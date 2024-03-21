@@ -1,0 +1,44 @@
+<div class="offcanvas-lg offcanvas-end" tabindex="-1" id="offcanvasSidebar">
+
+    <!-- Offcanvas body -->
+    <div class="offcanvas-body p-3 p-lg-0">
+        <div class="card bg-light w-100">
+
+            <!-- Edit profile button -->
+            <div class="position-absolute top-0 end-0 p-3">
+                <a href="{{ url_for('repositories.repositories', app_id=session['app_id']) }}"
+                    class="text-primary-hover" data-bs-toggle="tooltip" data-bs-title="Leave app">
+                    <i class="bi bi-close bi-box-arrow-right"></i>
+                </a>
+            </div>
+
+            <!-- Card body START -->
+            <div class="card-body p-3">
+                <!-- Avatar and content -->
+                <div class="text-center mb-3">
+                    <h6 class="mb-0">Repository: {{repo.name}}</h6>
+                    <hr>
+                </div>
+
+                <!-- Sidebar menu item START -->
+                <ul class="nav nav-pills-primary-soft flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link"
+                            href="{{ url_for('repositories.repository', app_id=session['app_id'], repository_id=repo.repository_id) }}"><i
+                                class="bi bi-person fa-fw me-2"></i>Resources</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link"
+                            href="{{ url_for('repositories.repository_playground', app_id=session['app_id'], repository_id=repo.repository_id) }}"><i
+                                class="bi bi-ticket-perforated fa-fw me-2"></i>Playground</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="bi bi-person fa-fw me-2"></i>Settings</a>
+                    </li>
+                </ul>
+                <!-- Sidebar menu item END -->
+            </div>
+            <!-- Card body END -->
+        </div>
+    </div>
+</div>

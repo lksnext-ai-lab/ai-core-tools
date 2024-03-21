@@ -1,14 +1,53 @@
 {% include 'header.html' %}
 
+
+
 <div class="row">
-    <div class="col-12 mb-2 mb-sm-2">
-        <div class="d-sm-flex justify-content-between align-items-center">
-            <h1 class="h4 mb-2 mb-sm-0">Repository: {{repo.name}}</h1>
-        </div>
+    <div class="col-2">
+        {% include 'repositories/repo_menu.html' %}
     </div>
+    <div class="col-10">
+        <div class="d-sm-flex justify-content-between align-items-center">
+            <h1 class="h4 mb-2 mb-sm-0">Resources</h1>
+        </div>
+
+
+        <table class="table table-fixed">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">URI</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for resource in repo.resources %}
+                <tr>
+                    <td>
+                        <a href="#">{{resource.name}}</a>
+                    </td>
+                    <td>
+                        {{resource.uri}}
+                    </td>
+                    <td>{{resource.type}}</td>
+                    <td>{{resource.status}}</td>
+                    <td>
+                        <button type="button" class="btn btn-primary inah-desc" data-bs-toggle="modal"
+                            data-bs-target="#description-modal" id="{{resource.resource_id}}">
+                            Edit
+                        </button>
+
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+
+    </div>
+
 </div>
-
-
-
 
 {% include 'footer.html' %}
