@@ -2,7 +2,7 @@
 
 <ul>
     {% for app in apps %}
-    <li><a href="{{ url_for('app_index', app_id=app.app_id ) }}">{{app.name}}</a></li>
+    <li>{{app.name}}</li>
     {% endfor%}
 </ul>
 
