@@ -8,12 +8,12 @@ class Resource(db.Model):
     uri = db.Column(db.String(1000))
     type = db.Column(db.String(45))
     status = db.Column(db.String(45))
-    app_id = db.Column(db.Integer,
-                        db.ForeignKey('App.app_id'),
+    repository_id = db.Column(db.Integer,
+                        db.ForeignKey('Repository.repository_id'),
                         nullable=True)
 
 
-    app = db.relationship('App',
+    reopository = db.relationship('Repository',
                            back_populates='resources',
-                           foreign_keys=[app_id])
+                           foreign_keys=[repository_id])
 

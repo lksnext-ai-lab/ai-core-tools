@@ -7,4 +7,5 @@ class App(db.Model):
     app_id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255))
 
-    resources = db.relationship('Resource', backref='app_resources', lazy=True)
+    repositories= db.relationship('Repository', backref='app_repositories', lazy=True)
+

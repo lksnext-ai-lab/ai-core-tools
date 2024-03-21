@@ -7,8 +7,13 @@ import json
 from model.app import App
 from flask import jsonify
 
+from views.resources import resources_blueprint
+from views.repositories import repositories_blueprint
+
 app = Flask(__name__)
-api = Api(app)
+
+app.register_blueprint(resources_blueprint)
+app.register_blueprint(repositories_blueprint)
 
 MYSQL_USER = os.getenv("MYSQL_USER")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
@@ -18,7 +23,6 @@ MYSQL_SCHEMA = os.getenv("MYSQL_SCHEMA")
 app.secret_key = 'your-secret-key-SXSCDSDASD'
 app.config[
     'SQLALCHEMY_DATABASE_URI'] = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_SCHEMA}"
-
 db.init_app(app)
 
 

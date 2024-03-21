@@ -1,0 +1,48 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="col-12 mb-2 mb-sm-2">
+        <div class="d-sm-flex justify-content-between align-items-center">
+            <h1 class="h4 mb-2 mb-sm-0">Repositories</h1>
+        </div>
+    </div>
+</div>
+
+<table class="table table-fixed">
+    <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Type #</th>
+            <th scope="col">Description</th>
+            <th scope="col">Resources</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for repo in repos %}
+        <tr>
+            <td>
+                <a
+                    href="{{url_for('repositories.repository',app_id=session['app_id'], repository_id=repo.repository_id)}}">{{repo.name}}</a>
+            </td>
+            <td></td>
+            <td>
+                <div class="text-wrap" id="desc_{{repo.repository_id}}"></div>
+            </td>
+            <td>{{repo.resources | length}}</td>
+            <td>
+                <button type="button" class="btn btn-primary inah-desc" data-bs-toggle="modal"
+                    data-bs-target="#description-modal" id="{{repo.repository_id}}">
+                    Edit
+                </button>
+
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+
+
+{% include 'footer.html' %}
