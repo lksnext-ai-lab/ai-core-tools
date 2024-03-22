@@ -1,0 +1,61 @@
+{% include 'header.html' %}
+
+
+
+<div class="row">
+    <div class="col-2">
+        {% include 'repositories/repo_menu.html' %}
+    </div>
+
+
+    <div class="col-10">
+        <div class="d-sm-flex justify-content-between align-items-center">
+            <h1 class="h4 mb-2 mb-sm-0">Agents</h1>
+            <a href="{{ url_for('repositories.repository_agent', app_id=session['app_id'], repository_id=repo.repository_id, agent_id=0) }}"
+                class="btn btn-primary mt-3">
+                <i class="bi bi-plus"></i>
+            </a>
+        </div>
+
+
+        <table class="table table-fixed">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for agent in repo.agents %}
+                <tr>
+                    <td>
+                        <a href="#">{{agent.name}}</a>
+                    </td>
+                    <td>
+                        {{agent.description}}
+                    </td>
+                    <td>{{agent.type}}</td>
+                    <td>
+                        <button type="button" class="btn btn-primary inah-desc" data-bs-toggle="modal"
+                            data-bs-target="#description-modal" id="{{agent.agent_id}}">
+                            Edit
+                        </button>
+                        <a href="{{ url_for('repositories.repository_agent_delete', app_id=session['app_id'], repository_id=repo.repository_id, agent_id=agent.agent_id) }}"
+                            class="btn btn-danger">Delete</a>
+                        <a href="{{ url_for('repositories.repository_playground', app_id=session['app_id'], repository_id=repo.repository_id, agent_id=agent.agent_id) }}"
+                            class="btn btn-warning">Playground</a>
+
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+
+    </div>
+
+</div>
+
+{% include 'footer.html' %}

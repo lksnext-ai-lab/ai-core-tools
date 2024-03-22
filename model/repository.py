@@ -17,4 +17,5 @@ class Repository(db.Model):
                            foreign_keys=[app_id])
     
     resources = db.relationship('Resource', backref='repository_resources', lazy=True)
+    agents = db.relationship('Agent', backref='repository_agents', lazy=True)
 

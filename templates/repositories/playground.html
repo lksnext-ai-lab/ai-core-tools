@@ -9,11 +9,94 @@
 
 
     <div class="col-10">
-        <div class="d-sm-flex justify-content-between align-items-center">
-            <h1 class="h4 mb-2 mb-sm-0">Playground</h1>
+
+
+        <div class="card shadow mb-4">
+            <!-- Card header -->
+            <div class="card-header border-bottom">
+                <h5 class="mb-0">Playground: {{agent.name}}</h5>
+            </div>
+            <!-- Card body -->
+            <div class="card-body">
+                <div class="row">
+                    <!-- Information item -->
+                    <div class="col-12">
+                        <ul class="list-group list-group-borderless">
+                            <li class="list-group-item">
+                                <span>System prompt: </span>
+                                <p class="h6 fw-normal mb-0">{{agent.system_prompt}}</p>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-12">
+                        <ul class="list-group list-group-borderless">
+                            <li class="list-group-item">
+                                <span>Prompt template: </span>
+                                <p class="h6 fw-normal mb-0">{{agent.prompt_template}}</p>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
         </div>
 
 
+        <div class="card shadow">
+            <!-- Card header -->
+            <div class="card-header border-bottom">
+                <h5 class="card-header-title">Test the agent...</h5>
+            </div>
+
+            <!-- Card body START -->
+            <div class="card-body">
+
+                <div class="bg-light border border-secondary border-opacity-25 p-3 rounded  mt-4">
+                    <!-- Avatar -->
+                    <div class="d-sm-flex align-items-center">
+                        <div class="avatar avatar-xs flex-shrink-0">
+                            <img class="avatar-img rounded-circle" src="/static/img/logo-lks.svg" alt="avatar">
+                        </div>
+                        <!-- Info -->
+                        <h6 class="mb-0 ms-2">Lori Stevens</h6>
+                    </div>
+                    <!-- Info -->
+                    <div class="hstack gap-4 gap-md-5 flex-wrap mt-2">
+                        <div>
+                            sdf oñlikhflñ asdfklh aslñdh asldsfkhañH ADFHAFDJAFGHBASDKJ hladjfh
+                            haklkjfghalkfjkhgvnjufhrnviosjhfhgsl
+                        </div>
+                    </div>
+
+                    <!-- Avatar -->
+                    <div class="d-sm-flex align-items-center">
+                        <div class="avatar avatar-xs flex-shrink-0">
+                            <img class="avatar-img rounded-circle" src="/static/img/logo-lks.svg" alt="avatar">
+                        </div>
+                        <!-- Info -->
+                        <h6 class="mb-0 ms-2">Lori Stevens</h6>
+                    </div>
+                    <!-- Info -->
+                    <div class="hstack gap-4 gap-md-5 flex-wrap mt-2">
+                        <div>
+                            sdf oñlikhflñ asdfklh aslñdh asldsfkhañH ADFHAFDJAFGHBASDKJ hladjfh
+                            haklkjfghalkfjkhgvnjufhrnviosjhfhgsl
+                        </div>
+                    </div>
+                </div>
+
+                <form class="row g-4 align-items-center">
+                    <div class="collapse show" id="collapseComment">
+                        <div class="d-flex mt-3">
+                            <textarea class="form-control mb-0" placeholder="Add a comment..." rows="2"
+                                spellcheck="false"></textarea>
+                            <button class="btn btn-sm btn-primary ms-2 px-4 mb-0 flex-shrink-0"><i
+                                    class="fas fa-paper-plane fs-5"></i></button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <!-- Card body END -->
+        </div>
 
 
     </div>
