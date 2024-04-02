@@ -11,13 +11,25 @@ class Agent(db.Model):
     type = db.Column(db.String(45))
     status = db.Column(db.String(45))
     model = db.Column(db.String(45))
+    model_id = db.Column(db.Integer,
+                        db.ForeignKey('Model.model_id'),
+                        nullable=True)
     repository_id = db.Column(db.Integer,
                         db.ForeignKey('Repository.repository_id'),
                         nullable=True)
+    app_id = db.Column(db.Integer,
+                        db.ForeignKey('App.app_id'),
+                        nullable=True)
     
-
+    model = db.relationship('Model',
+                           foreign_keys=[model_id])
+    
 
     reopository = db.relationship('Repository',
                            back_populates='agents',
                            foreign_keys=[repository_id])
 
+    app = db.relationship('App',
+                           back_populates='agents',
+                           foreign_keys=[app_id])
+    

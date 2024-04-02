@@ -69,6 +69,7 @@ def repository_agent(app_id, repository_id, agent_id):
         agent.name = request.form['name']
         agent.description = request.form.get('description')
         agent.system_prompt = request.form.get('system_prompt')
+        print(agent.system_prompt)
         agent.prompt_template = request.form.get('prompt_template')
         agent.type = request.form.get('type')
         agent.status = request.form.get('status')

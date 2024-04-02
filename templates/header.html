@@ -87,6 +87,11 @@
                             <ul class="nav nav-pills-primary-soft flex-column">
                                 <li class="nav-item">
                                     <a class="nav-link"
+                                        href="{{url_for('agents.app_agents', app_id=session['app_id']) }}"><i
+                                            class="bi bi-person fa-fw me-2"></i>Agents</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link"
                                         href="{{url_for('repositories.repositories', app_id=session['app_id']) }}"><i
                                             class="bi bi-person fa-fw me-2"></i>Repositories</a>
                                 </li>

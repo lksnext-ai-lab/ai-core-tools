@@ -8,4 +8,5 @@ class App(db.Model):
     name = db.Column(db.String(255))
 
     repositories= db.relationship('Repository', backref='app_repositories', lazy=True)
+    agents= db.relationship('Agent', backref='app_agents', lazy=True)
 

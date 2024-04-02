@@ -7,13 +7,16 @@ import json
 from model.app import App
 from flask import jsonify
 
-from views.resources import resources_blueprint
+from views.agents import agents_blueprint
 from views.repositories import repositories_blueprint
+from views.resources import resources_blueprint
+
 
 app = Flask(__name__)
 
-app.register_blueprint(resources_blueprint)
+app.register_blueprint(agents_blueprint)
 app.register_blueprint(repositories_blueprint)
+app.register_blueprint(resources_blueprint)
 
 MYSQL_USER = os.getenv("MYSQL_USER")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
