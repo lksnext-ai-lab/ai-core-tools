@@ -20,6 +20,7 @@ class Agent(db.Model):
     app_id = db.Column(db.Integer,
                         db.ForeignKey('App.app_id'),
                         nullable=True)
+    has_memory = db.Column(db.Boolean)
     
     model = db.relationship('Model',
                            foreign_keys=[model_id])

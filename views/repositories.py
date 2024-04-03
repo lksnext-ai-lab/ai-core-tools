@@ -13,17 +13,47 @@ def repositories(app_id):
     repos = Repository.query.filter_by(app_id=app_id).all()
     return render_template('repositories/repositories.html', repos=repos)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>', methods=['GET'])
+@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>', methods=['GET', 'POST'])
 def repository(app_id, repository_id):
-    repo = Repository.query.filter_by(repository_id=repository_id).first()
-    return render_template('repositories/repository.html', app_id=app_id, repo=repo)
+    if request.method == 'POST':
+        repo = Repository.query.filter_by(repository_id=repository_id).first()
+        if repo is None:
+            repo = Repository()
+        repo.name = request.form['name']
+        repo.type = request.form.get('type')
+        repo.status = request.form.get('status')
+        repo.app_id = app_id
+        db.session.add(repo)
+        db.session.commit()
+        db.session.refresh(repo)
+        return render_template('repositories/resources.html', app_id=app_id, repo=repo)
 
+    if repository_id == '0':
+        repo = Repository(name="New Repository", app_id=app_id, repository_id=0)
+        return render_template('repositories/repository.html', app_id=app_id, repo=repo)
+
+    repo = Repository.query.filter_by(repository_id=repository_id).first()
+    return render_template('repositories/resources.html', app_id=app_id, repo=repo)
 
 @repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/settings', methods=['GET'])
 def repository_settings(app_id, repository_id):
     repo = Repository.query.filter_by(repository_id=repository_id).first()
-    return render_template('repositories/settings.html', app_id=app_id, repo=repo)
+    return render_template('repositories/repository.html', app_id=app_id, repo=repo)
 
+@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/delete', methods=['GET'])
+def repository_delete(app_id, repository_id):
+    Repository.query.filter_by(repository_id=repository_id).delete()
+    db.session.commit()
+    return repositories(app_id)
+
+'''
+@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/settings', methods=['GET'])
+def repository_settings(app_id, repository_id):
+    repo = Repository.query.filter_by(repository_id=repository_id).first()
+    return render_template('repositories/settings.html', app_id=app_id, repo=repo)
+'''
+
+    
 '''
 Resources
 '''

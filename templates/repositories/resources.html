@@ -1,0 +1,63 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="col-2">
+        {% include 'repositories/repo_menu.html' %}
+    </div>
+    <div class="col-10">
+        <div class="d-sm-flex justify-content-between align-items-center">
+            <h1 class="h4 mb-2 mb-sm-0">Resources</h1>
+        </div>
+
+        <table class="table table-fixed">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">URI</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for resource in repo.resources %}
+                <tr>
+                    <td>
+                        <a href="#">{{resource.name}}</a>
+                    </td>
+                    <td>
+                        {{resource.uri}}
+                    </td>
+                    <td>{{resource.type}}</td>
+                    <td>{{resource.status}}</td>
+                    <td>
+                        <button type="button" class="btn btn-primary inah-desc" data-bs-toggle="modal"
+                            data-bs-target="#description-modal" id="{{resource.resource_id}}">
+                            Edit
+                        </button>
+                        <a href="{{url_for('repositories.resource_delete',app_id=session['app_id'], repository_id=repo.repository_id, resource_id=resource.resource_id)}}"
+                            class="btn btn-danger">Delete</a>
+
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <form
+            action="{{url_for('repositories.resource_create', app_id=session['app_id'], repository_id=repo.repository_id)}}"
+            method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="name" class="form-label">Name</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+            </div>
+            <div class="mb-3">
+                <label for="file" class="form-label">File</label>
+                <input type="file" class="form-control" id="file" name="file" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Create</button>
+        </form>
+    </div>
+</div>
+
+{% include 'footer.html' %}
