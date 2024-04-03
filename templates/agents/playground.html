@@ -42,41 +42,24 @@
 
             <!-- Card body START -->
             <div class="card-body">
-
-                <div class="bg-light border border-secondary border-opacity-25 p-3 rounded  mt-4">
-                    <!-- Avatar -->
-                    <div class="d-sm-flex align-items-center">
-                        <div class="avatar avatar-xs flex-shrink-0">
-                            <img class="avatar-img rounded-circle" src="/static/img/logo-lks.svg" alt="avatar">
+                <div>
+                    <div class="bg-light border border-secondary border-opacity-25 p-3 rounded  mt-4" id="referenece">
+                        <!-- Avatar -->
+                        <div class="d-sm-flex align-items-center">
+                            <div class="avatar avatar-xs flex-shrink-0">
+                                <img class="avatar-img rounded-circle" src="/static/img/logo-lks.svg" alt="avatar">
+                            </div>
+                            <!-- Info -->
+                            <h6 class="mb-0 ms-2" id="ref-name">{{agent.name}}</h6>
                         </div>
                         <!-- Info -->
-                        <h6 class="mb-0 ms-2">Lori Stevens</h6>
-                    </div>
-                    <!-- Info -->
-                    <div class="hstack gap-4 gap-md-5 flex-wrap mt-2">
-                        <div>
-                            sdf oñlikhflñ asdfklh aslñdh asldsfkhañH ADFHAFDJAFGHBASDKJ hladjfh
-                            haklkjfghalkfjkhgvnjufhrnviosjhfhgsl
-                        </div>
-                    </div>
-
-                    <!-- Avatar -->
-                    <div class="d-sm-flex align-items-center">
-                        <div class="avatar avatar-xs flex-shrink-0">
-                            <img class="avatar-img rounded-circle" src="/static/img/logo-lks.svg" alt="avatar">
-                        </div>
-                        <!-- Info -->
-                        <h6 class="mb-0 ms-2">Lori Stevens</h6>
-                    </div>
-                    <!-- Info -->
-                    <div class="hstack gap-4 gap-md-5 flex-wrap mt-2">
-                        <div>
-                            sdf oñlikhflñ asdfklh aslñdh asldsfkhañH ADFHAFDJAFGHBASDKJ hladjfh
-                            haklkjfghalkfjkhgvnjufhrnviosjhfhgsl
+                        <div class="hstack gap-4 gap-md-5 flex-wrap mt-2">
+                            <div>
+                                <p class="mb-0" id="ref-text">Hello, I am {{agent.name}} agent... May I help you?</p>
+                            </div>
                         </div>
                     </div>
                 </div>
-
                 <div class="collapse show" id="collapseComment">
                     <div class="d-flex mt-3">
                         <textarea id="question" class="form-control mb-0" placeholder="Add a comment..." rows="2"
@@ -96,9 +79,42 @@
 </div>
 
 <script>
+    var cont = 0;
     $('#send-btn').click(function () {
         var question = $('#question').val();
+        var agent_id = '{{agent.agent_id}}';
         console.log('Sending question:', question);
+        var qDiv = $('#referenece').clone();
+        qDiv.attr('id', 'referenece-' + cont);
+        cont++;
+        $('#ref-name', qDiv).text('You said...');
+        $('#ref-text', qDiv).text(question);
+        $('#referenece').parent().append(qDiv);
+
+        // Make a POST request
+        fetch('/api', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ question: question, agent_id: agent_id }),
+            data: JSON.stringify({ question: question, agent_id: agent_id })
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Handle the response data
+                console.log('Response:', data);
+                var respDiv = $('#referenece').clone();
+                respDiv.attr('id', 'referenece-' + cont);
+                cont++;
+                $('#ref-text', respDiv).text(data.generated_text);
+                $('#referenece').parent().append(respDiv);
+            })
+            .catch(error => {
+                // Handle any errors
+                console.error('Error:', error);
+            });
+
         $('#question').val('');
     });
 
