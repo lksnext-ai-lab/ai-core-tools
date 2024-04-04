@@ -2,8 +2,15 @@ from flask import Flask, render_template, session, Blueprint, request, redirect
 from model.repository import Repository
 from model.resource import Resource
 from model.agent import Agent
-
 from extensions import db
+import tools.milvusTools as milvusTools
+
+import os
+
+
+REPO_BASE_FOLDER = 'data/repositories'
+
+
 
 
 repositories_blueprint = Blueprint('repositories', __name__)
@@ -26,6 +33,11 @@ def repository(app_id, repository_id):
         db.session.add(repo)
         db.session.commit()
         db.session.refresh(repo)
+        
+        # Create folder for repository
+        repo_folder = os.path.join(REPO_BASE_FOLDER, str(repo.repository_id))
+        os.makedirs(repo_folder, exist_ok=True)
+        
         return render_template('repositories/resources.html', app_id=app_id, repo=repo)
 
     if repository_id == '0':
@@ -42,16 +54,10 @@ def repository_settings(app_id, repository_id):
 
 @repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/delete', methods=['GET'])
 def repository_delete(app_id, repository_id):
+    Resource.query.filter_by(repository_id=repository_id).delete()
     Repository.query.filter_by(repository_id=repository_id).delete()
     db.session.commit()
     return repositories(app_id)
-
-'''
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/settings', methods=['GET'])
-def repository_settings(app_id, repository_id):
-    repo = Repository.query.filter_by(repository_id=repository_id).first()
-    return render_template('repositories/settings.html', app_id=app_id, repo=repo)
-'''
 
     
 '''
@@ -73,11 +79,13 @@ def resource_create(app_id, repository_id):
         if file.filename == '':
             return redirect(request.url)
         if file : #and allowed_file(file.filename):
-            
+            file.save(os.path.join(REPO_BASE_FOLDER, repository_id, file.filename))
             resource = Resource(name=request.form['name'], uri=file.filename, repository_id=repository_id)
             
             db.session.add(resource)
             db.session.commit()
+            db.session.refresh(resource)
+            milvusTools.index_resource(resource)
 
         return repository(app_id, repository_id)
 

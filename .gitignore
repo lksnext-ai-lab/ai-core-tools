@@ -28,4 +28,3 @@ htmlcov/
 .coverage
 .coverage.*
 *,cover
-lks-heroes.log
