@@ -16,6 +16,8 @@ def api():
     agent = Agent.query.filter_by(agent_id=agent_id).first()
     
     result = modelTools.invoke_rag_with_repo(agent, question)
+    #result = modelTools.invoke(agent, question)
+    
     data = {
         "input": question,
         "generated_text": result,

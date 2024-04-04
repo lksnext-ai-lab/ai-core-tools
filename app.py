@@ -1,4 +1,4 @@
-from flask import Flask, render_template, session
+from flask import Flask, render_template, session, request
 from flask_restful import Api, Resource
 from extensions import db
 import os
@@ -45,6 +45,15 @@ def app_index(app_id):
     session['app_name'] = app.name
     
     return render_template('app_index.html', app=app)
+
+@app.route('/create-app', methods=['POST'])
+def create_app():
+    name = request.form['name']
+    app = App(name=name)
+    db.session.add(app)
+    db.session.commit()
+    db.session.refresh(app)
+    return app_index(app.app_id)
 
 @app.route('/leave')
 def leave():

@@ -2,6 +2,7 @@ from flask import Flask, render_template, session, Blueprint, request, redirect
 from model.app import App
 from model.agent import Agent
 from model.model import Model
+from model.repository import Repository
 
 from extensions import db
 
@@ -32,6 +33,9 @@ def app_agent(app_id, agent_id):
         agent.status = request.form.get('status')
         agent.model_id = request.form.get('model_id')
         agent.app_id = app_id
+        agent.repository_id = request.form.get('repository_id')
+        if agent.repository_id == '':
+            agent.repository_id = None 
         db.session.add(agent)
         db.session.commit()
         return app_agents(app_id)
@@ -40,7 +44,8 @@ def app_agent(app_id, agent_id):
         agent = Agent(agent_id=0, name="")
     
     models = Model.query.all()
-    return render_template('agents/agent.html', app_id=app_id, agent=agent, models=models)
+    repositories = Repository.query.filter_by(app_id=app_id).all()
+    return render_template('agents/agent.html', app_id=app_id, agent=agent, models=models, repositories=repositories)
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>/delete', methods=['GET'])
 def app_agent_delete(app_id, agent_id):

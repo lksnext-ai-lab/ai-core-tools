@@ -50,6 +50,22 @@
                             <textarea name="prompt_template" class="form-control mb-0"
                                 placeholder="Add a prompt tempate..." rows="2">{{agent.prompt_template}}</textarea>
                         </div>
+
+                        {% if repositories %}
+                        <div class="col-md-12 mb-4">
+                            <label class="form-label">Repository</label>
+                            <select name="repository_id" class="form-control">
+                                <option value="">-- Select a Repository --</option>
+                                {% for repository in repositories %}
+                                <option value="{{ repository.repository_id }}" {% if
+                                    agent.repository_id==repository.repository_id %}selected{% endif %}>
+                                    {{ repository.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
                     </div>
                     <div class="col-12">
                         <input type="submit" class="btn btn-primary" value="Save" />
