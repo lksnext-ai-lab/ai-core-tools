@@ -12,8 +12,7 @@ class Resource(db.Model):
                         db.ForeignKey('Repository.repository_id'),
                         nullable=True)
 
-
-    reopository = db.relationship('Repository',
+    repository = db.relationship('Repository',
                            back_populates='resources',
                            foreign_keys=[repository_id])
 

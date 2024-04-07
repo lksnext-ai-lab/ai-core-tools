@@ -11,11 +11,11 @@ class Repository(db.Model):
                         db.ForeignKey('App.app_id'),
                         nullable=True)
 
-
     app = db.relationship('App',
                            back_populates='repositories',
                            foreign_keys=[app_id])
     
-    resources = db.relationship('Resource', backref='repository_resources', lazy=True)
-    agents = db.relationship('Agent', backref='repository_agents', lazy=True)
+    resources = db.relationship('Resource', lazy=True)
+    
+    agents = db.relationship('Agent', lazy=True)
 

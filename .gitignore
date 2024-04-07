@@ -28,3 +28,4 @@ htmlcov/
 .coverage
 .coverage.*
 *,cover
+cosas.txt

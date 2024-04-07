@@ -7,6 +7,6 @@ class App(db.Model):
     app_id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255))
 
-    repositories= db.relationship('Repository', backref='app_repositories', lazy=True)
-    agents= db.relationship('Agent', backref='app_agents', lazy=True)
+    repositories= db.relationship('Repository', lazy=True)
+    agents= db.relationship('Agent', lazy=True)
 

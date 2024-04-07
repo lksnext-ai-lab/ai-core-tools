@@ -8,10 +8,7 @@ import tools.milvusTools as milvusTools
 import os
 
 
-REPO_BASE_FOLDER = 'data/repositories'
-
-
-
+REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 
 repositories_blueprint = Blueprint('repositories', __name__)
 
@@ -65,6 +62,9 @@ Resources
 '''
 @repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/resource/<resource_id>/delete', methods=['GET'])
 def resource_delete(app_id, repository_id, resource_id):
+    resource = Resource.query.filter_by(resource_id=resource_id).first()
+    milvusTools.delete_resource(resource)
+    
     Resource.query.filter_by(resource_id=resource_id).delete()
     db.session.commit()
     return repository(app_id, repository_id)

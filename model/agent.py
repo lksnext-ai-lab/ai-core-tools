@@ -25,8 +25,7 @@ class Agent(db.Model):
     model = db.relationship('Model',
                            foreign_keys=[model_id])
     
-
-    reopository = db.relationship('Repository',
+    repository = db.relationship('Repository',
                            back_populates='agents',
                            foreign_keys=[repository_id])
 

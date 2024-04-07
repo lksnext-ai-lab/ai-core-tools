@@ -39,7 +39,7 @@ def invoke(agent, input):
     return chain.invoke(input)
 
 def invoke_rag_with_repo(agent: Agent, input):
-    if agent.reopository is None:
+    if agent.repository is None:
         print('AGENT ' + agent.name + ' has no repository to relay on.')
         return invoke(agent, input)
     
