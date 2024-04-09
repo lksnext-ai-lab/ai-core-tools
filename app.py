@@ -1,8 +1,10 @@
 from flask import Flask, render_template, session, request
 from flask_restful import Api, Resource
+from flask_session import Session
 from extensions import db
 import os
 import json
+from datetime import timedelta, datetime
 
 from model.app import App
 from flask import jsonify
@@ -11,6 +13,7 @@ from api.api import api_blueprint
 from views.agents import agents_blueprint
 from views.repositories import repositories_blueprint
 from views.resources import resources_blueprint
+import uuid
 
 
 app = Flask(__name__)
@@ -30,6 +33,17 @@ app.config[
     'SQLALCHEMY_DATABASE_URI'] = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_SCHEMA}"
 db.init_app(app)
 
+SESSION_TYPE = 'filesystem'
+PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
+app.config.from_object(__name__)
+Session(app)
+
+
+@app.before_request
+def before_request():
+    if 'session_id' not in session:
+        # Generate a new session ID
+        session['session_id'] = str(uuid.uuid4())
 
 @app.route('/')
 def index():

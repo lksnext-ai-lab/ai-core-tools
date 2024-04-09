@@ -1,13 +1,18 @@
+from flask import session
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough 
+from langchain_core.runnables import RunnablePassthrough
+from langchain.prompts.prompt import PromptTemplate
+from langchain.chains.llm import LLMChain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+
 from model.agent import Agent
 import tools.milvusTools as milvusTools
 
-
-from langchain.prompts.prompt import PromptTemplate
 
 
 
@@ -70,3 +75,44 @@ def invoke_rag_with_repo(agent: Agent, input):
     )
 
     return chain.invoke(input)
+
+
+def invoke_ConversationalRetrievalChain(agent, input, session):
+    print("app_id 1: ", session['app_id'])
+    MEM_KEY = "MEM_KEY"
+    if MEM_KEY not in session:
+        print("Create memories")
+        session[MEM_KEY] = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
+    print("MEMORIES: ", session[MEM_KEY])
+    print("app_id 2: ", session['app_id'])
+    
+    llm = ChatOpenAI(model=agent.model.name)
+
+    retriever = milvusTools.get_milvus_retriever(agent.repository_id)
+   
+    template = """
+    Responde a las preguntas basadas en el contexto o historial de chat dado.
+        <<HISTORIAL>>
+        {chat_history}
+
+        <<CONTEXTO>>
+        Context: {context}
+
+        Nueva pregunta: {question}
+        """
+
+    prompt = PromptTemplate(
+        input_variables=["context", "chat_history", "question"], template=template
+    )
+
+    # Create the custom chain
+    chain = ConversationalRetrievalChain.from_llm(
+            llm=llm, retriever=retriever, memory=session[MEM_KEY],
+            return_source_documents=False,
+            verbose=True,
+            combine_docs_chain_kwargs={'prompt': prompt})
+
+    result = chain.invoke(input)
+    print("RESULT: ", result)
+    
+    return result["answer"]

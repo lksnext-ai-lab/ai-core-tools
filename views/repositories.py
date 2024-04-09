@@ -1,4 +1,4 @@
-from flask import Flask, render_template, session, Blueprint, request, redirect
+from flask import Flask, render_template, session, Blueprint, request, redirect, url_for
 from model.repository import Repository
 from model.resource import Resource
 from model.agent import Agent
@@ -87,8 +87,8 @@ def resource_create(app_id, repository_id):
             db.session.refresh(resource)
             milvusTools.index_resource(resource)
 
-        return repository(app_id, repository_id)
-
+        
+        return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
 
 '''
 Agents

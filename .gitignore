@@ -29,3 +29,4 @@ htmlcov/
 .coverage.*
 *,cover
 cosas.txt
+flask_session

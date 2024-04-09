@@ -91,6 +91,10 @@
         $('#ref-text', qDiv).text(question);
         $('#referenece').parent().append(qDiv);
 
+        $("html, body").animate({
+            scrollTop: $(document).height() - $(window).height()
+        }, 'slow');
+
         // Make a POST request
         fetch('/api', {
             method: 'POST',
@@ -109,6 +113,10 @@
                 cont++;
                 $('#ref-text', respDiv).text(data.generated_text);
                 $('#referenece').parent().append(respDiv);
+
+                $("html, body").animate({
+                    scrollTop: $(document).height() - $(window).height()
+                }, 'slow');
             })
             .catch(error => {
                 // Handle any errors

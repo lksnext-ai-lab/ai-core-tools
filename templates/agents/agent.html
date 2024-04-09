@@ -52,7 +52,7 @@
                         </div>
 
                         {% if repositories %}
-                        <div class="col-md-12 mb-4">
+                        <div class="col-md-6 mb-4">
                             <label class="form-label">Repository</label>
                             <select name="repository_id" class="form-control">
                                 <option value="">-- Select a Repository --</option>
@@ -64,7 +64,18 @@
                                 {% endfor %}
                             </select>
                         </div>
+
                         {% endif %}
+                        <div class="col-6">
+
+                            <label class="form-label">Conversational (With mem.)</label>
+
+                            <div class="form-check form-switch form-check-lg mb-0">
+                                <input class="form-check-input" type="checkbox" id="checkPrivacy1" {% if
+                                    agent.has_memory %} checked {% endif %} name="has_memory" />
+                            </div>
+
+                        </div>
 
                     </div>
                     <div class="col-12">
@@ -72,6 +83,7 @@
                         <a href="{{ url_for('agents.app_agents', app_id=session['app_id']) }}"
                             class="btn btn-primary-soft">Cancel</a>
                     </div>
+
                 </div>
             </form>
         </div>

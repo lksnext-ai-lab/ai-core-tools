@@ -34,6 +34,7 @@ def app_agent(app_id, agent_id):
         agent.model_id = request.form.get('model_id')
         agent.app_id = app_id
         agent.repository_id = request.form.get('repository_id')
+        agent.has_memory = request.form.get('has_memory') == 'on'
         if agent.repository_id == '':
             agent.repository_id = None 
         db.session.add(agent)

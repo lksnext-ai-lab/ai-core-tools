@@ -37,6 +37,10 @@ def search_similar_resources(repository_id, embed, RESULTS=5):
     milvus = create_milvus_instance(repository_id)
     return milvus.similarity_search_with_score_by_vector(embed, RESULTS)
 
+def get_milvus_retriever(repository_id):
+    milvus = create_milvus_instance(repository_id)
+    return milvus.as_retriever()
+
     
 
 
