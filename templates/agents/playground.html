@@ -98,6 +98,7 @@
         // Make a POST request
         fetch('/api', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },

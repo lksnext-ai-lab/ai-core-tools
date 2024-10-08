@@ -21,7 +21,8 @@ def api():
     result =""
     if agent is None:
         return jsonify({"error": "Agent not found"})
-    elif agent.repository is not None and agent.has_memory:
+    #elif agent.repository is not None and agent.has_memory:
+    elif agent.has_memory:
         result = modelTools.invoke_ConversationalRetrievalChain(agent, question, session)
     elif agent.repository is not None:
         result = modelTools.invoke_rag_with_repo(agent, question)

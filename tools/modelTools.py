@@ -1,5 +1,6 @@
 from flask import session
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -33,7 +34,7 @@ def invoke(agent, input):
     
 
     output_parser = StrOutputParser()
-    model = ChatOpenAI(model=agent.model.name)
+    model = getLLM(agent)
     chain = (
         {"question": RunnablePassthrough()} 
         | prompt
@@ -66,7 +67,7 @@ def invoke_rag_with_repo(agent: Agent, input):
     
 
     output_parser = StrOutputParser()
-    model = ChatOpenAI(model=agent.model.name)
+    model = getLLM(agent)
     chain = (
         {"question": RunnablePassthrough()} 
         | prompt
@@ -79,14 +80,14 @@ def invoke_rag_with_repo(agent: Agent, input):
 
 def invoke_ConversationalRetrievalChain(agent, input, session):
     print("app_id 1: ", session['app_id'])
-    MEM_KEY = "MEM_KEY"
+    MEM_KEY = "MEM_KEY-" + str(agent.agent_id)
     if MEM_KEY not in session:
         print("Create memories")
         session[MEM_KEY] = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
     print("MEMORIES: ", session[MEM_KEY])
     print("app_id 2: ", session['app_id'])
     
-    llm = ChatOpenAI(model=agent.model.name)
+    llm = getLLM(agent)
 
     retriever = milvusTools.get_milvus_retriever(agent.repository_id)
    
@@ -116,3 +117,12 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     print("RESULT: ", result)
     
     return result["answer"]
+
+def getLLM(agent):
+    if agent.model is None:
+        return None
+    if agent.model.provider == "OpenAI":
+        return ChatOpenAI(model=agent.model.name)
+    if agent.model.provider == "Anthropic":
+        return ChatAnthropic(model=agent.model.name)
+    return None
