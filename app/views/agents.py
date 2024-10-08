@@ -1,10 +1,10 @@
 from flask import Flask, render_template, session, Blueprint, request, redirect
-from model.app import App
-from model.agent import Agent
-from model.model import Model
-from model.repository import Repository
+from app.model.agent import Agent
+from app.model.app import App
+from app.model.model import Model
+from app.model.repository import Repository
 
-from extensions import db
+from app.extensions import db
 
 
 agents_blueprint = Blueprint('agents', __name__)
@@ -15,13 +15,13 @@ Agents
 '''
 @agents_blueprint.route('/app/<app_id>/agents', methods=['GET'])
 def app_agents(app_id):
-    app = App.query.filter_by(app_id=app_id).first()
+    app = db.session.query(App).filter(App.app_id == app_id).first()
     return render_template('agents/agents.html', app_id=app_id, app=app)
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>', methods=['GET', 'POST'])
 def app_agent(app_id, agent_id):
     if request.method == 'POST':
-        agent = Agent.query.filter_by(agent_id=agent_id).first()
+        agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
         if agent is None:
             agent = Agent()
         agent.name = request.form['name']
@@ -40,21 +40,21 @@ def app_agent(app_id, agent_id):
         db.session.add(agent)
         db.session.commit()
         return app_agents(app_id)
-    agent = Agent.query.filter_by(agent_id=agent_id).first()
+    agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     if agent is None:
         agent = Agent(agent_id=0, name="")
     
-    models = Model.query.all()
-    repositories = Repository.query.filter_by(app_id=app_id).all()
+    models = db.session.query(Model).all()
+    repositories = db.session.query(Repository).filter(Repository.app_id == app_id).all()
     return render_template('agents/agent.html', app_id=app_id, agent=agent, models=models, repositories=repositories)
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>/delete', methods=['GET'])
 def app_agent_delete(app_id, agent_id):
-    Agent.query.filter_by(agent_id=agent_id).delete()
+    db.session.query(Agent).filter(Agent.agent_id == agent_id).delete()
     db.session.commit()
     return app_agents(app_id)
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>/play', methods=['GET'])
 def app_agent_playground(app_id,  agent_id):
-    agent = Agent.query.filter_by(agent_id=agent_id).first()
+    agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     return render_template('agents/playground.html', app_id=app_id, agent=agent)

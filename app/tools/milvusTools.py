@@ -2,7 +2,7 @@ from langchain_community.vectorstores.milvus import Milvus
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders.pdf import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
-from model.resource import Resource
+from app.model.resource import Resource
 import os
 
 

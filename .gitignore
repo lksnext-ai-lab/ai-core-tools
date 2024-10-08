@@ -21,8 +21,8 @@ docs/_build/
 uploads/
 static/img/heroes/*
 #static/vendor/*
-data/*
-demo/*
+app/data/*
+app/demo/*
 # Coverage reports
 htmlcov/
 .coverage
@@ -30,3 +30,4 @@ htmlcov/
 *,cover
 cosas.txt
 flask_session
+__pycache__

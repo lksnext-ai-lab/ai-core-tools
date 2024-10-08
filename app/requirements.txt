@@ -1,0 +1,12 @@
+flask
+flask-sqlalchemy
+flask-restful
+Flask-Session
+langchain
+langchain-openai
+langchain-anthropic
+langchain-community
+psycopg2-binary
+alembic
+pypdf
+pymilvus

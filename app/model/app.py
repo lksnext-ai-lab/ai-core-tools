@@ -1,12 +1,13 @@
-'''App model class'''
-from extensions import db
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
+from app.db.base_class import Base
 
-class App(db.Model):
+class App(Base):
     '''User model class constructor'''
     __tablename__ = 'App'
-    app_id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255))
+    app_id = Column(Integer, primary_key=True)
+    name = Column(String(255))
 
-    repositories= db.relationship('Repository', lazy=True)
-    agents= db.relationship('Agent', lazy=True)
+    repositories= relationship('Repository', lazy=True)
+    agents= relationship('Agent', lazy=True)
 

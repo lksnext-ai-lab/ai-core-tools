@@ -1,18 +1,20 @@
-from extensions import db
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey 
+from sqlalchemy.orm import relationship
+from app.db.base_class import Base
 
 
-class Resource(db.Model):
+class Resource(Base):
     __tablename__ = 'Resource'
-    resource_id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255))
-    uri = db.Column(db.String(1000))
-    type = db.Column(db.String(45))
-    status = db.Column(db.String(45))
-    repository_id = db.Column(db.Integer,
-                        db.ForeignKey('Repository.repository_id'),
+    resource_id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+    uri = Column(String(1000))
+    type = Column(String(45))
+    status = Column(String(45))
+    repository_id = Column(Integer,
+                        ForeignKey('Repository.repository_id'),
                         nullable=True)
 
-    repository = db.relationship('Repository',
+    repository = relationship('Repository',
                            back_populates='resources',
                            foreign_keys=[repository_id])
 

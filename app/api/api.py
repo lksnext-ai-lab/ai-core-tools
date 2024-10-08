@@ -1,7 +1,7 @@
 from flask import Flask, render_template, session, Blueprint, request, redirect, jsonify, request
 from flask import request
-from model.agent import Agent
-import tools.modelTools as modelTools
+from app.model.agent import Agent
+import app.tools.modelTools as modelTools
 
 
 api_blueprint = Blueprint('api', __name__)

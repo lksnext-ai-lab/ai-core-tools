@@ -1,36 +1,35 @@
 from flask import Flask, render_template, session, request
 from flask_restful import Api, Resource
 from flask_session import Session
-from extensions import db
+from app.extensions import db
 import os
 import json
 from datetime import timedelta, datetime
+from dotenv import load_dotenv
 
-from model.app import App
+
+from app.model.app import App
 from flask import jsonify
 
-from api.api import api_blueprint
-from views.agents import agents_blueprint
-from views.repositories import repositories_blueprint
-from views.resources import resources_blueprint
+from app.api.api import api_blueprint
+from app.views.agents import agents_blueprint
+from app.views.repositories import repositories_blueprint
+from app.views.resources import resources_blueprint
 import uuid
 
+load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-SXSCDSDASD'
 
 app.register_blueprint(agents_blueprint)
 app.register_blueprint(repositories_blueprint)
 app.register_blueprint(resources_blueprint)
 app.register_blueprint(api_blueprint)
 
-MYSQL_USER = os.getenv("MYSQL_USER")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
-MYSQL_HOST = os.getenv("MYSQL_HOST")
-MYSQL_SCHEMA = os.getenv("MYSQL_SCHEMA")
+SQLALCHEMY_DATABASE_URI = os.getenv("SQLALCHEMY_DATABASE_URI")
+app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 
-app.secret_key = 'your-secret-key-SXSCDSDASD'
-app.config[
-    'SQLALCHEMY_DATABASE_URI'] = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_SCHEMA}"
 db.init_app(app)
 
 SESSION_TYPE = 'filesystem'
@@ -47,14 +46,14 @@ def before_request():
 
 @app.route('/')
 def index():
-    apps = App.query.all()
+    apps = db.session.query(App).all()
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
     return render_template('index.html', apps=apps)
 
 @app.route('/app/<app_id>', methods=['GET'])
 def app_index(app_id):
-    app = App.query.filter_by(app_id=app_id).first()
+    app = db.session.query(App).filter(App.app_id == app_id).first()
     session['app_id'] = app_id
     session['app_name'] = app.name
     

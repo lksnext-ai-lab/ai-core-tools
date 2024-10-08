@@ -11,8 +11,8 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 
-from model.agent import Agent
-import tools.milvusTools as milvusTools
+from app.model.agent import Agent
+import app.tools.milvusTools as milvusTools
 
 
 
