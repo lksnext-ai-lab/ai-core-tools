@@ -2,6 +2,7 @@ from flask import Flask, render_template, session, Blueprint, request, redirect,
 from flask import request
 from app.model.agent import Agent
 import app.tools.modelTools as modelTools
+from app.extensions import db
 
 
 api_blueprint = Blueprint('api', __name__)
@@ -17,7 +18,8 @@ def api():
     in_data = request.get_json()
     question = in_data.get('question')
     agent_id = in_data.get('agent_id')
-    agent = Agent.query.filter_by(agent_id=agent_id).first()
+
+    agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     result =""
     if agent is None:
         return jsonify({"error": "Agent not found"})

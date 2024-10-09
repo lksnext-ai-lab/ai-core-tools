@@ -4,7 +4,8 @@ services:
 
   ia-core-tools:
     build:
-      context: ./app
+      #context: ./app
+      context: .
       dockerfile: Dockerfile
     container_name: ia-core-tools
     ports:
