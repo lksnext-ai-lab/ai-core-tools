@@ -21,8 +21,8 @@ docs/_build/
 uploads/
 static/img/heroes/*
 #static/vendor/*
-app/data/*
-app/demo/*
+app/data
+app/demo
 # Coverage reports
 htmlcov/
 .coverage
