@@ -9,6 +9,8 @@ services:
       - "5000:5000"
     environment:
       - SQLALCHEMY_DATABASE_URI=postgresql://iacore:iacore@postgres:5432/iacore
+      - OPENAI_API_KEY=CHANGE_ME
+      - ANTHROPIC_API_KEY=CHANGE_ME
     depends_on:
       - postgres
     networks:
