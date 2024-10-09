@@ -1,0 +1,42 @@
+version: '3.3'
+
+services:
+
+  ia-core-tools:
+    image: aritzglks/lks-next-ia-core-tools:latest
+    container_name: ia-core-tools
+    ports:
+      - "5000:5000"
+    environment:
+      - SQLALCHEMY_DATABASE_URI=postgresql://iacore:iacore@postgres:5432/iacore
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:13
+    container_name: iacore_postgres
+    ports:
+      - "5432:5432" # Expose PostgreSQL's default port
+    environment:
+      - POSTGRES_DB=iacore
+      - POSTGRES_USER=iacore
+      - POSTGRES_PASSWORD=iacore
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      app-network:
+        aliases:
+          - postgres
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
