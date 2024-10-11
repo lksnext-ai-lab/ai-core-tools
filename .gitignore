@@ -7,7 +7,6 @@
 env/
 venv/
 .venv/
-env*
 dist/
 build/
 *.egg
@@ -31,3 +30,4 @@ htmlcov/
 cosas.txt
 flask_session
 __pycache__
+
