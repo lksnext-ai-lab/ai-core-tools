@@ -3,10 +3,11 @@ from app.model.repository import Repository
 from app.model.resource import Resource
 from app.model.agent import Agent
 from app.extensions import db
-import app.tools.milvusTools as milvusTools
+from app.tools.pgVectorTools import PGVectorTools
 
 import os
 
+pgVectorTools = PGVectorTools(db)
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 
@@ -63,8 +64,8 @@ Resources
 @repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/resource/<resource_id>/delete', methods=['GET'])
 def resource_delete(app_id, repository_id, resource_id):
     resource = db.session.query(Resource).filter(Resource.resource_id == resource_id).first()
-    milvusTools.delete_resource(resource)
-    
+    #milvusTools.delete_resource(resource)
+    pgVectorTools.delete_resource(resource)
     db.session.query(Resource).filter(Resource.resource_id == resource_id).delete()
     db.session.commit()
     return repository(app_id, repository_id)
@@ -85,8 +86,8 @@ def resource_create(app_id, repository_id):
             db.session.add(resource)
             db.session.commit()
             db.session.refresh(resource)
-            milvusTools.index_resource(resource)
-
+            #milvusTools.index_resource(resource)
+            pgVectorTools.index_resource(resource)
         
         return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
 

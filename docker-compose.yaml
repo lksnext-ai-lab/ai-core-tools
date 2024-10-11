@@ -11,14 +11,14 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - SQLALCHEMY_DATABASE_URI=postgresql://iacore:iacore@postgres:5432/iacore
+      - SQLALCHEMY_DATABASE_URI=postgresql+psycopg://iacore:iacore@postgres:5432/iacore
     depends_on:
       - postgres
     networks:
       - app-network
 
   postgres:
-    image: postgres:13
+    image: pgvector/pgvector:pg17
     container_name: iacore_postgres
     ports:
       - "5432:5432" # Expose PostgreSQL's default port

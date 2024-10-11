@@ -6,7 +6,7 @@ langchain
 langchain-openai
 langchain-anthropic
 langchain-community
+langchain_postgres
 psycopg2-binary
 alembic
 pypdf
-pymilvus

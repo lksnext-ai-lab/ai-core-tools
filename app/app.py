@@ -2,11 +2,11 @@ from flask import Flask, render_template, session, request
 from flask_restful import Api, Resource
 from flask_session import Session
 from app.extensions import db
+
 import os
 import json
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
-
 
 from app.model.app import App
 from flask import jsonify

@@ -27,4 +27,3 @@ EXPOSE 5000
 ENV SQLALCHEMY_DATABASE_URI='postgresql://iacore:iacore@postgres:5432/iacore'
 
 CMD ["sh", "-c", "alembic upgrade head && cd app && flask run --host=0.0.0.0"]
-#CMD ["ls", "-la"]

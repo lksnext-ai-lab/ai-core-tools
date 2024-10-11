@@ -12,8 +12,10 @@ from langchain.chains.conversational_retrieval.base import ConversationalRetriev
 from langchain.memory import ConversationBufferMemory
 
 from app.model.agent import Agent
-import app.tools.milvusTools as milvusTools
+from app.extensions import db
+from app.tools.pgVectorTools import PGVectorTools
 
+pgVectorTools = PGVectorTools(db)
 
 
 
@@ -52,12 +54,13 @@ def invoke_rag_with_repo(agent: Agent, input):
     print('AGENT ' + agent.name)
 
     embed = get_embedding(input)
-    similar_resources = milvusTools.search_similar_resources(agent.repository_id, embed, RESULTS=1)
+    similar_resources = pgVectorTools.search_similar_resources(agent.repository_id, embed, RESULTS=1)
     info = ""
+    print(similar_resources)
     for result in similar_resources:
-        #print(result)
+        print(result)
         #info += "\n\nINFO CHUNK: " + result[0].page_content  + "\nSource: " + result[0].metadata["source"] + " page:" + str(result[0].metadata["page"]) + "\n\n"
-        info += "\n\nINFO CHUNK: " + result[0].page_content
+        info += "\n\nINFO CHUNK: " + result.page_content
     
     prompt = ChatPromptTemplate.from_messages([
             ("system", agent.system_prompt),
@@ -89,7 +92,7 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     
     llm = getLLM(agent)
 
-    retriever = milvusTools.get_milvus_retriever(agent.repository_id)
+    retriever = pgVectorTools.get_pgvector_retriever(agent.repository_id)
    
     template = """
     Responde a las preguntas basadas en el contexto o historial de chat dado.
