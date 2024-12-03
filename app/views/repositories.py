@@ -1,9 +1,9 @@
 from flask import Flask, render_template, session, Blueprint, request, redirect, url_for
-from app.model.repository import Repository
-from app.model.resource import Resource
-from app.model.agent import Agent
-from app.extensions import db
-from app.tools.pgVectorTools import PGVectorTools
+from model.repository import Repository
+from model.resource import Resource
+from model.agent import Agent
+from extensions import db
+from tools.pgVectorTools import PGVectorTools
 
 import os
 

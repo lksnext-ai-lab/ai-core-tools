@@ -1,93 +1,236 @@
 {% include 'header.html' %}
 
 <div class="row">
-    <div class="col-10">
-        <div class="card shadow mb-4">
-            <!-- Card header -->
-            <div class="card-header border-bottom">
-                <h5 class="mb-0">Agent: {{agent.name}}</h5>
-            </div>
-            <form action="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                method="POST">
-                <input type="hidden" name="app_id" value="{{app_id}}">
+    <div class="col-6">
+        {% if agent.agent_id == 0 %}
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link active" data-bs-toggle="tab" href="#normal-agent">Agente Básico</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#ocr-agent">Agente OCR</a>
+            </li>
+        </ul>
+        {% endif %}
 
-                <div class="card-body">
-                    <div class="row">
-                        <!-- Information item -->
-                        <div class="col-md-6 mb-4">
-                            <label class="form-label">Name<span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" placeholder="Name..." value="{{agent.name}}"
-                                name="name">
-                        </div>
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="normal-agent">
+                <div class="card shadow mb-4">
+                    <div class="card-header border-bottom">
+                        <h5 class="mb-0">Agente: {{agent.name}}</h5>
+                    </div>
+                    <form action="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}"
+                        method="POST" onsubmit="return validateAgentForm()">
+                        <input type="hidden" name="app_id" value="{{app_id}}">
 
-                        <div class="col-md-12 mb-4">
-                            <label class="form-label">Description</label>
-                            <input type="text" class="form-control" placeholder="Description..."
-                                value="{{agent.description}}" name="description">
-                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-4">
+                                    <label class="form-label">Name<span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" placeholder="Name..." value="{{agent.name}}"
+                                        name="name">
+                                </div>
 
-                        <div class="col-md-12 mb-4">
-                            <label class="form-label">Model</label>
-                            <select name="model_id" class="form-control">
-                                <option value="">-- Select a model --</option>
-                                {% for model in models %}
-                                <option value="{{ model.model_id }}" {% if agent.model_id==model.model_id %}selected{%
-                                    endif %}>
-                                    {{ model.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                                <div class="col-md-12 mb-4">
+                                    <label class="form-label">Description</label>
+                                    <input type="text" class="form-control" placeholder="Description..."
+                                        value="{{agent.description}}" name="description">
+                                </div>
 
-                        <div class="col-md-12 mb-4">
-                            <label class="form-label">System prompt</label>
-                            <textarea name="system_prompt" class="form-control mb-0"
-                                placeholder="Add a system prompt..." rows="2">{{agent.system_prompt}}</textarea>
-                        </div>
+                                <div class="col-md-12 mb-4">
+                                    <label class="form-label">Model</label>
+                                    <select name="model_id" class="form-control">
+                                        <option value="">-- Select a model --</option>
+                                        {% for model in models %}
+                                        <option value="{{ model.model_id }}" {% if agent.model_id==model.model_id %}selected{%
+                                            endif %}>
+                                            {{ model.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
 
-                        <div class="col-md-12 mb-4">
-                            <label class="form-label">Prompt template</label>
-                            <textarea name="prompt_template" class="form-control mb-0"
-                                placeholder="Add a prompt tempate..." rows="2">{{agent.prompt_template}}</textarea>
-                        </div>
+                                <div class="col-md-12 mb-4">
+                                    <label class="form-label">System prompt</label>
+                                    <textarea name="system_prompt" class="form-control mb-0"
+                                        placeholder="Add a system prompt..." rows="2">{{agent.system_prompt}}</textarea>
+                                </div>
 
-                        {% if repositories %}
-                        <div class="col-md-6 mb-4">
-                            <label class="form-label">Repository</label>
-                            <select name="repository_id" class="form-control">
-                                <option value="">-- Select a Repository --</option>
-                                {% for repository in repositories %}
-                                <option value="{{ repository.repository_id }}" {% if
-                                    agent.repository_id==repository.repository_id %}selected{% endif %}>
-                                    {{ repository.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                                <div class="col-md-12 mb-4">
+                                    <label class="form-label">Prompt template</label>
+                                    <textarea name="prompt_template" class="form-control mb-0"
+                                        placeholder="Add a prompt tempate... Must include {question}" 
+                                        rows="2">{{agent.prompt_template}}</textarea>
+                                    <small class="text-muted">El prompt debe incluir {question} para funcionar correctamente</small>
+                                </div>
 
-                        {% endif %}
-                        <div class="col-6">
+                                {% if repositories %}
+                                <div class="col-md-6 mb-4">
+                                    <label class="form-label">Repository</label>
+                                    <select name="repository_id" class="form-control">
+                                        <option value="">-- Select a Repository --</option>
+                                        {% for repository in repositories %}
+                                        <option value="{{ repository.repository_id }}" {% if
+                                            agent.repository_id==repository.repository_id %}selected{% endif %}>
+                                            {{ repository.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
 
-                            <label class="form-label">Conversational (With mem.)</label>
+                                {% endif %}
+                                <div class="col-6">
 
-                            <div class="form-check form-switch form-check-lg mb-0">
-                                <input class="form-check-input" type="checkbox" id="checkPrivacy1" {% if
-                                    agent.has_memory %} checked {% endif %} name="has_memory" />
+                                    <label class="form-label">Conversational (With mem.)</label>
+
+                                    <div class="form-check form-switch form-check-lg mb-0">
+                                        <input class="form-check-input" type="checkbox" id="checkMemory" 
+                                            {% if agent.has_memory %} checked {% endif %} name="has_memory" />
+                                    </div>
+
+                                </div>
+
+                                <div class="col-6">
+                                    <label class="form-label">Output Parser</label>
+                                    <div class="form-check form-switch form-check-lg mb-0">
+                                        <input class="form-check-input" type="checkbox" id="checkOutputParser" 
+                                            {% if agent.output_parser_id %} checked {% endif %} 
+                                            onchange="toggleOutputParserSelect(this)"/>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12 mb-4" id="outputParserSelect" {% if not agent.output_parser_id %}style="display: none"{% endif %}>
+                                    <label class="form-label">Select Output Parser</label>
+                                    <select name="output_parser_id" class="form-control">
+                                        <option value="">-- Select an Output Parser --</option>
+                                        {% for parser in output_parsers %}
+                                        <option value="{{ parser.parser_id }}" 
+                                            {% if agent.output_parser_id == parser.parser_id %}selected{% endif %}>
+                                            {{ parser.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                             </div>
-
                         </div>
-
-                    </div>
-                    <div class="col-12">
-                        <input type="submit" class="btn btn-primary" value="Save" />
-                        <a href="{{ url_for('agents.app_agents', app_id=session['app_id']) }}"
-                            class="btn btn-primary-soft">Cancel</a>
-                    </div>
-
+                        <div class="col-12">
+                            <input type="submit" class="btn btn-primary" value="Save" />
+                            <a href="{{ url_for('agents.app_agents', app_id=session['app_id']) }}"
+                                class="btn btn-primary-soft">Cancel</a>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            </div>
+
+            {% if agent.agent_id == 0 %}
+            <div class="tab-pane fade" id="ocr-agent">
+                <div class="card shadow mb-4">
+                    <div class="card-header border-bottom">
+                        <h5 class="mb-0">Agente OCR</h5>
+                    </div>
+                    {% include 'agents/_ocr_agent_form.html' %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const maxRows = 4;
+        const tableBody = document.querySelector('#outputTable tbody');
+        const addRowBtn = document.getElementById('addRowBtn');
+        const removeRowBtn = document.getElementById('removeRowBtn');
+        const saveBtn = document.querySelector('input[type="submit"]');
+        const modelNameInput = document.getElementById('modelName');
+
+        addRowBtn.addEventListener('click', function() {
+            if (tableBody.rows.length < maxRows) {
+                const newRow = tableBody.insertRow();
+                newRow.innerHTML = `
+                    <td><input type="text" class="form-control" name="field_name" placeholder="Field name"></td>
+                    <td>
+                        <select class="form-control" name="field_type">
+                            <option value="str">str</option>
+                            <option value="int">int</option>
+                            <option value="float">float</option>
+                        </select>
+                    </td>
+                    <td><input type="text" class="form-control" name="field_description" placeholder="Description"></td>
+                `;
+                updateButtons();
+            }
+        });
+
+        removeRowBtn.addEventListener('click', function() {
+            if (tableBody.rows.length > 0) {
+                tableBody.deleteRow(-1);
+                updateButtons();
+            }
+        });
+
+        saveBtn.addEventListener('click', function(event) {
+            if (!validateTable()) {
+                event.preventDefault();
+                alert('Please ensure the table and model name meet the required conditions.');
+            }
+        });
+
+        function validateTable() {
+            const modelName = modelNameInput.value.trim();
+            const rows = tableBody.rows;
+            let allRowsEmpty = true;
+            let allRowsComplete = true;
+
+            for (let i = 0; i < rows.length; i++) {
+                const inputs = rows[i].querySelectorAll('input, select');
+                const rowEmpty = Array.from(inputs).every(input => input.value.trim() === '');
+                const rowComplete = Array.from(inputs).every(input => input.value.trim() !== '');
+
+                if (!rowEmpty) allRowsEmpty = false;
+                if (!rowComplete) allRowsComplete = false;
+            }
+
+            if ((modelName === '' && allRowsEmpty) || (modelName !== '' && allRowsComplete)) {
+                return true;
+            }
+            return false;
+        }
+
+        function updateButtons() {
+            removeRowBtn.style.display = tableBody.rows.length > 0 ? 'inline-block' : 'none';
+            addRowBtn.disabled = tableBody.rows.length >= maxRows;
+        }
+    });
+
+    function toggleOutputParserSelect(checkbox) {
+        const selectDiv = document.getElementById('outputParserSelect');
+        selectDiv.style.display = checkbox.checked ? 'block' : 'none';
+        if (!checkbox.checked) {
+            document.querySelector('select[name="output_parser_id"]').value = '';
+        }
+    }
+
+    function toggleOutputParserSelectOCR(checkbox) {
+        const selectDiv = document.getElementById('outputParserSelectOCR');
+        selectDiv.style.display = checkbox.checked ? 'block' : 'none';
+        if (!checkbox.checked) {
+            document.querySelector('select[name="output_parser_id"]').value = '';
+        }
+    }
+
+    function validateAgentForm() {
+        const promptTemplate = document.querySelector('textarea[name="prompt_template"]').value;
+        
+        if (!promptTemplate.includes("{question}")) {
+            alert('El prompt template debe incluir {question}');
+            return false;
+        }
+        
+        return true;
+    }
+
+</script>
 
 {% include 'footer.html' %}

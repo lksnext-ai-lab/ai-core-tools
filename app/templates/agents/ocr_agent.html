@@ -1,0 +1,24 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="col-6">
+        <div class="card shadow mb-4">
+            <div class="card-header border-bottom">
+                <h5 class="mb-0">Agente OCR: {{agent.name}}</h5>
+            </div>
+            {% include 'agents/_ocr_agent_form.html' %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleOutputParserSelectOCR(checkbox) {
+        const selectDiv = document.getElementById('outputParserSelectOCR');
+        selectDiv.style.display = checkbox.checked ? 'block' : 'none';
+        if (!checkbox.checked) {
+            document.querySelector('select[name="output_parser_id"]').value = '';
+        }
+    }
+</script>
+
+{% include 'footer.html' %} 

@@ -99,6 +99,11 @@
                                     <a class="nav-link" href="#"><i class="bi bi-person fa-fw me-2"></i>Crawlers</a>
                                 </li>
                                 <li class="nav-item">
+                                    <a class="nav-link" href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}">
+                                        <i class="bi bi-file-text fa-fw me-2"></i>Output Parsers
+                                    </a>
+                                </li>
+                                <li class="nav-item">
                                     <a class="nav-link" href="account-bookings.html"><i
                                             class="bi bi-ticket-perforated fa-fw me-2"></i>API Keys</a>
                                 </li>
@@ -265,7 +270,7 @@
                             <a class="avatar avatar-sm p-0" href="#" id="profileDropdown" role="button"
                                 data-bs-auto-close="outside" data-bs-display="static" data-bs-toggle="dropdown"
                                 aria-expanded="false">
-                                <img class="avatar-img rounded-2" src="{{session.picture}}" alt="avatar">
+                                <img loading="lazy" class="avatar-img rounded-circle shadow" src="{{session.picture}}" alt="avatar">
                             </a>
 
                             <ul class="dropdown-menu dropdown-animation dropdown-menu-end shadow pt-3"
@@ -275,7 +280,7 @@
                                     <div class="d-flex align-items-center">
                                         <!-- Avatar -->
                                         <div class="avatar me-3">
-                                            <img class="avatar-img rounded-circle shadow" src="{{session.picture}}"
+                                            <img loading="lazy" class="avatar-img rounded-circle shadow" src="{{session.picture}}"
                                                 alt="avatar">
                                         </div>
                                         <div>

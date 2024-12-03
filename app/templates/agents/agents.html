@@ -1,9 +1,6 @@
 {% include 'header.html' %}
 
-
-
 <div class="row">
-
     <div class="d-sm-flex justify-content-between align-items-center">
         <h1 class="h4 mb-2 mb-sm-0">Agents</h1>
         <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=0) }}" class="btn btn-primary mt-3">
@@ -17,8 +14,10 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Description</th>
+            <th scope="col">Type</th>
             <th scope="col">RAG</th>
             <th scope="col">Memory</th>
+            <th scope="col">Output Parser</th>
             <th scope="col">Model</th>
             <th scope="col">Actions</th>
         </tr>
@@ -26,13 +25,9 @@
     <tbody>
         {% for agent in app.agents %}
         <tr>
-            <td>
-                <a href="#">{{agent.name}}</a>
-            </td>
-            <td>
-                {{agent.description}}
-            </td>
-
+            <td><a href="#">{{agent.name}}</a></td>
+            <td>{{agent.description}}</td>
+            <td>Basic</td>
             <td>
                 {% if agent.repository %}
                 <i class="bi bi-check-circle-fill text-success"></i>
@@ -47,25 +42,45 @@
                 <i class="bi bi-x-circle-fill text-danger"></i>
                 {% endif %}
             </td>
-
+            <td>
+                {% if agent.output_parser_id %}
+                <i class="bi bi-check-circle-fill text-success"></i>
+                {% else %}
+                <i class="bi bi-x-circle-fill text-danger"></i>
+                {% endif %}
+            </td>
             <td>{{agent.model.name}}</td>
             <td>
-
-                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-primary">Edit</a>
-                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-danger">Delete</a>
-                <a href="{{ url_for('agents.app_agent_playground', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-warning">Playground</a>
-
+                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}" class="btn btn-primary">Edit</a>
+                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}?type=basic" class="btn btn-danger">Delete</a>
+                <a href="{{ url_for('agents.app_agent_playground', app_id=session['app_id'], agent_id=agent.agent_id) }}" class="btn btn-warning">Playground</a>
+            </td>
+        </tr>
+        {% endfor %}
+        
+        {% for agent in app.ocr_agents %}
+        <tr>
+            <td><a href="#">{{agent.name}}</a></td>
+            <td>{{agent.description}}</td>
+            <td>OCR</td>
+            <td><i class="bi bi-dash text-muted"></i></td>
+            <td><i class="bi bi-dash text-muted"></i></td>
+            <td>
+                {% if agent.output_parser_id %}
+                <i class="bi bi-check-circle-fill text-success"></i>
+                {% else %}
+                <i class="bi bi-x-circle-fill text-danger"></i>
+                {% endif %}
+            </td>
+            <td>{{agent.model_rel.name}}</td>
+            <td>
+                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}?type=ocr" class="btn btn-primary">Edit</a>
+                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}?type=ocr" class="btn btn-danger">Delete</a>
+                <a href="{{ url_for('agents.app_ocr_playground', app_id=session['app_id'], agent_id=agent.agent_id) }}" class="btn btn-warning">Playground</a>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
-
-
-
 
 {% include 'footer.html' %}

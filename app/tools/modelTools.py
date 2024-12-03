@@ -1,9 +1,13 @@
+import os
+from dotenv import load_dotenv
 from flask import session
+from typing import Dict, Type, Union
+from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain.prompts.prompt import PromptTemplate
 from langchain.chains.llm import LLMChain
@@ -11,40 +15,54 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 
-from app.model.agent import Agent
-from app.extensions import db
-from app.tools.pgVectorTools import PGVectorTools
+from model.output_parser import OutputParser
+from model.agent import Agent
+from extensions import db
+from tools.pgVectorTools import PGVectorTools
+from tools.outputParserTools import create_dynamic_pydantic_model, get_parser_model_by_id
+
+load_dotenv()
 
 pgVectorTools = PGVectorTools(db)
-
-
 
 def get_embedding(text):
     embeddings = OpenAIEmbeddings()
     return embeddings.embed_query(text)
 
+def get_output_parser(agent):
+    """Obtiene el parser apropiado basado en el output_parser_id del agente"""
+    if agent.output_parser_id is None:
+        return StrOutputParser()
+
+    try:
+        pydantic_model = get_parser_model_by_id(agent.output_parser_id)
+        return JsonOutputParser(pydantic_object=pydantic_model)
+    except Exception as e:
+        print(f"Error al crear el modelo Pydantic: {str(e)}")
+        return StrOutputParser()
 
 def invoke(agent, input):
     print('AGENT ' + agent.name)
-    sys_message = SystemMessage(agent.system_prompt)
-    user_message = HumanMessage(agent.prompt_template)
-
-    prompt = ChatPromptTemplate.from_messages([
-            ("system", agent.system_prompt),    
-            ("human", agent.prompt_template),
-        ])
     
-
-    output_parser = StrOutputParser()
     model = getLLM(agent)
-    chain = (
-        {"question": RunnablePassthrough()} 
-        | prompt
-        | model
-        | output_parser
-    )
+    if model is None:
+        raise ValueError("No se pudo inicializar el modelo para el agente")
+        
+    output_parser = get_output_parser(agent)
+    
+    format_instructions = output_parser.get_format_instructions()
+    format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
 
-    return chain.invoke(input)
+    system_prompt = agent.system_prompt
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("system", "<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
+        ("human", agent.prompt_template)
+    ])
+    
+    chain = prompt | model | output_parser
+    return chain.invoke({"question": input})
 
 def invoke_rag_with_repo(agent: Agent, input):
     if agent.repository is None:
@@ -62,23 +80,22 @@ def invoke_rag_with_repo(agent: Agent, input):
         #info += "\n\nINFO CHUNK: " + result[0].page_content  + "\nSource: " + result[0].metadata["source"] + " page:" + str(result[0].metadata["page"]) + "\n\n"
         info += "\n\nINFO CHUNK: " + result.page_content
     
+    output_parser = get_output_parser(agent)
+    format_instructions = output_parser.get_format_instructions()
+    format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
+    
     prompt = ChatPromptTemplate.from_messages([
             ("system", agent.system_prompt),
+            ("system", "<output_format_instructions>" + format_instructions + "</output_format_instructions>"),    
             ("human", "Here is some information that might help you: " + info if info != "" else ""),    
             ("human", agent.prompt_template),
         ])
     
 
-    output_parser = StrOutputParser()
     model = getLLM(agent)
-    chain = (
-        {"question": RunnablePassthrough()} 
-        | prompt
-        | model
-        | output_parser
-    )
+    chain = prompt | model | output_parser
 
-    return chain.invoke(input)
+    return chain.invoke({"question": input})
 
 
 def invoke_ConversationalRetrievalChain(agent, input, session):
@@ -125,7 +142,7 @@ def getLLM(agent):
     if agent.model is None:
         return None
     if agent.model.provider == "OpenAI":
-        return ChatOpenAI(model=agent.model.name)
+        return ChatOpenAI(model=agent.model.name, api_key=os.getenv('OPENAI_API_KEY'))
     if agent.model.provider == "Anthropic":
         return ChatAnthropic(model=agent.model.name)
     return None

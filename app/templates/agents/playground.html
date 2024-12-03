@@ -29,6 +29,38 @@
                             </li>
                         </ul>
                     </div>
+                    <div class="col-12">
+                        <ul class="list-group list-group-borderless">
+                            <li class="list-group-item">
+                                <span>Formato de salida: </span>
+                                {% if agent.output_parser %}
+                                <div class="mt-2">
+                                    <p class="mb-2"><strong>Nombre de la clase:</strong> {{agent.output_parser.name}}</p>
+                                    <table class="table table-sm table-bordered">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Nombre del campo</th>
+                                                <th>Tipo</th>
+                                                <th>Descripción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for field in agent.output_parser.fields %}
+                                            <tr>
+                                                <td>{{field.name}}</td>
+                                                <td><code>{{field.type}}</code></td>
+                                                <td>{{field.description}}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="h6 fw-normal mb-0">None</p>
+                                {% endif %}
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -112,7 +144,7 @@
                 var respDiv = $('#referenece').clone();
                 respDiv.attr('id', 'referenece-' + cont);
                 cont++;
-                $('#ref-text', respDiv).text(data.generated_text);
+                $('#ref-text', respDiv).text(JSON.stringify(data["generated_text"], null, 2));
                 $('#referenece').parent().append(respDiv);
 
                 $("html, body").animate({

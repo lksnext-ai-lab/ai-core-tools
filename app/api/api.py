@@ -1,8 +1,10 @@
-from flask import Flask, render_template, session, Blueprint, request, redirect, jsonify, request
+from flask import session, Blueprint, request, jsonify, request
 from flask import request
-from app.model.agent import Agent
-import app.tools.modelTools as modelTools
-from app.extensions import db
+from agents.ocrAgent import process_pdf
+from model.agent import Agent
+import tools.modelTools as modelTools
+from extensions import db
+import os
 
 
 api_blueprint = Blueprint('api', __name__)
@@ -30,7 +32,7 @@ def api():
         result = modelTools.invoke_rag_with_repo(agent, question)
     else:
         result = modelTools.invoke(agent, question)
-
+    print("result: ", result)
     data = {
         "input": question,
         "generated_text": result,
@@ -55,4 +57,35 @@ def api():
 
 
     return jsonify(data)
+    
+@api_blueprint.route('/api/ocr', methods=['POST'])
+def process_ocr():
+    if 'pdf' not in request.files:
+        return jsonify({'error': 'No se proporcionó archivo PDF'}), 400
+        
+    pdf_file = request.files['pdf']
+    print("pdf_file: ", pdf_file)
+    agent_id = request.form.get('agent_id')
+    
+    if not pdf_file or not agent_id:
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+    # Guardar temporalmente el PDF
+    temp_path = os.path.join('./downloads/', pdf_file.filename)
+    print("temp_path: ", temp_path)
+    
+    # Si existe un archivo diferente, eliminarlo antes de guardar el nuevo
+    if os.path.exists(temp_path) and os.path.basename(temp_path) != pdf_file.filename:
+        os.remove(temp_path)
+    
+    # Guardar el nuevo archivo solo si no existe
+    if not os.path.exists(temp_path):
+        pdf_file.save(temp_path)
+    
+    try:
+        # Procesar el PDF usando el agente OCR
+        result = process_pdf(int(agent_id), temp_path)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     

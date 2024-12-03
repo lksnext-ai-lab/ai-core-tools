@@ -1,14 +1,12 @@
-from flask import Flask, render_template, session, Blueprint, request, redirect
-from app.model.agent import Agent
-from app.model.app import App
-from app.model.model import Model
-from app.model.repository import Repository
+from flask import render_template, Blueprint, request
+from model.agent import Agent
+from model.app import App
+from model.ocr_agent import OCRAgent
 
-from app.extensions import db
-
+from extensions import db
+from services.agent_service import AgentService
 
 agents_blueprint = Blueprint('agents', __name__)
-
 
 '''
 Agents
@@ -20,41 +18,35 @@ def app_agents(app_id):
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>', methods=['GET', 'POST'])
 def app_agent(app_id, agent_id):
+    agent_service = AgentService()
     if request.method == 'POST':
-        agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
-        if agent is None:
-            agent = Agent()
-        agent.name = request.form['name']
-        agent.description = request.form.get('description')
-        agent.system_prompt = request.form.get('system_prompt')
-        print(agent.system_prompt)
-        agent.prompt_template = request.form.get('prompt_template')
-        agent.type = request.form.get('type')
-        agent.status = request.form.get('status')
-        agent.model_id = request.form.get('model_id')
-        agent.app_id = app_id
-        agent.repository_id = request.form.get('repository_id')
-        agent.has_memory = request.form.get('has_memory') == 'on'
-        if agent.repository_id == '':
-            agent.repository_id = None 
-        db.session.add(agent)
-        db.session.commit()
+        agent_data = {
+            'agent_id': agent_id,
+            'app_id': app_id,
+            **request.form.to_dict()
+        }
+        agent_type = request.form.get('type', 'basic')
+        agent = agent_service.create_or_update_agent(agent_data, agent_type)
         return app_agents(app_id)
-    agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
-    if agent is None:
-        agent = Agent(agent_id=0, name="")
     
-    models = db.session.query(Model).all()
-    repositories = db.session.query(Repository).filter(Repository.app_id == app_id).all()
-    return render_template('agents/agent.html', app_id=app_id, agent=agent, models=models, repositories=repositories)
+    # Obtener el tipo del query parameter o usar 'basic' como valor por defecto
+    agent_type = request.args.get('type', 'basic')
+    return agent_service.get_agent_form_data(app_id, agent_id, agent_type)
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>/delete', methods=['GET'])
 def app_agent_delete(app_id, agent_id):
-    db.session.query(Agent).filter(Agent.agent_id == agent_id).delete()
-    db.session.commit()
+    agent_service = AgentService()
+    # Obtener el tipo del query parameter
+    agent_type = request.args.get('type', 'basic')
+    agent_service.delete_agent(agent_id, agent_type)
     return app_agents(app_id)
 
 @agents_blueprint.route('/app/<app_id>/agent/<agent_id>/play', methods=['GET'])
-def app_agent_playground(app_id,  agent_id):
+def app_agent_playground(app_id, agent_id):
     agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     return render_template('agents/playground.html', app_id=app_id, agent=agent)
+
+@agents_blueprint.route('/app/<app_id>/agent/<agent_id>/ocr_play', methods=['GET'])
+def app_ocr_playground(app_id, agent_id):
+    agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+    return render_template('agents/ocr_playground.html', app_id=app_id, agent=agent)

@@ -1,0 +1,216 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="col-10">
+        <!-- Card de información del agente -->
+        <div class="card shadow mb-4">
+            <div class="card-header border-bottom">
+                <h5 class="mb-0">Playground OCR: {{agent.name}}</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12">
+                        <ul class="list-group list-group-borderless">
+                            <li class="list-group-item">
+                                <span>Vision System prompt: </span>
+                                <p class="h6 fw-normal mb-0">{{agent.vision_system_prompt}}</p>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-12">
+                        <ul class="list-group list-group-borderless">
+                            <li class="list-group-item">
+                                <span>Text System prompt: </span>
+                                <p class="h6 fw-normal mb-0">{{agent.text_system_prompt}}</p>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-12">
+                        <ul class="list-group list-group-borderless">
+                            <li class="list-group-item">
+                                <span>Formato de salida: </span>
+                                {% if agent.output_parser %}
+                                <div class="mt-2">
+                                    <p class="mb-2"><strong>Nombre de la clase:</strong> {{agent.output_parser.name}}</p>
+                                    <table class="table table-sm table-bordered">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Nombre del campo</th>
+                                                <th>Tipo</th>
+                                                <th>Descripción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for field in agent.output_parser.fields %}
+                                            <tr>
+                                                <td>{{field.name}}</td>
+                                                <td><code>{{field.type}}</code></td>
+                                                <td>{{field.description}}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="h6 fw-normal mb-0">None</p>
+                                {% endif %}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card de procesamiento de PDF -->
+        <div class="card shadow">
+            <div class="card-header border-bottom">
+                <h5 class="card-header-title">Procesar PDF</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Área de subida/preview PDF -->
+                    <div class="col-6">
+                        <div id="pdfPreview" class="mb-3" style="height: 500px; display: none;">
+                            <iframe id="pdfViewer" style="width: 100%; height: 100%; border: 1px solid #ddd; border-radius: 0.5rem;"></iframe>
+                        </div>
+                        
+                        <div class="pdf-upload-area border rounded p-3 text-center" id="dropZone">
+                            <i class="fas fa-file-pdf fa-3x mb-3"></i>
+                            <p>Arrastra un archivo PDF aquí o</p>
+                            <input type="file" id="pdfInput" accept=".pdf" class="d-none">
+                            <button class="btn btn-primary" onclick="document.getElementById('pdfInput').click()">
+                                Seleccionar archivo
+                            </button>
+                        </div>
+                        
+                        <button id="processBtn" class="btn btn-success mt-3 w-100" style="display: none;">
+                            Procesar PDF
+                        </button>
+                    </div>
+                    <!-- Área de resultados -->
+                    <div class="col-6">
+                        <div id="results" class="border rounded p-3" style="display: none;">
+                            <h6 class="mb-3">Resultados del procesamiento:</h6>
+                            <div id="resultsTable"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Añadir el modal de carga después del div de resultados -->
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <h5>Procesando documento...</h5>
+                <p class="mb-0">Por favor espere mientras se analiza el PDF.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const pdfInput = document.getElementById('pdfInput');
+const pdfPreview = document.getElementById('pdfPreview');
+const pdfViewer = document.getElementById('pdfViewer');
+const processBtn = document.getElementById('processBtn');
+const results = document.getElementById('results');
+let currentFile = null;
+
+// Prevenir comportamiento por defecto del drag & drop
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+// Manejar el drop del archivo
+dropZone.addEventListener('drop', handleDrop, false);
+pdfInput.addEventListener('change', handleFileSelect, false);
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    handleFiles(files);
+}
+
+function handleFileSelect(e) {
+    const files = e.target.files;
+    handleFiles(files);
+}
+
+function handleFiles(files) {
+    if (files.length > 0 && files[0].type === 'application/pdf') {
+        currentFile = files[0];
+        const fileUrl = URL.createObjectURL(currentFile);
+        pdfViewer.src = fileUrl;
+        pdfPreview.style.display = 'block';
+        processBtn.style.display = 'block';
+    }
+}
+
+processBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+
+    // Crear un nuevo FormData cada vez
+    const formData = new FormData();
+    
+    // Crear una nueva copia del archivo
+    const newFile = new File([currentFile], currentFile.name, {
+        type: currentFile.type,
+        lastModified: new Date().getTime()
+    });
+    
+    formData.append('pdf', newFile);
+    formData.append('agent_id', '{{agent.agent_id}}');
+
+    try {
+        // Mostrar modal de carga
+        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+        loadingModal.show();
+
+        const response = await fetch('/api/ocr', {
+            method: 'POST',
+            body: formData
+        });
+        console.log(response);
+        const data = await response.json();
+        
+        // Ocultar modal de carga
+        loadingModal.hide();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        displayResults(data);
+    } catch (error) {
+        console.error('Error:', error);
+        // Mostrar error al usuario
+        alert('Error al procesar el documento: ' + error.message);
+    }
+});
+
+function displayResults(data) {
+    if (!data || typeof data !== 'object') {
+        console.error('Datos inválidos recibidos:', data);
+        return;
+    }
+
+    results.style.display = 'block';
+    const resultsTable = document.getElementById('resultsTable');
+    
+    // Mostrar el JSON formateado
+    resultsTable.innerHTML = `<pre class="bg-light p-3 rounded"><code>${JSON.stringify(data, null, 2)}</code></pre>`;
+}
+</script>
+
+{% include 'footer.html' %} 

@@ -30,4 +30,7 @@ htmlcov/
 cosas.txt
 flask_session
 __pycache__
-
+downloads/
+images/
+agent_process.log
+__init__.py

@@ -1,43 +1,38 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey 
+from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from db.base_class import Base
 
 
-class Agent(Base):
-    __tablename__ = 'Agent'
+class OCRAgent(Base):
+    __tablename__ = 'OCRAgent'
+    __table_args__ = {'extend_existing': True}
     agent_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     description = Column(String(1000))
-    system_prompt = Column(Text)
-    prompt_template = Column(Text)
-    type = Column(String(45))
-    status = Column(String(45))
-    model = Column(String(45))
+    vision_model_id = Column(Integer,
+                        ForeignKey('Model.model_id'),
+                        nullable=True)
     model_id = Column(Integer,
                         ForeignKey('Model.model_id'),
                         nullable=True)
-    repository_id = Column(Integer,
-                        ForeignKey('Repository.repository_id'),
-                        nullable=True)
+    vision_system_prompt = Column(Text)
+    text_system_prompt = Column(Text)
     app_id = Column(Integer,
                         ForeignKey('App.app_id'),
                         nullable=True)
-    has_memory = Column(Boolean)
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
                         nullable=True)
     
-    model = relationship('Model',
+    vision_model_rel = relationship('Model',
+                           foreign_keys=[vision_model_id])
+    
+    model_rel = relationship('Model',
                            foreign_keys=[model_id])
     
-    repository = relationship('Repository',
-                           back_populates='agents',
-                           foreign_keys=[repository_id])
-
     app = relationship('App',
-                           back_populates='agents',
+                           back_populates='ocr_agents',
                            foreign_keys=[app_id])
     
     output_parser = relationship('OutputParser',
                            foreign_keys=[output_parser_id])
-    

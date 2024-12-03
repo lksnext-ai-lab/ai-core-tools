@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey 
 from sqlalchemy.orm import relationship
-from app.db.base_class import Base
+from db.base_class import Base
+from model.output_parser import OutputParser
 
 class App(Base):
     '''User model class constructor'''
@@ -8,6 +9,10 @@ class App(Base):
     app_id = Column(Integer, primary_key=True)
     name = Column(String(255))
 
-    repositories= relationship('Repository', lazy=True)
-    agents= relationship('Agent', lazy=True)
+    repositories = relationship('Repository', lazy=True)
+    agents = relationship('Agent', lazy=True)
+    ocr_agents = relationship('OCRAgent', lazy=True)
+    output_parsers = relationship('OutputParser', 
+                                back_populates='app',
+                                lazy=True)
 
