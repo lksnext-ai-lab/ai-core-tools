@@ -1,9 +1,9 @@
 from flask import Flask, render_template, session, Blueprint, request, redirect, url_for
-from model.repository import Repository
-from model.resource import Resource
-from model.agent import Agent
-from extensions import db
-from tools.pgVectorTools import PGVectorTools
+from app.model.repository import Repository
+from app.model.resource import Resource
+from app.model.agent import Agent
+from app.extensions import db
+from app.tools.pgVectorTools import PGVectorTools
 
 import os
 
@@ -13,13 +13,13 @@ REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 
 repositories_blueprint = Blueprint('repositories', __name__)
 
-@repositories_blueprint.route('/app/<app_id>/repositories', methods=['GET'])
-def repositories(app_id):
+@repositories_blueprint.route('/app/<int:app_id>/repositories', methods=['GET'])
+def repositories(app_id: int):
     repos = db.session.query(Repository).filter(Repository.app_id == app_id).all()
     return render_template('repositories/repositories.html', repos=repos)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>', methods=['GET', 'POST'])
-def repository(app_id, repository_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>', methods=['GET', 'POST'])
+def repository(app_id: int, repository_id: int):
     if request.method == 'POST':
         repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
         if repo is None:
@@ -45,13 +45,13 @@ def repository(app_id, repository_id):
     repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
     return render_template('repositories/resources.html', app_id=app_id, repo=repo)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/settings', methods=['GET'])
-def repository_settings(app_id, repository_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/settings', methods=['GET'])
+def repository_settings(app_id: int, repository_id: int):
     repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
     return render_template('repositories/repository.html', app_id=app_id, repo=repo)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/delete', methods=['GET'])
-def repository_delete(app_id, repository_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/delete', methods=['GET'])
+def repository_delete(app_id: int, repository_id: int):
     db.session.query(Resource).filter(Resource.repository_id == repository_id).delete()
     db.session.query(Repository).filter(Repository.repository_id == repository_id).delete()
     db.session.commit()
@@ -61,8 +61,8 @@ def repository_delete(app_id, repository_id):
 '''
 Resources
 '''
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/resource/<resource_id>/delete', methods=['GET'])
-def resource_delete(app_id, repository_id, resource_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource/<int:resource_id>/delete', methods=['GET'])
+def resource_delete(app_id: int, repository_id: int, resource_id: int):
     resource = db.session.query(Resource).filter(Resource.resource_id == resource_id).first()
     #milvusTools.delete_resource(resource)
     pgVectorTools.delete_resource(resource)
@@ -70,8 +70,8 @@ def resource_delete(app_id, repository_id, resource_id):
     db.session.commit()
     return repository(app_id, repository_id)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/resource', methods=['POST'])
-def resource_create(app_id, repository_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource', methods=['POST'])
+def resource_create(app_id: int, repository_id: int):
     if request.method == 'POST':
         if 'file' not in request.files:
             return redirect(request.url)
@@ -94,13 +94,13 @@ def resource_create(app_id, repository_id):
 '''
 Agents
 '''
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/agents', methods=['GET'])
-def repository_agents(app_id, repository_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agents', methods=['GET'])
+def repository_agents(app_id: int, repository_id: int):
     repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
     return render_template('repositories/agents.html', app_id=app_id, repo=repo)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/agent/<agent_id>', methods=['GET', 'POST'])
-def repository_agent(app_id, repository_id, agent_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agent/<int:agent_id>', methods=['GET', 'POST'])
+def repository_agent(app_id: int, repository_id: int, agent_id: int):
     if request.method == 'POST':
         agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
         if agent is None:
@@ -124,14 +124,14 @@ def repository_agent(app_id, repository_id, agent_id):
         
     return render_template('repositories/agent.html', app_id=app_id, repo=repo, agent=agent)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/agent/<agent_id>/delete', methods=['GET'])
-def repository_agent_delete(app_id, repository_id, agent_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agent/<int:agent_id>/delete', methods=['GET'])
+def repository_agent_delete(app_id: int, repository_id: int, agent_id: int):
     db.session.query(Agent).filter(Agent.agent_id == agent_id).delete()
     db.session.commit()
     return repository_agents(app_id, repository_id)
 
-@repositories_blueprint.route('/app/<app_id>/repository/<repository_id>/agent/<agent_id>/play', methods=['GET'])
-def repository_playground(app_id, repository_id, agent_id):
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agent/<int:agent_id>/play', methods=['GET'])
+def repository_playground(app_id: int, repository_id: int, agent_id: int):
     repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
     agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     return render_template('repositories/playground.html', app_id=app_id, repo=repo, agent=agent)

@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 from typing import Type
 from dotenv import load_dotenv
@@ -51,6 +52,7 @@ def convert_pdf_to_images(pdf_path: str, output_folder: str) -> list[str]:
         image_path = os.path.join(output_folder, f"pagina_{i+1}_{pdf_path.split('/')[-1].split('.')[0]}.jpeg")
         image.save(image_path, "JPEG")
         image_paths.append(image_path)
+        logging.info(f"Imagen guardada en: {image_path}")
     
     return image_paths
 

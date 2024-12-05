@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
-from extensions import db
-from model.output_parser import OutputParser
+from app.extensions import db
+from app.model.output_parser import OutputParser
 
 class OutputParserService:
     def __init__(self):

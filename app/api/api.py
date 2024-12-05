@@ -1,9 +1,9 @@
 from flask import session, Blueprint, request, jsonify, request
 from flask import request
-from agents.ocrAgent import process_pdf
-from model.agent import Agent
-import tools.modelTools as modelTools
-from extensions import db
+from app.agents.ocrAgent import process_pdf
+from app.model.agent import Agent
+import app.tools.modelTools as modelTools
+from app.extensions import db
 import os
 
 
@@ -19,7 +19,7 @@ def api():
     print(session)
     in_data = request.get_json()
     question = in_data.get('question')
-    agent_id = in_data.get('agent_id')
+    agent_id = int(in_data.get('agent_id'))
 
     agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     result =""
@@ -64,18 +64,22 @@ def process_ocr():
         return jsonify({'error': 'No se proporcionó archivo PDF'}), 400
         
     pdf_file = request.files['pdf']
-    print("pdf_file: ", pdf_file)
     agent_id = request.form.get('agent_id')
     
     if not pdf_file or not agent_id:
         return jsonify({'error': 'Faltan datos requeridos'}), 400
+    
+    # Crear directorios si no existen
+    downloads_dir = './downloads'
+    images_dir = './images'
         
     # Guardar temporalmente el PDF
-    temp_path = os.path.join('./downloads/', pdf_file.filename)
-    print("temp_path: ", temp_path)
+    pdf_filename = pdf_file.filename
+    temp_path = os.path.join(downloads_dir, pdf_filename)
+    images_path = os.path.join(images_dir, pdf_filename.split('.')[0])
     
     # Si existe un archivo diferente, eliminarlo antes de guardar el nuevo
-    if os.path.exists(temp_path) and os.path.basename(temp_path) != pdf_file.filename:
+    if os.path.exists(temp_path) and os.path.basename(temp_path) != pdf_filename:
         os.remove(temp_path)
     
     # Guardar el nuevo archivo solo si no existe
@@ -84,7 +88,7 @@ def process_ocr():
     
     try:
         # Procesar el PDF usando el agente OCR
-        result = process_pdf(int(agent_id), temp_path)
+        result = process_pdf(int(agent_id), temp_path, images_path)
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -3,7 +3,7 @@ from langchain_community.document_loaders.pdf import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
-from model.resource import Resource
+from app.model.resource import Resource
 import os
 import numpy as np
 from sqlalchemy.orm import sessionmaker

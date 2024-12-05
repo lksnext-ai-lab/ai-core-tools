@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Type, Dict, Any, List, get_origin, get_args
 from sqlalchemy.orm import Session
-from extensions import db
-from model.output_parser import OutputParser
+from app.extensions import db
+from app.model.output_parser import OutputParser
 import logging
 
 

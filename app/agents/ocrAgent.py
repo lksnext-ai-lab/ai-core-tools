@@ -6,18 +6,19 @@ from typing_extensions import TypedDict
 from dotenv import load_dotenv
 import logging
 
-from extensions import db
+from app.extensions import db
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
-from tools.outputParserTools import create_model_from_json_schema
-from model.ocr_agent import OCRAgent
-from tools.ocrAgentTools import convert_pdf_to_images, convert_image_to_base64, extract_text_from_image, get_data_from_extracted_text, cargar_pdf
+from app.tools.outputParserTools import create_model_from_json_schema
+from app.model.ocr_agent import OCRAgent
+from app.tools.ocrAgentTools import convert_pdf_to_images, convert_image_to_base64, extract_text_from_image, get_data_from_extracted_text, cargar_pdf
 
 load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -31,9 +32,10 @@ class State(TypedDict):
     pdf_path: str
     images: List[str]
     vision_output: List[Dict[str, Any]]
-    formatted_llm_text_output: Dict[str, Any]
+    formatted_llm_text_output: List[Dict[str, Any]]
     pdf_text: str
     has_plain_text: bool
+    images_path: str
     agent: OCRAgent
     vision_model: ChatOpenAI
     text_model: ChatOpenAI
@@ -71,7 +73,7 @@ def get_or_create_graph():
         graph_builder.add_edge("pdf text extractor", "pdf to images converter")
         graph_builder.add_edge("pdf to images converter", "vision data extractor")
         graph_builder.add_edge("vision data extractor", "data analyzer and formatter llm")
-
+        graph_builder.add_edge("data analyzer and formatter llm", END)
         _compiled_graph = graph_builder.compile()
     
     return _compiled_graph
@@ -80,9 +82,9 @@ def get_agent_llms(state: State):
     vision_model_info = state["agent"].vision_model_rel
     text_model_info = state["agent"].model_rel
     if vision_model_info.provider == "OpenAI":
-        vision_model = ChatOpenAI(model=vision_model_info.name, temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+        vision_model = ChatOpenAI(model=vision_model_info.name, temperature=0, api_key=OPENAI_API_KEY)
     if text_model_info.provider == "OpenAI":
-        text_model = ChatOpenAI(model=text_model_info.name, temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+        text_model = ChatOpenAI(model=text_model_info.name, temperature=0, api_key=OPENAI_API_KEY)
     return {"vision_model": vision_model, "text_model": text_model}
 
 def get_agent_output_parser(state: State):
@@ -142,7 +144,7 @@ def pdf_to_images(state: State):
     try:
         images = convert_pdf_to_images(
             pdf_path=state["pdf_path"],
-            output_folder= os.getenv("IMAGES_PATH")
+            output_folder=state["images_path"]
         )
         logging.info(f"PDF convertido exitosamente. {len(images)} imágenes generadas")
         return {
@@ -200,26 +202,30 @@ def extract_data_from_images(state: State):
 def get_and_format_data_with_llm(state: State):
     """Formatea los datos extraídos usando el LLM"""
     logging.info("Iniciando formateo de datos con LLM...")
-    formatted_data = {}
+    formatted_data_by_page = []
     text_system_prompt = state["agent"].text_system_prompt
     try:
         for output in state["vision_output"]:
             logging.info(f"Formateando datos para imagen: {output['image_path']}")
             if state["has_plain_text"]:
-                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt,state["pdf_text"])
+                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt, state["pdf_text"])
             else:
                 formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt)
-            formatted_data = formatted_text
+            
+            formatted_data_by_page.append({
+                "page": len(formatted_data_by_page) + 1,
+                "data": formatted_text
+            })
         
         logging.info("Formateo de datos completado")
-        logging.info(f"Datos formateados: {formatted_data}")
+        logging.info(f"Datos formateados: {formatted_data_by_page}")
         return {
-            "formatted_llm_text_output": formatted_data,
+            "formatted_llm_text_output": formatted_data_by_page,
             "messages": [AIMessage(content="Datos formateados exitosamente.")]
         }
     except Exception as e:
         return {
-            "formatted_llm_text_output": {},
+            "formatted_llm_text_output": [],
             "messages": [AIMessage(content=f"Error al formatear datos: {str(e)}")]
         }
 
@@ -229,7 +235,7 @@ def determine_path_with_vision(state: State) -> Literal["pdf text extractor", "p
     has_text = state.get("has_plain_text", False)
     return "pdf text extractor" if has_text else "pdf to images converter"
 
-def process_pdf(agent_id: int, pdf_path: str):
+def process_pdf(agent_id: int, pdf_path: str, images_path: str):
     agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
     if not agent:
         raise ValueError(f"No se encontró el agente con ID {agent_id}")
@@ -239,6 +245,7 @@ def process_pdf(agent_id: int, pdf_path: str):
     
     extracted_data = graph.invoke({
         "pdf_path": pdf_path,
+        "images_path": images_path,
         "images": [],
         "vision_output": [],
         "formatted_llm_text_output": {},

@@ -1,11 +1,11 @@
 from typing import Union, Dict, Any
 from flask import render_template
-from model.agent import Agent
-from model.ocr_agent import OCRAgent
-from model.model import Model
-from model.repository import Repository
-from model.output_parser import OutputParser
-from extensions import db
+from app.model.agent import Agent
+from app.model.ocr_agent import OCRAgent
+from app.model.model import Model
+from app.model.repository import Repository
+from app.model.output_parser import OutputParser
+from app.extensions import db
 
 class AgentService:
     @staticmethod
@@ -58,7 +58,7 @@ class AgentService:
         agent.output_parser_id = data.get('output_parser_id') or None
     
     @staticmethod
-    def get_agent_form_data(app_id: int, agent_id: str, agent_type: str) -> str:
+    def get_agent_form_data(app_id: int, agent_id: int, agent_type: str) -> str:
         """
         Obtiene los datos necesarios para renderizar el formulario del agente.
         
@@ -75,7 +75,7 @@ class AgentService:
         output_parsers = db.session.query(OutputParser).filter(OutputParser.app_id == app_id).all()
         
         # Para nuevo agente
-        if agent_id == '0':
+        if agent_id == 0:
             if agent_type == 'ocr':
                 return render_template('agents/ocr_agent.html',
                                     app_id=app_id,

@@ -15,11 +15,11 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 
-from model.output_parser import OutputParser
-from model.agent import Agent
-from extensions import db
-from tools.pgVectorTools import PGVectorTools
-from tools.outputParserTools import create_dynamic_pydantic_model, get_parser_model_by_id
+from app.model.output_parser import OutputParser
+from app.model.agent import Agent
+from app.extensions import db
+from app.tools.pgVectorTools import PGVectorTools
+from app.tools.outputParserTools import create_dynamic_pydantic_model, get_parser_model_by_id
 
 load_dotenv()
 
@@ -50,8 +50,11 @@ def invoke(agent, input):
         
     output_parser = get_output_parser(agent)
     
-    format_instructions = output_parser.get_format_instructions()
-    format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
+    if agent.output_parser_id is None:
+        format_instructions = ""
+    else:
+        format_instructions = output_parser.get_format_instructions()
+        format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
 
     system_prompt = agent.system_prompt
     
