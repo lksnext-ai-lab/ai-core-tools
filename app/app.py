@@ -1,7 +1,7 @@
 from flask import Flask, render_template, session, request
 from flask_restful import Api, Resource
 from flask_session import Session
-from app.extensions import db, init_db
+from app.extensions import db, init_db, DATABASE_URL
 
 import os
 import json
@@ -29,7 +29,7 @@ app.register_blueprint(resources_blueprint)
 app.register_blueprint(api_blueprint)
 app.register_blueprint(output_parsers_blueprint)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("SQLALCHEMY_DATABASE_URI")
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 db.init_app(app)
 
@@ -80,5 +80,5 @@ def leave():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=4321)
 

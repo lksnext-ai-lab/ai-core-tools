@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ia-core-tools-app-test
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ia-core-tools-app-test
+  template:
+    metadata:
+      labels:
+        app: ia-core-tools-app-test
+    spec:
+      containers:
+        - name: ia-core-tools-app-test
+          image: registry.lksnext.com/ia-core-tools:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4321
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          env:
+            - name: DATABASE_HOST
+              value: "ia-core-tools-postgresql-service-test"
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_DATABASE
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ia-core-tools-service-test
+  namespace: test
+spec:
+  selector:
+    app: ia-core-tools-app-test
+  ports:
+    - protocol: TCP
+      port: 80        
+      targetPort: 4321 
+  type: ClusterIP
