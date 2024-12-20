@@ -4,11 +4,10 @@ FROM python:3.11-slim
 # Set the working directory in the container
 WORKDIR /app
 
-ENV DATABASE_HOST=""
+ENV DATABASE_NAME=""
 ENV DATABASE_PORT=""
 ENV DATABASE_USER=""
 ENV DATABASE_PASSWORD=""
-ENV DATABASE_NAME=""
 
 # Copy the current directory contents into the container at /app
 COPY ./app /app/app
