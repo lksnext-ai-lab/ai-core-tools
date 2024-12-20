@@ -99,7 +99,8 @@
                                     <a class="nav-link" href="#"><i class="bi bi-person fa-fw me-2"></i>Crawlers</a>
                                 </li>
                                 <li class="nav-item">
-                                    <a class="nav-link" href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}">
+                                    <a class="nav-link"
+                                        href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}">
                                         <i class="bi bi-file-text fa-fw me-2"></i>Output Parsers
                                     </a>
                                 </li>
@@ -138,14 +139,16 @@
 
                 <!-- Sidebar footer START -->
                 <div class="d-flex align-items-center justify-content-between text-primary-hover mt-auto p-3">
-                    <a class="h6 fw-light mb-0 text-body" href="#" data-bs-toggle="tooltip" data-bs-placement="top"
-                        aria-label="Sign out">
+                    {% if session and session['user'] %}
+                    <a class="h6 fw-light mb-0 text-body" href="{{ url_for('logout') }}" data-bs-toggle="tooltip"
+                        data-bs-placement="top" aria-label="Sign out">
                         <i class="fa-solid fa-arrow-right-from-bracket"></i> Log out
                     </a>
                     <a class="h6 mb-0 text-body" href="admin-settings.html" data-bs-toggle="tooltip"
                         data-bs-placement="top" aria-label="Settings">
                         <i class="bi bi-gear-fill"></i>
                     </a>
+                    {% endif %}
                 </div>
                 <!-- Sidebar footer END -->
 
@@ -202,7 +205,7 @@
                     </div>
                     <!-- Top bar left END -->
 
-                    {% if session %}
+                    {% if session and session['user'] %}
                     <!-- Top bar right START -->
                     <ul class="nav flex-row align-items-center list-unstyled ms-xl-auto">
                         <!-- Notification dropdown START -->
@@ -270,7 +273,8 @@
                             <a class="avatar avatar-sm p-0" href="#" id="profileDropdown" role="button"
                                 data-bs-auto-close="outside" data-bs-display="static" data-bs-toggle="dropdown"
                                 aria-expanded="false">
-                                <img loading="lazy" class="avatar-img rounded-circle shadow" src="{{session.picture}}" alt="avatar">
+                                <img loading="lazy" class="avatar-img rounded-circle shadow"
+                                    src="{{session['user'].picture}}" alt="avatar">
                             </a>
 
                             <ul class="dropdown-menu dropdown-animation dropdown-menu-end shadow pt-3"
@@ -280,12 +284,12 @@
                                     <div class="d-flex align-items-center">
                                         <!-- Avatar -->
                                         <div class="avatar me-3">
-                                            <img loading="lazy" class="avatar-img rounded-circle shadow" src="{{session.picture}}"
-                                                alt="avatar">
+                                            <img loading="lazy" class="avatar-img rounded-circle shadow"
+                                                src="{{session['user'].picture}}" alt="avatar">
                                         </div>
                                         <div>
-                                            <a class="h6 mt-2 mt-sm-0" href="#">{{session.name}}</a>
-                                            <p class="small m-0">agaldos@lksnext.com </p>
+                                            <a class="h6 mt-2 mt-sm-0" href="#">{{session['user'].name}}</a>
+                                            <p class="small m-0">{{session['user'].email}}</p>
                                         </div>
                                     </div>
                                 </li>
@@ -300,7 +304,7 @@
                                 <li><a class="dropdown-item" href="#"><i
                                             class="bi bi-info-circle fa-fw me-2"></i>Ayuda</a>
                                 </li>
-                                <li><a class="dropdown-item bg-danger-soft-hover" href="#"><i
+                                <li><a class="dropdown-item bg-danger-soft-hover" href="{{ url_for('logout') }}"><i
                                             class="bi bi-power fa-fw me-2"></i>Salir</a></li>
                             </ul>
                         </li>
@@ -309,7 +313,7 @@
                     {% else %}
                     <ul class="nav flex-row align-items-center list-unstyled ms-xl-auto">
                         <li class="nav-item">
-                            <a class="nav-link" href="#">Login</a>
+                            <a class="nav-link" href="{{ url_for('login') }}">Login</a>
                         </li>
                     </ul>
                     {% endif %}

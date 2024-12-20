@@ -1,27 +1,36 @@
-from flask import Flask, render_template, session, request
+from flask import Flask, render_template, session, request, jsonify, redirect, url_for
 from flask_restful import Api, Resource
 from flask_session import Session
+
 from app.extensions import db, init_db, DATABASE_URL
 
 import os
 import json
+import requests
+import uuid
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
 from app.model.app import App
-from flask import jsonify
+from app.model.user import User
 
 from app.api.api import api_blueprint
 from app.views.agents import agents_blueprint
 from app.views.repositories import repositories_blueprint
 from app.views.resources import resources_blueprint
 from app.views.output_parsers import output_parsers_blueprint
-import uuid
+
+from authlib.integrations.flask_client import OAuth
+
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-SXSCDSDASD'
+app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
+app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
+app.config["GOOGLE_DISCOVERY_URL"] = os.getenv('GOOGLE_DISCOVERY_URL')
+
 
 app.register_blueprint(agents_blueprint)
 app.register_blueprint(repositories_blueprint)
@@ -30,6 +39,15 @@ app.register_blueprint(api_blueprint)
 app.register_blueprint(output_parsers_blueprint)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+
+oauth = OAuth(app)
+google = oauth.register(
+    name="google",
+    client_id=app.config["GOOGLE_CLIENT_ID"],
+    client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+    server_metadata_url=app.config["GOOGLE_DISCOVERY_URL"],
+    client_kwargs={"scope": "openid email profile"},
+)
 
 db.init_app(app)
 
@@ -77,6 +95,58 @@ def leave():
     session.pop('app_id', None)
     session.pop('app_name', None)
     return index()
+
+
+@app.route("/login")
+def login():
+    nonce = uuid.uuid4().hex 
+    session["oauth_nonce"] = nonce
+    return google.authorize_redirect(url_for("auth_callback", _external=True), nonce=nonce)
+
+
+
+@app.route('/callback')
+def auth_callback():
+    token = google.authorize_access_token()
+    access_token = token.get("access_token")
+
+    if not access_token:
+        return "Error: Access token not found!", 400
+
+    # Use the access token to fetch user info
+    user_info_endpoint = "https://www.googleapis.com/oauth2/v1/userinfo"
+    user_info = google.get(user_info_endpoint, token=token).json()
+
+    if not user_info:
+        return "Error: Unable to fetch user info!", 400
+    
+    session["user"] = user_info 
+
+    print(session["user"])
+
+    return redirect("/")
+    
+    '''user = User.query.filter_by(email=email).first()
+    if not user:
+        user = User(email=email, name=name)
+        db.session.add(user)
+        db.session.commit()
+    session['user_id'] = user.user_id
+    login_user(SessionUser(user.user_id))'''
+
+
+
+    return redirect("/")
+    
+    
+    
+
+@app.route('/logout')
+def logout():
+    '''Logout user'''
+    session.clear()
+    return redirect('/')
+
 
 
 if __name__ == '__main__':
