@@ -1,7 +1,7 @@
 from flask import Flask, render_template, session, request, jsonify, redirect, url_for
 from flask_restful import Api, Resource
 from flask_session import Session
-
+from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
 from app.extensions import db, init_db, DATABASE_URL
 
 import os
@@ -71,6 +71,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/home')
+@login_required
 def home():
     apps = db.session.query(App).filter(App.user_id == session['user_id']).all()
     if session.get('app_id') is not None:
@@ -78,6 +79,7 @@ def home():
     return render_template('home.html', apps=apps)
 
 @app.route('/app/<int:app_id>', methods=['GET'])
+@login_required
 def app_index(app_id: int):
     app = db.session.query(App).filter(App.app_id == app_id).first()
     session['app_id'] = app_id
@@ -86,6 +88,7 @@ def app_index(app_id: int):
     return render_template('app_index.html', app=app)
 
 @app.route('/create-app', methods=['POST'])
+@login_required
 def create_app():
     name = request.form['name']
     app = App(name=name)
@@ -95,6 +98,7 @@ def create_app():
     return app_index(app.app_id)
 
 @app.route('/leave')
+@login_required
 def leave():
     session.pop('app_id', None)
     session.pop('app_name', None)
@@ -117,7 +121,6 @@ def auth_callback():
     if not access_token:
         return "Error: Access token not found!", 400
 
-    # Use the access token to fetch user info
     user_info_endpoint = "https://www.googleapis.com/oauth2/v1/userinfo"
     user_info = google.get(user_info_endpoint, token=token).json()
 
@@ -126,15 +129,13 @@ def auth_callback():
     
     session["user"] = user_info 
 
-    print(session["user"])
-
     user = db.session.query(User).filter_by(email=user_info['email']).first()
     if not user:
         db.session.add(User(email=user_info['email'], name=user_info['name']))
         db.session.commit()
+    
     session['user_id'] = user.user_id
-    #login_user(SessionUser(user.user_id))
-
+    login_user(user)
 
     return redirect(url_for('home'))
     
@@ -145,7 +146,13 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.query(User).get(int(user_id))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4321)

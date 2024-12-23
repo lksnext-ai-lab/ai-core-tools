@@ -1,8 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey 
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
-
-class User(Base):
+from flask_login import UserMixin
+class User(UserMixin, Base):
     '''User model class constructor'''
     __tablename__ = 'User'
     user_id = Column(Integer, primary_key=True)
@@ -15,3 +15,7 @@ class User(Base):
     def api_keys(self):
         from app.model.api_key import APIKey
         return relationship('APIKey', back_populates='user', lazy=True)
+
+    # Add this method required by Flask-Login
+    def get_id(self):
+        return str(self.user_id)
