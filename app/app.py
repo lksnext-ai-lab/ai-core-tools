@@ -98,7 +98,7 @@ def create_app():
 def leave():
     session.pop('app_id', None)
     session.pop('app_name', None)
-    return index()
+    return home()
 
 
 @app.route("/login")

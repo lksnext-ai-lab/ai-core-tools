@@ -9,3 +9,9 @@ class User(Base):
     email = Column(String(255))
     name = Column(String(255))
     #domains = db.relationship('Domain', backref='user', lazy=True)
+
+    apps = relationship('App', back_populates='user', lazy=True)
+    
+    def api_keys(self):
+        from app.model.api_key import APIKey
+        return relationship('APIKey', back_populates='user', lazy=True)

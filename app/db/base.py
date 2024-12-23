@@ -1,3 +1,4 @@
+from app.model.api_key import APIKey
 from app.model.app import App
 from app.model.agent import Agent
 from app.model.model import Model

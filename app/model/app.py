@@ -16,3 +16,8 @@ class App(Base):
                                 back_populates='app',
                                 lazy=True)
     user_id = Column(Integer, ForeignKey('User.user_id'))
+    user = relationship('User', back_populates='apps')
+
+    def api_keys(self):
+        from app.model.api_key import APIKey
+        return relationship('APIKey', back_populates='app', lazy=True)
