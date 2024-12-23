@@ -68,10 +68,14 @@ def before_request():
 
 @app.route('/')
 def index():
-    apps = db.session.query(App).all()
+    return render_template('index.html')
+
+@app.route('/home')
+def home():
+    apps = db.session.query(App).filter(App.user_id == session['user_id']).all()
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
-    return render_template('index.html', apps=apps)
+    return render_template('home.html', apps=apps)
 
 @app.route('/app/<int:app_id>', methods=['GET'])
 def app_index(app_id: int):
@@ -124,28 +128,22 @@ def auth_callback():
 
     print(session["user"])
 
-    return redirect("/")
-    
-    '''user = User.query.filter_by(email=email).first()
+    user = db.session.query(User).filter_by(email=user_info['email']).first()
     if not user:
-        user = User(email=email, name=name)
-        db.session.add(user)
+        db.session.add(User(email=user_info['email'], name=user_info['name']))
         db.session.commit()
     session['user_id'] = user.user_id
-    login_user(SessionUser(user.user_id))'''
+    #login_user(SessionUser(user.user_id))
 
 
-
-    return redirect("/")
-    
-    
+    return redirect(url_for('home'))
     
 
 @app.route('/logout')
 def logout():
     '''Logout user'''
     session.clear()
-    return redirect('/')
+    return redirect(url_for('index'))
 
 
 

@@ -4,68 +4,10 @@
 <div class="row">
 
     <div class="d-sm-flex justify-content-between align-items-center">
-        <h1 class="h4 mb-2 mb-sm-0">Your applications</h1>
+        <h1 class="h4 mb-2 mb-sm-0">IA Core Tools</h1>
     </div>
 </div>
 
 
-<table class="table table-fixed">
-    <thead>
-        <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Agents</th>
-            <th scope="col">Repos</th>
-            <th scope="col">Crawlers</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for app in apps %}
-        <tr>
-            <td>
-                <a href="{{ url_for('app_index', app_id=app.app_id ) }}">{{app.name}}</a>
-            </td>
-            <td>
-                {{app.agents|length}}
-            </td>
-            <td>
-                {{app.repositories|length}}
-            </td>
-            <td>
-                0
-            </td>
-
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-
-<div class="row">
-    <div class="col-4">
-        <div class="card shadow mb-4">
-            <!-- Card header -->
-            <div class="card-header border-bottom">
-                <h5 class="mb-0">Create new app</h5>
-            </div>
-            <form action="{{ url_for('create_app') }}" method="POST">
-
-
-                <div class="card-body">
-                    <div class="row">
-                        <!-- Information item -->
-                        <div class="col-md-6 mb-4">
-                            <label class="form-label">Name<span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" placeholder="Name..." value="" name="name">
-                        </div>
-
-
-                    </div>
-                    <div class="col-12">
-                        <input type="submit" class="btn btn-primary" value="Create" />
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 {% include 'footer.html' %}

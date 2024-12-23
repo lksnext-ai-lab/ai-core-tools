@@ -15,4 +15,4 @@ class App(Base):
     output_parsers = relationship('OutputParser', 
                                 back_populates='app',
                                 lazy=True)
-
+    user_id = Column(Integer, ForeignKey('User.user_id'))
