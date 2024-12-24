@@ -19,7 +19,7 @@ from app.views.agents import agents_blueprint
 from app.views.repositories import repositories_blueprint
 from app.views.resources import resources_blueprint
 from app.views.output_parsers import output_parsers_blueprint
-
+from app.views.api_keys import api_keys_blueprint
 from authlib.integrations.flask_client import OAuth
 
 
@@ -37,6 +37,7 @@ app.register_blueprint(repositories_blueprint)
 app.register_blueprint(resources_blueprint)
 app.register_blueprint(api_blueprint)
 app.register_blueprint(output_parsers_blueprint)
+app.register_blueprint(api_keys_blueprint)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
@@ -81,21 +82,21 @@ def home():
 @app.route('/app/<int:app_id>', methods=['GET'])
 @login_required
 def app_index(app_id: int):
-    app = db.session.query(App).filter(App.app_id == app_id).first()
+    selected_app = db.session.query(App).filter(App.app_id == app_id).first()
     session['app_id'] = app_id
-    session['app_name'] = app.name
+    session['app_name'] = selected_app.name
     
-    return render_template('app_index.html', app=app)
+    return render_template('app_index.html', app=selected_app)
 
 @app.route('/create-app', methods=['POST'])
 @login_required
 def create_app():
     name = request.form['name']
-    app = App(name=name)
-    db.session.add(app)
+    new_app = App(name=name, user_id=current_user.get_id())
+    db.session.add(new_app)
     db.session.commit()
-    db.session.refresh(app)
-    return app_index(app.app_id)
+    db.session.refresh(new_app)
+    return app_index(new_app.app_id)
 
 @app.route('/leave')
 @login_required

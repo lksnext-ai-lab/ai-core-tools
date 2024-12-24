@@ -1,0 +1,61 @@
+{% include 'header.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2>Create New API Key</h2>
+
+            <form method="POST" action="{{ url_for('api_keys.create_api_key') }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" name="name" required
+                        placeholder="Enter a name for your API key">
+                    <div class="form-text">Give your API key a memorable name (e.g., 'Production', 'Testing')</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="expiration" class="form-label">Expiration (Optional)</label>
+                    <input type="date" class="form-control" id="expiration" name="expiration">
+                    <div class="form-text">Leave blank for a non-expiring key</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Permissions</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="read_permission" name="permissions"
+                            value="read" checked>
+                        <label class="form-check-label" for="read_permission">
+                            Read Access
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="write_permission" name="permissions"
+                            value="write">
+                        <label class="form-check-label" for="write_permission">
+                            Write Access
+                        </label>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary">Create API Key</button>
+                    <a href="{{ url_for('api_keys.list_api_keys') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} mt-3">
+                {{ message }}
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% include 'footer.html' %}

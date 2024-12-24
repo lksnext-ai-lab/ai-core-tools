@@ -4,3 +4,16 @@ p.titulo-app {
     font-weight: 100;
     font-size: 24px;
 }
+
+.flash-messages {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 1000;
+    width: 300px;
+    /* Adjust width as needed */
+}
+
+.flash-messages .alert {
+    margin-bottom: 10px;
+}
