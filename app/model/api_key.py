@@ -16,12 +16,8 @@ class APIKey(Base):
     last_used_at = Column(DateTime)
     is_active = Column(Boolean, default=True, nullable=False)
     
-    # Relationships
-    #app = relationship("App", back_populates="api_keys")
-    #user = relationship("User", back_populates="api_keys")
-
-    '''app = relationship('App',
-                           back_populates='api_keys',
-                           foreign_keys=[app_id])'''
+    
+    app = relationship('App',
+                           back_populates='api_keys')
     user = relationship('User',
                            back_populates='api_keys')

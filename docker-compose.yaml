@@ -23,7 +23,7 @@ services:
     image: pgvector/pgvector:pg17
     container_name: iacore_postgres
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "${DATABASE_PORT}:5432"
     environment:
       - POSTGRES_DB=${DATABASE_NAME}
       - POSTGRES_USER=${DATABASE_USER}
