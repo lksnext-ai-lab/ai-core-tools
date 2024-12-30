@@ -132,7 +132,8 @@ def auth_callback():
 
     user = db.session.query(User).filter_by(email=user_info['email']).first()
     if not user:
-        db.session.add(User(email=user_info['email'], name=user_info['name']))
+        user = User(email=user_info['email'], name=user_info['name'])
+        db.session.add(user)
         db.session.commit()
     
     session['user_id'] = user.user_id

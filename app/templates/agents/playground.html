@@ -35,7 +35,8 @@
                                 <span>Formato de salida: </span>
                                 {% if agent.output_parser %}
                                 <div class="mt-2">
-                                    <p class="mb-2"><strong>Nombre de la clase:</strong> {{agent.output_parser.name}}</p>
+                                    <p class="mb-2"><strong>Nombre de la clase:</strong> {{agent.output_parser.name}}
+                                    </p>
                                     <table class="table table-sm table-bordered">
                                         <thead class="table-light">
                                             <tr>
@@ -128,14 +129,14 @@
         }, 'slow');
 
         // Make a POST request
-        fetch('/api', {
+        fetch('/api/{{app_id}}/call/{{agent.agent_id}}', {
             method: 'POST',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ question: question, agent_id: agent_id }),
-            data: JSON.stringify({ question: question, agent_id: agent_id })
+            body: JSON.stringify({ question: question }),
+            data: JSON.stringify({ question: question })
         })
             .then(response => response.json())
             .then(data => {

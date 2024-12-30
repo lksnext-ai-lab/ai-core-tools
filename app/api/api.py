@@ -1,25 +1,61 @@
 from flask import session, Blueprint, request, jsonify, request
-from flask import request
 from app.agents.ocrAgent import process_pdf
 from app.model.agent import Agent
 import app.tools.modelTools as modelTools
 from app.extensions import db
 import os
+from app.model.api_key import APIKey
+from app.model.app import App
+from datetime import datetime
 
-
-api_blueprint = Blueprint('api', __name__)
+api_blueprint = Blueprint('api', __name__, url_prefix='/api')
 MSG_LIST = "MSG_LIST"
+
+
+def is_valid_api_key(app_id,api_key):
+    
+    if api_key is None:
+        return False
+    else:
+        api_key_obj = db.session.query(APIKey).filter(APIKey.app_id == app_id, APIKey.key == api_key).first()
+        if api_key_obj is None:
+            return False
+        else:
+            api_key_obj.last_used = datetime.now()
+            db.session.commit()
+            return True
+    
+def check_session_permission(app_id):
+    if session.get('user') is None:
+        return False
+    else:
+        app = db.session.query(App).filter(
+            App.app_id == int(app_id), 
+            App.user_id == int(session.get('user_id'))
+        ).first()
+        if app is None:
+            return False
+        else:
+            return True
 
 '''
 API
 '''
-@api_blueprint.route('/api', methods=['GET', 'POST'])
-def api():
+@api_blueprint.route('/<string:app_id>/call/<int:agent_id>', methods=['GET', 'POST'])
+def api(app_id, agent_id):
+
     print("session: ", request.cookies.get('session_id'))
     print(session)
+
+    api_key = request.headers.get('X-API-KEY')  
+    if not check_session_permission(app_id) and not is_valid_api_key(app_id, api_key):
+        return jsonify({"error": "Invalid or missing API key"}), 401
+    
+    
+    
     in_data = request.get_json()
     question = in_data.get('question')
-    agent_id = int(in_data.get('agent_id'))
+    #agent_id = int(in_data.get('agent_id'))
 
     agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
     result =""
@@ -58,8 +94,12 @@ def api():
 
     return jsonify(data)
     
-@api_blueprint.route('/api/ocr', methods=['POST'])
-def process_ocr():
+@api_blueprint.route('/<string:app_id>/ocr', methods=['POST'])
+def process_ocr(app_id):
+    api_key = request.headers.get('X-API-KEY')
+    if not api_key or not is_valid_api_key(app_id, api_key):
+        return jsonify({"error": "Invalid or missing API key"}), 401
+
     if 'pdf' not in request.files:
         return jsonify({'error': 'No se proporcionó archivo PDF'}), 400
         
