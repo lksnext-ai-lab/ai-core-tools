@@ -17,7 +17,11 @@ def is_valid_api_key(app_id,api_key):
     if api_key is None:
         return False
     else:
-        api_key_obj = db.session.query(APIKey).filter(APIKey.app_id == app_id, APIKey.key == api_key).first()
+        api_key_obj = db.session.query(APIKey).filter(
+            APIKey.app_id == app_id, 
+            APIKey.key == api_key, 
+            APIKey.active == True
+        ).first()
         if api_key_obj is None:
             return False
         else:
@@ -97,12 +101,12 @@ def api(app_id, agent_id):
 @api_blueprint.route('/<string:app_id>/ocr', methods=['POST'])
 def process_ocr(app_id):
     api_key = request.headers.get('X-API-KEY')
-    if not api_key or not is_valid_api_key(app_id, api_key):
+    '''if not api_key or not is_valid_api_key(app_id, api_key):
         return jsonify({"error": "Invalid or missing API key"}), 401
 
     if 'pdf' not in request.files:
         return jsonify({'error': 'No se proporcionó archivo PDF'}), 400
-        
+    ''' 
     pdf_file = request.files['pdf']
     agent_id = request.form.get('agent_id')
     
