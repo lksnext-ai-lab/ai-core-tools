@@ -11,7 +11,6 @@ ENV DATABASE_PASSWORD=""
 
 # Copy the current directory contents into the container at /app
 COPY ./app /app/app
-COPY .env /app/.env
 # Ensure the alembic directory is copied correctly
 COPY ./alembic /app/alembic
 COPY alembic.ini /app/alembic.ini

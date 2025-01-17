@@ -1,4 +1,4 @@
-from flask import Flask, render_template, session, Blueprint, request, redirect, url_for
+from flask import render_template, Blueprint, request, redirect, url_for
 from app.model.repository import Repository
 from app.model.resource import Resource
 from app.model.agent import Agent

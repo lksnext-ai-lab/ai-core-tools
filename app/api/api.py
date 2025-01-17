@@ -7,6 +7,14 @@ import os
 from app.model.api_key import APIKey
 from app.model.app import App
 from datetime import datetime
+import logging
+
+# Configuración del logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 api_blueprint = Blueprint('api', __name__, url_prefix='/api')
 MSG_LIST = "MSG_LIST"
@@ -100,40 +108,54 @@ def api(app_id, agent_id):
     
 @api_blueprint.route('/<string:app_id>/ocr', methods=['POST'])
 def process_ocr(app_id):
+    logger.info(f"Iniciando proceso OCR para app_id: {app_id}")
+    
     api_key = request.headers.get('X-API-KEY')
     '''if not api_key or not is_valid_api_key(app_id, api_key):
         return jsonify({"error": "Invalid or missing API key"}), 401
 
     if 'pdf' not in request.files:
+        logger.error("No se proporcionó archivo PDF en la solicitud")
         return jsonify({'error': 'No se proporcionó archivo PDF'}), 400
     ''' 
     pdf_file = request.files['pdf']
     agent_id = request.form.get('agent_id')
     
     if not pdf_file or not agent_id:
+        logger.error(f"Datos incompletos - pdf_file: {bool(pdf_file)}, agent_id: {agent_id}")
         return jsonify({'error': 'Faltan datos requeridos'}), 400
     
-    # Crear directorios si no existen
-    downloads_dir = './downloads'
-    images_dir = './images'
+    # Obtener rutas desde variables de entorno
+    downloads_dir = os.getenv('DOWNLOADS_PATH', '/app/temp/downloads/')
+    images_dir = os.getenv('IMAGES_PATH', '/app/temp/images/')
+    
+    logger.info(f"Usando directorios - downloads: {downloads_dir}, images: {images_dir}")
+
+    os.makedirs(downloads_dir, exist_ok=True)
+    os.makedirs(images_dir, exist_ok=True)
         
     # Guardar temporalmente el PDF
     pdf_filename = pdf_file.filename
     temp_path = os.path.join(downloads_dir, pdf_filename)
     images_path = os.path.join(images_dir, pdf_filename.split('.')[0])
     
-    # Si existe un archivo diferente, eliminarlo antes de guardar el nuevo
-    if os.path.exists(temp_path) and os.path.basename(temp_path) != pdf_filename:
+    logger.info(f"Procesando archivo: {pdf_filename}")
+    logger.debug(f"Rutas completas - temp_path: {temp_path}, images_path: {images_path}")
+    
+    # Limpiar archivos antiguos si existen
+    if os.path.exists(temp_path):
+        logger.info(f"Eliminando archivo temporal existente: {temp_path}")
         os.remove(temp_path)
     
-    # Guardar el nuevo archivo solo si no existe
-    if not os.path.exists(temp_path):
-        pdf_file.save(temp_path)
+    pdf_file.save(temp_path)
+    logger.info(f"Archivo PDF guardado en: {temp_path}")
     
     try:
-        # Procesar el PDF usando el agente OCR
+        logger.info(f"Iniciando procesamiento OCR con agent_id: {agent_id}")
         result = process_pdf(int(agent_id), temp_path, images_path)
+        logger.info("Proceso OCR completado exitosamente")
         return jsonify(result)
     except Exception as e:
+        logger.error(f"Error durante el procesamiento OCR: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
     

@@ -17,7 +17,12 @@
                         <ul class="list-group list-group-borderless">
                             <li class="list-group-item">
                                 <span>System prompt: </span>
-                                <p class="h6 fw-normal mb-0">{{agent.system_prompt}}</p>
+                                <div class="d-flex align-items-center">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.system_prompt}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#systemPromptModal">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
+                                </div>
                             </li>
                         </ul>
                     </div>
@@ -25,7 +30,12 @@
                         <ul class="list-group list-group-borderless">
                             <li class="list-group-item">
                                 <span>Prompt template: </span>
-                                <p class="h6 fw-normal mb-0">{{agent.prompt_template}}</p>
+                                <div class="d-flex align-items-center">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.prompt_template}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#promptTemplateModal">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
+                                </div>
                             </li>
                         </ul>
                     </div>
@@ -161,5 +171,33 @@
     });
 
 </script>
+
+<div class="modal fade" id="systemPromptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">System Prompt</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-light p-3 rounded"><code>{{agent.system_prompt}}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="promptTemplateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Prompt Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-light p-3 rounded"><code>{{agent.prompt_template}}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% include 'footer.html' %}

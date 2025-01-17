@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 from dotenv import load_dotenv
 import logging
+from langsmith import Client
 
 from app.extensions import db
 
@@ -15,9 +16,16 @@ from langgraph.graph.message import add_messages
 
 from app.tools.outputParserTools import create_model_from_json_schema
 from app.model.ocr_agent import OCRAgent
-from app.tools.ocrAgentTools import convert_pdf_to_images, convert_image_to_base64, extract_text_from_image, get_data_from_extracted_text, cargar_pdf
+from app.tools.ocrAgentTools import convert_pdf_to_images, convert_image_to_base64, extract_text_from_image, get_data_from_extracted_text, cargar_pdf, get_document_data_from_pages
 
 load_dotenv()
+
+# Configuración de LangSmith
+client = Client()
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "ia-core-tools"
+os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +41,7 @@ class State(TypedDict):
     images: List[str]
     vision_output: List[Dict[str, Any]]
     formatted_llm_text_output: List[Dict[str, Any]]
+    final_output: Dict[str, Any]
     pdf_text: str
     has_plain_text: bool
     images_path: str
@@ -59,6 +68,7 @@ def get_or_create_graph():
         graph_builder.add_node("pdf to images converter", pdf_to_images)
         graph_builder.add_node("vision data extractor", extract_data_from_images)
         graph_builder.add_node("data analyzer and formatter llm", get_and_format_data_with_llm)
+        graph_builder.add_node("document data integration by pages", get_final_output)
 
         # Conexiones
         graph_builder.add_edge(START, "get_agent_llms")
@@ -73,7 +83,8 @@ def get_or_create_graph():
         graph_builder.add_edge("pdf text extractor", "pdf to images converter")
         graph_builder.add_edge("pdf to images converter", "vision data extractor")
         graph_builder.add_edge("vision data extractor", "data analyzer and formatter llm")
-        graph_builder.add_edge("data analyzer and formatter llm", END)
+        graph_builder.add_edge("data analyzer and formatter llm", "document data integration by pages")
+        graph_builder.add_edge("document data integration by pages", END)
         _compiled_graph = graph_builder.compile()
     
     return _compiled_graph
@@ -182,7 +193,7 @@ def extract_data_from_images(state: State):
         for image_path in state["images"]:
             logging.info(f"Procesando imagen: {image_path}")
             base64_image = convert_image_to_base64(image_path)
-            extracted_text = extract_text_from_image(base64_image, state["agent"].vision_system_prompt, state["pydantic_class"], state["vision_model"])
+            extracted_text = extract_text_from_image(base64_image, state["agent"].vision_system_prompt, state["pydantic_class"], state["vision_model"], state["pdf_path"].split("/")[-1])
             logging.info(f"Texto extraído de la imagen: {extracted_text}")
             vision_output.append({
                 "image_path": image_path,
@@ -208,9 +219,9 @@ def get_and_format_data_with_llm(state: State):
         for output in state["vision_output"]:
             logging.info(f"Formateando datos para imagen: {output['image_path']}")
             if state["has_plain_text"]:
-                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt, state["pdf_text"])
+                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt, state["pdf_text"], state["pdf_path"].split("/")[-1])
             else:
-                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt)
+                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt, document_title=state["pdf_path"].split("/")[-1])
             
             formatted_data_by_page.append({
                 "page": len(formatted_data_by_page) + 1,
@@ -229,6 +240,28 @@ def get_and_format_data_with_llm(state: State):
             "messages": [AIMessage(content=f"Error al formatear datos: {str(e)}")]
         }
 
+def get_final_output(state: State):
+    """Obtiene los datos del documento a partir de los datos extraidos de cada una de las páginas"""
+    logging.info("Iniciando obtención de datos del documento a partir de los datos extraidos de cada una de las páginas...")
+    text_system_prompt = state["agent"].text_system_prompt
+    try:
+        if state["has_plain_text"]:
+            document_data = get_document_data_from_pages(text_system_prompt, state["formatted_llm_text_output"], state["pydantic_class"], state["text_model"], state["pdf_text"], state["pdf_path"].split("/")[-1])
+        else:
+            document_data = get_document_data_from_pages(text_system_prompt, state["formatted_llm_text_output"], state["pydantic_class"], state["text_model"], document_title= state["pdf_path"].split("/")[-1])
+        logging.info(f"Datos del documento extraidos exitosamente: {document_data}")
+        return {
+            "final_output": document_data,
+            "messages": [AIMessage(content="Datos del documento extraidos exitosamente.")]
+        }
+    except Exception as e:
+        logging.error(f"Error al obtener los datos del documento: {e}")
+        return {
+            "final_output": {},
+            "messages": [AIMessage(content=f"Error al obtener los datos del documento: {str(e)}")]
+        }
+
+
 # Función para determinar el camino basado en el resultado del checker
 def determine_path_with_vision(state: State) -> Literal["pdf text extractor", "pdf to images converter"]:
     """Determina el siguiente nodo basado en el resultado del PDF checker"""
@@ -236,28 +269,62 @@ def determine_path_with_vision(state: State) -> Literal["pdf text extractor", "p
     return "pdf text extractor" if has_text else "pdf to images converter"
 
 def process_pdf(agent_id: int, pdf_path: str, images_path: str):
-    agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
-    if not agent:
-        raise ValueError(f"No se encontró el agente con ID {agent_id}")
-    
-    # Usar el grafo existente o crear uno nuevo
-    graph = get_or_create_graph()
-    
-    extracted_data = graph.invoke({
-        "pdf_path": pdf_path,
-        "images_path": images_path,
-        "images": [],
-        "vision_output": [],
-        "formatted_llm_text_output": {},
-        "pdf_text": "",
-        "has_plain_text": False,
-        "messages": [
-            HumanMessage(content="Inicio del procesamiento del PDF")
-        ],
-        "agent": agent,
-        "vision_model": None,
-        "text_model": None,
-        "pydantic_class": None,
-    })["formatted_llm_text_output"]
+    try:
+        agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+        if not agent:
+            raise ValueError(f"No se encontró el agente con ID {agent_id}")
+        
+        # Usar el grafo existente o crear uno nuevo
+        graph = get_or_create_graph()
+        
+        extracted_data = graph.invoke({
+            "pdf_path": pdf_path,
+            "images_path": images_path,
+            "images": [],
+            "vision_output": [],
+            "formatted_llm_text_output": {},
+            "final_output": {},
+            "pdf_text": "",
+            "has_plain_text": False,
+            "messages": [
+                HumanMessage(content="Inicio del procesamiento del PDF")
+            ],
+            "agent": agent,
+            "vision_model": None,
+            "text_model": None,
+            "pydantic_class": None,
+        })["final_output"]
 
-    return extracted_data
+        # Limpiar archivos después del procesamiento
+        try:
+            # Eliminar el PDF
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+                logging.info(f"PDF eliminado: {pdf_path}")
+
+            # Eliminar el directorio de imágenes y su contenido
+            if os.path.exists(images_path):
+                for file in os.listdir(images_path):
+                    file_path = os.path.join(images_path, file)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        logging.info(f"Imagen eliminada: {file_path}")
+                os.rmdir(images_path)
+                logging.info(f"Directorio de imágenes eliminado: {images_path}")
+        except Exception as cleanup_error:
+            logging.error(f"Error al limpiar archivos: {cleanup_error}")
+
+        return extracted_data
+
+    except Exception as e:
+        # En caso de error, intentar limpiar los archivos de todos modos
+        try:
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+            if os.path.exists(images_path):
+                for file in os.listdir(images_path):
+                    os.remove(os.path.join(images_path, file))
+                os.rmdir(images_path)
+        except:
+            pass
+        raise e

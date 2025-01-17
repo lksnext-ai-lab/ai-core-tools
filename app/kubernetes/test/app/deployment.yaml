@@ -21,11 +21,14 @@ spec:
             - containerPort: 4321
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "250m"
-            limits:
-              memory: "128Mi"
+              memory: "256Mi"
               cpu: "500m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: temp-storage
+              mountPath: /app/temp
           env:
             - name: DATABASE_HOST
               value: "ia-core-tools-postgresql-service-test"
@@ -46,6 +49,62 @@ spec:
                 secretKeyRef:
                   name: ia-core-tools-postgresql-secret-test
                   key: POSTGRES_DATABASE
+            - name: IMAGES_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: IMAGES_PATH
+            - name: GOOGLE_DISCOVERY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: GOOGLE_DISCOVERY_URL
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: ANTHROPIC_API_KEY
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: GOOGLE_CLIENT_SECRET
+            - name: TEMP_STORAGE_PATH
+              value: "/app/temp"
+            - name: LANGCHAIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: LANGCHAIN_API_KEY
+            - name: LANGCHAIN_TRACING_V2
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: LANGCHAIN_TRACING_V2
+            - name: LANGCHAIN_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: LANGCHAIN_PROJECT
+            - name: LANGCHAIN_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: LANGCHAIN_ENDPOINT
+      volumes:
+        - name: temp-storage
+          persistentVolumeClaim:
+            claimName: ia-core-tools-temp-pvc-test
 
 ---
 apiVersion: v1

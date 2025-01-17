@@ -13,7 +13,12 @@
                         <ul class="list-group list-group-borderless">
                             <li class="list-group-item">
                                 <span>Vision System prompt: </span>
-                                <p class="h6 fw-normal mb-0">{{agent.vision_system_prompt}}</p>
+                                <div class="d-flex align-items-center">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.vision_system_prompt}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#visionSystemPromptModal">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
+                                </div>
                             </li>
                         </ul>
                     </div>
@@ -21,7 +26,12 @@
                         <ul class="list-group list-group-borderless">
                             <li class="list-group-item">
                                 <span>Text System prompt: </span>
-                                <p class="h6 fw-normal mb-0">{{agent.text_system_prompt}}</p>
+                                <div class="d-flex align-items-center">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.text_system_prompt}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#textSystemPromptModal">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
+                                </div>
                             </li>
                         </ul>
                     </div>
@@ -93,16 +103,9 @@
                     <div class="col-6">
                         <div id="results" class="border rounded p-3" style="display: none;">
                             <h6 class="mb-3">Resultados del procesamiento:</h6>
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <button id="prevPage" class="btn btn-sm btn-primary" style="display: none;">
-                                    <i class="fas fa-chevron-left"></i> Anterior
-                                </button>
-                                <span id="pageIndicator"></span>
-                                <button id="nextPage" class="btn btn-sm btn-primary" style="display: none;">
-                                    Siguiente <i class="fas fa-chevron-right"></i>
-                                </button>
+                            <div id="resultsContent">
+                                <pre class="bg-light p-3 rounded"><code id="jsonResult"></code></pre>
                             </div>
-                            <div id="resultsTable"></div>
                         </div>
                     </div>
                 </div>
@@ -119,6 +122,35 @@
                 <div class="spinner-border text-primary mb-3" role="status"></div>
                 <h5>Procesando documento...</h5>
                 <p class="mb-0">Por favor espere mientras se analiza el PDF.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Añadir los modales al final del archivo, antes del footer -->
+<div class="modal fade" id="visionSystemPromptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Vision System Prompt</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-light p-3 rounded"><code>{{agent.vision_system_prompt}}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="textSystemPromptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Text System Prompt</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-light p-3 rounded"><code>{{agent.text_system_prompt}}</code></pre>
             </div>
         </div>
     </div>
@@ -211,48 +243,17 @@
     });
 
     function displayResults(data) {
-        if (!Array.isArray(data)) {
+        if (typeof data !== 'object') {
             console.error('Datos inválidos recibidos:', data);
             return;
         }
 
         const results = document.getElementById('results');
-        const resultsTable = document.getElementById('resultsTable');
-        const prevButton = document.getElementById('prevPage');
-        const nextButton = document.getElementById('nextPage');
-        const pageIndicator = document.getElementById('pageIndicator');
+        const jsonResult = document.getElementById('jsonResult');
 
-        let currentPage = 0;
-
-        function showPage(pageIndex) {
-            if (!data[pageIndex]) return;
-
-            resultsTable.innerHTML = `<pre class="bg-light p-3 rounded"><code>${JSON.stringify(data[pageIndex].data, null, 2)}</code></pre>`;
-            pageIndicator.textContent = `Página ${pageIndex + 1} de ${data.length}`;
-
-            // Mostrar/ocultar botones según corresponda
-            prevButton.style.display = pageIndex > 0 ? 'block' : 'none';
-            nextButton.style.display = pageIndex < data.length - 1 ? 'block' : 'none';
-        }
-
-        // Configurar eventos de los botones
-        prevButton.onclick = () => {
-            if (currentPage > 0) {
-                currentPage--;
-                showPage(currentPage);
-            }
-        };
-
-        nextButton.onclick = () => {
-            if (currentPage < data.length - 1) {
-                currentPage++;
-                showPage(currentPage);
-            }
-        };
-
-        // Mostrar la primera página
+        // Mostrar el JSON formateado
+        jsonResult.textContent = JSON.stringify(data, null, 2);
         results.style.display = 'block';
-        showPage(currentPage);
     }
 </script>
 

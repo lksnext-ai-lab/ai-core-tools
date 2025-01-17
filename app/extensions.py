@@ -3,6 +3,9 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import create_engine
 import os
 from app.db.base_class import Base
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATABASE_URL = f"postgresql+psycopg://{os.getenv('DATABASE_USER')}:{os.getenv('DATABASE_PASSWORD')}@{os.getenv('DATABASE_HOST')}:{os.getenv('DATABASE_PORT')}/{os.getenv('DATABASE_NAME')}"
 some_engine = create_engine(DATABASE_URL)
