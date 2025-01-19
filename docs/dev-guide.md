@@ -13,3 +13,6 @@ pip install alembic
 alembic revision --autogenerate -m "Initial revision"
 alembic upgrade head
 ```
+
+
+docker-compose -f docker-compose.yaml --env-file .env up postgres
