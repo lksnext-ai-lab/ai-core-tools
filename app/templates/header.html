@@ -104,6 +104,10 @@
                                         <i class="bi bi-file-text fa-fw me-2"></i>Output Parsers
                                     </a>
                                 </li>
+                                <li class="nav-item"></li>
+                                <a class="nav-link" href="{{ url_for('silos.silos', app_id=session['app_id']) }}"><i
+                                        class="bi bi-file-text fa-fw me-2"></i>Silos</a>
+                                </li>
                                 <li class="nav-item">
                                     <a class="nav-link" href="{{ url_for('api_keys.list_api_keys') }}"><i
                                             class="bi bi-ticket-perforated fa-fw me-2"></i>API Keys</a>

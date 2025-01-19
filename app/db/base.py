@@ -7,3 +7,4 @@ from app.model.resource import Resource
 from app.model.user import User
 from app.model.output_parser import OutputParser
 from app.model.ocr_agent import OCRAgent
+from app.model.silo import Silo
