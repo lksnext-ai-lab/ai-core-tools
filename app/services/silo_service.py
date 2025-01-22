@@ -1,9 +1,19 @@
 from typing import Optional, List
 from app.model.silo import Silo
 from app.model.output_parser import OutputParser
-from app.extensions import db
+from app.extensions import db, engine
+from sqlalchemy import text
+from langchain_postgres import PGVector
+from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+import time
 
 class SiloService:
+
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+
+
+    '''SILO CRUD Operations'''
     @staticmethod
     def get_silo(silo_id: int) -> Optional[Silo]:
         """
@@ -83,3 +93,86 @@ class SiloService:
         if silo:
             db.session.delete(silo)
             db.session.commit()
+
+    '''SILO and DATA Operations'''
+
+    @staticmethod
+    def check_silo_collection_exists(silo_id: int) -> bool:
+        sql = text("SELECT COUNT(*) FROM langchain_pg_collection WHERE name = :silo_id;")
+        result = db.session.execute(sql, {'silo_id': 'silo_' + str(silo_id)})
+        return result.fetchone()[0] > 0
+    
+    @staticmethod
+    def get_silo_collection_uuid(silo_id: int) -> str:
+        sql = text("SELECT uuid FROM langchain_pg_collection WHERE name = :silo_id;")
+        result = db.session.execute(sql, {'silo_id': 'silo_' + str(silo_id)})
+        return result.fetchone()[0]
+    
+    @staticmethod
+    def count_docs_in_silo(silo_id: int) -> int:
+        if not SiloService.check_silo_collection_exists(silo_id):
+            return 0
+        collection_uuid = SiloService.get_silo_collection_uuid(silo_id)
+        #sql = text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE cmetadata @> '{\"silo_id\": :silo_id}'::jsonb;")
+        sql = text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = :collection_uuid;")
+        result = db.session.execute(sql, {'collection_uuid': collection_uuid})
+        return result.fetchone()[0]
+    
+    @staticmethod
+    def index_content(silo_id: int, content: str, metadata: dict):
+        silo = SiloService.get_silo(silo_id)
+        if not silo:
+            raise ValueError(f"Silo with id {silo_id} does not exist")
+        
+        #if not SiloService.check_silo_collection_exists(silo_id):
+        #    raise ValueError(f"Silo collection for silo_id {silo_id} does not exist")
+
+        
+        collection_name = 'silo_' + str(silo_id)
+        vector_store = PGVector(
+            embeddings=SiloService.embeddings,
+            collection_name=collection_name,
+            connection=engine,
+            use_jsonb=True,
+
+        )
+        documents = [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})]
+        vector_store.add_documents(documents)
+
+    @staticmethod
+    def delete_collection(silo_id: int):
+        if not SiloService.check_silo_collection_exists(silo_id):
+            return
+        collection_name = 'silo_' + str(silo_id)
+        vector_store = PGVector(
+            embeddings=SiloService.embeddings,
+            collection_name=collection_name,
+            connection=engine,
+        )
+        vector_store.delete()
+
+    @staticmethod
+    def delete_docs_in_collection(silo_id: int, ids: List[str]):
+        if not SiloService.check_silo_collection_exists(silo_id):
+            return
+        collection_name = 'silo_' + str(silo_id)
+        vector_store = PGVector(
+            embeddings=SiloService.embeddings,
+            collection_name=collection_name,
+            connection=engine,
+        )
+        vector_store.delete(ids=ids, collection_only=True)
+
+    @staticmethod
+    def find_docs_in_collection(silo_id: int, query: str, filter_metadata: dict) -> List[Document]:
+        if not SiloService.check_silo_collection_exists(silo_id):
+            return []
+        collection_name = 'silo_' + str(silo_id)
+        vector_store = PGVector(
+            embeddings=SiloService.embeddings,
+            collection_name=collection_name,
+            connection=engine,
+        )
+        return vector_store.similarity_search(query, filter=filter_metadata)
+
+

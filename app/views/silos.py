@@ -4,7 +4,7 @@ from app.model.app import App
 
 from app.extensions import db
 from app.services.silo_service import SiloService
-
+from app.services.output_parser_service import OutputParserService
 silos_blueprint = Blueprint('silos', __name__, url_prefix='/app/<int:app_id>/silos')
 
 '''
@@ -17,6 +17,7 @@ def silos(app_id: int):
 
 @silos_blueprint.route('/<int:silo_id>', methods=['GET', 'POST'])
 def silo(app_id: int, silo_id: int):
+    parser_service = OutputParserService()
     if request.method == 'POST':
         SiloService.create_or_update_silo(request.form)
         return redirect(url_for('silos.silos', app_id=app_id))
@@ -24,7 +25,11 @@ def silo(app_id: int, silo_id: int):
     silo = SiloService.get_silo(silo_id)
     if silo is None:
         silo = Silo(name="New Silo", app_id=app_id, silo_id=0)
-    return render_template('silos/silo.html', silo=silo)
+    
+    parsers = parser_service.get_parsers_by_app(app_id)
+
+    docs_count = SiloService.count_docs_in_silo(silo_id)
+    return render_template('silos/silo.html', silo=silo, output_parsers=parsers, docs_count=docs_count)
 
 @silos_blueprint.route('/<int:silo_id>/delete', methods=['GET'])
 def delete(app_id: int, silo_id: int):

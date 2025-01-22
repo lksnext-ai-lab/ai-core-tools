@@ -15,6 +15,7 @@ from app.model.app import App
 from app.model.user import User
 
 from app.api.api import api_blueprint
+from app.api.silo_api import api_silo_blueprint
 from app.views.agents import agents_blueprint
 from app.views.repositories import repositories_blueprint
 from app.views.resources import resources_blueprint
@@ -36,10 +37,13 @@ app.config["GOOGLE_DISCOVERY_URL"] = os.getenv('GOOGLE_DISCOVERY_URL')
 app.register_blueprint(agents_blueprint)
 app.register_blueprint(repositories_blueprint)
 app.register_blueprint(resources_blueprint)
-app.register_blueprint(api_blueprint)
 app.register_blueprint(output_parsers_blueprint)
 app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
+
+app.register_blueprint(api_blueprint)
+app.register_blueprint(api_silo_blueprint)
+
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 oauth = OAuth(app)
