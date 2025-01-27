@@ -1,0 +1,32 @@
+[project]
+name = "ia-core-tools"
+version = "0.1.0"
+description = "LKS Next AI Core Tools to aid and complement other software projects."
+authors = [
+    {name = "Aritz Galdos, Mikel Lonbide"}
+]
+readme = "README.md"
+requires-python = ">=3.9,<4.0"
+dependencies = [
+    "flask (>=3.1.0,<4.0.0)",
+    "flask-restful (>=0.3.10,<0.4.0)",
+    "flask-session (>=0.8.0,<0.9.0)",
+    "flask-login (>=0.6.3,<0.7.0)",
+    "flask-sqlalchemy (>=3.1.1,<4.0.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "psycopg (>=3.2.4,<4.0.0)",
+    "langchain-openai (>=0.3.2,<0.4.0)",
+    "langgraph (>=0.2.67,<0.3.0)",
+    "langchain (>=0.3.15,<0.4.0)",
+    "pdf2image (>=1.17.0,<2.0.0)",
+    "pypdf (>=5.2.0,<6.0.0)",
+    "langchain-anthropic (>=0.3.4,<0.4.0)",
+    "langchain-community (>=0.3.15,<0.4.0)",
+    "langchain-postgres (>=0.0.12,<0.0.13)",
+    "authlib (>=1.4.0,<2.0.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
