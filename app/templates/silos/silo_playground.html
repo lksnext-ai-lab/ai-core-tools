@@ -1,0 +1,68 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="d-sm-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-2 mb-sm-0">Playground for silo:{{silo.name}}</h1>
+        <a href="{{ url_for('silos.silos', app_id=session['app_id']) }}" class="btn btn-primary mt-3">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+    </div>
+</div>
+
+
+<form method="post" action="{{ url_for('silos.playground', app_id=session['app_id'], silo_id=silo.silo_id) }}">
+    <div class="row">
+        {% for field in silo.metadata_definition.fields %}
+        <div class="form-group col-md-4">
+            <label for="{{ field.name }}">{{ field.description }}</label>
+            <input type="text" class="form-control" id="filter_{{ field.name }}" name="filter_{{ field.name }}"
+                placeholder="Enter {{ field.name }}">
+        </div>
+        {% endfor %}
+    </div>
+    <div class="row mt-3">
+        <div class="col-md-12">
+            <textarea class="form-control" id="query" name="query" placeholder="Enter your query"></textarea>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-primary mt-3">Search</button>
+        </div>
+    </div>
+</form>
+
+{% if results %}
+<div class="row mt-5">
+    <div class="col-md-12">
+        <h2>Results</h2>
+        <div class="card-deck">
+            {% for result in results %}
+            <div class="card mb-3" id="content_{{ result.id }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ result.metadata }}</h5>
+                    <p class="card-text">{{ result.page_content }}</p>
+                    <a href="#" onclick="delete_content('{{ result.id }}')" class="btn btn-danger">Delete</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function delete_content(content_id) {
+        fetch('/app/{{ session["app_id"] }}/silos/{{ silo.silo_id }}/content/' + content_id + '/delete', { method: 'GET' })
+            .then(response => response.text())
+            .then(data => {
+                if (data === 'OK') {
+                    document.getElementById('content_' + content_id).remove();
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+</script>
+
+{% endif %}
+
+{% include 'footer.html' %}

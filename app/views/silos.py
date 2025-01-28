@@ -35,3 +35,21 @@ def silo(app_id: int, silo_id: int):
 def delete(app_id: int, silo_id: int):
     SiloService.delete_silo(silo_id)
     return redirect(url_for('silos.silos', app_id=app_id))
+
+@silos_blueprint.route('/<int:silo_id>/playground', methods=['GET', 'POST'])
+def playground(app_id: int, silo_id: int):
+    silo = SiloService.get_silo(silo_id)
+    results = None
+    if request.method == 'POST':
+        filter_prefix = 'filter_'
+        query = request.form.get('query')
+        filtered_form_data = {key: value for key, value in request.form.items() if value}
+        filter = {key[len(filter_prefix):]: {"$eq": value} for key, value in filtered_form_data.items() if key.startswith(filter_prefix)}
+        results = SiloService.find_docs_in_collection(silo_id, query=query, filter_metadata=filter)
+    
+    return render_template('silos/silo_playground.html', silo=silo, results=results)
+
+@silos_blueprint.route('/<int:silo_id>/content/<string:content_id>/delete', methods=['GET'])
+def delete_content(app_id: int, silo_id: int, content_id: str):
+    SiloService.delete_content(silo_id, content_id)
+    return "OK"

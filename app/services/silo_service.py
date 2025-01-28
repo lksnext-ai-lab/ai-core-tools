@@ -140,6 +140,18 @@ class SiloService:
         vector_store.add_documents(documents)
 
     @staticmethod
+    def delete_content(silo_id: int, content_id: str):
+        if not SiloService.check_silo_collection_exists(silo_id):
+            return
+        collection_name = 'silo_' + str(silo_id)
+        vector_store = PGVector(
+            embeddings=SiloService.embeddings,
+            collection_name=collection_name,
+            connection=engine,
+        )
+        vector_store.delete(ids=[content_id], collection_only=True)
+
+    @staticmethod
     def delete_collection(silo_id: int):
         if not SiloService.check_silo_collection_exists(silo_id):
             return
@@ -164,7 +176,7 @@ class SiloService:
         vector_store.delete(ids=ids, collection_only=True)
 
     @staticmethod
-    def find_docs_in_collection(silo_id: int, query: str, filter_metadata: dict) -> List[Document]:
+    def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None) -> List[Document]:
         if not SiloService.check_silo_collection_exists(silo_id):
             return []
         collection_name = 'silo_' + str(silo_id)
@@ -173,6 +185,4 @@ class SiloService:
             collection_name=collection_name,
             connection=engine,
         )
-        return vector_store.similarity_search(query, filter=filter_metadata)
-
-
+        return vector_store.similarity_search(query, filter=filter_metadata or {})
