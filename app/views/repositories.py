@@ -1,12 +1,15 @@
 from flask import render_template, Blueprint, request, redirect, url_for
 from app.model.repository import Repository
 from app.model.resource import Resource
+from app.model.silo import Silo
 from app.model.agent import Agent
 from app.extensions import db
 from app.tools.pgVectorTools import PGVectorTools
+from app.services.silo_service import SiloService
 
 import os
 
+#TODO: should be accesed from silo service
 pgVectorTools = PGVectorTools(db)
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
@@ -23,7 +26,18 @@ def repository(app_id: int, repository_id: int):
     if request.method == 'POST':
         repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
         if repo is None:
+            silo_service = SiloService()
+            silo_data = {
+                'silo_id': 0,
+                'name': 'silo for repository ' + request.form['name'],
+                'description': 'silo for repository ' + request.form['name'],
+                'status': 'active',
+                'app_id': app_id,
+                'fixed_metadata': False
+            }
+            silo = silo_service.create_or_update_silo(silo_data)
             repo = Repository()
+            repo.silo_id = silo.silo_id
         repo.name = request.form['name']
         repo.type = request.form.get('type')
         repo.status = request.form.get('status')
@@ -38,7 +52,7 @@ def repository(app_id: int, repository_id: int):
         
         return render_template('repositories/resources.html', app_id=app_id, repo=repo)
 
-    if repository_id == '0':
+    if repository_id == 0:
         repo = Repository(name="New Repository", app_id=app_id, repository_id=0)
         return render_template('repositories/repository.html', app_id=app_id, repo=repo)
 
@@ -52,8 +66,11 @@ def repository_settings(app_id: int, repository_id: int):
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/delete', methods=['GET'])
 def repository_delete(app_id: int, repository_id: int):
+    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
     db.session.query(Resource).filter(Resource.repository_id == repository_id).delete()
     db.session.query(Repository).filter(Repository.repository_id == repository_id).delete()
+    db.session.query(Silo).filter(Silo.silo_id == repo.silo_id).delete()
+    #TODO: empty silo
     db.session.commit()
     return repositories(app_id)
 
@@ -64,8 +81,7 @@ Resources
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource/<int:resource_id>/delete', methods=['GET'])
 def resource_delete(app_id: int, repository_id: int, resource_id: int):
     resource = db.session.query(Resource).filter(Resource.resource_id == resource_id).first()
-    #milvusTools.delete_resource(resource)
-    pgVectorTools.delete_resource(resource)
+    SiloService.delete_resource(resource)
     db.session.query(Resource).filter(Resource.resource_id == resource_id).delete()
     db.session.commit()
     return repository(app_id, repository_id)
@@ -80,14 +96,14 @@ def resource_create(app_id: int, repository_id: int):
         if file.filename == '':
             return redirect(request.url)
         if file : #and allowed_file(file.filename):
-            file.save(os.path.join(REPO_BASE_FOLDER, repository_id, file.filename))
+            file.save(os.path.join(REPO_BASE_FOLDER, str(repository_id), file.filename))
             resource = Resource(name=request.form['name'], uri=file.filename, repository_id=repository_id)
             
             db.session.add(resource)
             db.session.commit()
             db.session.refresh(resource)
-            #milvusTools.index_resource(resource)
-            pgVectorTools.index_resource(resource)
+            
+            SiloService.index_resource(resource)
         
         return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
 

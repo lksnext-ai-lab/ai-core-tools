@@ -14,4 +14,6 @@ class Silo(Base):
     fixed_metadata = Column(Boolean, default=False)
     metadata_definition_id = Column(Integer, ForeignKey('OutputParser.parser_id'), nullable=True)
     metadata_definition = relationship('OutputParser', uselist=False)
+
+    repository = relationship('Repository', back_populates='silo')
     

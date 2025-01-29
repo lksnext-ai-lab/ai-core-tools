@@ -7,10 +7,15 @@ from langchain_postgres import PGVector
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 import time
+from app.model.resource import Resource
+from app.tools.pgVectorTools import PGVectorTools
+import os
+
+REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 
 class SiloService:
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 
     '''SILO CRUD Operations'''
@@ -120,6 +125,8 @@ class SiloService:
     
     @staticmethod
     def index_content(silo_id: int, content: str, metadata: dict):
+        #TODO: should relay on pgVectorTools as index_content
+
         silo = SiloService.get_silo(silo_id)
         if not silo:
             raise ValueError(f"Silo with id {silo_id} does not exist")
@@ -138,6 +145,16 @@ class SiloService:
         )
         documents = [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})]
         vector_store.add_documents(documents)
+
+    @staticmethod
+    def index_resource(resource: Resource):
+        pgVectorTools = PGVectorTools(db)
+        pgVectorTools.index_resource(resource)
+
+    @staticmethod
+    def delete_resource(resource: Resource):
+        pgVectorTools = PGVectorTools(db)
+        pgVectorTools.delete_resource(resource)
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):
@@ -186,3 +203,27 @@ class SiloService:
             connection=engine,
         )
         return vector_store.similarity_search(query, filter=filter_metadata or {})
+
+    @staticmethod
+    def get_metadata_filter_from_form(silo: Silo, form_data: dict) -> dict:
+        filter_prefix = 'filter_'
+        field_definitions = silo.metadata_definition.fields
+        filter = {}
+        for field_name, field_value in form_data.items():
+            if field_value and field_value != '':
+                if field_name.startswith(filter_prefix):
+                    name = field_name[len(filter_prefix):]
+                    field_definition = next((f for f in field_definitions if f['name'] == name), None)
+                    if field_definition:
+                        if field_definition['type'] == 'str':
+                            filter[field_definition['name']] = {"$eq": f"'{field_value}'"}
+                        elif field_definition['type'] == 'int':
+                            filter[field_definition['name']] = {"$eq": int(field_value)}
+                        elif field_definition['type'] == 'bool':
+                            filter[field_definition['name']] = {"$eq": field_value}
+                        elif field_definition['type'] == 'float':
+                            filter[field_definition['name']] = {"$eq": float(field_value)}
+                        elif field_definition['type'] == 'date':
+                            filter[field_definition['name']] = {"$eq": field_value}
+                
+        return filter
