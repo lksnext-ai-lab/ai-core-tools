@@ -1,0 +1,56 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="d-sm-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-2 mb-sm-0">{%if silo.silo_id == 0 %}New Silo{% else %}{{silo.name}} ({{docs_count}} docs){%
+            endif %}</h1>
+        <a href="{{ url_for('silos.silos', app_id=session['app_id']) }}" class="btn btn-primary mt-3">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+    </div>
+</div>
+
+<form action="{{ url_for('silos.silo', app_id=session['app_id'], silo_id=silo.silo_id) }}" method="post">
+    <input type="hidden" name="app_id" value="{{session['app_id']}}">
+    <input type="hidden" name="silo_id" value="{{silo.silo_id}}">
+
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <label class="form-label">Name<span class="text-danger">*</span></label>
+                <input type="text" class="form-control" placeholder="Name..." value="{{silo.name}}" name="name"
+                    required>
+            </div>
+
+            <div class="col-md-12 mb-4">
+                <label class="form-label">Description</label>
+                <input type="text" class="form-control" placeholder="Description..." value="{{silo.description}}"
+                    name="description">
+            </div>
+
+            <div class="col-md-12 mb-4" id="outputParserSelect">
+                <label class="form-label">Select metadata definition</label>
+                <select name="metadata_definition_id" class="form-control">
+                    <option value="">-- Select an Output Parser --</option>
+                    {% for parser in output_parsers %}
+                    <option value="{{ parser.parser_id }}" {% if silo.metadata_definition_id==parser.parser_id
+                        %}selected{% endif %}>
+                        {{ parser.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+
+        </div>
+    </div>
+    <div class="card-footer">
+        <input type="submit" class="btn btn-primary" value="Save" />
+        <a href="{{ url_for('silos.silos', app_id=session['app_id']) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+
+</form>
+
+
+
+{% include 'footer.html' %}

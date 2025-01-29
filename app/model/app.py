@@ -19,3 +19,5 @@ class App(Base):
     user = relationship('User', back_populates='apps')
     
     api_keys = relationship('APIKey', back_populates='app', lazy=True)
+
+    silos = relationship('Silo', back_populates='app', lazy=True)

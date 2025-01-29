@@ -1,0 +1,40 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="d-sm-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-2 mb-sm-0">Silos</h1>
+        <a href="{{ url_for('silos.silo', app_id=session['app_id'], silo_id=0) }}" class="btn btn-primary mt-3">
+            <i class="bi bi-plus"></i>
+        </a>
+    </div>
+</div>
+
+<table class="table table-fixed">
+    <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for silo in silos %}
+        <tr>
+            <td><a href="#">{{silo.name}}</a></td>
+            <td>{{silo.description}}</td>
+
+            <td>
+                <a href="{{ url_for('silos.silo', app_id=session['app_id'], silo_id=silo.silo_id) }}"
+                    class="btn btn-primary">Edit</a>
+                <a href="{{ url_for('silos.delete', app_id=session['app_id'], silo_id=silo.silo_id) }}"
+                    class="btn btn-danger">Delete</a>
+                <a href="{{ url_for('silos.playground', app_id=session['app_id'], silo_id=silo.silo_id) }}"
+                    class="btn btn-warning">Playground</a>
+            </td>
+        </tr>
+        {% endfor %}
+
+    </tbody>
+</table>
+
+{% include 'footer.html' %}

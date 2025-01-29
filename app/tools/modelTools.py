@@ -76,7 +76,7 @@ def invoke_rag_with_repo(agent: Agent, input):
     print('AGENT ' + agent.name)
 
     embed = get_embedding(input)
-    similar_resources = pgVectorTools.search_similar_resources(agent.repository_id, embed, RESULTS=1)
+    similar_resources = pgVectorTools.search_similar_resources(agent.repository, embed, RESULTS=1)
     info = ""
     print(similar_resources)
     for result in similar_resources:
@@ -113,7 +113,7 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     
     llm = getLLM(agent)
 
-    retriever = pgVectorTools.get_pgvector_retriever(agent.repository_id)
+    retriever = pgVectorTools.get_pgvector_retriever(agent.repository)
    
     template = """
     Responde a las preguntas basadas en el contexto o historial de chat dado.

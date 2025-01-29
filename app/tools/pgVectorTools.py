@@ -9,7 +9,8 @@ import numpy as np
 from sqlalchemy.orm import sessionmaker
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
-COLLECTION_PREFIX = 'collection_'
+#TODO: move to common, there is silo_ in silo_service too
+COLLECTION_PREFIX = 'silo_'
 
 class PGVectorTools:
     def __init__(self, db):
@@ -40,9 +41,15 @@ class PGVectorTools:
         text_splitter = CharacterTextSplitter(chunk_size=10, chunk_overlap=0)
         docs = text_splitter.split_documents(pages)
 
+        for doc in docs:
+            doc.metadata["repository_id"] = resource.repository_id
+            doc.metadata["resource_id"] = resource.resource_id
+            doc.metadata["silo_id"] = resource.repository.silo_id
+
+
         vector_store = PGVector(
             embeddings=OpenAIEmbeddings(),
-            collection_name=COLLECTION_PREFIX + str(resource.repository_id),
+            collection_name=COLLECTION_PREFIX + str(resource.repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
         )
@@ -52,12 +59,12 @@ class PGVectorTools:
         """Deletes a resource from the pgvector table using langchain vector store."""
         vector_store = PGVector(
             embeddings=OpenAIEmbeddings(),
-            collection_name=COLLECTION_PREFIX + str(resource.repository_id),
+            collection_name=COLLECTION_PREFIX + str(resource.repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
         )
         results = vector_store.similarity_search(
-            "", k=1000, filter={"source": {"$eq": f"{REPO_BASE_FOLDER}/{resource.repository_id}/{resource.uri}"}}
+            "", k=1000, filter={"resource_id": {"$eq": resource.resource_id}}
         )
         print(results)
         ids_array = [doc.id for doc in results]
@@ -67,11 +74,11 @@ class PGVectorTools:
         
         
 
-    def search_similar_resources(self, repository_id, embed, RESULTS=5):
+    def search_similar_resources(self, repository, embed, RESULTS=5):
         """Searches for similar resources in the pgvector table using langchain vector store."""
         vector_store = PGVector(
             embeddings=OpenAIEmbeddings(),
-            collection_name=COLLECTION_PREFIX + str(repository_id),
+            collection_name=COLLECTION_PREFIX + str(repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
         )
@@ -81,11 +88,11 @@ class PGVectorTools:
         )
         return results
 
-    def get_pgvector_retriever(self, repository_id):
+    def get_pgvector_retriever(self, repository):
         """Returns a retriever object for the pgvector collection."""
         vector_store = PGVector(
             embeddings=OpenAIEmbeddings(),
-            collection_name=COLLECTION_PREFIX + str(repository_id),
+            collection_name=COLLECTION_PREFIX + str(repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
         )

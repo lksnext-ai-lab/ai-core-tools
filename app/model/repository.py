@@ -21,3 +21,6 @@ class Repository(Base):
     
     agents = relationship('Agent', lazy=True)
 
+    silo = relationship('Silo', lazy=False, uselist=False)
+    silo_id = Column(Integer, ForeignKey('Silo.silo_id'), nullable=False)
+
