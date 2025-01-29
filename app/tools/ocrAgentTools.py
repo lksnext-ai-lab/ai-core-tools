@@ -10,6 +10,7 @@ from pdf2image import convert_from_path
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
 from pypdf import PdfReader
+from mistralai import Mistral
 load_dotenv()
 
 IMAGES_PATH = os.getenv("IMAGES_PATH")
@@ -77,25 +78,72 @@ def convert_image_to_base64(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
+
+
 def extract_text_from_image(base64_image: str, vision_system_prompt, pydantic_class, vision_model, document_title: str) -> str:
     """Extrae texto de una imagen usando el modelo de visión"""
     output_parser = JsonOutputParser(pydantic_object=pydantic_class)
     format_instructions = output_parser.get_format_instructions()
     
-    chat_template = ChatPromptTemplate.from_messages([
-        SystemMessage(content=vision_system_prompt),
-        SystemMessage(content=f"Estás analizando el documento: {document_title}"),
-        SystemMessage(content=f"Extrae la siguiente información de la imagen según este formato:\n{format_instructions}"),
-        SystemMessage(content="En caso de que no se pueda extraer el dato o no encuentres los campos que se te piden, manten el formato pero con un valor nulo en el campo que no se pudo extraer."),
-        HumanMessage(content=[
-            {"type": "text", "text": f"Analiza la siguiente imagen del documento '{document_title}' y extrae los datos que aparecen en dicha imagen."}, 
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+    if isinstance(vision_model, ChatOpenAI):
+        # Usar el modelo de OpenAI
+        chat_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content=vision_system_prompt),
+            SystemMessage(content=f"Estás analizando el documento: {document_title}"),
+            SystemMessage(content=f"Extrae la siguiente información de la imagen según este formato:\n{format_instructions}"),
+            SystemMessage(content="En caso de que no se pueda extraer el dato o no encuentres los campos que se te piden, manten el formato pero con un valor nulo en el campo que no se pudo extraer."),
+            HumanMessage(content=[
+                {"type": "text", "text": f"Analiza la siguiente imagen del documento '{document_title}' y extrae los datos que aparecen en dicha imagen."}, 
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+            ])
         ])
-    ])
+        chain = chat_template | vision_model
+        response = chain.invoke({})
+        return response.content
     
-    chain = chat_template | vision_model
-    response = chain.invoke({})
-    return response.content
+    elif isinstance(vision_model.client, Mistral):
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text", 
+                        "text": f"""{vision_system_prompt}
+                        Estás analizando el documento: {document_title}
+                        """
+                    },
+                    {
+                        "type": "text",
+                        "text": f"""Extrae la siguiente información de la imagen según este formato:
+                        {format_instructions}
+                        En caso de que no se pueda extraer el dato o no encuentres los campos que se te piden, manten el formato pero con un valor nulo en el campo que no se pudo extraer.
+                        """
+                    }
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Analiza la siguiente imagen del documento '{document_title}' y extrae los datos que aparecen en dicha imagen."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                ]
+            }
+        ]
+        
+        response = vision_model.client.chat.complete(
+            messages=messages,
+            model=vision_model.model_name
+        )
+        return response.choices[0].message.content
+    
+    else:
+        raise ValueError("Modelo de visión no soportado")
 
 def prepare_text_model_prompt(pdf_text: str = None, text_system_prompt: str = None, pydantic_class: Type[BaseModel] = None, document_title: str = None) -> PromptTemplate:
     """Prepara el prompt para el modelo de texto basado en los datos disponibles"""

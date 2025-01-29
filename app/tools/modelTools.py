@@ -14,6 +14,7 @@ from langchain.chains.llm import LLMChain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
+from langchain_mistralai import ChatMistralAI
 
 from app.model.output_parser import OutputParser
 from app.model.agent import Agent
@@ -147,5 +148,7 @@ def getLLM(agent):
     if agent.model.provider == "OpenAI":
         return ChatOpenAI(model=agent.model.name, api_key=os.getenv('OPENAI_API_KEY'))
     if agent.model.provider == "Anthropic":
-        return ChatAnthropic(model=agent.model.name)
+        return ChatAnthropic(model=agent.model.name, api_key=os.getenv('ANTHROPIC_API_KEY'))
+    if agent.model.provider == "MistralAI":
+        return ChatMistralAI(model=agent.model.name, api_key=os.getenv('MISTRAL_API_KEY'))
     return None

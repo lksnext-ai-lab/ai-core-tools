@@ -34,3 +34,7 @@ downloads/
 images/
 agent_process.log
 __init__.py
+
+**/secrets.yaml
+**/secret.yaml
+*-secret.yaml
