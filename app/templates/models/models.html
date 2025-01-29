@@ -1,0 +1,25 @@
+{% include 'header.html' %}
+
+Models
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for model in models %}
+        <tr>
+            <td>{{ model.name }}</td>
+            <td>{{ model.description }}</td>
+            <td>
+                <a href="{{ url_for('models.model', model_id=model.id) }}">View</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% include 'footer.html' %}

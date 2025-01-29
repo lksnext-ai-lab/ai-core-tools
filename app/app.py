@@ -22,6 +22,7 @@ from app.views.resources import resources_blueprint
 from app.views.output_parsers import output_parsers_blueprint
 from app.views.api_keys import api_keys_blueprint
 from app.views.silos import silos_blueprint
+from app.views.models import models_blueprint
 from authlib.integrations.flask_client import OAuth
 
 
@@ -40,6 +41,7 @@ app.register_blueprint(resources_blueprint)
 app.register_blueprint(output_parsers_blueprint)
 app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
+app.register_blueprint(models_blueprint)
 
 app.register_blueprint(api_blueprint)
 app.register_blueprint(api_silo_blueprint)
