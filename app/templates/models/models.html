@@ -16,7 +16,7 @@ Models
             <td>{{ model.name }}</td>
             <td>{{ model.description }}</td>
             <td>
-                <a href="{{ url_for('models.model', model_id=model.id) }}">View</a>
+                <a href="{{ url_for('models.model', model_id=model.model_id) }}">View</a>
             </td>
         </tr>
         {% endfor %}
