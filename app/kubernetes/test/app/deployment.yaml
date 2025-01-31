@@ -15,17 +15,17 @@ spec:
     spec:
       containers:
         - name: ia-core-tools-app-test
-          image: registry.lksnext.com/ia-core-tools:latest
+          image: registry.lksnext.com/ia-core-tools/ia-core-tools:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4321
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "512Mi"
+              cpu: "1000m"
             limits:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "512Mi"
+              cpu: "1000m"
           volumeMounts:
             - name: temp-storage
               mountPath: /app/temp
@@ -69,6 +69,11 @@ spec:
                 secretKeyRef:
                   name: ia-core-tools-api-secret-test
                   key: ANTHROPIC_API_KEY
+            - name: MISTRAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: MISTRAL_API_KEY
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:
@@ -101,6 +106,8 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: LANGCHAIN_ENDPOINT
+      imagePullSecrets:
+        - name: lks-registry
       volumes:
         - name: temp-storage
           persistentVolumeClaim:

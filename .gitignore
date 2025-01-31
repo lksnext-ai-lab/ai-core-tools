@@ -35,3 +35,6 @@ images/
 agent_process.log
 __init__.py
 data/
+**/secrets.yaml
+**/secret.yaml
+*-secret.yaml
