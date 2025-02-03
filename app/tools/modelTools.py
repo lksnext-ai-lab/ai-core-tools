@@ -8,6 +8,8 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+from langchain_core.retrievers import BaseRetriever
+
 from langchain_core.runnables import RunnablePassthrough
 from langchain.prompts.prompt import PromptTemplate
 from langchain.chains.llm import LLMChain
@@ -21,6 +23,8 @@ from app.model.agent import Agent
 from app.extensions import db
 from app.tools.pgVectorTools import PGVectorTools
 from app.tools.outputParserTools import create_dynamic_pydantic_model, get_parser_model_by_id
+from typing import List
+from langchain_core.documents import Document
 
 load_dotenv()
 
@@ -113,8 +117,11 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     
     llm = getLLM(agent)
 
-    retriever = pgVectorTools.get_pgvector_retriever(agent.repository)
-   
+    retriever = None 
+    if agent.repository and agent.repository.silo_id:
+        retriever = pgVectorTools.get_pgvector_retriever(agent.repository)
+    if agent.repository is None:
+        retriever = VoidRetriever()
     template = """
     Responde a las preguntas basadas en el contexto o historial de chat dado.
         <<HISTORIAL>>
@@ -152,3 +159,13 @@ def getLLM(agent):
     if agent.model.provider == "MistralAI":
         return ChatMistralAI(model=agent.model.name, api_key=os.getenv('MISTRAL_API_KEY'))
     return None
+
+
+
+class VoidRetriever(BaseRetriever):
+    
+    def _get_relevant_documents(self, query: str) -> List[Document]:
+        return []
+
+    async def _aget_relevant_documents(self, query: str) -> List[Document]:
+        return []

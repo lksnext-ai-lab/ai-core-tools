@@ -216,7 +216,7 @@ class SiloService:
                     field_definition = next((f for f in field_definitions if f['name'] == name), None)
                     if field_definition:
                         if field_definition['type'] == 'str':
-                            filter[field_definition['name']] = {"$eq": f"'{field_value}'"}
+                            filter[field_definition['name']] = {"$eq": f"{field_value}"}
                         elif field_definition['type'] == 'int':
                             filter[field_definition['name']] = {"$eq": int(field_value)}
                         elif field_definition['type'] == 'bool':
