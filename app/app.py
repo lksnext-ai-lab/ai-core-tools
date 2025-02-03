@@ -3,6 +3,9 @@ from flask_restful import Api, Resource
 from flask_session import Session
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
 from app.extensions import db, init_db, DATABASE_URL
+from flask_openapi3 import OpenAPI
+from flask_openapi3 import Info, Tag
+from flask_openapi3 import Parameter
 
 import os
 import json
@@ -14,8 +17,7 @@ from dotenv import load_dotenv
 from app.model.app import App
 from app.model.user import User
 
-from app.api.api import api_blueprint
-from app.api.silo_api import api_silo_blueprint
+
 from app.views.agents import agents_blueprint
 from app.views.repositories import repositories_blueprint
 from app.views.resources import resources_blueprint
@@ -23,12 +25,18 @@ from app.views.output_parsers import output_parsers_blueprint
 from app.views.api_keys import api_keys_blueprint
 from app.views.silos import silos_blueprint
 from app.views.models import models_blueprint
+
+from app.api.api import api
+from app.api.silo_api import silo_api
+
 from authlib.integrations.flask_client import OAuth
 
 
 load_dotenv()
 
-app = Flask(__name__)
+info = Info(title="IA Core Tools", version="1.0.0")
+app = OpenAPI(__name__, info=info)
+
 app.secret_key = 'your-secret-key-SXSCDSDASD'
 app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
@@ -43,9 +51,8 @@ app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
 app.register_blueprint(models_blueprint)
 
-app.register_blueprint(api_blueprint)
-app.register_blueprint(api_silo_blueprint)
-
+app.register_api(silo_api)
+app.register_api(api)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 oauth = OAuth(app)
@@ -73,6 +80,12 @@ def before_request():
     if 'session_id' not in session:
         # Generate a new session ID
         session['session_id'] = str(uuid.uuid4())
+
+
+@app.get('/cat/<int:app_id>')
+def get_cat(app_id: int):
+
+    return {"name": "cat", "age": "20"}
 
 @app.route('/')
 def index():

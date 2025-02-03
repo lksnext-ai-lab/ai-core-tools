@@ -14,8 +14,10 @@
                             <li class="list-group-item">
                                 <span>Vision System prompt: </span>
                                 <div class="d-flex align-items-center">
-                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.vision_system_prompt}}</p>
-                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#visionSystemPromptModal">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                                        {{agent.vision_system_prompt}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
+                                        data-bs-target="#visionSystemPromptModal">
                                         <i class="fas fa-expand"></i>
                                     </button>
                                 </div>
@@ -27,8 +29,10 @@
                             <li class="list-group-item">
                                 <span>Text System prompt: </span>
                                 <div class="d-flex align-items-center">
-                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.text_system_prompt}}</p>
-                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#textSystemPromptModal">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                                        {{agent.text_system_prompt}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
+                                        data-bs-target="#textSystemPromptModal">
                                         <i class="fas fa-expand"></i>
                                     </button>
                                 </div>
@@ -220,7 +224,7 @@
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
             loadingModal.show();
 
-            const response = await fetch('/api/{{agent.app_id}}/ocr', {
+            const response = await fetch('/api/app/{{agent.app_id}}/ocr', {
                 method: 'POST',
                 body: formData
             });

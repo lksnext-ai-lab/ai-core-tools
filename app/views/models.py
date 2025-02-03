@@ -5,6 +5,11 @@ models_blueprint = Blueprint('models', __name__, url_prefix='/admin/models')
 
 @models_blueprint.route('/', methods=['GET'])
 def models():
-    models = Model.query.all()
+    models = db.session.query(Model).all()
     return render_template('models/models.html', models=models)
+
+@models_blueprint.route('/<int:model_id>', methods=['GET'])
+def model(model_id):
+    model = db.session.query(Model).get(model_id)
+    return render_template('models/model.html', model=model)
 

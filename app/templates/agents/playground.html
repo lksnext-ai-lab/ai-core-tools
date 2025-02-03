@@ -18,8 +18,10 @@
                             <li class="list-group-item">
                                 <span>System prompt: </span>
                                 <div class="d-flex align-items-center">
-                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.system_prompt}}</p>
-                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#systemPromptModal">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                                        {{agent.system_prompt}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
+                                        data-bs-target="#systemPromptModal">
                                         <i class="fas fa-expand"></i>
                                     </button>
                                 </div>
@@ -31,8 +33,10 @@
                             <li class="list-group-item">
                                 <span>Prompt template: </span>
                                 <div class="d-flex align-items-center">
-                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">{{agent.prompt_template}}</p>
-                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#promptTemplateModal">
+                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                                        {{agent.prompt_template}}</p>
+                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
+                                        data-bs-target="#promptTemplateModal">
                                         <i class="fas fa-expand"></i>
                                     </button>
                                 </div>
@@ -139,7 +143,7 @@
         }, 'slow');
 
         // Make a POST request
-        fetch('/api/{{app_id}}/call/{{agent.agent_id}}', {
+        fetch('/api/app/{{app_id}}/call/{{agent.agent_id}}', {
             method: 'POST',
             credentials: 'include',
             headers: {
