@@ -9,6 +9,7 @@ class OCRAgent(Base):
     agent_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     description = Column(String(1000))
+    request_count = Column(Integer, default=0)
     vision_model_id = Column(Integer,
                         ForeignKey('Model.model_id'),
                         nullable=True)

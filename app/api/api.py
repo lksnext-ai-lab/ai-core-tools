@@ -42,6 +42,9 @@ def call_agent(path: AgentPath, body: ChatRequest):
     
     if agent is None:
         return jsonify({"error": "Agent not found"}), 404
+    
+    agent.request_count += 1
+    db.session.commit()
 
     result = ""
     if agent.has_memory:
@@ -79,6 +82,13 @@ def call_agent(path: AgentPath, body: ChatRequest):
 def process_ocr(path: AppPath):
     logger.info(f"Starting OCR process for app_id: {path.app_id}")
     
+    agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == path.agent_id).first()
+    if agent is None:
+        return jsonify({"error": "Agent not found"}), 404
+    
+    agent.request_count += 1
+    db.session.commit()
+
     if 'pdf' not in request.files:
         logger.error("No PDF file provided in request")
         return jsonify({'error': 'No PDF file provided'}), 400

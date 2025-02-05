@@ -12,6 +12,7 @@ class Agent(Base):
     prompt_template = Column(Text)
     type = Column(String(45))
     status = Column(String(45))
+    request_count = Column(Integer, default=0)
     model = Column(String(45))
     model_id = Column(Integer,
                         ForeignKey('Model.model_id'),
