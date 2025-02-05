@@ -72,15 +72,15 @@ def invoke(agent, input):
     chain = prompt | model | output_parser
     return chain.invoke({"question": input})
 
-def invoke_rag_with_repo(agent: Agent, input):
-    if agent.repository is None:
-        print('AGENT ' + agent.name + ' has no repository to relay on.')
+def invoke_with_RAG(agent: Agent, input):
+    if agent.silo is None:
+        print('AGENT ' + agent.name + ' has no silo to relay on.')
         return invoke(agent, input)
     
     print('AGENT ' + agent.name)
 
     embed = get_embedding(input)
-    similar_resources = pgVectorTools.search_similar_resources(agent.repository, embed, RESULTS=1)
+    similar_resources = pgVectorTools.search_similar_resources(agent.silo, embed, RESULTS=1)
     info = ""
     print(similar_resources)
     for result in similar_resources:
@@ -118,9 +118,9 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     llm = getLLM(agent)
 
     retriever = None 
-    if agent.repository and agent.repository.silo_id:
-        retriever = pgVectorTools.get_pgvector_retriever(agent.repository)
-    if agent.repository is None:
+    if agent.silo:
+        retriever = pgVectorTools.get_pgvector_retriever("silo_" + str(agent.silo.silo_id))
+    if agent.silo is None:
         retriever = VoidRetriever()
     template = """
     Responde a las preguntas basadas en el contexto o historial de chat dado.

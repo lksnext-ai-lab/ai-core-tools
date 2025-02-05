@@ -19,7 +19,8 @@
                     <div class="card-header border-bottom">
                         <h5 class="mb-0">Agente: {{agent.name}}</h5>
                     </div>
-                    <form action="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}"
+                    <form
+                        action="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}"
                         method="POST" onsubmit="return validateAgentForm()">
                         <input type="hidden" name="app_id" value="{{app_id}}">
 
@@ -42,8 +43,8 @@
                                     <select name="model_id" class="form-control">
                                         <option value="">-- Select a model --</option>
                                         {% for model in models %}
-                                        <option value="{{ model.model_id }}" {% if agent.model_id==model.model_id %}selected{%
-                                            endif %}>
+                                        <option value="{{ model.model_id }}" {% if agent.model_id==model.model_id
+                                            %}selected{% endif %}>
                                             {{ model.name }}
                                         </option>
                                         {% endfor %}
@@ -59,20 +60,21 @@
                                 <div class="col-md-12 mb-4">
                                     <label class="form-label">Prompt template</label>
                                     <textarea name="prompt_template" class="form-control mb-0"
-                                        placeholder="Add a prompt tempate... Must include {question}" 
+                                        placeholder="Add a prompt tempate... Must include {question}"
                                         rows="2">{{agent.prompt_template}}</textarea>
-                                    <small class="text-muted">El prompt debe incluir {question} para funcionar correctamente</small>
+                                    <small class="text-muted">El prompt debe incluir {question} para funcionar
+                                        correctamente</small>
                                 </div>
 
-                                {% if repositories %}
+                                {% if silos %}
                                 <div class="col-md-6 mb-4">
-                                    <label class="form-label">Repository</label>
-                                    <select name="repository_id" class="form-control">
-                                        <option value="">-- Select a Repository --</option>
-                                        {% for repository in repositories %}
-                                        <option value="{{ repository.repository_id }}" {% if
-                                            agent.repository_id==repository.repository_id %}selected{% endif %}>
-                                            {{ repository.name }}
+                                    <label class="form-label">Silo</label>
+                                    <select name="silo_id" class="form-control">
+                                        <option value="">-- Select a Silo --</option>
+                                        {% for silo in silos %}
+                                        <option value="{{ silo.silo_id }}" {% if agent.silo_id==silo.silo_id
+                                            %}selected{% endif %}>
+                                            {{ silo.name }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -84,8 +86,8 @@
                                     <label class="form-label">Conversational (With mem.)</label>
 
                                     <div class="form-check form-switch form-check-lg mb-0">
-                                        <input class="form-check-input" type="checkbox" id="checkMemory" 
-                                            {% if agent.has_memory %} checked {% endif %} name="has_memory" />
+                                        <input class="form-check-input" type="checkbox" id="checkMemory" {% if
+                                            agent.has_memory %} checked {% endif %} name="has_memory" />
                                     </div>
 
                                 </div>
@@ -93,19 +95,20 @@
                                 <div class="col-6">
                                     <label class="form-label">Output Parser</label>
                                     <div class="form-check form-switch form-check-lg mb-0">
-                                        <input class="form-check-input" type="checkbox" id="checkOutputParser" 
-                                            {% if agent.output_parser_id %} checked {% endif %} 
-                                            onchange="toggleOutputParserSelect(this)"/>
+                                        <input class="form-check-input" type="checkbox" id="checkOutputParser" {% if
+                                            agent.output_parser_id %} checked {% endif %}
+                                            onchange="toggleOutputParserSelect(this)" />
                                     </div>
                                 </div>
 
-                                <div class="col-md-12 mb-4" id="outputParserSelect" {% if not agent.output_parser_id %}style="display: none"{% endif %}>
+                                <div class="col-md-12 mb-4" id="outputParserSelect" {% if not agent.output_parser_id
+                                    %}style="display: none" {% endif %}>
                                     <label class="form-label">Select Output Parser</label>
                                     <select name="output_parser_id" class="form-control">
                                         <option value="">-- Select an Output Parser --</option>
                                         {% for parser in output_parsers %}
-                                        <option value="{{ parser.parser_id }}" 
-                                            {% if agent.output_parser_id == parser.parser_id %}selected{% endif %}>
+                                        <option value="{{ parser.parser_id }}" {% if
+                                            agent.output_parser_id==parser.parser_id %}selected{% endif %}>
                                             {{ parser.name }}
                                         </option>
                                         {% endfor %}
@@ -137,7 +140,7 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         const maxRows = 4;
         const tableBody = document.querySelector('#outputTable tbody');
         const addRowBtn = document.getElementById('addRowBtn');
@@ -145,7 +148,7 @@
         const saveBtn = document.querySelector('input[type="submit"]');
         const modelNameInput = document.getElementById('modelName');
 
-        addRowBtn.addEventListener('click', function() {
+        addRowBtn.addEventListener('click', function () {
             if (tableBody.rows.length < maxRows) {
                 const newRow = tableBody.insertRow();
                 newRow.innerHTML = `
@@ -163,14 +166,14 @@
             }
         });
 
-        removeRowBtn.addEventListener('click', function() {
+        removeRowBtn.addEventListener('click', function () {
             if (tableBody.rows.length > 0) {
                 tableBody.deleteRow(-1);
                 updateButtons();
             }
         });
 
-        saveBtn.addEventListener('click', function(event) {
+        saveBtn.addEventListener('click', function (event) {
             if (!validateTable()) {
                 event.preventDefault();
                 alert('Please ensure the table and model name meet the required conditions.');
@@ -222,12 +225,12 @@
 
     function validateAgentForm() {
         const promptTemplate = document.querySelector('textarea[name="prompt_template"]').value;
-        
+
         if (!promptTemplate.includes("{question}")) {
             alert('El prompt template debe incluir {question}');
             return false;
         }
-        
+
         return true;
     }
 

@@ -16,8 +16,8 @@ class Agent(Base):
     model_id = Column(Integer,
                         ForeignKey('Model.model_id'),
                         nullable=True)
-    repository_id = Column(Integer,
-                        ForeignKey('Repository.repository_id'),
+    silo_id = Column(Integer,
+                        ForeignKey('Silo.silo_id'),
                         nullable=True)
     app_id = Column(Integer,
                         ForeignKey('App.app_id'),
@@ -29,10 +29,10 @@ class Agent(Base):
     
     model = relationship('Model',
                            foreign_keys=[model_id])
-    
-    repository = relationship('Repository',
+
+    silo = relationship('Silo',
                            back_populates='agents',
-                           foreign_keys=[repository_id])
+                           foreign_keys=[silo_id])
 
     app = relationship('App',
                            back_populates='agents',

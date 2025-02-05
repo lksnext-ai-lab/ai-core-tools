@@ -3,9 +3,10 @@ from flask import render_template
 from app.model.agent import Agent
 from app.model.ocr_agent import OCRAgent
 from app.model.model import Model
-from app.model.repository import Repository
 from app.model.output_parser import OutputParser
 from app.extensions import db
+from app.model.silo import Silo
+from app.services.silo_service import SiloService
 
 class AgentService:
     @staticmethod
@@ -53,7 +54,7 @@ class AgentService:
         agent.status = data.get('status')
         agent.model_id = data.get('model_id')
         agent.app_id = data['app_id']
-        agent.repository_id = data.get('repository_id') or None
+        agent.silo_id = data.get('silo_id') or None
         agent.has_memory = data.get('has_memory') == 'on'
         agent.output_parser_id = data.get('output_parser_id') or None
     
@@ -87,7 +88,7 @@ class AgentService:
                                     app_id=app_id,
                                     agent=Agent(agent_id=0, name=""),
                                     models=models,
-                                    repositories=db.session.query(Repository).filter(Repository.app_id == app_id).all(),
+                                    silos=SiloService.get_silos_by_app_id(app_id),
                                     output_parsers=output_parsers)
         
         # Para agente existente
@@ -104,7 +105,7 @@ class AgentService:
                                 app_id=app_id,
                                 agent=agent,
                                 models=models,
-                                repositories=db.session.query(Repository).filter(Repository.app_id == app_id).all(),
+                                silos=SiloService.get_silos_by_app_id(app_id),
                                 output_parsers=output_parsers)
     
     @staticmethod

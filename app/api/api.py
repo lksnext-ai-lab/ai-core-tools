@@ -46,8 +46,8 @@ def call_agent(path: AgentPath, body: ChatRequest):
     result = ""
     if agent.has_memory:
         result = modelTools.invoke_ConversationalRetrievalChain(agent, question, session)
-    elif agent.repository is not None:
-        result = modelTools.invoke_rag_with_repo(agent, question)
+    elif agent.silo is not None:
+        result = modelTools.invoke_with_RAG(agent, question)
     else:
         result = modelTools.invoke(agent, question)
 
