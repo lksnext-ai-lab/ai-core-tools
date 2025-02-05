@@ -6,9 +6,10 @@ from app.model.agent import Agent
 from app.extensions import db
 from app.tools.pgVectorTools import PGVectorTools
 from app.services.silo_service import SiloService
-
+from app.model.silo import SiloType
 import os
-
+from app.services.repository_service import RepositoryService
+from app.services.output_parser_service import OutputParserService
 #TODO: should be accesed from silo service
 pgVectorTools = PGVectorTools(db)
 
@@ -35,7 +36,7 @@ def repository(app_id: int, repository_id: int):
                 'app_id': app_id,
                 'fixed_metadata': False
             }
-            silo = silo_service.create_or_update_silo(silo_data)
+            silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO)
             repo = Repository()
             repo.silo_id = silo.silo_id
         repo.name = request.form['name']
@@ -43,6 +44,9 @@ def repository(app_id: int, repository_id: int):
         repo.status = request.form.get('status')
         repo.app_id = app_id
         db.session.add(repo)
+        output_parser_service = OutputParserService()
+        filter = output_parser_service.create_default_filter_for_repo(repo)
+        silo.metadata_definition_id = filter.parser_id
         db.session.commit()
         db.session.refresh(repo)
         
@@ -66,12 +70,14 @@ def repository_settings(app_id: int, repository_id: int):
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/delete', methods=['GET'])
 def repository_delete(app_id: int, repository_id: int):
-    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
+    '''repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
     db.session.query(Resource).filter(Resource.repository_id == repository_id).delete()
     db.session.query(Repository).filter(Repository.repository_id == repository_id).delete()
     db.session.query(Silo).filter(Silo.silo_id == repo.silo_id).delete()
     #TODO: empty silo
-    db.session.commit()
+    db.session.commit()'''
+    repo = RepositoryService.get_repository(repository_id)
+    RepositoryService.delete_repository(repo)
     return repositories(app_id)
 
     

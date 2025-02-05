@@ -3,19 +3,19 @@ from app.model.silo import Silo
 from app.model.output_parser import OutputParser
 from app.extensions import db, engine
 from sqlalchemy import text
-from langchain_postgres import PGVector
 from langchain_core.documents import Document
-from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import CharacterTextSplitter
+from langchain_community.document_loaders.pdf import PyPDFLoader
 import time
 from app.model.resource import Resource
 from app.tools.pgVectorTools import PGVectorTools
 import os
-
+from langchain_openai import OpenAIEmbeddings
+from app.model.silo import SiloType
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
+COLLECTION_PREFIX = 'silo_'
 
 class SiloService:
-
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 
     '''SILO CRUD Operations'''
@@ -34,15 +34,22 @@ class SiloService:
         return db.session.query(Silo).filter(Silo.app_id == app_id).all()
     
     @staticmethod
-    def create_or_update_silo(silo_data: dict) -> Silo:
+    def create_or_update_silo(silo_data: dict, silo_type: Optional[SiloType] = None) -> Silo:
         """
         Create a new silo or update an existing one
         """
         silo_id = int(silo_data.get('silo_id'))
         silo = SiloService.get_silo(silo_id) if silo_id else None
         
-        if not silo:
+        if not silo:    
             silo = Silo()
+            silo.silo_type = SiloType.CUSTOM.value
+        
+        if silo_type:
+            silo.silo_type = silo_type.value
+        
+        if silo_type == SiloType.REPO:
+            silo.metadata_definition_id = 0
             
         SiloService._update_silo(silo, silo_data)
         db.session.add(silo)
@@ -99,6 +106,8 @@ class SiloService:
             db.session.delete(silo)
             db.session.commit()
 
+        SiloService.delete_collection(silo_id)
+
     '''SILO and DATA Operations'''
 
     @staticmethod
@@ -125,8 +134,6 @@ class SiloService:
     
     @staticmethod
     def index_content(silo_id: int, content: str, metadata: dict):
-        #TODO: should relay on pgVectorTools as index_content
-
         silo = SiloService.get_silo(silo_id)
         if not silo:
             raise ValueError(f"Silo with id {silo_id} does not exist")
@@ -135,80 +142,75 @@ class SiloService:
         #    raise ValueError(f"Silo collection for silo_id {silo_id} does not exist")
 
         
-        collection_name = 'silo_' + str(silo_id)
-        vector_store = PGVector(
-            embeddings=SiloService.embeddings,
-            collection_name=collection_name,
-            connection=engine,
-            use_jsonb=True,
-
-        )
-        documents = [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})]
-        vector_store.add_documents(documents)
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        pgVectorTools = PGVectorTools(db)
+        pgVectorTools.index_documents(collection_name, [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})])
+    
 
     @staticmethod
     def index_resource(resource: Resource):
+        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
+        loader = PyPDFLoader(os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri), extract_images=False)
+        pages = loader.load()
+        text_splitter = CharacterTextSplitter(chunk_size=10, chunk_overlap=0)
+        docs = text_splitter.split_documents(pages)
+
+        for doc in docs:
+            doc.metadata["repository_id"] = resource.repository_id
+            doc.metadata["resource_id"] = resource.resource_id
+            doc.metadata["silo_id"] = resource.repository.silo_id
+
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.index_resource(resource)
+        pgVectorTools.index_documents(collection_name, docs)
+
 
     @staticmethod
     def delete_resource(resource: Resource):
+        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_resource(resource)
+        pgVectorTools.delete_documents(collection_name, filter_metadata={"resource_id": {"$eq": resource.resource_id}})
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):
         if not SiloService.check_silo_collection_exists(silo_id):
             return
-        collection_name = 'silo_' + str(silo_id)
-        vector_store = PGVector(
-            embeddings=SiloService.embeddings,
-            collection_name=collection_name,
-            connection=engine,
-        )
-        vector_store.delete(ids=[content_id], collection_only=True)
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        pgVectorTools = PGVectorTools(db)
+        pgVectorTools.delete_documents(collection_name, filter_metadata={"id": {"$eq": content_id}})
 
     @staticmethod
     def delete_collection(silo_id: int):
         if not SiloService.check_silo_collection_exists(silo_id):
             return
-        collection_name = 'silo_' + str(silo_id)
-        vector_store = PGVector(
-            embeddings=SiloService.embeddings,
-            collection_name=collection_name,
-            connection=engine,
-        )
-        vector_store.delete()
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        pgVectorTools = PGVectorTools(db)
+        pgVectorTools.delete_collection(collection_name)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str]):
         if not SiloService.check_silo_collection_exists(silo_id):
             return
-        collection_name = 'silo_' + str(silo_id)
-        vector_store = PGVector(
-            embeddings=SiloService.embeddings,
-            collection_name=collection_name,
-            connection=engine,
-        )
-        vector_store.delete(ids=ids, collection_only=True)
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        pgVectorTools = PGVectorTools(db)
+        pgVectorTools.delete_documents(collection_name, filter_metadata={"id": {"$in": ids}})
 
     @staticmethod
     def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None) -> List[Document]:
         if not SiloService.check_silo_collection_exists(silo_id):
             return []
-        collection_name = 'silo_' + str(silo_id)
-        vector_store = PGVector(
-            embeddings=SiloService.embeddings,
-            collection_name=collection_name,
-            connection=engine,
-        )
-        return vector_store.similarity_search(query, filter=filter_metadata or {})
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        pgVectorTools = PGVectorTools(db)
+        embedding = OpenAIEmbeddings(model="text-embedding-3-small").embed_query(query)
+        return pgVectorTools.search_similar_documents(collection_name, embedding, filter_metadata or {})
 
     @staticmethod
     def get_metadata_filter_from_form(silo: Silo, form_data: dict) -> dict:
         filter_prefix = 'filter_'
+        filter_dict = {}
+        if not silo.metadata_definition:
+            return filter_dict
         field_definitions = silo.metadata_definition.fields
-        filter = {}
+        
         for field_name, field_value in form_data.items():
             if field_value and field_value != '':
                 if field_name.startswith(filter_prefix):
@@ -216,14 +218,14 @@ class SiloService:
                     field_definition = next((f for f in field_definitions if f['name'] == name), None)
                     if field_definition:
                         if field_definition['type'] == 'str':
-                            filter[field_definition['name']] = {"$eq": f"{field_value}"}
+                            filter_dict[field_definition['name']] = {"$eq": f"{field_value}"}
                         elif field_definition['type'] == 'int':
-                            filter[field_definition['name']] = {"$eq": int(field_value)}
+                            filter_dict[field_definition['name']] = {"$eq": int(field_value)}
                         elif field_definition['type'] == 'bool':
-                            filter[field_definition['name']] = {"$eq": field_value}
+                            filter_dict[field_definition['name']] = {"$eq": field_value}
                         elif field_definition['type'] == 'float':
-                            filter[field_definition['name']] = {"$eq": float(field_value)}
+                            filter_dict[field_definition['name']] = {"$eq": float(field_value)}
                         elif field_definition['type'] == 'date':
-                            filter[field_definition['name']] = {"$eq": field_value}
+                            filter_dict[field_definition['name']] = {"$eq": field_value}
                 
-        return filter
+        return filter_dict

@@ -27,7 +27,7 @@
                 <a href="{{ url_for('silos.silo', app_id=session['app_id'], silo_id=silo.silo_id) }}"
                     class="btn btn-primary">Edit</a>
                 <a href="{{ url_for('silos.delete', app_id=session['app_id'], silo_id=silo.silo_id) }}"
-                    class="btn btn-danger">Delete</a>
+                    class="btn btn-danger {{ 'disabled' if silo.silo_type != 'CUSTOM' else '' }}">Delete</a>
                 <a href="{{ url_for('silos.playground', app_id=session['app_id'], silo_id=silo.silo_id) }}"
                     class="btn btn-warning">Playground</a>
             </td>

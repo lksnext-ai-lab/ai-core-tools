@@ -1,15 +1,20 @@
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.document_loaders.pdf import PyPDFLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_postgres import PGVector
-from langchain_postgres.vectorstores import PGVector
-from app.model.resource import Resource
 import os
+import warnings, deprecation
+
 import numpy as np
 from sqlalchemy.orm import sessionmaker
 
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.document_loaders.pdf import PyPDFLoader
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_postgres.vectorstores import PGVector
+
+from app.model.resource import Resource
+from typing import Optional
+from langchain.schema import Document
+from typing import List
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
-#TODO: move to common, there is silo_ in silo_service too
+#TODO: pgVector should not know abot silos
 COLLECTION_PREFIX = 'silo_'
 
 class PGVectorTools:
@@ -18,24 +23,15 @@ class PGVectorTools:
         self.Session = db.session
         self.db = db    
 
-    def create_pgvector_table(self, repository_id):
-        """Creates a pgvector table for the given repository if it doesn't exist."""
-        table_name = COLLECTION_PREFIX + str(repository_id)
-        session = self.Session()
-        try:
-            session.execute(f"""
-                CREATE TABLE IF NOT EXISTS {table_name} (
-                    id SERIAL PRIMARY KEY,
-                    source TEXT,
-                    embedding VECTOR(1536) -- Adjust the vector size according to the embedding model
-                );
-            """)
-            session.commit()
-        finally:
-            session.close()
 
+    @deprecation.deprecated(
+        deprecated_in="0.1.0",
+        current_version="0.1.0",
+        details="This method is deprecated and will be removed in a future version. Use the 'index_documents' method instead."
+    )
     def index_resource(self, resource):
         """Indexes a resource by loading its content, splitting it into chunks, and adding it to the pgvector table."""
+        
         loader = PyPDFLoader(os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri), extract_images=False)
         pages = loader.load()
         text_splitter = CharacterTextSplitter(chunk_size=10, chunk_overlap=0)
@@ -55,6 +51,21 @@ class PGVectorTools:
         )
         vector_store.add_documents(docs)
 
+    def index_documents(self, collection_name : str, documents : list[Document]):
+        """Indexes a list of documents in the pgvector collection using langchain vector store."""
+        vector_store = PGVector(
+            embeddings=OpenAIEmbeddings(),
+            collection_name=collection_name,
+            connection=self.db.engine,
+            use_jsonb=True,
+        )
+        vector_store.add_documents(documents)
+
+    @deprecation.deprecated(
+        deprecated_in="0.1.0",
+        current_version="0.1.0",
+        details="This method is deprecated and will be removed in a future version. Use the 'delete_documents' method instead."
+    )
     def delete_resource(self, resource):
         """Deletes a resource from the pgvector table using langchain vector store."""
         vector_store = PGVector(
@@ -71,10 +82,36 @@ class PGVectorTools:
         print(ids_array)
         
         vector_store.delete(ids=ids_array)
-        
-        
 
-    def search_similar_resources(self, repository, embed, RESULTS=5):
+    def delete_documents(self, collection_name : str, filter_metadata: Optional[dict] = None):
+        """Deletes documents from the pgvector collection using langchain vector store."""
+        vector_store = PGVector(
+            embeddings=OpenAIEmbeddings(),
+            collection_name=collection_name,
+            connection=self.db.engine,
+            use_jsonb=True,
+        )
+        results = vector_store.similarity_search(
+            "", k=1000, filter=filter_metadata
+        )
+        ids_array = [doc.id for doc in results]
+        vector_store.delete(ids=ids_array)
+
+    def delete_collection(self, collection_name : str):
+        """Deletes a collection from the pgvector database."""
+        vector_store = PGVector(
+            embeddings=OpenAIEmbeddings(),
+            collection_name=collection_name,
+            connection=self.db.engine,
+        )
+        vector_store.delete()
+        
+    @deprecation.deprecated(
+        deprecated_in="0.1.0",
+        current_version="0.1.0",
+        details="This method is deprecated and will be removed in a future version. Use the 'search_similar_documents' method instead."
+    )
+    def search_similar_resources(self, repository : str, embed, RESULTS=5):
         """Searches for similar resources in the pgvector table using langchain vector store."""
         vector_store = PGVector(
             embeddings=OpenAIEmbeddings(),
@@ -87,19 +124,31 @@ class PGVectorTools:
             k=RESULTS
         )
         return results
-
-    def get_pgvector_retriever(self, repository):
+    
+    def search_similar_documents(self, collection_name : str, embedding: List[float], filter_metadata: Optional[dict] = None, RESULTS=5):
+        """Searches for similar documents in the pgvector collection using langchain vector store."""
+        vector_store = PGVector(
+            embeddings=OpenAIEmbeddings(),
+            collection_name=collection_name,
+            connection=self.db.engine,
+            use_jsonb=True,
+        )   
+        results = vector_store.similarity_search_by_vector(
+            embedding=embedding,
+            k=RESULTS,
+            filter=filter_metadata
+        )
+        return results
+    
+    def get_pgvector_retriever(self, collection_name : str):
         """Returns a retriever object for the pgvector collection."""
         vector_store = PGVector(
             embeddings=OpenAIEmbeddings(),
-            collection_name=COLLECTION_PREFIX + str(repository.silo_id),
+            collection_name=collection_name,
             connection=self.db.engine,
             use_jsonb=True,
         )
         retriever = vector_store.as_retriever()
         return retriever
 
-# Usage example:
-# from sqlalchemy import create_engine
-# engine = create_engine('postgresql://user:password@localhost/dbname')
-# pg_vector_tools = PGVectorTools(engine)
+

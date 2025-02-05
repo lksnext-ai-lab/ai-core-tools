@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from app.extensions import db
 from app.model.output_parser import OutputParser
-
+from app.model.repository import Repository
 class OutputParserService:
     def __init__(self):
         self.field_types = ['str', 'int', 'float', 'bool', 'list']
@@ -73,3 +73,13 @@ class OutputParserService:
             fields.append(field)
             
         return fields 
+    
+    def create_default_filter_for_repo(self, repository: Repository) -> OutputParser:
+        parser = OutputParser()
+        parser.name = f"DEFALT-REPO-FILTER-{repository.silo_id}"
+        parser.description = "Default filter for repository"
+        parser.app_id = repository.app_id
+        parser.fields = [{"name": "name", "description": "Name of the file", "type": "str"}, {"name": "page", "description": "page of the document or chunk", "type": "int"}, {"name": "ref", "description": "reference of the file", "type": "str"}, {"name": "resource_id", "description": "resource id", "type": "int"}, {"name": "repository_id", "description": "repo id", "type": "int"}, {"name": "silo_id", "description": "silo id", "type": "int"}]
+        db.session.add(parser)
+        db.session.commit()
+        return parser
