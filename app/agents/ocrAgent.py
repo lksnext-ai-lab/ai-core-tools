@@ -19,7 +19,17 @@ from mistralai import Mistral
 
 from app.tools.outputParserTools import create_model_from_json_schema
 from app.model.ocr_agent import OCRAgent
-from app.tools.ocrAgentTools import convert_pdf_to_images, convert_image_to_base64, extract_text_from_image, get_data_from_extracted_text, cargar_pdf, get_document_data_from_pages
+from app.tools.ocrAgentTools import (
+    convert_pdf_to_images, 
+    convert_image_to_base64, 
+    extract_text_from_image, 
+    cargar_pdf, 
+    get_document_data_from_pages,
+    format_data_with_text_llm,
+    format_data_from_vision
+)
+
+from langchain_anthropic import ChatAnthropic
 
 load_dotenv()
 
@@ -59,43 +69,37 @@ class MistralWrapper:
         self.client = client
         self.model_name = model_name
 
-# Crear una variable global para el grafo compilado
-_compiled_graph = None
-
 def get_or_create_graph():
-    """Obtiene el grafo compilado existente o crea uno nuevo si no existe"""
-    global _compiled_graph
-    if _compiled_graph is None:
-        graph_builder = StateGraph(State)
-        
-        # Añadir nodos al grafo
-        graph_builder.add_node("get_agent_llms", get_agent_llms)
-        graph_builder.add_node("get_agent_output_parser", get_agent_output_parser)
-        graph_builder.add_node("pdf text checker", check_pdf_contains_plain_text)
-        graph_builder.add_node("pdf text extractor", extract_text_from_pdf)
-        graph_builder.add_node("pdf to images converter", pdf_to_images)
-        graph_builder.add_node("vision data extractor", extract_data_from_images)
-        graph_builder.add_node("data analyzer and formatter llm", get_and_format_data_with_llm)
-        graph_builder.add_node("document data integration by pages", get_final_output)
-
-        # Conexiones
-        graph_builder.add_edge(START, "get_agent_llms")
-        graph_builder.add_edge("get_agent_llms", "get_agent_output_parser")
-        graph_builder.add_edge("get_agent_output_parser", "pdf text checker")
-        
-        # Conexiones para el flujo con visión
-        graph_builder.add_conditional_edges(
-            source="pdf text checker",
-            path=determine_path_with_vision
-        )
-        graph_builder.add_edge("pdf text extractor", "pdf to images converter")
-        graph_builder.add_edge("pdf to images converter", "vision data extractor")
-        graph_builder.add_edge("vision data extractor", "data analyzer and formatter llm")
-        graph_builder.add_edge("data analyzer and formatter llm", "document data integration by pages")
-        graph_builder.add_edge("document data integration by pages", END)
-        _compiled_graph = graph_builder.compile()
+    """Crea y retorna un nuevo grafo compilado"""
+    graph_builder = StateGraph(State)
     
-    return _compiled_graph
+    # Añadir nodos al grafo
+    graph_builder.add_node("get_agent_llms", get_agent_llms)
+    graph_builder.add_node("get_agent_output_parser", get_agent_output_parser)
+    graph_builder.add_node("pdf text checker", check_pdf_contains_plain_text)
+    graph_builder.add_node("pdf text extractor", extract_text_from_pdf)
+    graph_builder.add_node("pdf to images converter", pdf_to_images)
+    graph_builder.add_node("vision data extractor", extract_data_from_images)
+    graph_builder.add_node("data analyzer and formatter llm", get_and_format_data_with_llm)
+    graph_builder.add_node("document data integration by pages", get_final_output)
+
+    # Conexiones
+    graph_builder.add_edge(START, "get_agent_llms")
+    graph_builder.add_edge("get_agent_llms", "get_agent_output_parser")
+    graph_builder.add_edge("get_agent_output_parser", "pdf text checker")
+    
+    # Conexiones para el flujo con visión
+    graph_builder.add_conditional_edges(
+        source="pdf text checker",
+        path=determine_path_with_vision
+    )
+    graph_builder.add_edge("pdf text extractor", "pdf to images converter")
+    graph_builder.add_edge("pdf to images converter", "vision data extractor")
+    graph_builder.add_edge("vision data extractor", "data analyzer and formatter llm")
+    graph_builder.add_edge("data analyzer and formatter llm", "document data integration by pages")
+    graph_builder.add_edge("document data integration by pages", END)
+    
+    return graph_builder.compile()
 
 def get_agent_llms(state: State):
     vision_model_info = state["agent"].vision_model_rel
@@ -107,6 +111,8 @@ def get_agent_llms(state: State):
     elif vision_model_info.provider == "MistralAI":
         mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
         vision_model = MistralWrapper(client=mistral_client, model_name=vision_model_info.name)
+    elif vision_model_info.provider == "Anthropic":
+        vision_model = ChatAnthropic(model=vision_model_info.name, temperature=0, api_key=os.getenv("ANTHROPIC_API_KEY"))
     else:
         raise ValueError(f"Proveedor de modelo de visión no soportado: {vision_model_info.provider}")
     
@@ -115,6 +121,8 @@ def get_agent_llms(state: State):
         text_model = ChatOpenAI(model=text_model_info.name, temperature=0, api_key=OPENAI_API_KEY)
     elif text_model_info.provider == "MistralAI":
         text_model = ChatMistralAI(model=text_model_info.name, temperature=0, api_key=os.getenv("MISTRAL_API_KEY"))
+    elif text_model_info.provider == "Anthropic":
+        text_model = ChatAnthropic(model=text_model_info.name, temperature=0, api_key=os.getenv("ANTHROPIC_API_KEY"))
     else:
         raise ValueError(f"Proveedor de modelo de texto no soportado: {text_model_info.provider}")
     
@@ -144,7 +152,6 @@ def check_pdf_contains_plain_text(state: State):
         logging.info("Iniciando verificación de texto en PDF...")
         pdf_text = cargar_pdf(state["pdf_path"])
         
-        # Si el texto está vacío o contiene muy pocos caracteres, probablemente es un PDF escaneado
         if not pdf_text or len(pdf_text.strip()) < 50:
             state["has_plain_text"] = False
             logging.info(f"Resultado de verificación: contiene texto plano = {state['has_plain_text']}")
@@ -153,7 +160,6 @@ def check_pdf_contains_plain_text(state: State):
                 "messages": [AIMessage(content="El PDF no contiene texto plano.")]
             }
             
-        # Si más del 30% son caracteres no imprimibles o espacios, probablemente es un PDF escaneado
         caracteres_validos = sum(1 for c in pdf_text if c.isprintable() and not c.isspace())
         ratio_caracteres = caracteres_validos / len(pdf_text)
         
@@ -235,20 +241,18 @@ def extract_data_from_images(state: State):
 def get_and_format_data_with_llm(state: State):
     """Formatea los datos extraídos usando el LLM"""
     logging.info("Iniciando formateo de datos con LLM...")
-    formatted_data_by_page = []
-    text_system_prompt = state["agent"].text_system_prompt
     try:
-        for output in state["vision_output"]:
-            logging.info(f"Formateando datos para imagen: {output['image_path']}")
-            if state["has_plain_text"]:
-                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt, state["pdf_text"], state["pdf_path"].split("/")[-1])
-            else:
-                formatted_text = get_data_from_extracted_text(output["extracted_text"], state["text_model"], state["pydantic_class"], text_system_prompt, document_title=state["pdf_path"].split("/")[-1])
-            
-            formatted_data_by_page.append({
-                "page": len(formatted_data_by_page) + 1,
-                "data": formatted_text
-            })
+        if state["has_plain_text"]:
+            formatted_data_by_page = format_data_with_text_llm(
+                state["vision_output"],
+                state["text_model"],
+                state["pydantic_class"],
+                state["agent"].text_system_prompt,
+                state["pdf_text"],
+                state["pdf_path"].split("/")[-1]
+            )
+        else:
+            formatted_data_by_page = format_data_from_vision(state["vision_output"])
         
         logging.info("Formateo de datos completado")
         logging.info(f"Datos formateados: {formatted_data_by_page}")
@@ -257,6 +261,7 @@ def get_and_format_data_with_llm(state: State):
             "messages": [AIMessage(content="Datos formateados exitosamente.")]
         }
     except Exception as e:
+        logging.error(f"Error en get_and_format_data_with_llm: {str(e)}")
         return {
             "formatted_llm_text_output": [],
             "messages": [AIMessage(content=f"Error al formatear datos: {str(e)}")]
@@ -283,8 +288,6 @@ def get_final_output(state: State):
             "messages": [AIMessage(content=f"Error al obtener los datos del documento: {str(e)}")]
         }
 
-
-# Función para determinar el camino basado en el resultado del checker
 def determine_path_with_vision(state: State) -> Literal["pdf text extractor", "pdf to images converter"]:
     """Determina el siguiente nodo basado en el resultado del PDF checker"""
     has_text = state.get("has_plain_text", False)
@@ -296,7 +299,6 @@ def process_pdf(agent_id: int, pdf_path: str, images_path: str):
         if not agent:
             raise ValueError(f"No se encontró el agente con ID {agent_id}")
         
-        # Usar el grafo existente o crear uno nuevo
         graph = get_or_create_graph()
         
         extracted_data = graph.invoke({
@@ -317,14 +319,11 @@ def process_pdf(agent_id: int, pdf_path: str, images_path: str):
             "pydantic_class": None,
         })["final_output"]
 
-        # Limpiar archivos después del procesamiento
         try:
-            # Eliminar el PDF
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
                 logging.info(f"PDF eliminado: {pdf_path}")
 
-            # Eliminar el directorio de imágenes y su contenido
             if os.path.exists(images_path):
                 for file in os.listdir(images_path):
                     file_path = os.path.join(images_path, file)
@@ -339,7 +338,6 @@ def process_pdf(agent_id: int, pdf_path: str, images_path: str):
         return extracted_data
 
     except Exception as e:
-        # En caso de error, intentar limpiar los archivos de todos modos
         try:
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
