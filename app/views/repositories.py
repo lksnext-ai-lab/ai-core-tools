@@ -25,34 +25,12 @@ def repositories(app_id: int):
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>', methods=['GET', 'POST'])
 def repository(app_id: int, repository_id: int):
     if request.method == 'POST':
-        repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-        if repo is None:
-            silo_service = SiloService()
-            silo_data = {
-                'silo_id': 0,
-                'name': 'silo for repository ' + request.form['name'],
-                'description': 'silo for repository ' + request.form['name'],
-                'status': 'active',
-                'app_id': app_id,
-                'fixed_metadata': False
-            }
-            silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO)
-            repo = Repository()
-            repo.silo_id = silo.silo_id
+        repo = Repository()
         repo.name = request.form['name']
         repo.type = request.form.get('type')
         repo.status = request.form.get('status')
         repo.app_id = app_id
-        db.session.add(repo)
-        output_parser_service = OutputParserService()
-        filter = output_parser_service.create_default_filter_for_repo(repo)
-        silo.metadata_definition_id = filter.parser_id
-        db.session.commit()
-        db.session.refresh(repo)
-        
-        # Create folder for repository
-        repo_folder = os.path.join(REPO_BASE_FOLDER, str(repo.repository_id))
-        os.makedirs(repo_folder, exist_ok=True)
+        repo = RepositoryService.create_repository(repo)
         
         return render_template('repositories/resources.html', app_id=app_id, repo=repo)
 

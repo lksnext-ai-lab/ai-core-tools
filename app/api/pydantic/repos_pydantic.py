@@ -7,8 +7,6 @@ class RepoPath(AppPath):
     repo_id: int
 
 
-
-
 class RepositorySchema(BaseModel):
     repository_id: int
     name: Optional[str]
@@ -22,3 +20,4 @@ class RepositorySchema(BaseModel):
 
 class CreateRepositoryRequest(BaseModel):
     name: str
+    description: Optional[str]

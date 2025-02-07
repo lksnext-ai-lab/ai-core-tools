@@ -29,6 +29,7 @@ from app.views.models import models_blueprint
 from app.api.api import api
 from app.api.silo_api import silo_api
 from app.api.repository_api import repo_api
+from app.api.resource_api import resource_api
 from authlib.integrations.flask_client import OAuth
 
 
@@ -54,6 +55,7 @@ app.register_blueprint(models_blueprint)
 app.register_api(silo_api)
 app.register_api(api)
 app.register_api(repo_api)
+app.register_api(resource_api)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 oauth = OAuth(app)
