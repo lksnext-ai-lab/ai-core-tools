@@ -1,24 +1,17 @@
-from flask import jsonify, request, session
+from flask import jsonify, request
 from flask_openapi3 import APIBlueprint, Tag
 from sqlalchemy import text
-from pydantic import BaseModel
 from app.model.silo import Silo
-from app.model.app import App
-from app.model.api_key import APIKey
 from app.extensions import db
 from app.services.silo_service import SiloService
 from app.api.api_auth import require_auth
+from app.api.pydantic.silos_pydantic import SiloPath
+from app.api.pydantic.pydantic import AppPath
 
 silo_tag = Tag(name="Silo", description="Silo description")
 
 silo_api = APIBlueprint('silo_api', __name__, url_prefix='/api/silo/app/<int:app_id>/silos')
 
-
-class AppPath(BaseModel):
-    app_id: int
-
-class SiloPath(AppPath):
-    silo_id: int
 
 @silo_api.get('/<int:silo_id>/docs', summary="count docs in silo", tags=[silo_tag])
 @require_auth

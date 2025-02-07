@@ -43,6 +43,8 @@ def call_agent(path: AgentPath, body: ChatRequest):
     if agent is None:
         return jsonify({"error": "Agent not found"}), 404
     
+    if agent.request_count is None:
+        agent.request_count = 0
     agent.request_count += 1
     db.session.commit()
 

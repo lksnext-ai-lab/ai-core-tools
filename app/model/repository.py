@@ -22,3 +22,26 @@ class Repository(Base):
     silo = relationship('Silo', lazy=False, uselist=False)
     silo_id = Column(Integer, ForeignKey('Silo.silo_id'), nullable=False)
 
+    def to_dict(self, include_relationships=False):
+        data = {
+            'repository_id': self.repository_id,
+            'name': self.name,
+            'type': self.type,
+            'status': self.status,
+            'app_id': self.app_id,
+            'silo_id': self.silo_id
+        }
+        
+        if include_relationships:
+            if self.silo:
+                data['silo'] = {
+                    'silo_id': self.silo.silo_id,
+                    # Add other silo fields as needed
+                }
+            data['resources'] = [{
+                'resource_id': resource.resource_id,
+                # Add other resource fields as needed
+            } for resource in self.resources]
+        
+        return data
+

@@ -28,7 +28,7 @@ from app.views.models import models_blueprint
 
 from app.api.api import api
 from app.api.silo_api import silo_api
-
+from app.api.repository_api import repo_api
 from authlib.integrations.flask_client import OAuth
 
 
@@ -53,6 +53,7 @@ app.register_blueprint(models_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)
+app.register_api(repo_api)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 oauth = OAuth(app)
@@ -80,12 +81,6 @@ def before_request():
     if 'session_id' not in session:
         # Generate a new session ID
         session['session_id'] = str(uuid.uuid4())
-
-
-@app.get('/cat/<int:app_id>')
-def get_cat(app_id: int):
-
-    return {"name": "cat", "age": "20"}
 
 @app.route('/')
 def index():

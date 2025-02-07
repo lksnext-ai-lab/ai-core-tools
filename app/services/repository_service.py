@@ -3,6 +3,7 @@ from app.model.resource import Resource
 from app.extensions import db
 from typing import Optional, List
 from app.services.silo_service import SiloService
+from app.model.silo import SiloType
 class RepositoryService:
 
     @staticmethod
@@ -15,6 +16,18 @@ class RepositoryService:
     
     @staticmethod
     def create_repository(repository: Repository) -> Repository:
+     
+        silo_service = SiloService()
+        silo_data = {
+            'silo_id': 0,
+            'name': 'silo for repository ' + repository.name,
+            'description': 'silo for repository ' + repository.name,
+            'status': 'active',
+            'app_id': repository.app_id,
+        'fixed_metadata': False
+        }
+        silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO)
+        repository.silo_id = silo.silo_id
         db.session.add(repository)
         db.session.commit()
         return repository
