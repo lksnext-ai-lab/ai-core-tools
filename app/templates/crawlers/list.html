@@ -1,0 +1,46 @@
+{% include 'header.html' %}
+
+<h2>DOMAINS</h2>
+
+<table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Domain</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for domain in domains %}
+        <tr>
+          <td>{{ domain.name }}</td>
+            <td>{{ domain.base_url }}  [Content selectors  tag:{{domain.content_tag}}; ID: {{domain.content_id}}; class: .{{domain.content_class}}   ]</td>
+            <td>
+              <div class="dropdown">
+                <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-bs-toggle="dropdown" aria-expanded="false">
+                  Actions
+                </a>
+              
+                <ul class="dropdown-menu" aria-labelledby="dropdownMenuLink">
+                  <li><a href="/domain/{{ domain.domain_id }}/edit" class="dropdown-item">Edit</a></li>
+                  <li><a href="/domain/{{ domain.domain_id }}/delete" class="dropdown-item">Delete</a></li>
+                  <li><a href="{{ url_for('crawler.view_domain_urls', domain_id=domain.domain_id) }}" class="dropdown-item">Urls</a></li>
+                  <li><a href="/domain/{{ domain.domain_id }}/re-index" class="dropdown-item">Reindex</a></li>
+                  <li><a href="/domain/{{ domain.domain_id }}/resume" class="dropdown-item">Resume</a></li>
+                </ul>
+              </div>
+              
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <a href="/domain/0/edit" class="btn btn-primary">Add Domain</a>
+
+
+
+
+
+
+{% include 'footer.html' %}

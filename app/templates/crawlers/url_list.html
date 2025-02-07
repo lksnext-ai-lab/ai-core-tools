@@ -1,0 +1,52 @@
+{% include 'header.html' %}
+
+<h2>URLs for {{domain.base_url}}</h2>
+
+<table class="table">
+    <thead>
+      <tr>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for url in urls %}
+        <tr>
+            <td><a href="{{domain.base_url}}{{ url.url }}" target="_blank"> {{ url.url }}</a></td>
+            <td><span class="badge {{'bg-warning' if url.status.value=='PENDING' else 'bg-danger' if url.status.value=='ERROR' else 'bg-secondary' if url.status.value=='DISCARDED' else 'bg-success'}} text-dark">{{ url.status.value }}</span></td> 
+            <td>
+            <div class="dropdown">
+              <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-bs-toggle="dropdown" aria-expanded="false">
+                Actions
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="dropdownMenuLink">
+                
+            
+
+                <li><a href="/domain/{{url.domain_id}}/url/{{ url.id }}/re-index" class="dropdown-item">Reindex</a></li>
+                <li><a href="/domain/{{url.domain_id}}/url/{{ url.id }}/delete" class="dropdown-item">Delete</a></li>
+                <li><a href="/domain/{{url.domain_id}}/url/{{ url.id }}/discard" class="dropdown-item">Discard</a></li>
+              </ul>
+            </div>
+            </td>
+        </tr>
+    {% endfor %}
+
+    </tbody>
+  </table>
+  <div class="pagination">
+      {{ pagination.links }}
+  </div>
+<form action="{{ url_for('crawler.add_url', domain_id=domain.domain_id) }}" method="post">
+    <div class="row">
+        <div class="col-md-12">
+            {{domain.base_url}} <input type="text" name="url" placeholder="/index.html"/>
+            <input type="submit" value="Add" />
+        </div>
+    </div>
+</form>
+
+
+
+{% include 'footer.html' %}

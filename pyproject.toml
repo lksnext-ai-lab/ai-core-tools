@@ -28,6 +28,8 @@ dependencies = [
     "flask-openapi3 (>=4.0.3,<5.0.0)",
     "langchain-mistralai (>=0.2.6,<0.3.0)",
     "mistralai (>=1.5.0,<2.0.0)",
+    "flask-paginate (>=2024.4.12,<2025.0.0)",
+    "beautifulsoup4 (>=4.13.3,<5.0.0)",
 ]
 
 

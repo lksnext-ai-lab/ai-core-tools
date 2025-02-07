@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 from app.model.app import App
 from app.model.user import User
 
-
 from app.views.agents import agents_blueprint
 from app.views.repositories import repositories_blueprint
 from app.views.resources import resources_blueprint
@@ -25,6 +24,7 @@ from app.views.output_parsers import output_parsers_blueprint
 from app.views.api_keys import api_keys_blueprint
 from app.views.silos import silos_blueprint
 from app.views.models import models_blueprint
+from app.views.crawler import crawler_blueprint
 
 from app.api.api import api
 from app.api.silo_api import silo_api
@@ -51,6 +51,7 @@ app.register_blueprint(output_parsers_blueprint)
 app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
 app.register_blueprint(models_blueprint)
+app.register_blueprint(crawler_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)
