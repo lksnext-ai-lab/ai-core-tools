@@ -1,39 +1,28 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from app.db.base_class import Base
+from app.model.agent import Agent
 
 
-class OCRAgent(Base):
+class OCRAgent(Agent):
     __tablename__ = 'OCRAgent'
     __table_args__ = {'extend_existing': True}
-    agent_id = Column(Integer, primary_key=True)
-    name = Column(String(255))
-    description = Column(String(1000))
-    request_count = Column(Integer, default=0)
+    
+    agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
+    
+    # Only keep OCR-specific attributes
     vision_model_id = Column(Integer,
-                        ForeignKey('Model.model_id'),
-                        nullable=True)
-    model_id = Column(Integer,
                         ForeignKey('Model.model_id'),
                         nullable=True)
     vision_system_prompt = Column(Text)
     text_system_prompt = Column(Text)
-    app_id = Column(Integer,
-                        ForeignKey('App.app_id'),
-                        nullable=True)
-    output_parser_id = Column(Integer,
-                        ForeignKey('OutputParser.parser_id'),
-                        nullable=True)
     
     vision_model_rel = relationship('Model',
                            foreign_keys=[vision_model_id])
     
-    model_rel = relationship('Model',
-                           foreign_keys=[model_id])
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.type = 'ocr_agent'  # Ensure type is always set for OCR agents
     
-    app = relationship('App',
-                           back_populates='ocr_agents',
-                           foreign_keys=[app_id])
-    
-    output_parser = relationship('OutputParser',
-                           foreign_keys=[output_parser_id])
+    __mapper_args__ = {
+        'polymorphic_identity': 'ocr_agent',
+    }

@@ -8,7 +8,8 @@ from app.extensions import db
 import os
 import logging
 from app.api.api_auth import require_auth
-
+from app.agents.ocrAgent import OCRAgent
+from app.api.pydantic.agent_pydantic import AgentPath, ChatRequest
 # Logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -21,18 +22,6 @@ api = APIBlueprint('api', __name__, url_prefix='/api/app/<int:app_id>')
 
 MSG_LIST = "MSG_LIST"
 
-# Request/Path models
-class AppPath(BaseModel):
-    app_id: int
-
-class AgentPath(AppPath):
-    agent_id: int
-
-class ChatRequest(BaseModel):
-    question: str
-
-class OCRRequest(BaseModel):
-    agent_id: str
 
 @api.post('/call/<int:agent_id>', summary="Call agent", tags=[api_tag])
 @require_auth
@@ -81,8 +70,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
 
 @api.post('/ocr', summary="Process OCR", tags=[api_tag])
 @require_auth
-def process_ocr(path: AppPath):
-    logger.info(f"Starting OCR process for app_id: {path.app_id}")
+def process_ocr(path: AgentPath):
     
     agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == path.agent_id).first()
     if agent is None:

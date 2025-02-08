@@ -27,7 +27,7 @@
         <tr>
             <td><a href="#">{{agent.name}}</a></td>
             <td>{{agent.description}}</td>
-            <td>Basic</td>
+            <td>{{agent.type}}</td>
             <td>
                 {% if agent.silo %}
                 <i class="bi bi-check-circle-fill text-success"></i>
@@ -51,9 +51,9 @@
             </td>
             <td>{{agent.model.name}}</td>
             <td>
-                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}"
+                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-primary">Edit</a>
-                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}?type=basic"
+                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-danger">Delete</a>
                 <a href="{{ url_for('agents.app_agent_playground', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-warning">Playground</a>
@@ -61,31 +61,7 @@
         </tr>
         {% endfor %}
 
-        {% for agent in app.ocr_agents %}
-        <tr>
-            <td><a href="#">{{agent.name}}</a></td>
-            <td>{{agent.description}}</td>
-            <td>OCR</td>
-            <td><i class="bi bi-dash text-muted"></i></td>
-            <td><i class="bi bi-dash text-muted"></i></td>
-            <td>
-                {% if agent.output_parser_id %}
-                <i class="bi bi-check-circle-fill text-success"></i>
-                {% else %}
-                <i class="bi bi-x-circle-fill text-danger"></i>
-                {% endif %}
-            </td>
-            <td>{{agent.model_rel.name}}</td>
-            <td>
-                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}?type=ocr"
-                    class="btn btn-primary">Edit</a>
-                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}?type=ocr"
-                    class="btn btn-danger">Delete</a>
-                <a href="{{ url_for('agents.app_ocr_playground', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-warning">Playground</a>
-            </td>
-        </tr>
-        {% endfor %}
+
     </tbody>
 </table>
 

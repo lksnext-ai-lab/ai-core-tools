@@ -5,6 +5,8 @@ from app.api.pydantic.repos_pydantic import RepoPath, CreateRepositoryRequest
 from app.services.repository_service import RepositoryService 
 from app.api.pydantic.pydantic import AppPath
 from app.model.repository import Repository
+from app.api.pydantic.repos_pydantic import RepositorySchema
+
 repo_tag = Tag(name="Repository", description="Repository operations")
 
 repo_api = APIBlueprint('repo_api', __name__, url_prefix='/api/repo/app/<int:app_id>/repos')

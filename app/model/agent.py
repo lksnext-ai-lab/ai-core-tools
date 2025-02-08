@@ -10,10 +10,9 @@ class Agent(Base):
     description = Column(String(1000))
     system_prompt = Column(Text)
     prompt_template = Column(Text)
-    type = Column(String(45))
+    type = Column(String(45), nullable=False, default='agent')
     status = Column(String(45))
     request_count = Column(Integer, default=0)
-    model = Column(String(45))
     model_id = Column(Integer,
                         ForeignKey('Model.model_id'),
                         nullable=True)
@@ -41,4 +40,9 @@ class Agent(Base):
     
     output_parser = relationship('OutputParser',
                            foreign_keys=[output_parser_id])
+    
+    __mapper_args__ = {
+        'polymorphic_identity': 'agent',
+        'polymorphic_on': type
+    }
     
