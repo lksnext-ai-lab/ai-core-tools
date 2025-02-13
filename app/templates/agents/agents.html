@@ -18,6 +18,8 @@
             <th scope="col">RAG</th>
             <th scope="col">Memory</th>
             <th scope="col">Output Parser</th>
+            <th scope="col">Is Tool</th>
+            <th scope="col">Uses Tools</th>
             <th scope="col">Model</th>
             <th scope="col">Actions</th>
         </tr>
@@ -49,14 +51,33 @@
                 <i class="bi bi-x-circle-fill text-danger"></i>
                 {% endif %}
             </td>
+            <td>
+                {% if agent.is_tool %}
+                <i class="bi bi-check-circle-fill text-success"></i>
+                {% else %}
+                <i class="bi bi-x-circle-fill text-danger"></i>
+                {% endif %}
+            </td>
+            <td>
+                {% for tool in agent.tools %}
+                {{tool.name}}<br />
+                {% endfor %}
+            </td>
             <td>{{agent.model.name}}</td>
             <td>
                 <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-primary">Edit</a>
                 <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-danger">Delete</a>
-                <a href="{{ url_for('agents.app_agent_playground', app_id=session['app_id'], agent_id=agent.agent_id) }}"
+                {% set playground_urls = {
+                'agent': 'agents.app_agent_playground',
+                'ocr_agent': 'agents.app_ocr_playground',
+                }
+                %}
+                {% if agent.type in playground_urls %}
+                <a href="{{ url_for(playground_urls[agent.type], app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-warning">Playground</a>
+                {% endif %}
             </td>
         </tr>
         {% endfor %}

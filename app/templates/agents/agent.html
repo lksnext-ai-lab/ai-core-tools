@@ -114,6 +114,19 @@
                                         {% endfor %}
                                     </select>
                                 </div>
+
+                                <div class="col-md-4 mb-4">
+                                    <label class="form-label">Is a tool:</label>
+                                    <div class="form-check form-switch form-check-lg mb-0">
+                                        <input class="form-check-input" type="checkbox" id="checkTool" {% if
+                                            agent.is_tool %} checked {% endif %} name="is_tool" />
+                                    </div>
+                                </div>
+
+                                <div class="col-md-8 mb-4" id="toolSelector">
+                                    <label class="form-label">Uses tools:</label>
+                                    {% include 'agents/_tool_selector.html' %}
+                                </div>
                             </div>
                         </div>
                         <div class="col-12">

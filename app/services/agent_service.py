@@ -14,6 +14,7 @@ class AgentService:
     def create_or_update_agent(agent_data: dict, agent_type: str) -> Union[Agent, OCRAgent]:
         agent_id = agent_data.get('agent_id')
         agent = AgentService.get_agent(agent_id, agent_type) if agent_id else None
+        agent.type = agent_type
         
         if agent_type == 'ocr_agent':
             if not agent:
@@ -38,6 +39,7 @@ class AgentService:
         agent.text_system_prompt = data.get('text_system_prompt')
         agent.output_parser_id = data.get('output_parser_id') or None
         agent.app_id = data['app_id']
+        agent.is_tool = data.get('is_tool') == 'on'
     
     @staticmethod
     def _update_normal_agent(agent: Agent, data: dict):
@@ -45,14 +47,20 @@ class AgentService:
         agent.description = data.get('description')
         agent.system_prompt = data.get('system_prompt')
         agent.prompt_template = data.get('prompt_template')
-        agent.type = data.get('type')
         agent.status = data.get('status')
         agent.model_id = data.get('model_id')
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         agent.has_memory = data.get('has_memory') == 'on'
         agent.output_parser_id = data.get('output_parser_id') or None
-    
+        agent.is_tool = data.get('is_tool') == 'on'
+
+    @staticmethod
+    def update_agent_tools(agent: Agent, tool_ids: list):
+        # Convert tool_ids to integers
+        ids = [int(tool_id) for tool_id in tool_ids]
+        agent.tools = db.session.query(Agent).filter(Agent.agent_id.in_(ids)).all()
+        db.session.commit()
     
     @staticmethod
     def delete_agent(agent_id: int):

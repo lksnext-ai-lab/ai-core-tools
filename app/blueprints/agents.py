@@ -29,10 +29,14 @@ def app_agent(app_id: int, agent_id: int):
         }
         agent_type = request.form.get('type', 'agent')
         agent = agent_service.create_or_update_agent(agent_data, agent_type)
+
+        agent_service.update_agent_tools(agent, request.form.getlist('tool_id'))
         return app_agents(app_id)
     
     models = db.session.query(Model).all()
     output_parsers = db.session.query(OutputParser).filter(OutputParser.app_id == app_id).all()
+    tools = db.session.query(Agent).filter(Agent.is_tool == True, Agent.app_id == app_id, Agent.agent_id != agent_id).all()
+
     template = 'agents/agent.html'
     agent = Agent(agent_id=0, name="")
     if agent_id != 0:
@@ -40,7 +44,7 @@ def app_agent(app_id: int, agent_id: int):
         if agent.type == 'ocr_agent':
             template = 'agents/ocr_agent.html'
 
-    return render_template(template, app_id=app_id, agent=agent, models=models, output_parsers=output_parsers)
+    return render_template(template, app_id=app_id, agent=agent, models=models, output_parsers=output_parsers, tools=tools)
 
         
 
