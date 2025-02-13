@@ -25,10 +25,7 @@ def upgrade():
     sa.ForeignKeyConstraint(['tool_id'], ['Agent.agent_id'], ),
     sa.PrimaryKeyConstraint('agent_id', 'tool_id')
     )
-    op.drop_index('ix_cmetadata_gin', table_name='langchain_pg_embedding', postgresql_using='gin')
-    op.drop_index('ix_langchain_pg_embedding_id', table_name='langchain_pg_embedding')
-    op.drop_table('langchain_pg_embedding')
-    op.drop_table('langchain_pg_collection')
+
     op.add_column('Agent', sa.Column('is_tool', sa.Boolean(), nullable=True))
     op.alter_column('Agent', 'type',
                existing_type=sa.VARCHAR(length=45),
@@ -42,24 +39,5 @@ def downgrade():
                existing_type=sa.VARCHAR(length=45),
                nullable=True)
     op.drop_column('Agent', 'is_tool')
-    op.create_table('langchain_pg_collection',
-    sa.Column('uuid', sa.UUID(), autoincrement=False, nullable=False),
-    sa.Column('name', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('cmetadata', postgresql.JSON(astext_type=sa.Text()), autoincrement=False, nullable=True),
-    sa.PrimaryKeyConstraint('uuid', name='langchain_pg_collection_pkey'),
-    sa.UniqueConstraint('name', name='langchain_pg_collection_name_key'),
-    postgresql_ignore_search_path=False
-    )
-    op.create_table('langchain_pg_embedding',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('collection_id', sa.UUID(), autoincrement=False, nullable=True),
-    sa.Column('embedding', sa.NullType(), autoincrement=False, nullable=True),
-    sa.Column('document', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('cmetadata', postgresql.JSONB(astext_type=sa.Text()), autoincrement=False, nullable=True),
-    sa.ForeignKeyConstraint(['collection_id'], ['langchain_pg_collection.uuid'], name='langchain_pg_embedding_collection_id_fkey', ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id', name='langchain_pg_embedding_pkey')
-    )
-    op.create_index('ix_langchain_pg_embedding_id', 'langchain_pg_embedding', ['id'], unique=True)
-    op.create_index('ix_cmetadata_gin', 'langchain_pg_embedding', ['cmetadata'], unique=False, postgresql_using='gin')
     op.drop_table('agent_tools')
     # ### end Alembic commands ###
