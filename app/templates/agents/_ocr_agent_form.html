@@ -1,7 +1,7 @@
 <form action="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}" method="POST">
     <input type="hidden" name="app_id" value="{{app_id}}">
-    <input type="hidden" name="type" value="ocr">
-    
+    <input type="hidden" name="type" value="ocr_agent">
+
     <div class="card-body">
         <div class="row">
             <div class="col-md-6 mb-4">
@@ -11,7 +11,8 @@
 
             <div class="col-md-12 mb-4">
                 <label class="form-label">Descripción</label>
-                <input type="text" class="form-control" placeholder="Descripción..." name="description" value="{{agent.description}}">
+                <input type="text" class="form-control" placeholder="Descripción..." name="description"
+                    value="{{agent.description}}">
             </div>
 
             <div class="col-md-12 mb-4">
@@ -19,7 +20,8 @@
                 <select name="vision_model_id" class="form-control">
                     <option value="">-- Seleccionar modelo de visión --</option>
                     {% for model in models %}
-                    <option value="{{ model.model_id }}" {% if agent.vision_model_id==model.model_id %}selected{% endif %}>
+                    <option value="{{ model.model_id }}" {% if agent.vision_model_id==model.model_id %}selected{% endif
+                        %}>
                         {{ model.name }}
                     </option>
                     {% endfor %}
@@ -29,7 +31,7 @@
             <div class="col-md-12 mb-4">
                 <label class="form-label">System Prompt (Visión)</label>
                 <textarea name="vision_system_prompt" class="form-control mb-0"
-                    placeholder="Añade el system prompt para el modelo de visión..." 
+                    placeholder="Añade el system prompt para el modelo de visión..."
                     rows="2">{{agent.vision_system_prompt}}</textarea>
             </div>
 
@@ -48,26 +50,26 @@
             <div class="col-md-12 mb-4">
                 <label class="form-label">System Prompt (Texto)</label>
                 <textarea name="text_system_prompt" class="form-control mb-0"
-                    placeholder="Añade el system prompt para el modelo de texto..." 
+                    placeholder="Añade el system prompt para el modelo de texto..."
                     rows="2">{{agent.text_system_prompt}}</textarea>
             </div>
 
             <div class="col-6">
                 <label class="form-label">Output Parser</label>
                 <div class="form-check form-switch form-check-lg mb-0">
-                    <input class="form-check-input" type="checkbox" id="checkOutputParserOCR" 
-                        {% if agent.output_parser_id %} checked {% endif %} 
-                        onchange="toggleOutputParserSelectOCR(this)"/>
+                    <input class="form-check-input" type="checkbox" id="checkOutputParserOCR" {% if
+                        agent.output_parser_id %} checked {% endif %} onchange="toggleOutputParserSelectOCR(this)" />
                 </div>
             </div>
 
-            <div class="col-md-12 mb-4" id="outputParserSelectOCR" {% if not agent.output_parser_id %}style="display: none"{% endif %}>
+            <div class="col-md-12 mb-4" id="outputParserSelectOCR" {% if not agent.output_parser_id
+                %}style="display: none" {% endif %}>
                 <label class="form-label">Select Output Parser</label>
                 <select name="output_parser_id" class="form-control">
                     <option value="">-- Select an Output Parser --</option>
                     {% for parser in output_parsers %}
-                    <option value="{{ parser.parser_id }}" 
-                        {% if agent.output_parser_id == parser.parser_id %}selected{% endif %}>
+                    <option value="{{ parser.parser_id }}" {% if agent.output_parser_id==parser.parser_id %}selected{%
+                        endif %}>
                         {{ parser.name }}
                     </option>
                     {% endfor %}
@@ -77,7 +79,6 @@
     </div>
     <div class="col-12 mb-3">
         <input type="submit" class="btn btn-primary" value="Guardar" />
-        <a href="{{ url_for('agents.app_agents', app_id=session['app_id']) }}" 
-           class="btn btn-primary-soft">Cancelar</a>
+        <a href="{{ url_for('agents.app_agents', app_id=session['app_id']) }}" class="btn btn-primary-soft">Cancelar</a>
     </div>
-</form> 
+</form>

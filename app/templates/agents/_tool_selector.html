@@ -1,0 +1,9 @@
+<div class="form-group">
+    <select class="form-control" id="tool_id" name="tool_id" multiple>
+        {% for tool in tools %}
+        <option value="{{ tool.agent_id }}" {% if tool in agent.tools %}selected{% endif %}>
+            {{ tool.name }}
+        </option>
+        {% endfor %}
+    </select>
+</div>
