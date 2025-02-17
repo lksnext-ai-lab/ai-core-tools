@@ -33,7 +33,6 @@ from langchain_anthropic import ChatAnthropic
 
 load_dotenv()
 
-# Configuración de LangSmith
 client = Client()
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "ia-core-tools"
