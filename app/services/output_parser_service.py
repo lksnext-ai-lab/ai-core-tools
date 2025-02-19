@@ -78,7 +78,7 @@ class OutputParserService:
     def create_default_filter_for_repo(self, repository: Repository) -> OutputParser:
         parser = OutputParser()
         parser.name = f"DEFAULT-REPO-FILTER-{repository.silo_id}"
-        parser.description = "Default filter for repository"
+        parser.description = f"Default filter for repository ({repository.name})"
         parser.app_id = repository.app_id
         parser.fields = [{"name": "name", "description": "Name of the file", "type": "str"}, {"name": "page", "description": "page of the document or chunk", "type": "int"}, {"name": "ref", "description": "reference of the file", "type": "str"}, {"name": "resource_id", "description": "resource id", "type": "int"}, {"name": "repository_id", "description": "repo id", "type": "int"}, {"name": "silo_id", "description": "silo id", "type": "int"}]
         db.session.add(parser)
@@ -88,7 +88,7 @@ class OutputParserService:
     def create_default_filter_for_domain(self, domain: Domain) -> OutputParser:
         parser = OutputParser()
         parser.name = f"DEFAULT-DOMAIN-FILTER-{domain.silo_id}"
-        parser.description = "Default filter for domain"
+        parser.description = f"Default filter for domain ({domain.name})"
         parser.app_id = domain.app_id
         parser.fields = [{"name":"url_id","description":"url id","type":"int"}, {"name":"url","description":"url","type":"str"}, {"name":"domain_id","description":"domain id","type":"int"}, {"name":"page","description":"page of the document or chunk","type":"int"}]
         db.session.add(parser)

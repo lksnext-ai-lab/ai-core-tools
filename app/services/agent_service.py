@@ -14,7 +14,6 @@ class AgentService:
     def create_or_update_agent(agent_data: dict, agent_type: str) -> Union[Agent, OCRAgent]:
         agent_id = agent_data.get('agent_id')
         agent = AgentService.get_agent(agent_id, agent_type) if agent_id else None
-        agent.type = agent_type
         
         if agent_type == 'ocr_agent':
             if not agent:
