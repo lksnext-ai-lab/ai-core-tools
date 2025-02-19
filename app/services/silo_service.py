@@ -12,6 +12,7 @@ from app.tools.pgVectorTools import PGVectorTools
 import os
 from langchain_openai import OpenAIEmbeddings
 from app.model.silo import SiloType
+from app.services.output_parser_service import OutputParserService
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 COLLECTION_PREFIX = 'silo_'
 
@@ -107,6 +108,9 @@ class SiloService:
             db.session.commit()
 
         SiloService.delete_collection(silo_id)
+
+        output_parser_service = OutputParserService()
+        output_parser_service.delete_parser(silo.metadata_definition_id)
 
     '''SILO and DATA Operations'''
 

@@ -24,7 +24,7 @@ from app.blueprints.output_parsers import output_parsers_blueprint
 from app.blueprints.api_keys import api_keys_blueprint
 from app.blueprints.silos import silos_blueprint
 from app.blueprints.models import models_blueprint
-from app.blueprints.crawler import crawler_blueprint
+from app.blueprints.domains import domains_blueprint
 
 from app.api.api import api
 from app.api.silo_api import silo_api
@@ -51,7 +51,7 @@ app.register_blueprint(output_parsers_blueprint)
 app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
 app.register_blueprint(models_blueprint)
-app.register_blueprint(crawler_blueprint)
+app.register_blueprint(domains_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)

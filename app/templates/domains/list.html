@@ -1,13 +1,20 @@
 {% include 'header.html' %}
 
-<h2>DOMAINS</h2>
+<div class="row">
+    <div class="d-sm-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-2 mb-sm-0">Domains</h1>
+        <a href="{{ url_for('domains.domain', domain_id=0) }}" class="btn btn-primary mt-3">
+            <i class="bi bi-plus"></i>
+        </a>
+    </div>
+</div>
 
-<table class="table">
+<table class="table table-fixed">
     <thead>
       <tr>
-        <th>Name</th>
-        <th>Domain</th>
-        <th>Actions</th>
+        <th scope="col">Name</th>
+        <th scope="col">Domain</th>
+        <th scope="col">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -22,9 +29,9 @@
                 </a>
               
                 <ul class="dropdown-menu" aria-labelledby="dropdownMenuLink">
-                  <li><a href="/domain/{{ domain.domain_id }}/edit" class="dropdown-item">Edit</a></li>
-                  <li><a href="/domain/{{ domain.domain_id }}/delete" class="dropdown-item">Delete</a></li>
-                  <li><a href="{{ url_for('crawler.view_domain_urls', domain_id=domain.domain_id) }}" class="dropdown-item">Urls</a></li>
+                  <li><a href="{{ url_for('domains.domain', domain_id=domain.domain_id) }}" class="dropdown-item">Edit</a></li>
+                  <li><a href="{{ url_for('domains.domain_delete', domain_id=domain.domain_id) }}" class="dropdown-item">Delete</a></li>
+                  <li><a href="{{ url_for('domains.view_domain_urls', domain_id=domain.domain_id) }}" class="dropdown-item">Urls</a></li>
                   <li><a href="/domain/{{ domain.domain_id }}/re-index" class="dropdown-item">Reindex</a></li>
                   <li><a href="/domain/{{ domain.domain_id }}/resume" class="dropdown-item">Resume</a></li>
                 </ul>
@@ -35,9 +42,6 @@
     {% endfor %}
     </tbody>
   </table>
-
-  <a href="/domain/0/edit" class="btn btn-primary">Add Domain</a>
-
 
 
 

@@ -1,0 +1,32 @@
+{% include 'header.html' %}
+
+<h1>Domain</h1>
+
+<form method="post">
+    <input type="hidden" class="form-control" id="domain_id" name="domain_id" value="{{ domain.domain_id }}">
+
+    <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ domain.name }}">
+    </div>
+    <div class="form-group">
+        <label for="base_url">Base URL</label>
+        <input type="text" class="form-control" id="base_url" name="base_url" value="{{ domain.base_url }}">
+    </div>
+    <div class="form-group">
+        <label for="content_tag">Content Tag</label>
+        <input type="text" class="form-control" id="content_tag" name="content_tag" value="{{ domain.content_tag }}">
+    </div>
+    <div class="form-group">
+        <label for="content_class">Content Class</label>
+        <input type="text" class="form-control" id="content_class" name="content_class" value="{{ domain.content_class }}">
+    </div>
+    <div class="form-group">
+        <label for="content_id">Content ID</label>
+        <input type="text" class="form-control" id="content_id" name="content_id" value="{{ domain.content_id }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a href="{{ url_for('domains.domains') }}" class="btn btn-secondary">Cancel</a>
+</form>
+
+{% include 'footer.html' %}
