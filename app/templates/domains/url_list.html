@@ -38,7 +38,7 @@
   <div class="pagination">
       {{ pagination.links }}
   </div>
-<form action="{{ url_for('crawler.add_url', domain_id=domain.domain_id) }}" method="post">
+<form action="{{ url_for('domains.add_url', domain_id=domain.domain_id) }}" method="post">
     <div class="row">
         <div class="col-md-12">
             {{domain.base_url}} <input type="text" name="url" placeholder="/index.html"/>

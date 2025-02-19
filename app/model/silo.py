@@ -6,8 +6,8 @@ from enum import Enum
 class SiloType(Enum):
     CUSTOM = "CUSTOM"
     REPO = "REPO"
-    CRAWLER = "CRAWLER"
-
+    DOMAIN = "DOMAIN"
+    
 class Silo(Base):
     __tablename__ = 'Silo'
     silo_id = Column(Integer, primary_key=True)

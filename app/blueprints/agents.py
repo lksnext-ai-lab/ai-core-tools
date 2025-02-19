@@ -4,7 +4,7 @@ from app.model.app import App
 from app.model.ocr_agent import OCRAgent
 from app.model.model import Model
 from app.model.output_parser import OutputParser
-
+from app.model.silo import Silo
 from app.extensions import db
 from app.services.agent_service import AgentService
 
@@ -36,6 +36,7 @@ def app_agent(app_id: int, agent_id: int):
     models = db.session.query(Model).all()
     output_parsers = db.session.query(OutputParser).filter(OutputParser.app_id == app_id).all()
     tools = db.session.query(Agent).filter(Agent.is_tool == True, Agent.app_id == app_id, Agent.agent_id != agent_id).all()
+    silos = db.session.query(Silo).filter(Silo.app_id == app_id).all()
 
     template = 'agents/agent.html'
     agent = Agent(agent_id=0, name="")
@@ -44,7 +45,7 @@ def app_agent(app_id: int, agent_id: int):
         if agent.type == 'ocr_agent':
             template = 'agents/ocr_agent.html'
 
-    return render_template(template, app_id=app_id, agent=agent, models=models, output_parsers=output_parsers, tools=tools)
+    return render_template(template, app_id=app_id, agent=agent, models=models, output_parsers=output_parsers, tools=tools, silos=silos)
 
         
 
