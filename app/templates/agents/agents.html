@@ -59,8 +59,8 @@
                 {% endif %}
             </td>
             <td>
-                {% for tool in agent.tools %}
-                {{tool.name}}<br />
+                {% for tool in agent.tool_associations %}
+                {{tool.tool.name}}<br />
                 {% endfor %}
             </td>
             <td>{{agent.model.name}}</td>

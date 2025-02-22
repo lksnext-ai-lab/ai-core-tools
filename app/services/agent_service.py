@@ -30,6 +30,7 @@ class AgentService:
     
     @staticmethod
     def _update_ocr_agent(agent: OCRAgent, data: dict):
+        was_tool = agent.is_tool
         agent.name = data['name']
         agent.description = data.get('description')
         agent.vision_model_id = data.get('vision_model_id') or agent.vision_model_id
@@ -39,9 +40,14 @@ class AgentService:
         agent.output_parser_id = data.get('output_parser_id') or None
         agent.app_id = data['app_id']
         agent.is_tool = data.get('is_tool') == 'on'
+        
+        # If agent was a tool but is no longer one, remove all references to it
+        if was_tool and not agent.is_tool:
+            AgentService._remove_tool_references(agent.agent_id)
     
     @staticmethod
     def _update_normal_agent(agent: Agent, data: dict):
+        was_tool = agent.is_tool
         agent.name = data['name']
         agent.description = data.get('description')
         agent.system_prompt = data.get('system_prompt')
@@ -53,17 +59,62 @@ class AgentService:
         agent.has_memory = data.get('has_memory') == 'on'
         agent.output_parser_id = data.get('output_parser_id') or None
         agent.is_tool = data.get('is_tool') == 'on'
+        
+        # If agent was a tool but is no longer one, remove all references to it
+        if was_tool and not agent.is_tool:
+            AgentService._remove_tool_references(agent.agent_id)
 
     @staticmethod
-    def update_agent_tools(agent: Agent, tool_ids: list):
-        # Convert tool_ids to integers
-        ids = [int(tool_id) for tool_id in tool_ids]
-        agent.tools = db.session.query(Agent).filter(Agent.agent_id.in_(ids)).all()
+    def update_agent_tools(agent: Agent, tool_ids: list, form_data: dict = None):
+        from app.model.agent import AgentTool
+        
+        # Get existing tool associations
+        existing_tools = {assoc.tool_id: assoc for assoc in agent.tool_associations}
+        
+        # Convert tool_ids to set of integers and filter out non-tool agents
+        tools_query = db.session.query(Agent.agent_id).filter(
+            Agent.agent_id.in_([int(id) for id in tool_ids if id]),
+            Agent.is_tool == True
+        )
+        valid_tool_ids = {id for (id,) in tools_query}
+        
+        # Remove associations that are no longer needed
+        for tool_id in list(existing_tools.keys()):
+            if tool_id not in valid_tool_ids:
+                db.session.delete(existing_tools[tool_id])
+        
+        # Update or create associations
+        for tool_id in valid_tool_ids:
+            description = form_data.get(f'tool_description_{tool_id}') if form_data else None
+            
+            if tool_id in existing_tools:
+                # Update existing association
+                existing_tools[tool_id].description = description
+            else:
+                # Create new association
+                tool_assoc = AgentTool(
+                    agent_id=agent.agent_id,
+                    tool_id=tool_id,
+                    description=description
+                )
+                agent.tool_associations.append(tool_assoc)
+        
         db.session.commit()
     
     @staticmethod
     def delete_agent(agent_id: int):
         agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
-        print(agent)
-        db.session.delete(agent)
+        if agent:
+            # First remove all references to this agent as a tool
+            AgentService._remove_tool_references(agent_id)
+            # Then delete the agent
+            db.session.delete(agent)
+            db.session.commit()
+
+    @staticmethod
+    def _remove_tool_references(tool_id: int):
+        """Remove all references to an agent as a tool from other agents."""
+        from app.model.agent import AgentTool
+        # Delete all tool associations where this agent is used as a tool
+        db.session.query(AgentTool).filter(AgentTool.tool_id == tool_id).delete()
         db.session.commit()

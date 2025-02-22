@@ -30,7 +30,7 @@ def app_agent(app_id: int, agent_id: int):
         agent_type = request.form.get('type', 'agent')
         agent = agent_service.create_or_update_agent(agent_data, agent_type)
 
-        agent_service.update_agent_tools(agent, request.form.getlist('tool_id'))
+        agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
         return app_agents(app_id)
     
     models = db.session.query(Model).all()

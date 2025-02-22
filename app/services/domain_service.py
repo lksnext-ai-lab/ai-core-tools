@@ -16,8 +16,8 @@ class DomainService:
             silo_service = SiloService()
             silo_data = {
                 'silo_id': 0,
-                'name': 'silo for repository ' + domain.name,
-                'description': 'silo for repository ' + domain.name,
+                'name': 'silo for domain ' + domain.name,
+                'description': 'silo for domain ' + domain.name,
                 'status': 'active',
                 'app_id': domain.app_id,
                 'fixed_metadata': False

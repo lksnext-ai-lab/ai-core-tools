@@ -10,6 +10,8 @@ import logging
 from app.api.api_auth import require_auth
 from app.agents.ocrAgent import OCRAgent
 from app.api.pydantic.agent_pydantic import AgentPath, ChatRequest
+from app.tools.agentTools import create_agent
+from langchain_core.messages import HumanMessage, AIMessage
 # Logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -37,17 +39,25 @@ def call_agent(path: AgentPath, body: ChatRequest):
     agent.request_count += 1
     db.session.commit()
 
-    result = ""
+    agentX = create_agent(agent)
+    formatted_prompt = agent.prompt_template.format(question=question)
+    messages = [HumanMessage(content=formatted_prompt)]
+    result = agentX.invoke({"messages": messages})
+    '''result = ""
     if agent.has_memory:
         result = modelTools.invoke_ConversationalRetrievalChain(agent, question, session)
     elif agent.silo is not None:
         result = modelTools.invoke_with_RAG(agent, question)
     else:
-        result = modelTools.invoke(agent, question)
+        result = modelTools.invoke(agent, question)'''
+    
+    # Get the last AIMessage from the messages list
+    final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
+    response_text = final_message.content if final_message else str(result)
 
     data = {
         "input": question,
-        "generated_text": result,
+        "generated_text": response_text,
         "control": {
             "temperature": 0.8,
             "max_tokens": 100,
@@ -64,7 +74,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
 
     if MSG_LIST not in session:
         session[MSG_LIST] = []
-    session[MSG_LIST].append(result)
+    session[MSG_LIST].append(response_text)
 
     return jsonify(data)
 

@@ -25,7 +25,9 @@ from app.tools.pgVectorTools import PGVectorTools
 from app.tools.outputParserTools import create_dynamic_pydantic_model, get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
-
+from langchain_core.tools import BaseTool
+from app.services.silo_service import SiloService
+from app.model.silo import Silo
 load_dotenv()
 
 pgVectorTools = PGVectorTools(db)
@@ -137,6 +139,7 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
         input_variables=["context", "chat_history", "question"], template=template
     )
 
+    llm.b
     # Create the custom chain
     chain = ConversationalRetrievalChain.from_llm(
             llm=llm, retriever=retriever, memory=session[MEM_KEY],
@@ -169,3 +172,6 @@ class VoidRetriever(BaseRetriever):
 
     async def _aget_relevant_documents(self, query: str) -> List[Document]:
         return []
+    
+
+

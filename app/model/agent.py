@@ -2,13 +2,15 @@ from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 
-# New association table for agent-tool relationship
-agent_tools = Table(
-    'agent_tools',
-    Base.metadata,
-    Column('agent_id', Integer, ForeignKey('Agent.agent_id'), primary_key=True),
-    Column('tool_id', Integer, ForeignKey('Agent.agent_id'), primary_key=True)
-)
+class AgentTool(Base):
+    __tablename__ = 'agent_tools'
+    agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
+    tool_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
+    description = Column(Text, nullable=True)  # Description of what this tool is used for
+    
+    # Add relationships to both the agent and the tool
+    agent = relationship('Agent', foreign_keys=[agent_id], back_populates='tool_associations')
+    tool = relationship('Agent', foreign_keys=[tool_id])
 
 class Agent(Base):
     __tablename__ = 'Agent'
@@ -49,14 +51,10 @@ class Agent(Base):
     output_parser = relationship('OutputParser',
                            foreign_keys=[output_parser_id])
     
-    # Add the relationship to tools
-    tools = relationship(
-        'Agent',
-        secondary=agent_tools,
-        primaryjoin=(agent_id == agent_tools.c.agent_id),
-        secondaryjoin=(agent_id == agent_tools.c.tool_id),
-        backref='used_by_agents'
-    )
+    # Modified relationship to use back_populates instead of backref
+    tool_associations = relationship('AgentTool',
+                                   primaryjoin=(agent_id == AgentTool.agent_id),
+                                   back_populates='agent')
     
     __mapper_args__ = {
         'polymorphic_identity': 'agent',
