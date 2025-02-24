@@ -13,6 +13,8 @@ import os
 from langchain_openai import OpenAIEmbeddings
 from app.model.silo import SiloType
 from app.services.output_parser_service import OutputParserService
+from langchain_core.vectorstores.base import VectorStoreRetriever
+
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 COLLECTION_PREFIX = 'silo_'
 
@@ -26,6 +28,12 @@ class SiloService:
         Retrieve a silo by its ID
         """
         return db.session.query(Silo).filter(Silo.silo_id == silo_id).first()
+    
+    @staticmethod
+    def get_silo_retriever(silo_id: int) -> Optional[VectorStoreRetriever]:
+        pgVectorTools = PGVectorTools(db)
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        return pgVectorTools.get_pgvector_retriever(collection_name)
     
     @staticmethod
     def get_silos_by_app_id(app_id: int) -> List[Silo]:

@@ -23,4 +23,4 @@ class Silo(Base):
 
     agents = relationship('Agent', lazy=True)
     repository = relationship('Repository', back_populates='silo')
-    
+    domain = relationship('Domain', back_populates='silo')
