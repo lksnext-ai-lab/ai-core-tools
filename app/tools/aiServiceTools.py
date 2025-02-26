@@ -1,33 +1,25 @@
 import os
 from dotenv import load_dotenv
-from flask import session
-from typing import Dict, Type, Union
-from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_core.retrievers import BaseRetriever
-
-from langchain_core.runnables import RunnablePassthrough
 from langchain.prompts.prompt import PromptTemplate
-from langchain.chains.llm import LLMChain
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_mistralai import ChatMistralAI
+from mistralai import Mistral
+ 
 
-from app.model.output_parser import OutputParser
 from app.model.agent import Agent
 from app.extensions import db
 from app.tools.pgVectorTools import PGVectorTools
-from app.tools.outputParserTools import create_dynamic_pydantic_model, get_parser_model_by_id
+from app.tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
-from langchain_core.tools import BaseTool
-from app.services.silo_service import SiloService
-from app.model.silo import Silo
+
 load_dotenv()
 
 pgVectorTools = PGVectorTools(db)
@@ -139,7 +131,6 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
         input_variables=["context", "chat_history", "question"], template=template
     )
 
-    llm.b
     # Create the custom chain
     chain = ConversationalRetrievalChain.from_llm(
             llm=llm, retriever=retriever, memory=session[MEM_KEY],
@@ -152,18 +143,34 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     
     return result["answer"]
 
-def getLLM(agent):
-    if agent.model is None:
+def getLLM(ai_service, is_vision=False):
+    """
+    Función base para obtener cualquier modelo LLM
+    Args:
+        model_info: Información del modelo
+        is_vision: Boolean que indica si es un modelo de visión
+    """
+    if ai_service is None:
         return None
-    if agent.model.provider == "OpenAI":
-        return ChatOpenAI(model=agent.model.name, api_key=os.getenv('OPENAI_API_KEY'))
-    if agent.model.provider == "Anthropic":
-        return ChatAnthropic(model=agent.model.name, api_key=os.getenv('ANTHROPIC_API_KEY'))
-    if agent.model.provider == "MistralAI":
-        return ChatMistralAI(model=agent.model.name, api_key=os.getenv('MISTRAL_API_KEY'))
-    return None
+        
+    if ai_service.provider == "OpenAI":
+        return ChatOpenAI(model=ai_service.name, temperature=0, api_key= ai_service.api_key)
+    if ai_service.provider == "Anthropic":
+        return ChatAnthropic(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
+    if ai_service.provider == "MistralAI":
+        if is_vision:
+            mistral_client = Mistral(api_key=ai_service.api_key)
+            return MistralWrapper(client=mistral_client, model_name=ai_service.name)
+        return ChatMistralAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
+    if ai_service.provider == "Custom":
+            return ChatOllama(model=ai_service.name, temperature=0, base_url=ai_service.endpoint)
+        
+    raise ValueError(f"Proveedor de modelo no soportado: {ai_service.provider}")
 
-
+class MistralWrapper:
+    def __init__(self, client, model_name):
+        self.client = client
+        self.model_name = model_name
 
 class VoidRetriever(BaseRetriever):
     
@@ -172,6 +179,4 @@ class VoidRetriever(BaseRetriever):
 
     async def _aget_relevant_documents(self, query: str) -> List[Document]:
         return []
-    
-
 

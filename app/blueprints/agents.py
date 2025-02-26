@@ -2,7 +2,7 @@ from flask import render_template, Blueprint, request
 from app.model.agent import Agent
 from app.model.app import App
 from app.model.ocr_agent import OCRAgent
-from app.model.model import Model
+from app.model.ai_service import AIService
 from app.model.output_parser import OutputParser
 from app.model.silo import Silo
 from app.extensions import db
@@ -33,7 +33,7 @@ def app_agent(app_id: int, agent_id: int):
         agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
         return app_agents(app_id)
     
-    models = db.session.query(Model).all()
+    ai_services = db.session.query(AIService).all()
     output_parsers = db.session.query(OutputParser).filter(OutputParser.app_id == app_id).all()
     tools = db.session.query(Agent).filter(Agent.is_tool == True, Agent.app_id == app_id, Agent.agent_id != agent_id).all()
     silos = db.session.query(Silo).filter(Silo.app_id == app_id).all()
@@ -45,7 +45,7 @@ def app_agent(app_id: int, agent_id: int):
         if agent.type == 'ocr_agent':
             template = 'agents/ocr_agent.html'
 
-    return render_template(template, app_id=app_id, agent=agent, models=models, output_parsers=output_parsers, tools=tools, silos=silos)
+    return render_template(template, app_id=app_id, agent=agent, ai_services=ai_services, output_parsers=output_parsers, tools=tools, silos=silos)
 
         
 

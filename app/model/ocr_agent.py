@@ -10,14 +10,14 @@ class OCRAgent(Agent):
     agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
     
     # Only keep OCR-specific attributes
-    vision_model_id = Column(Integer,
-                        ForeignKey('Model.model_id'),
+    vision_service_id = Column(Integer,
+                        ForeignKey('AIService.service_id'),
                         nullable=True)
     vision_system_prompt = Column(Text)
     text_system_prompt = Column(Text)
     
-    vision_model_rel = relationship('Model',
-                           foreign_keys=[vision_model_id])
+    vision_service_rel = relationship('AIService',
+                           foreign_keys=[vision_service_id])
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -17,12 +17,12 @@
 
             <div class="col-md-12 mb-4">
                 <label class="form-label">Modelo de Visión</label>
-                <select name="vision_model_id" class="form-control">
+                <select name="vision_service_id" class="form-control">
                     <option value="">-- Seleccionar modelo de visión --</option>
-                    {% for model in models %}
-                    <option value="{{ model.model_id }}" {% if agent.vision_model_id==model.model_id %}selected{% endif
-                        %}>
-                        {{ model.name }}
+                    {% for service in ai_services %}
+                    <option value="{{ service.service_id }}" {% if agent.vision_service_id==service.service_id %}selected{% endif %}
+                            data-provider="{{ service.provider }}">
+                        {{ service.name }}
                     </option>
                     {% endfor %}
                 </select>
@@ -37,11 +37,12 @@
 
             <div class="col-md-12 mb-4">
                 <label class="form-label">Modelo de Texto</label>
-                <select name="model_id" class="form-control">
+                <select name="service_id" class="form-control">
                     <option value="">-- Seleccionar modelo de texto --</option>
-                    {% for model in models %}
-                    <option value="{{ model.model_id }}" {% if agent.model_id==model.model_id %}selected{% endif %}>
-                        {{ model.name }}
+                    {% for service in ai_services %}
+                    <option value="{{ service.service_id }}" {% if agent.service_id==service.service_id %}selected{% endif %}
+                            data-provider="{{ service.provider }}">
+                        {{ service.name }}
                     </option>
                     {% endfor %}
                 </select>

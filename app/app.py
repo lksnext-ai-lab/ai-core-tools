@@ -23,8 +23,8 @@ from app.blueprints.resources import resources_blueprint
 from app.blueprints.output_parsers import output_parsers_blueprint
 from app.blueprints.api_keys import api_keys_blueprint
 from app.blueprints.silos import silos_blueprint
-from app.blueprints.models import models_blueprint
 from app.blueprints.domains import domains_blueprint
+from app.blueprints.ai_services import ai_services_blueprint
 
 from app.api.api import api
 from app.api.silo_api import silo_api
@@ -50,7 +50,7 @@ app.register_blueprint(resources_blueprint)
 app.register_blueprint(output_parsers_blueprint)
 app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
-app.register_blueprint(models_blueprint)
+app.register_blueprint(ai_services_blueprint)
 app.register_blueprint(domains_blueprint)
 
 app.register_api(silo_api)
@@ -75,7 +75,6 @@ PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
 app.config.from_object(__name__)
 Session(app)
 
-# Después de configurar la app y antes de ejecutarla
 with app.app_context():
     init_db()
 

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from pypdf import PdfReader
 from mistralai import Mistral
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 load_dotenv()
 
 IMAGES_PATH = os.getenv("IMAGES_PATH")
@@ -66,7 +67,7 @@ def extract_text_from_image(base64_image: str, vision_system_prompt, pydantic_cl
     output_parser = JsonOutputParser(pydantic_object=pydantic_class)
     format_instructions = output_parser.get_format_instructions()
     
-    if isinstance(vision_model, (ChatOpenAI, ChatAnthropic)):
+    if isinstance(vision_model, (ChatOpenAI, ChatAnthropic, ChatOllama)):
         chat_template = ChatPromptTemplate.from_messages([
             SystemMessage(content=vision_system_prompt),
             SystemMessage(content=f"You are an expert in analyzing documents and extracting data from images. You are analyzing the document: {document_title}"),

@@ -14,8 +14,8 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
+from app.tools.aiServiceTools import MistralWrapper, getLLM
 from langchain_mistralai import ChatMistralAI
-from mistralai import Mistral
 
 from app.tools.outputParserTools import create_model_from_json_schema
 from app.model.ocr_agent import OCRAgent
@@ -30,6 +30,7 @@ from app.tools.ocrAgentTools import (
 )
 
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama.llms import OllamaLLM
 
 load_dotenv()
 
@@ -63,10 +64,6 @@ class State(TypedDict):
     pydantic_class: Type[BaseModel]
     messages: Annotated[List[BaseMessage], add_messages]
 
-class MistralWrapper:
-    def __init__(self, client, model_name):
-        self.client = client
-        self.model_name = model_name
 
 def get_or_create_graph():
     """Crea y retorna un nuevo grafo compilado"""
@@ -101,30 +98,13 @@ def get_or_create_graph():
     return graph_builder.compile()
 
 def get_agent_llms(state: State):
-    vision_model_info = state["agent"].vision_model_rel
-    text_model_info = state["agent"].model_rel
+    """Obtiene los modelos específicos para el agente OCR"""
+    vision_model = getLLM(state["agent"].vision_service_rel, is_vision=True)
+    text_model = getLLM(state["agent"].ai_service)
     
-    # Configurar modelo de visión
-    if vision_model_info.provider == "OpenAI":
-        vision_model = ChatOpenAI(model=vision_model_info.name, temperature=0, api_key=OPENAI_API_KEY)
-    elif vision_model_info.provider == "MistralAI":
-        mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
-        vision_model = MistralWrapper(client=mistral_client, model_name=vision_model_info.name)
-    elif vision_model_info.provider == "Anthropic":
-        vision_model = ChatAnthropic(model=vision_model_info.name, temperature=0, api_key=os.getenv("ANTHROPIC_API_KEY"))
-    else:
-        raise ValueError(f"Proveedor de modelo de visión no soportado: {vision_model_info.provider}")
-    
-    # Configurar modelo de texto
-    if text_model_info.provider == "OpenAI":
-        text_model = ChatOpenAI(model=text_model_info.name, temperature=0, api_key=OPENAI_API_KEY)
-    elif text_model_info.provider == "MistralAI":
-        text_model = ChatMistralAI(model=text_model_info.name, temperature=0, api_key=os.getenv("MISTRAL_API_KEY"))
-    elif text_model_info.provider == "Anthropic":
-        text_model = ChatAnthropic(model=text_model_info.name, temperature=0, api_key=os.getenv("ANTHROPIC_API_KEY"))
-    else:
-        raise ValueError(f"Proveedor de modelo de texto no soportado: {text_model_info.provider}")
-    
+    if vision_model is None or text_model is None:
+        raise ValueError("No se pudieron inicializar los modelos necesarios")
+        
     return {"vision_model": vision_model, "text_model": text_model}
 
 def get_agent_output_parser(state: State):

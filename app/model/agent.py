@@ -23,8 +23,8 @@ class Agent(Base):
     status = Column(String(45))
     request_count = Column(Integer, default=0)
     is_tool = Column(Boolean, default=False)
-    model_id = Column(Integer,
-                        ForeignKey('Model.model_id'),
+    service_id = Column(Integer,
+                        ForeignKey('AIService.service_id'),
                         nullable=True)
     silo_id = Column(Integer,
                         ForeignKey('Silo.silo_id'),
@@ -37,8 +37,8 @@ class Agent(Base):
                         ForeignKey('OutputParser.parser_id'),
                         nullable=True)
     
-    model = relationship('Model',
-                           foreign_keys=[model_id])
+    ai_service = relationship('AIService',
+                           foreign_keys=[service_id])
 
     silo = relationship('Silo',
                            back_populates='agents',

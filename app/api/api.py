@@ -3,7 +3,7 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel
 from app.agents.ocrAgent import process_pdf
 from app.model.agent import Agent
-import app.tools.modelTools as modelTools
+import app.tools.aiServiceTools as aiServiceTools
 from app.extensions import db
 import os
 import logging
@@ -45,11 +45,11 @@ def call_agent(path: AgentPath, body: ChatRequest):
     result = agentX.invoke({"messages": messages})
     '''result = ""
     if agent.has_memory:
-        result = modelTools.invoke_ConversationalRetrievalChain(agent, question, session)
+        result = aiServiceTools.invoke_ConversationalRetrievalChain(agent, question, session)
     elif agent.silo is not None:
-        result = modelTools.invoke_with_RAG(agent, question)
+        result = aiServiceTools.invoke_with_RAG(agent, question)
     else:
-        result = modelTools.invoke(agent, question)'''
+        result = aiServiceTools.invoke(agent, question)'''
     
     # Get the last AIMessage from the messages list
     final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)

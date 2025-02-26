@@ -40,12 +40,12 @@
 
                                 <div class="col-md-12 mb-4">
                                     <label class="form-label">Model</label>
-                                    <select name="model_id" class="form-control">
+                                    <select name="service_id" class="form-control">
                                         <option value="">-- Select a model --</option>
-                                        {% for model in models %}
-                                        <option value="{{ model.model_id }}" {% if agent.model_id==model.model_id
+                                        {% for service in ai_services %}
+                                        <option value="{{ service.service_id }}" {% if agent.service_id==service.service_id
                                             %}selected{% endif %}>
-                                            {{ model.name }}
+                                            {{ service.name }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -245,7 +245,6 @@
 
         return true;
     }
-
 </script>
 
 {% include 'footer.html' %}

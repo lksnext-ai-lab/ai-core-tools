@@ -1,6 +1,6 @@
 {% include 'header.html' %}
 
-Models
+AI Services
 
 <table>
     <thead>
@@ -11,12 +11,12 @@ Models
         </tr>
     </thead>
     <tbody>
-        {% for model in models %}
+        {% for ai_service in ai_services %}
         <tr>
-            <td>{{ model.name }}</td>
-            <td>{{ model.description }}</td>
+            <td>{{ ai_service.name }}</td>
+            <td>{{ ai_service.description }}</td>
             <td>
-                <a href="{{ url_for('models.model', model_id=model.model_id) }}">View</a>
+                <a href="{{ url_for('ai_services.ai_service', service_id=ai_service.service_id) }}">View</a>
             </td>
         </tr>
         {% endfor %}

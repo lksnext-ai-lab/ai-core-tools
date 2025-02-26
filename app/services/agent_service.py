@@ -33,9 +33,9 @@ class AgentService:
         was_tool = agent.is_tool
         agent.name = data['name']
         agent.description = data.get('description')
-        agent.vision_model_id = data.get('vision_model_id') or agent.vision_model_id
+        agent.vision_service_id = data.get('vision_model_id') or agent.vision_service_id
         agent.vision_system_prompt = data.get('vision_system_prompt') or agent.vision_system_prompt
-        agent.model_id = data.get('model_id')
+        agent.service_id = data.get('service_id')
         agent.text_system_prompt = data.get('text_system_prompt')
         agent.output_parser_id = data.get('output_parser_id') or None
         agent.app_id = data['app_id']
@@ -53,7 +53,9 @@ class AgentService:
         agent.system_prompt = data.get('system_prompt')
         agent.prompt_template = data.get('prompt_template')
         agent.status = data.get('status')
-        agent.model_id = data.get('model_id')
+        agent.service_id = data.get('service_id')
+        agent.host_url = data.get('host_url')
+        agent.ollama_model_name = data.get('ollama_model_name')
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         agent.has_memory = data.get('has_memory') == 'on'
