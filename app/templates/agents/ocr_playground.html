@@ -207,10 +207,7 @@
     processBtn.addEventListener('click', async () => {
         if (!currentFile) return;
 
-        // Crear un nuevo FormData cada vez
         const formData = new FormData();
-
-        // Crear una nueva copia del archivo
         const newFile = new File([currentFile], currentFile.name, {
             type: currentFile.type,
             lastModified: new Date().getTime()
@@ -220,28 +217,29 @@
         formData.append('agent_id', '{{agent.agent_id}}');
 
         try {
-            // Mostrar modal de carga
             const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
             loadingModal.show();
 
-            const response = await fetch('/api/app/{{agent.app_id}}/ocr', {
+            const response = await fetch(`/api/app/{{agent.app_id}}/ocr/{{agent.agent_id}}`, {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {
+                    'Accept': 'application/json'
+                }
             });
-            console.log(response);
+
             const data = await response.json();
 
-            // Ocultar modal de carga
             loadingModal.hide();
 
-            if (data.error) {
-                throw new Error(data.error);
+            if (response.ok) {
+                displayResults(data);
+            } else {
+                throw new Error(data.error || 'Error al procesar el documento');
             }
-
-            displayResults(data);
         } catch (error) {
             console.error('Error:', error);
-            // Mostrar error al usuario
+            loadingModal.hide();
             alert('Error al procesar el documento: ' + error.message);
         }
     });
@@ -258,6 +256,10 @@
         // Mostrar el JSON formateado
         jsonResult.textContent = JSON.stringify(data, null, 2);
         results.style.display = 'block';
+
+        if (typeof hljs !== 'undefined') {
+            hljs.highlightElement(jsonResult);
+        }
     }
 </script>
 

@@ -5,7 +5,7 @@
 *.pyo
 *.wav
 env/
-venv/
+*venv/
 .venv/
 dist/
 build/

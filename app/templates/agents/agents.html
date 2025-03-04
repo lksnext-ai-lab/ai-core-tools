@@ -63,7 +63,7 @@
                 {{tool.tool.name}}<br />
                 {% endfor %}
             </td>
-            <td>{{agent.model.name}}</td>
+            <td>{{agent.ai_service.name}}</td>
             <td>
                 <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                     class="btn btn-primary">Edit</a>

@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
@@ -21,6 +22,12 @@ from typing import List
 from langchain_core.documents import Document
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 pgVectorTools = PGVectorTools(db)
 
@@ -48,7 +55,6 @@ def invoke(agent, input):
         raise ValueError("No se pudo inicializar el modelo para el agente")
         
     output_parser = get_output_parser(agent)
-    
     if agent.output_parser_id is None:
         format_instructions = ""
     else:
@@ -64,7 +70,9 @@ def invoke(agent, input):
     ])
     
     chain = prompt | model | output_parser
-    return chain.invoke({"question": input})
+    response = chain.invoke({"question": input})
+    logger.info(f"Response: {response}")
+    return response
 
 def invoke_with_RAG(agent: Agent, input):
     if agent.silo is None:
@@ -143,27 +151,39 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     
     return result["answer"]
 
-def getLLM(ai_service, is_vision=False):
+def getLLM(agent, is_vision=False):
     """
     Función base para obtener cualquier modelo LLM
     Args:
         model_info: Información del modelo
         is_vision: Boolean que indica si es un modelo de visión
     """
+    ai_service = agent.ai_service
     if ai_service is None:
         return None
-        
-    if ai_service.provider == "OpenAI":
-        return ChatOpenAI(model=ai_service.name, temperature=0, api_key= ai_service.api_key)
-    if ai_service.provider == "Anthropic":
+    if ai_service.provider.value == "OpenAI":
+        return ChatOpenAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
+    if ai_service.provider.value == "Anthropic":
         return ChatAnthropic(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider == "MistralAI":
+    if ai_service.provider.value == "MistralAI":
         if is_vision:
             mistral_client = Mistral(api_key=ai_service.api_key)
             return MistralWrapper(client=mistral_client, model_name=ai_service.name)
         return ChatMistralAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider == "Custom":
-            return ChatOllama(model=ai_service.name, temperature=0, base_url=ai_service.endpoint)
+    if ai_service.provider.value == "Custom":
+        service = ChatOllama(
+            model=ai_service.name, 
+            temperature=0,
+            base_url=ai_service.endpoint,
+            client_kwargs={
+                "verify": False,
+                "headers": {
+                    "Authorization": f"Bearer {ai_service.api_key}"
+                }
+            }
+        )
+        logger.info(f"Service: {service}")
+        return service
         
     raise ValueError(f"Proveedor de modelo no soportado: {ai_service.provider}")
 

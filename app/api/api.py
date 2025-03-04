@@ -67,7 +67,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
             "stop_sequence": "\n\n"
         },
         "metadata": {
-            "model_name": agent.model.name,
+            "model_name": agent.ai_service.name,
             "timestamp": "2024-04-04T12:00:00Z"
         }
     }
@@ -78,7 +78,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
 
     return jsonify(data)
 
-@api.post('/ocr', summary="Process OCR", tags=[api_tag])
+@api.post('/ocr/<int:agent_id>', summary="Process OCR", tags=[api_tag])
 @require_auth
 def process_ocr(path: AgentPath):
     

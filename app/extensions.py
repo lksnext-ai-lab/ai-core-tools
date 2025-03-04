@@ -16,13 +16,9 @@ def init_db():
     try:
         inspector = db.inspect(engine)
         existing_tables = inspector.get_table_names()
-        """
         if existing_tables:
             print(f"Tablas existentes encontradas: {', '.join(existing_tables)}")
             return
-        """
-
-            
         Base.metadata.create_all(bind=engine)
         print("Base de datos inicializada correctamente")
     except Exception as e:

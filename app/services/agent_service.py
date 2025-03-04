@@ -15,15 +15,13 @@ class AgentService:
         agent_id = agent_data.get('agent_id')
         agent = AgentService.get_agent(agent_id, agent_type) if agent_id else None
         
-        if agent_type == 'ocr_agent':
-            if not agent:
-                agent = OCRAgent()
-            AgentService._update_ocr_agent(agent, agent_data)
-        else:
-            if not agent:
-                agent = Agent()
-            AgentService._update_normal_agent(agent, agent_data)
-            
+        if not agent:
+            agent = OCRAgent() if agent_type == 'ocr_agent' else Agent()
+        
+        update_method = AgentService._update_ocr_agent if agent_type == 'ocr_agent' else AgentService._update_normal_agent
+        update_method(agent, agent_data)
+        
+        agent.type = agent_type
         db.session.add(agent)
         db.session.commit()
         return agent
@@ -33,8 +31,8 @@ class AgentService:
         was_tool = agent.is_tool
         agent.name = data['name']
         agent.description = data.get('description')
-        agent.vision_service_id = data.get('vision_model_id') or agent.vision_service_id
-        agent.vision_system_prompt = data.get('vision_system_prompt') or agent.vision_system_prompt
+        agent.vision_service_id = data.get('vision_service_id')
+        agent.vision_system_prompt = data.get('vision_system_prompt')
         agent.service_id = data.get('service_id')
         agent.text_system_prompt = data.get('text_system_prompt')
         agent.output_parser_id = data.get('output_parser_id') or None
@@ -53,7 +51,7 @@ class AgentService:
         agent.system_prompt = data.get('system_prompt')
         agent.prompt_template = data.get('prompt_template')
         agent.status = data.get('status')
-        agent.service_id = data.get('service_id')
+        agent.service_id = data.get('service_id') or None
         agent.host_url = data.get('host_url')
         agent.ollama_model_name = data.get('ollama_model_name')
         agent.app_id = data['app_id']

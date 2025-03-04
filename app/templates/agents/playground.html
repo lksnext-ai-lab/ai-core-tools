@@ -128,9 +128,14 @@
 <script>
     var cont = 0;
     $('#send-btn').click(function () {
+        // Deshabilitar el botón mientras se procesa
+        $('#send-btn').prop('disabled', true);
+        
         var question = $('#question').val();
         var agent_id = '{{agent.agent_id}}';
         console.log('Sending question:', question);
+        
+        // Crear y mostrar el div de la pregunta
         var qDiv = $('#referenece').clone();
         qDiv.attr('id', 'referenece-' + cont);
         cont++;
@@ -138,11 +143,22 @@
         $('#ref-text', qDiv).text(question);
         $('#referenece').parent().append(qDiv);
 
+        // Crear y mostrar un div de "loading"
+        var loadingDiv = $('#referenece').clone();
+        loadingDiv.attr('id', 'loading-' + cont);
+        $('#ref-name', loadingDiv).text('{{agent.name}}');
+        $('#ref-text', loadingDiv).html('<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Thinking...</div>');
+        $('#referenece').parent().append(loadingDiv);
+
         $("html, body").animate({
             scrollTop: $(document).height() - $(window).height()
         }, 'slow');
 
-        // Make a POST request
+        // Hacer la petición con timeout
+        const timeoutDuration = 600000; // 10 minutos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+
         fetch('/api/app/{{app_id}}/call/{{agent.agent_id}}', {
             method: 'POST',
             credentials: 'include',
@@ -150,28 +166,55 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ question: question }),
-            data: JSON.stringify({ question: question })
+            signal: controller.signal
         })
-            .then(response => response.json())
-            .then(data => {
-                // Handle the response data
-                console.log('Response:', data);
-                var respDiv = $('#referenece').clone();
-                respDiv.attr('id', 'referenece-' + cont);
-                cont++;
-                $('#ref-text', respDiv).text(JSON.stringify(data["generated_text"], null, 2));
-                $('#referenece').parent().append(respDiv);
+        .then(async response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                // Intentar obtener el mensaje de error del servidor
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Error del servidor: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Eliminar el div de loading
+            loadingDiv.remove();
+            
+            // Crear el div de respuesta
+            var respDiv = $('#referenece').clone();
+            respDiv.attr('id', 'referenece-' + cont);
+            cont++;
+            $('#ref-text', respDiv).text(JSON.stringify(data["generated_text"], null, 2));
+            $('#referenece').parent().append(respDiv);
 
-                $("html, body").animate({
-                    scrollTop: $(document).height() - $(window).height()
-                }, 'slow');
-            })
-            .catch(error => {
-                // Handle any errors
-                console.error('Error:', error);
-            });
-
-        $('#question').val('');
+            $("html, body").animate({
+                scrollTop: $(document).height() - $(window).height()
+            }, 'slow');
+        })
+        .catch(error => {
+            // Eliminar el div de loading
+            loadingDiv.remove();
+            
+            // Mostrar error en un nuevo div con más detalles
+            var errorDiv = $('#referenece').clone();
+            errorDiv.attr('id', 'error-' + cont);
+            $('#ref-name', errorDiv).text('Error');
+            $('#ref-text', errorDiv).html(`
+                <div class="text-danger">
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><small>Si el problema persiste, por favor contacte al administrador.</small></p>
+                </div>
+            `);
+            $('#referenece').parent().append(errorDiv);
+            
+            console.error('Error detallado:', error);
+        })
+        .finally(() => {
+            // Limpiar el input y habilitar el botón
+            $('#question').val('');
+            $('#send-btn').prop('disabled', false);
+        });
     });
 
 </script>

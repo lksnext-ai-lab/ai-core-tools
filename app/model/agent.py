@@ -24,7 +24,7 @@ class Agent(Base):
     request_count = Column(Integer, default=0)
     is_tool = Column(Boolean, default=False)
     service_id = Column(Integer,
-                        ForeignKey('AIService.service_id'),
+                        ForeignKey('AIService.service_id', ondelete='SET NULL'),
                         nullable=True)
     silo_id = Column(Integer,
                         ForeignKey('Silo.silo_id'),

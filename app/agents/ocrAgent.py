@@ -99,8 +99,8 @@ def get_or_create_graph():
 
 def get_agent_llms(state: State):
     """Obtiene los modelos específicos para el agente OCR"""
-    vision_model = getLLM(state["agent"].vision_service_rel, is_vision=True)
-    text_model = getLLM(state["agent"].ai_service)
+    vision_model = getLLM(state["agent"], is_vision=True)
+    text_model = getLLM(state["agent"], is_vision=False)
     
     if vision_model is None or text_model is None:
         raise ValueError("No se pudieron inicializar los modelos necesarios")

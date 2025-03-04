@@ -7,8 +7,10 @@ from app.model.output_parser import OutputParser
 from app.model.silo import Silo
 from app.extensions import db
 from app.services.agent_service import AgentService
+import logging
 
 agents_blueprint = Blueprint('agents', __name__)
+logger = logging.getLogger(__name__)
 
 '''
 Agents
@@ -27,6 +29,7 @@ def app_agent(app_id: int, agent_id: int):
             'app_id': app_id,
             **request.form.to_dict()
         }
+        logger.info(f"agent_data: {agent_data}")
         agent_type = request.form.get('type', 'agent')
         agent = agent_service.create_or_update_agent(agent_data, agent_type)
 
