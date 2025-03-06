@@ -1,7 +1,7 @@
 """Added update model to AIService
 
 Revision ID: edc20b9a73de
-Revises: 48aea27275aa
+Revises: 986475e9f1f5
 Create Date: 2025-02-27 11:34:40.628511
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'edc20b9a73de'
-down_revision = '48aea27275aa'
+down_revision = '986475e9f1f5'
 branch_labels = None
 depends_on = None
 
