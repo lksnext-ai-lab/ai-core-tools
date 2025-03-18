@@ -158,7 +158,11 @@ def getLLM(agent, is_vision=False):
         model_info: Información del modelo
         is_vision: Boolean que indica si es un modelo de visión
     """
-    ai_service = agent.ai_service
+    if is_vision:
+        ai_service = agent.vision_service_rel
+    else:
+        ai_service = agent.ai_service
+        
     if ai_service is None:
         return None
     if ai_service.provider.value == "OpenAI":
