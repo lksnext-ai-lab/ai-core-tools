@@ -1,4 +1,4 @@
-# LKS Next IA Core Tools Development Guide
+# Mattin AI - Development Guide
 
 ## Alembic migrations
 
