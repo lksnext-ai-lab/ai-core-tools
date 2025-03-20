@@ -1,5 +1,201 @@
 {% include 'header.html' %}
 
-Application: {{app.name}}
+<div class="container-fluid">
+    <!-- Page title START -->
+    <div class="row g-4 align-items-center mb-4">
+        <div class="col">
+            <h1 class="h3 mb-0">{{app.name}}</h1>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('my_apps') }}" class="btn btn-light">
+                <i class="bi bi-arrow-left me-2"></i>Back to Apps
+            </a>
+        </div>
+    </div>
+    <!-- Page title END -->
+
+    <!-- Stats cards START -->
+    <div class="row g-4 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="icon-lg bg-primary bg-opacity-10 rounded-3">
+                            <i class="bi bi-robot text-primary"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">Active Agents</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="icon-lg bg-success bg-opacity-10 rounded-3">
+                            <i class="bi bi-database text-success"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">Repositories</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="icon-lg bg-info bg-opacity-10 rounded-3">
+                            <i class="bi bi-file-text text-info"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">Output Parsers</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="icon-lg bg-warning bg-opacity-10 rounded-3">
+                            <i class="bi bi-box text-warning"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">Silos</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Stats cards END -->
+
+    <!-- Main cards START -->
+    <div class="row g-4">
+        <!-- Agents Card -->
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="icon-lg bg-primary bg-opacity-10 rounded-3">
+                            <i class="bi bi-robot text-primary"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="card-title mb-0">AI Agents</h5>
+                            <p class="text-muted mb-0">Manage your intelligent agents</p>
+                        </div>
+                    </div>
+                    <p class="card-text">Create and manage intelligent agents that can handle complex tasks and workflows.</p>
+                    <a href="{{url_for('agents.app_agents', app_id=session['app_id']) }}" class="btn btn-primary">View Agents</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Repositories Card -->
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="icon-lg bg-success bg-opacity-10 rounded-3">
+                            <i class="bi bi-database text-success"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="card-title mb-0">Repositories</h5>
+                            <p class="text-muted mb-0">Manage your data repositories</p>
+                        </div>
+                    </div>
+                    <p class="card-text">Organize and manage your data repositories efficiently with built-in versioning.</p>
+                    <a href="{{url_for('repositories.repositories', app_id=session['app_id']) }}" class="btn btn-success">View Repositories</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Domains Card -->
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="icon-lg bg-info bg-opacity-10 rounded-3">
+                            <i class="bi bi-globe text-info"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="card-title mb-0">Domains</h5>
+                            <p class="text-muted mb-0">Manage your domains</p>
+                        </div>
+                    </div>
+                    <p class="card-text">Configure and manage your application domains and settings.</p>
+                    <a href="{{ url_for('domains.domains') }}" class="btn btn-info">View Domains</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Parsers Card -->
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="icon-lg bg-warning bg-opacity-10 rounded-3">
+                            <i class="bi bi-file-text text-warning"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="card-title mb-0">Output Parsers</h5>
+                            <p class="text-muted mb-0">Manage your output parsers</p>
+                        </div>
+                    </div>
+                    <p class="card-text">Configure how your agents process and format their outputs.</p>
+                    <a href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}" class="btn btn-warning">View Parsers</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Silos Card -->
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="icon-lg bg-danger bg-opacity-10 rounded-3">
+                            <i class="bi bi-box text-danger"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="card-title mb-0">Silos</h5>
+                            <p class="text-muted mb-0">Manage your data silos</p>
+                        </div>
+                    </div>
+                    <p class="card-text">Organize and manage your data silos for better data isolation.</p>
+                    <a href="{{ url_for('silos.silos', app_id=session['app_id']) }}" class="btn btn-danger">View Silos</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Keys Card -->
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="icon-lg bg-secondary bg-opacity-10 rounded-3">
+                            <i class="bi bi-key text-secondary"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="card-title mb-0">API Keys</h5>
+                            <p class="text-muted mb-0">Manage your API keys</p>
+                        </div>
+                    </div>
+                    <p class="card-text">Securely manage your API keys and access tokens.</p>
+                    <a href="{{ url_for('api_keys.list_api_keys') }}" class="btn btn-secondary">View API Keys</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Main cards END -->
+</div>
 
 {% include 'footer.html' %}

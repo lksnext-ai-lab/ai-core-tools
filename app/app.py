@@ -35,7 +35,7 @@ from authlib.integrations.flask_client import OAuth
 
 load_dotenv()
 
-info = Info(title="IA Core Tools", version="1.0.0")
+info = Info(title="Mattin AI", version="1.0.0")
 app = OpenAPI(__name__, info=info)
 
 app.secret_key = 'your-secret-key-SXSCDSDASD'
@@ -115,9 +115,10 @@ def create_app():
     db.session.refresh(new_app)
     return app_index(new_app.app_id)
 
-@app.route('/leave')
+#@app.route('/leave')
+@app.route('/my-apps')
 @login_required
-def leave():
+def my_apps():
     session.pop('app_id', None)
     session.pop('app_name', None)
     return home()

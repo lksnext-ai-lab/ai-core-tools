@@ -68,7 +68,7 @@
 
                         <!-- Edit profile button -->
                         <div class="position-absolute top-0 end-0 p-3">
-                            <a href="{{ url_for('leave') }}" class="text-primary-hover" data-bs-toggle="tooltip"
+                            <a href="{{ url_for('my_apps') }}" class="text-primary-hover" data-bs-toggle="tooltip"
                                 data-bs-title="Leave app">
                                 <i class="bi bi-close bi-box-arrow-right"></i>
                             </a>
@@ -128,6 +128,12 @@
 
                 <!-- Sidebar menu START -->
                 <ul class="navbar-nav flex-column" id="navbar-sidebar">
+
+                    {% if session %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('my_apps') }}">My Apps</a>
+                    </li>
+                    {% endif %}
 
                     <!-- Menu item -->
                     <li class="nav-item">

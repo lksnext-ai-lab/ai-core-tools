@@ -1,89 +1,98 @@
 {% include 'header.html' %}
 
 <div class="row">
-    <div class="d-sm-flex justify-content-between align-items-center">
+    <div class="d-sm-flex justify-content-between align-items-center mb-4">
         <h1 class="h4 mb-2 mb-sm-0">Agents</h1>
-        <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=0) }}" class="btn btn-primary mt-3">
-            <i class="bi bi-plus"></i>
+        <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=0) }}" class="btn btn-primary">
+            <i class="bi bi-plus"></i> New Agent
         </a>
     </div>
 </div>
 
-<table class="table table-fixed">
-    <thead>
-        <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Description</th>
-            <th scope="col">Type</th>
-            <th scope="col">RAG</th>
-            <th scope="col">Memory</th>
-            <th scope="col">Output Parser</th>
-            <th scope="col">Is Tool</th>
-            <th scope="col">Uses Tools</th>
-            <th scope="col">Model</th>
-            <th scope="col">Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for agent in app.agents %}
-        <tr>
-            <td><a href="#">{{agent.name}}</a></td>
-            <td>{{agent.description}}</td>
-            <td>{{agent.type}}</td>
-            <td>
-                {% if agent.silo %}
-                <i class="bi bi-check-circle-fill text-success"></i>
-                {% else %}
-                <i class="bi bi-x-circle-fill text-danger"></i>
-                {% endif %}
-            </td>
-            <td>
-                {% if agent.has_memory %}
-                <i class="bi bi-check-circle-fill text-success"></i>
-                {% else %}
-                <i class="bi bi-x-circle-fill text-danger"></i>
-                {% endif %}
-            </td>
-            <td>
-                {% if agent.output_parser_id %}
-                <i class="bi bi-check-circle-fill text-success"></i>
-                {% else %}
-                <i class="bi bi-x-circle-fill text-danger"></i>
-                {% endif %}
-            </td>
-            <td>
-                {% if agent.is_tool %}
-                <i class="bi bi-check-circle-fill text-success"></i>
-                {% else %}
-                <i class="bi bi-x-circle-fill text-danger"></i>
-                {% endif %}
-            </td>
-            <td>
-                {% for tool in agent.tool_associations %}
-                {{tool.tool.name}}<br />
-                {% endfor %}
-            </td>
-            <td>{{agent.ai_service.name}}</td>
-            <td>
-                <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-primary">Edit</a>
-                <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-danger">Delete</a>
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+    {% for agent in app.agents %}
+    <div class="col">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h5 class="card-title mb-0">{{agent.name}}</h5>
+                    <span class="badge bg-primary">{{agent.type}}</span>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="fw-semibold text-dark mb-1">Description:</div>
+                    <p class="card-text mb-0">{{agent.description or 'No description provided'}}</p>
+                </div>
+                
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="d-flex align-items-center">
+                            <i class="bi {% if agent.silo %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} me-2"></i>
+                            <small>RAG</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex align-items-center">
+                            <i class="bi {% if agent.has_memory %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} me-2"></i>
+                            <small>Memory</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex align-items-center">
+                            <i class="bi {% if agent.output_parser_id %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} me-2"></i>
+                            <small>Parser</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex align-items-center">
+                            <i class="bi {% if agent.is_tool %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} me-2"></i>
+                            <small>Tool</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="fw-semibold text-dark mb-1">Tools:</div>
+                    <div class="d-flex flex-wrap gap-1">
+                        {% for tool in agent.tool_associations %}
+                        <span class="badge bg-secondary">{{tool.tool.name}}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="fw-semibold text-dark mb-1">Model:</div>
+                    <div class="fw-medium">{{agent.ai_service.name}}</div>
+                </div>
+
+                <div class="d-flex gap-2 mt-auto">
+                    <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
+                        class="btn btn-sm btn-outline-primary flex-grow-1">
+                        <i class="bi bi-pencil"></i> Edit
+                    </a>
+                    <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}"
+                        class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i>
+                    </a>
+                </div>
+
                 {% set playground_urls = {
                 'agent': 'agents.app_agent_playground',
                 'ocr_agent': 'agents.app_ocr_playground',
                 }
                 %}
                 {% if agent.type in playground_urls %}
-                <a href="{{ url_for(playground_urls[agent.type], app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                    class="btn btn-warning">Playground</a>
+                <div class="mt-2">
+                    <a href="{{ url_for(playground_urls[agent.type], app_id=session['app_id'], agent_id=agent.agent_id) }}"
+                        class="btn btn-sm btn-warning w-100">
+                        <i class="bi bi-play-circle"></i> Playground
+                    </a>
+                </div>
                 {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-
-
-    </tbody>
-</table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
 
 {% include 'footer.html' %}
