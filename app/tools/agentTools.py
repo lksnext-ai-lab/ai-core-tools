@@ -12,7 +12,7 @@ import os
 from typing import Any
 from langchain.tools.retriever import create_retriever_tool
 from app.services.silo_service import SiloService
-
+from app.model.ai_service import ProviderEnum
 def create_agent(agent: Agent):
     llm = getLLM(agent)
     if llm is None:
@@ -71,14 +71,14 @@ class IACTTool(BaseTool):
 
 
 def getLLM(agent):
-    if agent.model is None:
+    if agent.ai_service is None:
         return None
-    if agent.model.provider == "OpenAI":
-        return ChatOpenAI(model=agent.model.name, api_key=os.getenv('OPENAI_API_KEY'))
-    if agent.model.provider == "Anthropic":
-        return ChatAnthropic(model=agent.model.name, api_key=os.getenv('ANTHROPIC_API_KEY'))
-    if agent.model.provider == "MistralAI":
-        return ChatMistralAI(model=agent.model.name, api_key=os.getenv('MISTRAL_API_KEY'))
+    if agent.ai_service.provider == ProviderEnum.OpenAI.value:
+        return ChatOpenAI(model=agent.ai_service.name, api_key=os.getenv('OPENAI_API_KEY'))
+    if agent.ai_service.provider == ProviderEnum.Anthropic.value:
+        return ChatAnthropic(model=agent.ai_service.name, api_key=os.getenv('ANTHROPIC_API_KEY'))
+    if agent.ai_service.provider == ProviderEnum.MistralAI.value:
+        return ChatMistralAI(model=agent.ai_service.name, api_key=os.getenv('MISTRAL_API_KEY'))
     return None
 
 def getRetrieverTool(silo: Silo):
