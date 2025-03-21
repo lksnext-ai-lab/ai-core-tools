@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Enum as SQLAEnum
+from sqlalchemy import Column, String
 from app.model.base_service import BaseService
 
 class ProviderEnum(enum.Enum):
@@ -11,4 +11,4 @@ class ProviderEnum(enum.Enum):
 class AIService(BaseService):
     __tablename__ = 'AIService'
     
-    provider = SQLAEnum(ProviderEnum, nullable=False)
+    provider = Column(String(45), nullable=False)

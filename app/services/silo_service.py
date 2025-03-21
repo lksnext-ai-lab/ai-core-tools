@@ -58,6 +58,9 @@ class SiloService:
         
         if silo_type == SiloType.REPO:
             silo.metadata_definition_id = 0
+
+        if silo_data.get('embedding_service_id'):
+            silo.embedding_service_id = silo_data.get('embedding_service_id')
             
         SiloService._update_silo(silo, silo_data)
         db.session.add(silo)
