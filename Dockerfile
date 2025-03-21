@@ -10,10 +10,10 @@ ENV DATABASE_USER=""
 ENV DATABASE_PASSWORD=""
 
 # Copy the current directory contents into the container at /app
-COPY ./app /app/app
+COPY ./app /app
 # Ensure the alembic directory is copied correctly
-COPY ./alembic /app/alembic
-COPY alembic.ini /app/alembic.ini
+COPY ./alembic /alembic
+COPY alembic.ini /alembic.ini
 
 
 # Install system dependencies

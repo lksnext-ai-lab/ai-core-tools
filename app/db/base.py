@@ -10,3 +10,5 @@ from app.model.ocr_agent import OCRAgent
 from app.model.silo import Silo
 from app.model.domain import Domain
 from app.model.url import Url
+from app.model.embedding_service import EmbeddingService
+from app.model.base_service import BaseService

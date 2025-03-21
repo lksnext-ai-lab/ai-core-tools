@@ -1,6 +1,8 @@
 from flask import render_template, Blueprint, request, redirect, url_for
 from app.model.silo import Silo
 from app.model.app import App
+from app.model.output_parser import OutputParser
+from app.model.embedding_service import EmbeddingService
 
 from app.extensions import db
 from app.services.silo_service import SiloService
@@ -18,6 +20,20 @@ def silos(app_id: int):
 @silos_blueprint.route('/<int:silo_id>', methods=['GET', 'POST'])
 def silo(app_id: int, silo_id: int):
     parser_service = OutputParserService()
+    if request.method == 'GET':
+        output_parsers = db.session.query(OutputParser).all()
+        embedding_services = db.session.query(EmbeddingService).all()
+        silo = SiloService.get_silo(silo_id)
+        if silo is None:
+            silo = Silo(name="New Silo", app_id=app_id, silo_id=0)
+        
+        docs_count = SiloService.count_docs_in_silo(silo_id)
+        return render_template('silos/silo.html', 
+                             silo=silo, 
+                             output_parsers=output_parsers,
+                             embedding_services=embedding_services,
+                             docs_count=docs_count)
+    
     if request.method == 'POST':
         SiloService.create_or_update_silo(request.form)
         return redirect(url_for('silos.silos', app_id=app_id))

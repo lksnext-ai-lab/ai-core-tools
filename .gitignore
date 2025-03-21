@@ -4,6 +4,8 @@
 *.pyc
 *.pyo
 *.wav
+repositories/
+ictvenv/
 env/
 *venv/
 .venv/

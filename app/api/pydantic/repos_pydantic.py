@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 
-from app.api.pydantic.pydantic import AppPath
+from api.pydantic.pydantic import AppPath
 
 class RepoPath(AppPath):
     repo_id: int

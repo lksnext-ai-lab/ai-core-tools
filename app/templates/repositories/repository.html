@@ -24,16 +24,29 @@
                         <div class="col-md-6 mb-4">
                             <label class="form-label">Name<span class="text-danger">*</span></label>
                             <input type="text" class="form-control" placeholder="Name..." value="{{repo.name}}"
-                                name="name">
+                                name="name" required>
                         </div>
 
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label">Embedding Service<span class="text-danger">*</span></label>
+                            <select name="embedding_service_id" class="form-control" required>
+                                <option value="">-- Select an Embedding Service --</option>
+                                {% for service in embedding_services %}
+                                <option value="{{ service.service_id }}" 
+                                    {% if repo.silo and repo.silo.embedding_service_id == service.service_id %}selected{% endif %}>
+                                    {{ service.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
 
                         <div class="col-12">
-                            <input type="submit" class="btn btn-primary" value="Save" />
+                            <input type="submit" class="btn btn-primary" value="{% if repo.repository_id == 0 %}Create{% else %}Save Changes{% endif %}" />
                             <a href="{{ url_for('repositories.repositories', app_id=session['app_id']) }}"
-                                class="btn btn-primary-soft">Cancel</a>
+                                class="btn btn-secondary">Cancel</a>
                         </div>
                     </div>
+                </div>
             </form>
         </div>
     </div>

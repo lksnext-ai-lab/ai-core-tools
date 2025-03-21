@@ -245,16 +245,20 @@
     });
 
     function displayResults(data) {
-        if (typeof data !== 'object') {
-            console.error('Datos inválidos recibidos:', data);
-            return;
-        }
-
         const results = document.getElementById('results');
         const jsonResult = document.getElementById('jsonResult');
 
-        // Mostrar el JSON formateado
-        jsonResult.textContent = JSON.stringify(data, null, 2);
+        let displayData;
+        if (typeof data === 'string') {
+            displayData = data;
+        } else if (typeof data === 'object') {
+            displayData = JSON.stringify(data, null, 2);
+        } else {
+            console.error('Tipo de datos no soportado:', typeof data);
+            return;
+        }
+
+        jsonResult.textContent = displayData;
         results.style.display = 'block';
 
         if (typeof hljs !== 'undefined') {

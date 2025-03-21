@@ -8,6 +8,9 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders.pdf import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_postgres.vectorstores import PGVector
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from app.model.embedding_service import EmbeddingProvider
+from app.tools.embeddingTools import get_embeddings_model
 
 from app.model.resource import Resource
 from typing import Optional
@@ -22,7 +25,6 @@ class PGVectorTools:
         """Initializes the PGVectorTools with a SQLAlchemy engine."""
         self.Session = db.session
         self.db = db    
-
 
     @deprecation.deprecated(
         deprecated_in="0.1.0",
@@ -44,17 +46,17 @@ class PGVectorTools:
 
 
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(resource.embedding_service),
             collection_name=COLLECTION_PREFIX + str(resource.repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
         )
         vector_store.add_documents(docs)
 
-    def index_documents(self, collection_name : str, documents : list[Document]):
+    def index_documents(self, collection_name: str, documents: list[Document], embedding_service=None):
         """Indexes a list of documents in the pgvector collection using langchain vector store."""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
             connection=self.db.engine,
             use_jsonb=True,
@@ -69,7 +71,7 @@ class PGVectorTools:
     def delete_resource(self, resource):
         """Deletes a resource from the pgvector table using langchain vector store."""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(resource.embedding_service),
             collection_name=COLLECTION_PREFIX + str(resource.repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
@@ -83,28 +85,31 @@ class PGVectorTools:
         
         vector_store.delete(ids=ids_array)
 
-    def delete_documents(self, collection_name : str, filter_metadata: Optional[dict] = None):
+    def delete_documents(self, collection_name: str, ids, embedding_service=None):
         """Deletes documents from the pgvector collection using langchain vector store."""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
             connection=self.db.engine,
             use_jsonb=True,
         )
-        results = vector_store.similarity_search(
-            "", k=1000, filter=filter_metadata
-        )
-        ids_array = [doc.id for doc in results]
-        vector_store.delete(ids=ids_array)
+        if isinstance(ids, list):
+            vector_store.delete(ids=ids)
+        else:
+            results = vector_store.similarity_search(
+                "", k=1000, filter=ids
+            )
+            ids_array = [doc.id for doc in results]
+            vector_store.delete(ids=ids_array)
 
     def delete_collection(self, collection_name : str):
         """Deletes a collection from the pgvector database."""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(None),
             collection_name=collection_name,
             connection=self.db.engine,
         )
-        vector_store.delete()
+        vector_store.delete_collection()
         
     @deprecation.deprecated(
         deprecated_in="0.1.0",
@@ -114,7 +119,7 @@ class PGVectorTools:
     def search_similar_resources(self, repository : str, embed, RESULTS=5):
         """Searches for similar resources in the pgvector table using langchain vector store."""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(None),
             collection_name=COLLECTION_PREFIX + str(repository.silo_id),
             connection=self.db.engine,
             use_jsonb=True,
@@ -125,30 +130,39 @@ class PGVectorTools:
         )
         return results
     
-    def search_similar_documents(self, collection_name : str, embedding: List[float], filter_metadata: Optional[dict] = None, RESULTS=5):
-        """Searches for similar documents in the pgvector collection using langchain vector store."""
+    def search_similar_documents(self, collection_name: str, query: str, embedding_service=None, filter_metadata: Optional[dict] = None, RESULTS=5):
+        """Searches for similar documents using the configured embedding service"""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
             connection=self.db.engine,
             use_jsonb=True,
-        )   
-        results = vector_store.similarity_search_by_vector(
-            embedding=embedding,
-            k=RESULTS,
-            filter=filter_metadata
         )
+        
+        # Si recibimos directamente el embedding, lo usamos
+        if isinstance(query, (list, np.ndarray)):
+            results = vector_store.similarity_search_by_vector(
+                embedding=query,
+                k=RESULTS,
+                filter=filter_metadata
+            )
+        else:
+            # Si recibimos texto, hacemos la búsqueda normal
+            results = vector_store.similarity_search(
+                query,
+                k=RESULTS,
+                filter=filter_metadata
+            )
         return results
     
-    def get_pgvector_retriever(self, collection_name : str):
+    def get_pgvector_retriever(self, collection_name: str, embedding_service=None):
         """Returns a retriever object for the pgvector collection."""
         vector_store = PGVector(
-            embeddings=OpenAIEmbeddings(),
+            embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
             connection=self.db.engine,
             use_jsonb=True,
         )
-        retriever = vector_store.as_retriever()
-        return retriever
+        return vector_store.as_retriever()
 
 

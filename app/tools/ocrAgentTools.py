@@ -62,20 +62,31 @@ def convert_image_to_base64(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-def extract_text_from_image(base64_image: str, vision_system_prompt, pydantic_class, vision_model, document_title: str) -> str:
+def extract_text_from_image(base64_image: str, vision_system_prompt, vision_model, document_title: str) -> str:
     """Extrae texto de una imagen usando el modelo de visión"""
-    output_parser = JsonOutputParser(pydantic_object=pydantic_class)
-    format_instructions = output_parser.get_format_instructions()
     
-    if isinstance(vision_model, (ChatOpenAI, ChatAnthropic, ChatOllama)):
+    if isinstance(vision_model, (ChatOpenAI, ChatAnthropic)):
         chat_template = ChatPromptTemplate.from_messages([
             SystemMessage(content=vision_system_prompt),
-            SystemMessage(content=f"You are an expert in analyzing documents and extracting data from images. You are analyzing the document: {document_title}"),
-            SystemMessage(content=f"IMPORTANT: You must ONLY return a valid JSON object following this exact format:\n{format_instructions}"),
-            SystemMessage(content="If you cannot extract the data or cannot find the requested fields, use null values but maintain the exact JSON structure. Do not include any explanations or additional text outside the JSON object."),
+            SystemMessage(content=f"You are an expert in analyzing documents and performing OCR on images. Your task is to extract all possible information from the provided document image. You are analyzing the document: {document_title}"),
+            SystemMessage(content="You MUST extract all text and data from the image and return it as a JSON object. Do not include any explanations or additional text outside the JSON object."),
             HumanMessage(content=[
-                {"type": "text", "text": f"Extract the data from this image and return it ONLY as a JSON object."}, 
+                {"type": "text", "text": f"Extract all information from this image and return it ONLY as a JSON object."}, 
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+            ])
+        ])
+        chain = chat_template | vision_model
+        response = chain.invoke({})
+        return response.content
+        
+    elif isinstance(vision_model, ChatOllama):
+        chat_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content=vision_system_prompt),
+            SystemMessage(content=f"You are an expert in analyzing documents and performing OCR on images. Your task is to extract all possible information from the provided document image. You are analyzing the document: {document_title}"),
+            SystemMessage(content="You MUST extract all text and data from the image and return it as a JSON object. Do not include any explanations or additional text outside the JSON object."),
+            HumanMessage(content=[
+                {"type": "text", "text": f"Extract all information from this image and return it ONLY as a JSON object."}, 
+                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
             ])
         ])
         chain = chat_template | vision_model
@@ -90,15 +101,11 @@ def extract_text_from_image(base64_image: str, vision_system_prompt, pydantic_cl
                     {
                         "type": "text", 
                         "text": f"""{vision_system_prompt}
-                        You are an expert in analyzing documents and extracting data from images. You are analyzing the document: {document_title}
-                        """
+                        You are an expert in analyzing documents and performing OCR on images. Your task is to extract all possible information from the provided document image. You are analyzing the document: {document_title}                        """
                     },
                     {
                         "type": "text",
-                        "text": f"""Extract the following information from the image according to this format:
-                        {format_instructions}
-                        If you cannot extract the data or cannot find the requested fields, maintain the format but use a null value for the field that could not be extracted.
-                        """
+                        "text": """You MUST extract all text and data from the image and return it as a JSON object. Do not include any explanations or additional text outside the JSON object."""
                     }
                 ]
             },
@@ -107,7 +114,7 @@ def extract_text_from_image(base64_image: str, vision_system_prompt, pydantic_cl
                 "content": [
                     {
                         "type": "text",
-                        "text": f"Analyze the following image and extract the data that appears in it."
+                        "text": f"Extract all information from this image and return it ONLY as a JSON object."
                     },
                     {
                         "type": "image_url",
@@ -216,47 +223,59 @@ def get_document_data_from_pages(text_system_prompt: str, pages_data: list[dict]
     format_instructions = output_parser.get_format_instructions()
     
     pages_data_str = "\n".join([
-        f"Página {page['page']}:\n{page['data']}" 
+        f"Page {page['page']}:\n{page['data']}" 
         for page in pages_data
     ])
 
     logging.info(f"Datos extraidos de las páginas: {pages_data_str}")
     if pdf_text:
-        context = """You are an expert in document analysis and data consolidation. Your task is to consolidate information extracted from multiple pages into a single coherent JSON.
+        context = """IMPORTANT: You must ONLY return a valid JSON object that matches the format specified in the format instructions.
+        DO NOT include any explanations or additional text.
+        
         You have two sources of information:
-        1. Text extracted directly from the PDF (more reliable)
+        1. Text extracted directly from the PDF (more reliable source)
         2. Data extracted from each page of the document
-        Consolidation rules:
-        - For fields with values on some pages and null on others, discard null values
-        - For fields with different values between pages:
-            * Compare with PDF text to validate accuracy
-            * Select the most complete and accurate field description
-        - For fields containing lists:
-            * Combine unique elements from all pages
-            * Verify against PDF text to validate completeness
-            * Remove duplicates keeping the most detailed descriptions
+        
+        Rules for data consolidation:
+        - Prioritize information based on:
+            * Pages with more complete data sets
+            * Initial pages of the document (pages 1-2 have higher priority)
+        - Discard null values when a field has values on other pages
+        - For conflicting values between pages:
+            * Compare with PDF text for validation
+            * Select the most complete and accurate value
+        - For list fields:
+            * Combine unique elements
+            * Remove duplicates keeping most detailed descriptions
+            * Validate against PDF text
+        
         <pdf_plain_text>
         {pdf_text}
         </pdf_plain_text>
         """
     else:
-        context = """You are an expert in analyzing and consolidating financial document data. Your task is to consolidate information extracted from multiple pages into a single coherent JSON.
-        Consolidation rules:
-        - For fields with values on some pages and null on others, discard null values
-        - For fields with different values between pages:
-            * Select the most complete and accurate field description
-            * If there's no way to determine which is more accurate, indicate the discrepancy in the field
-        - For fields containing lists:
-            * Combine unique elements from all pages
-            * Remove duplicates keeping the most detailed descriptions
+        context = """IMPORTANT: You must ONLY return a valid JSON object that matches the format specified in the format instructions.
+        DO NOT include any explanations or additional text.
+        
+        Rules for data consolidation:
+        - Prioritize information based on:
+            * Pages with more complete data sets
+            * Initial pages of the document (pages 1-2 have higher priority)
+        - Discard null values when a field has values on other pages
+        - For conflicting values between pages:
+            * Select the most complete and accurate value
+            * Note discrepancies if accuracy cannot be determined
+        - For list fields:
+            * Combine unique elements
+            * Remove duplicates keeping most detailed descriptions
         """
 
     system_prompt = text_system_prompt + """
-    You are analyzing the document: {document_title}
+    Document being analyzed: {document_title}
     
     {context}
 
-    Analyze and consolidate the following data extracted by page:
+    Data extracted by page:
     <data_extracted_by_page>
         {pages_data}
     </data_extracted_by_page>
@@ -265,9 +284,11 @@ def get_document_data_from_pages(text_system_prompt: str, pages_data: list[dict]
         {format_instructions}
     </format_instructions>
 
-    Ensure the resulting JSON:
-    1. Contains the most complete and accurate information available
-    2. Maintains consistency in data format
+    CRITICAL REQUIREMENTS:
+    1. Return ONLY a JSON object
+    2. The JSON MUST follow the exact format specified above
+    3. DO NOT include any text before or after the JSON
+    4. DO NOT include any explanations or analysis
     """
 
     prompt = PromptTemplate(
@@ -280,7 +301,7 @@ def get_document_data_from_pages(text_system_prompt: str, pages_data: list[dict]
         }
     )
 
-    if isinstance(text_model, ChatAnthropic):
+    if isinstance(text_model, (ChatAnthropic, ChatOllama)):
         logging.info("Usando extract_json para modelo Claude")
         response = prompt | text_model
         result = response.invoke({"pages_data": pages_data_str})
@@ -308,6 +329,7 @@ def format_data_with_text_llm(vision_output: list, text_model, pydantic_class, t
             "data": formatted_text
         })
     return formatted_data_by_page
+
 
 def format_data_from_vision(vision_output: list) -> list:
     """Formatea los datos directamente del output de visión cuando no hay texto plano"""
@@ -337,6 +359,8 @@ def format_data_from_vision(vision_output: list) -> list:
             logging.error(f"Error al parsear JSON de vision_output: {e}")
             continue
     return formatted_data_by_page
+
+
 
 
 

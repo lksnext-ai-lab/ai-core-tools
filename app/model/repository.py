@@ -22,6 +22,14 @@ class Repository(Base):
     silo = relationship('Silo', lazy=False, uselist=False)
     silo_id = Column(Integer, ForeignKey('Silo.silo_id'), nullable=False)
 
+    def get_embedding_service(self):
+        """
+        Returns the embedding service associated with this repository's silo
+        """
+        if self.silo and self.silo.embedding_service:
+            return self.silo.embedding_service
+        return None
+
     def to_dict(self, include_relationships=False):
         data = {
             'repository_id': self.repository_id,
@@ -36,7 +44,7 @@ class Repository(Base):
             if self.silo:
                 data['silo'] = {
                     'silo_id': self.silo.silo_id,
-                    # Add other silo fields as needed
+                    'embedding_service': self.silo.embedding_service.name if self.silo.embedding_service else None
                 }
             data['resources'] = [{
                 'resource_id': resource.resource_id,

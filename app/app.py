@@ -25,6 +25,7 @@ from app.blueprints.api_keys import api_keys_blueprint
 from app.blueprints.silos import silos_blueprint
 from app.blueprints.domains import domains_blueprint
 from app.blueprints.ai_services import ai_services_blueprint
+from app.blueprints.embeddings_services import embedding_services_blueprint
 
 from app.api.api import api
 from app.api.silo_api import silo_api
@@ -52,6 +53,7 @@ app.register_blueprint(api_keys_blueprint)
 app.register_blueprint(silos_blueprint)
 app.register_blueprint(ai_services_blueprint)
 app.register_blueprint(domains_blueprint)
+app.register_blueprint(embedding_services_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)

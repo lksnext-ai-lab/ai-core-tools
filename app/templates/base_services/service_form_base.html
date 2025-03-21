@@ -1,0 +1,64 @@
+{% include 'header.html' %}
+
+<div class="row">
+    <div class="d-sm-flex justify-content-between align-items-center mb-4">
+        <h1 class="h4 mb-2 mb-sm-0">{{ form_title }}</h1>
+    </div>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <label class="form-label">Name<span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="name" name="name" 
+                           value="{{ service.name if service else '' }}" required>
+                </div>
+                
+                <div class="col-md-12 mb-4">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" 
+                              rows="3">{{ service.description if service else '' }}</textarea>
+                </div>
+                
+                <div class="col-md-6 mb-4">
+                    <label class="form-label">Provider<span class="text-danger">*</span></label>
+                    <select class="form-control" id="provider" name="provider" required>
+                        {% if not service %}
+                        <option value="">-- Select provider --</option>
+                        {% endif %}
+                        {% for provider in providers %}
+                        <option value="{{ provider.name }}" 
+                                {% if service and provider.name == service.provider.name %}selected{% endif %}>
+                            {{ provider.value }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-12 mb-4">
+                    <label class="form-label">Endpoint</label>
+                    <input type="text" class="form-control" id="endpoint" name="endpoint" 
+                           value="{{ service.endpoint if service else '' }}">
+                </div>
+                
+                <div class="col-md-12 mb-4">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-control" id="api_key" name="api_key" 
+                           value="{{ service.api_key if service else '' }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="card-footer">
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">{{ submit_button_text }}</button>
+                <a href="{{ url_for(cancel_url) }}" 
+                   class="btn btn-primary-soft">Cancel</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+{% include 'footer.html' %}

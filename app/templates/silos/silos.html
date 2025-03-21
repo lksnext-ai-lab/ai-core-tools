@@ -14,6 +14,7 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Description</th>
+            <th scope="col">Embedding Service</th>
             <th scope="col">Actions</th>
         </tr>
     </thead>
@@ -22,6 +23,7 @@
         <tr>
             <td><a href="#">{{silo.name}}</a></td>
             <td>{{silo.description}}</td>
+            <td>{{silo.embedding_service.name if silo.embedding_service else 'No embedding service'}}</td>
 
             <td>
                 <a href="{{ url_for('silos.silo', app_id=session['app_id'], silo_id=silo.silo_id) }}"

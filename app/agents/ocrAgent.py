@@ -200,7 +200,7 @@ def extract_data_from_images(state: State):
         for image_path in state["images"]:
             logging.info(f"Procesando imagen: {image_path}")
             base64_image = convert_image_to_base64(image_path)
-            extracted_text = extract_text_from_image(base64_image, state["agent"].vision_system_prompt, state["pydantic_class"], state["vision_model"], state["pdf_path"].split("/")[-1])
+            extracted_text = extract_text_from_image(base64_image, state["agent"].vision_system_prompt, state["vision_model"], state["pdf_path"].split("/")[-1])
             logging.info(f"Texto extraído de la imagen: {extracted_text}")
             vision_output.append({
                 "image_path": image_path,
@@ -221,17 +221,14 @@ def get_and_format_data_with_llm(state: State):
     """Formatea los datos extraídos usando el LLM"""
     logging.info("Iniciando formateo de datos con LLM...")
     try:
-        if state["has_plain_text"]:
-            formatted_data_by_page = format_data_with_text_llm(
-                state["vision_output"],
-                state["text_model"],
-                state["pydantic_class"],
-                state["agent"].text_system_prompt,
-                state["pdf_text"],
-                state["pdf_path"].split("/")[-1]
-            )
-        else:
-            formatted_data_by_page = format_data_from_vision(state["vision_output"])
+        formatted_data_by_page = format_data_with_text_llm(
+            state["vision_output"],
+            state["text_model"],
+            state["pydantic_class"],
+            state["agent"].text_system_prompt,
+            state["pdf_text"],
+            state["pdf_path"].split("/")[-1]
+        )
         
         logging.info("Formateo de datos completado")
         logging.info(f"Datos formateados: {formatted_data_by_page}")
