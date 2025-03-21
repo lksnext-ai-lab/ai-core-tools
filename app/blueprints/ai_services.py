@@ -8,8 +8,13 @@ ai_services_blueprint = Blueprint('ai_services', __name__, url_prefix='/admin/ai
 
 @ai_services_blueprint.route('/', methods=['GET'])
 def ai_services():
-    ai_services = db.session.query(AIService).all()
-    return render_template('ai_services/ai_services.html', ai_services=ai_services)
+    services = db.session.query(AIService).all()
+    return render_template('ai_services/ai_services.html', 
+                          services=services,
+                          service_title="AI Services",
+                          create_url='ai_services.create_ai_service',
+                          edit_url='ai_services.edit_ai_service',
+                          delete_url='ai_services.delete_ai_service')
 
 @ai_services_blueprint.route('/<int:service_id>', methods=['GET'])
 def ai_service(service_id):
@@ -31,8 +36,11 @@ def edit_ai_service(service_id):
         return redirect(url_for('ai_services.ai_services'))
         
     return render_template('ai_services/edit_ai_service.html', 
-                         ai_service=ai_service, 
-                         providers=ProviderEnum)
+                         service=ai_service, 
+                         providers=ProviderEnum,
+                         form_title="Edit AI service",
+                         submit_button_text="Save changes",
+                         cancel_url='ai_services.ai_services')
 
 @ai_services_blueprint.route('/<int:service_id>/delete', methods=['POST'])
 def delete_ai_service(service_id):
@@ -66,5 +74,8 @@ def create_ai_service():
         return redirect(url_for('ai_services.ai_services'))
         
     return render_template('ai_services/create_ai_service.html', 
-                         providers=ProviderEnum)
+                         providers=ProviderEnum,
+                         form_title="Create new AI service",
+                         submit_button_text="Create service",
+                         cancel_url='ai_services.ai_services')
 

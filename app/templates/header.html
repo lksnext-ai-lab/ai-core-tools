@@ -101,7 +101,7 @@
                                 <li class="nav-item">
                                     <a class="nav-link"
                                         href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}">
-                                        <i class="bi bi-file-text fa-fw me-2"></i>Output Parsers
+                                        <i class="bi bi-file-text fa-fw me-2"></i>Data Structures
                                     </a>
                                 </li>
                                 <li class="nav-item"></li>
@@ -141,6 +141,11 @@
                         <ul>
                             <li>
                                 <a class="nav-link" href="{{ url_for('ai_services.ai_services') }}">AI Services</a>
+                            </li>
+                        </ul>
+                        <ul>
+                            <li>
+                                <a class="nav-link" href="{{ url_for('embedding_services.embedding_services') }}">Embedding Services</a>
                             </li>
                         </ul>
                         <ul>

@@ -135,6 +135,9 @@
         var agent_id = '{{agent.agent_id}}';
         console.log('Sending question:', question);
         
+        // Limpiar el input inmediatamente después de obtener su valor
+        $('#question').val('');
+        
         // Crear y mostrar el div de la pregunta
         var qDiv = $('#referenece').clone();
         qDiv.attr('id', 'referenece-' + cont);
@@ -211,8 +214,7 @@
             console.error('Error detallado:', error);
         })
         .finally(() => {
-            // Limpiar el input y habilitar el botón
-            $('#question').val('');
+            // Solo habilitar el botón ya que el input se limpió antes
             $('#send-btn').prop('disabled', false);
         });
     });

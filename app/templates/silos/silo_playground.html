@@ -51,6 +51,7 @@
 </div>
 
 <script>
+    /*
     function delete_content(content_id) {
         fetch('/app/{{ session["app_id"] }}/silos/{{ silo.silo_id }}/content/' + content_id + '/delete', { method: 'GET' })
             .then(response => response.text())
@@ -60,6 +61,23 @@
                 }
             })
             .catch(error => console.error('Error:', error));
+    }
+    */
+    function delete_content(content_id) {
+        fetch('/api/silo/app/{{ session["app_id"] }}/silos/{{ silo.silo_id }}/docs/delete', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ids: [content_id] })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message === "docs deleted") {
+                document.getElementById('content_' + content_id).remove();
+            }
+        })
+        .catch(error => console.error('Error:', error));
     }
 </script>
 

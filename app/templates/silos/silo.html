@@ -31,16 +31,26 @@
             <div class="col-md-12 mb-4" id="outputParserSelect">
                 <label class="form-label">Select metadata definition</label>
                 <select name="metadata_definition_id" class="form-control">
-                    <option value="">-- Select an Output Parser --</option>
+                    <option value="">-- Select an Data Structure --</option>
                     {% for parser in output_parsers %}
-                    <option value="{{ parser.parser_id }}" {% if silo.metadata_definition_id==parser.parser_id
-                        %}selected{% endif %}>
+                    <option value="{{ parser.parser_id }}" {% if silo.metadata_definition_id==parser.parser_id %}selected{% endif %}>
                         {{ parser.name }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
 
+            <div class="col-md-12 mb-4" id="embeddingServiceSelect">
+                <label class="form-label">Select embedding service</label>
+                <select name="embedding_service_id" class="form-control">
+                    <option value="">-- Select an Embedding Service --</option>
+                    {% for service in embedding_services %}
+                    <option value="{{ service.service_id }}" {% if silo.embedding_service_id==service.service_id %}selected{% endif %}>
+                        {{ service.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
         </div>
     </div>

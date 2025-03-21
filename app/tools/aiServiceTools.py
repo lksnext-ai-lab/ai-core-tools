@@ -12,7 +12,8 @@ from langchain.chains.conversational_retrieval.base import ConversationalRetriev
 from langchain.memory import ConversationBufferMemory
 from langchain_mistralai import ChatMistralAI
 from mistralai import Mistral
- 
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from app.model.embedding_service import EmbeddingProvider
 
 from app.model.agent import Agent
 from app.extensions import db
@@ -20,6 +21,7 @@ from app.tools.pgVectorTools import PGVectorTools
 from app.tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
+from app.tools.embeddingTools import get_embeddings_model
 
 load_dotenv()
 
@@ -31,8 +33,10 @@ logger = logging.getLogger(__name__)
 
 pgVectorTools = PGVectorTools(db)
 
-def get_embedding(text):
-    embeddings = OpenAIEmbeddings()
+def get_embedding(text, embedding_service=None):
+    """Get embeddings using the configured service"""
+    embeddings = get_embeddings_model(embedding_service)
+        
     return embeddings.embed_query(text)
 
 def get_output_parser(agent):
@@ -90,9 +94,15 @@ def invoke_with_RAG(agent: Agent, input):
         #info += "\n\nINFO CHUNK: " + result[0].page_content  + "\nSource: " + result[0].metadata["source"] + " page:" + str(result[0].metadata["page"]) + "\n\n"
         info += "\n\nINFO CHUNK: " + result.page_content
     
-    output_parser = get_output_parser(agent)
-    format_instructions = output_parser.get_format_instructions()
-    format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
+    if agent.output_parser_id is None:
+        print("output_parser_id is None")
+        output_parser = StrOutputParser()
+        format_instructions = ""
+    else:
+        print("output_parser_id is not None")
+        output_parser = get_output_parser(agent)
+        format_instructions = output_parser.get_format_instructions()
+        format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
     
     prompt = ChatPromptTemplate.from_messages([
             ("system", agent.system_prompt),

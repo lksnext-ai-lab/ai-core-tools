@@ -6,7 +6,7 @@
     <div class="col-6">
         <div class="card shadow mb-4">
             <div class="card-header border-bottom">
-                <h5 class="mb-0">Output Parser: {{parser.name}}</h5>
+                <h5 class="mb-0">Data Structure: {{parser.name}}</h5>
             </div>
             <form action="{{ url_for('output_parsers.app_output_parser', app_id=app_id, parser_id=parser.parser_id) }}" method="POST" onsubmit="return OutputParserValidator.validateForm()">
                 <div class="card-body">
@@ -45,6 +45,7 @@
                                                     <option value="int" {% if field.type == 'int' %}selected{% endif %}>Integer</option>
                                                     <option value="float" {% if field.type == 'float' %}selected{% endif %}>Float</option>
                                                     <option value="bool" {% if field.type == 'bool' %}selected{% endif %}>Boolean</option>
+                                                    <option value="date" {% if field.type == 'date' %}selected{% endif %}>Date</option>
                                                     <option value="list" {% if field.type == 'list' %}selected{% endif %}>List</option>
                                                     {% for parser in available_parsers %}
                                                     <option value="parser:{{parser.parser_id}}" 
@@ -140,6 +141,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <option value="int">Integer</option>
                     <option value="float">Float</option>
                     <option value="bool">Boolean</option>
+                    <option value="date">Date</option>
                     <option value="list">List</option>
                     {% for parser in available_parsers %}
                     <option value="parser:{{parser.parser_id}}">{{parser.name}}</option>

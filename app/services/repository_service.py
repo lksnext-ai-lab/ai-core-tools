@@ -20,8 +20,7 @@ class RepositoryService:
         return db.session.query(Repository).filter(Repository.app_id == app_id).all()
     
     @staticmethod
-    def create_repository(repository: Repository) -> Repository:
-     
+    def create_repository(repository: Repository, embedding_service_id: Optional[int] = None) -> Repository:
         silo_service = SiloService()
         silo_data = {
             'silo_id': 0,
@@ -29,7 +28,8 @@ class RepositoryService:
             'description': 'silo for repository ' + repository.name,
             'status': 'active',
             'app_id': repository.app_id,
-            'fixed_metadata': False
+            'fixed_metadata': False,
+            'embedding_service_id': embedding_service_id
         }
         silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO)
         repository.silo_id = silo.silo_id
@@ -39,14 +39,15 @@ class RepositoryService:
         db.session.add(repository)
         db.session.commit()
         db.session.refresh(repository)
-
         repo_folder = os.path.join(REPO_BASE_FOLDER, str(repository.repository_id))
         os.makedirs(repo_folder, exist_ok=True)
         
         return repository
     
-    @staticmethod   
-    def update_repository(repository: Repository) -> Repository:
+    @staticmethod
+    def update_repository(repository: Repository, embedding_service_id: Optional[int] = None) -> Repository:
+        if repository.silo and embedding_service_id:
+            repository.silo.embedding_service_id = embedding_service_id
         db.session.commit()
         return repository
     

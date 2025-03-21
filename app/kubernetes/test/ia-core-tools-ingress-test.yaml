@@ -14,7 +14,7 @@ metadata:
       more_set_headers "X-Content-Type-Options: nosniff";
       more_set_headers "X-Frame-Options: DENY";
       more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
-      more_set_headers "Content-Security-Policy: default-src 'self' https://iacoretoolstest.lksnext.com";
+      more_set_headers "Content-Security-Policy: default-src 'self' https://aicoretoolstest.lksnext.com";
       more_set_headers "Cross-Origin-Resource-Policy: same-site";
 spec:
   tls:

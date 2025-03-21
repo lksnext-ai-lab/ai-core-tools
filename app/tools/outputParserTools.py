@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.extensions import db
 from app.model.output_parser import OutputParser
 import logging
+from datetime import date
 
 
 def process_type(field_type):
@@ -85,7 +86,8 @@ def get_type_from_string(type_str: str, list_item_type: str = None, list_item_pa
         'str': str,
         'int': int,
         'float': float,
-        'bool': bool
+        'bool': bool,
+        'date': date
     }
     
     if type_str == 'parser':

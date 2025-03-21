@@ -10,7 +10,6 @@ import time
 from app.model.resource import Resource
 from app.tools.pgVectorTools import PGVectorTools
 import os
-from langchain_openai import OpenAIEmbeddings
 from app.model.silo import SiloType
 from app.services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
@@ -59,6 +58,9 @@ class SiloService:
         
         if silo_type == SiloType.REPO:
             silo.metadata_definition_id = 0
+
+        if silo_data.get('embedding_service_id'):
+            silo.embedding_service_id = silo_data.get('embedding_service_id')
             
         SiloService._update_silo(silo, silo_data)
         db.session.add(silo)
@@ -173,14 +175,15 @@ class SiloService:
             doc.metadata["silo_id"] = resource.repository.silo_id
 
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.index_documents(collection_name, docs)
+        embedding_service = resource.repository.silo.embedding_service
+        pgVectorTools.index_documents(collection_name, docs, embedding_service)
 
 
     @staticmethod
     def delete_resource(resource: Resource):
         collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(collection_name, filter_metadata={"resource_id": {"$eq": resource.resource_id}})
+        pgVectorTools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}})
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):
@@ -204,16 +207,22 @@ class SiloService:
             return
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(collection_name, filter_metadata={"id": {"$in": ids}})
+        pgVectorTools.delete_documents(collection_name, ids)
 
     @staticmethod
     def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None) -> List[Document]:
-        if not SiloService.check_silo_collection_exists(silo_id):
+        silo = SiloService.get_silo(silo_id)
+        if not silo or not SiloService.check_silo_collection_exists(silo_id):
             return []
+        
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
-        embedding = OpenAIEmbeddings(model="text-embedding-3-small").embed_query(query)
-        return pgVectorTools.search_similar_documents(collection_name, embedding, filter_metadata or {})
+        return pgVectorTools.search_similar_documents(
+            collection_name, 
+            query, 
+            embedding_service=silo.embedding_service,
+            filter_metadata=filter_metadata or {}
+        )
 
     @staticmethod
     def get_metadata_filter_from_form(silo: Silo, form_data: dict) -> dict:

@@ -18,6 +18,7 @@
             <th scope="col">Type #</th>
             <th scope="col">Description</th>
             <th scope="col">Resources</th>
+            <th scope="col">Embedding Service</th>
             <th scope="col">Actions</th>
         </tr>
     </thead>
@@ -33,6 +34,7 @@
                 <div class="text-wrap" id="desc_{{repo.repository_id}}"></div>
             </td>
             <td>{{repo.resources | length}}</td>
+            <td>{{repo.silo.embedding_service.name if repo.silo and repo.silo.embedding_service else 'No service'}}</td>
             <td>
 
                 <a href="{{ url_for('repositories.repository_settings', app_id=session['app_id'], repository_id=repo.repository_id) }}"

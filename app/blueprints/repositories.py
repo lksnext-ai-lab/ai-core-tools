@@ -10,6 +10,7 @@ from app.model.silo import SiloType
 import os
 from app.services.repository_service import RepositoryService
 from app.services.output_parser_service import OutputParserService
+from app.model.embedding_service import EmbeddingService
 #TODO: should be accesed from silo service
 pgVectorTools = PGVectorTools(db)
 
@@ -25,26 +26,61 @@ def repositories(app_id: int):
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>', methods=['GET', 'POST'])
 def repository(app_id: int, repository_id: int):
     if request.method == 'POST':
-        repo = Repository()
-        repo.name = request.form['name']
-        repo.type = request.form.get('type')
-        repo.status = request.form.get('status')
-        repo.app_id = app_id
-        repo = RepositoryService.create_repository(repo)
+        if repository_id == 0:
+            # Crear nuevo repositorio
+            repo = Repository()
+            repo.name = request.form['name']
+            repo.type = request.form.get('type')
+            repo.status = request.form.get('status')
+            repo.app_id = app_id
+            embedding_service_id = request.form.get('embedding_service_id')
+            
+            repo = RepositoryService.create_repository(repo, embedding_service_id)
+        else:
+            # Actualizar repositorio existente
+            repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
+            repo.name = request.form['name']
+            embedding_service_id = request.form.get('embedding_service_id')
+            
+            repo = RepositoryService.update_repository(repo, embedding_service_id)
         
-        return render_template('repositories/resources.html', app_id=app_id, repo=repo)
+        return redirect(url_for('repositories.repositories', app_id=app_id))
 
     if repository_id == 0:
         repo = Repository(name="New Repository", app_id=app_id, repository_id=0)
-        return render_template('repositories/repository.html', app_id=app_id, repo=repo)
+        embedding_services = db.session.query(EmbeddingService).all()
+        return render_template('repositories/repository.html', 
+                             app_id=app_id, 
+                             repo=repo, 
+                             embedding_services=embedding_services)
 
     repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-    return render_template('repositories/resources.html', app_id=app_id, repo=repo)
+    embedding_services = db.session.query(EmbeddingService).all()
+    return render_template('repositories/repository.html', 
+                         app_id=app_id, 
+                         repo=repo, 
+                         embedding_services=embedding_services)
 
-@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/settings', methods=['GET'])
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/settings', methods=['GET', 'POST'])
 def repository_settings(app_id: int, repository_id: int):
     repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-    return render_template('repositories/repository.html', app_id=app_id, repo=repo)
+    
+    if request.method == 'POST':
+        repo.name = request.form['name']
+        embedding_service_id = request.form.get('embedding_service_id')
+        
+        # Actualizar el embedding service del silo asociado
+        if repo.silo:
+            repo.silo.embedding_service_id = embedding_service_id if embedding_service_id else None
+            
+        db.session.commit()
+        return redirect(url_for('repositories.repositories', app_id=app_id))
+    
+    embedding_services = db.session.query(EmbeddingService).all()
+    return render_template('repositories/repository.html', 
+                         app_id=app_id, 
+                         repo=repo, 
+                         embedding_services=embedding_services)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/delete', methods=['GET'])
 def repository_delete(app_id: int, repository_id: int):

@@ -1,4 +1,5 @@
 from flask import render_template, Blueprint, request
+from app.model.silo import Silo
 from app.model.agent import Agent
 from app.model.app import App
 from app.model.ocr_agent import OCRAgent
@@ -37,6 +38,7 @@ def app_agent(app_id: int, agent_id: int):
         return app_agents(app_id)
     
     ai_services = db.session.query(AIService).all()
+    silos = db.session.query(Silo).filter(Silo.app_id == app_id).all()
     output_parsers = db.session.query(OutputParser).filter(OutputParser.app_id == app_id).all()
     tools = db.session.query(Agent).filter(Agent.is_tool == True, Agent.app_id == app_id, Agent.agent_id != agent_id).all()
     silos = db.session.query(Silo).filter(Silo.app_id == app_id).all()

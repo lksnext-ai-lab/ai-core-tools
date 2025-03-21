@@ -5,7 +5,7 @@ from app.model.repository import Repository
 from app.model.domain import Domain
 class OutputParserService:
     def __init__(self):
-        self.field_types = ['str', 'int', 'float', 'bool', 'list']
+        self.field_types = ['str', 'int', 'float', 'bool', 'date', 'list']
     
     def get_parsers_by_app(self, app_id: int) -> List[OutputParser]:
         """Obtiene todos los parsers de una aplicación"""
