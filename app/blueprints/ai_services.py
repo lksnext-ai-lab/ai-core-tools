@@ -3,6 +3,7 @@ from app.extensions import db
 from app.model.ai_service import AIService
 from app.model.ai_service import ProviderEnum
 from app.model.agent import Agent
+from app.model.app import App
 
 ai_services_blueprint = Blueprint('ai_services', __name__, url_prefix='/admin/ai_services')
 
@@ -31,13 +32,16 @@ def edit_ai_service(service_id):
         ai_service.provider = request.form['provider']
         ai_service.endpoint = request.form['endpoint']
         ai_service.api_key = request.form['api_key']
+        ai_service.app_id = request.form['app_id']
         
         db.session.commit()
         return redirect(url_for('ai_services.ai_services'))
         
+    apps = db.session.query(App).all()
     return render_template('ai_services/edit_ai_service.html', 
                          service=ai_service, 
                          providers=ProviderEnum,
+                         apps=apps,
                          form_title="Edit AI service",
                          submit_button_text="Save changes",
                          cancel_url='ai_services.ai_services')
@@ -66,15 +70,18 @@ def create_ai_service():
             description=request.form['description'],
             provider=request.form['provider'],
             endpoint=request.form['endpoint'],
-            api_key=request.form['api_key']
+            api_key=request.form['api_key'],
+            app_id=request.form['app_id']
         )
         
         db.session.add(new_service)
         db.session.commit()
         return redirect(url_for('ai_services.ai_services'))
         
+    apps = db.session.query(App).all()
     return render_template('ai_services/create_ai_service.html', 
                          providers=ProviderEnum,
+                         apps=apps,
                          form_title="Create new AI service",
                          submit_button_text="Create service",
                          cancel_url='ai_services.ai_services')

@@ -2,6 +2,7 @@ from flask import render_template, Blueprint, request, redirect, url_for
 from app.extensions import db
 from app.model.embedding_service import EmbeddingService
 from app.model.embedding_service import EmbeddingProvider
+from app.model.app import App
 
 embedding_services_blueprint = Blueprint('embedding_services', __name__, url_prefix='/admin/embedding_services')
 
@@ -30,13 +31,16 @@ def edit_embedding_service(service_id):
         service.provider = request.form['provider']
         service.endpoint = request.form['endpoint']
         service.api_key = request.form['api_key']
+        service.app_id = request.form['app_id']
         
         db.session.commit()
         return redirect(url_for('embedding_services.embedding_services'))
         
+    apps = db.session.query(App).all()
     return render_template('embedding_services/edit_embedding_service.html', 
                          service=service, 
                          providers=EmbeddingProvider,
+                         apps=apps,
                          form_title="Edit embedding service",
                          submit_button_text="Save changes",
                          cancel_url='embedding_services.embedding_services')
@@ -62,15 +66,18 @@ def create_embedding_service():
             description=request.form['description'],
             provider=request.form['provider'],
             endpoint=request.form['endpoint'],
-            api_key=request.form['api_key']
+            api_key=request.form['api_key'],
+            app_id=request.form['app_id']
         )
         
         db.session.add(new_service)
         db.session.commit()
         return redirect(url_for('embedding_services.embedding_services'))
         
+    apps = db.session.query(App).all()
     return render_template('embedding_services/create_embedding_service.html', 
                          providers=EmbeddingProvider,
+                         apps=apps,
                          form_title="Create new embedding service",
                          submit_button_text="Create service",
                          cancel_url='embedding_services.embedding_services')
