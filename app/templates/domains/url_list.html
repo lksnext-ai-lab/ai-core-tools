@@ -1,4 +1,6 @@
-{% include 'header.html' %}
+{% extends "base.html" %}
+
+{% block content %}
 
 <h2>URLs for {{domain.base_url}}</h2>
 
@@ -49,4 +51,4 @@
 
 
 
-{% include 'footer.html' %}
+{% endblock %}

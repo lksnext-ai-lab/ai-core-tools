@@ -1,4 +1,6 @@
-{% include 'header.html' %}
+{% extends "base.html" %}
+
+{% block content %}
 
 <h1>Domain</h1>
 
@@ -29,4 +31,4 @@
     <a href="{{ url_for('domains.domains') }}" class="btn btn-secondary">Cancel</a>
 </form>
 
-{% include 'footer.html' %}
+{% endblock %}

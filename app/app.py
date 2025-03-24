@@ -176,6 +176,10 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return db.session.query(User).get(int(user_id))
 
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4321, debug=True)
 

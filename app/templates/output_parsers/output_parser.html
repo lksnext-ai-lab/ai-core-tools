@@ -1,4 +1,6 @@
-{% include 'header.html' %}
+{% extends "base.html" %}
+
+{% block content %}
 
 <script src="{{ url_for('static', filename='js/output_parser_validator.js') }}"></script>
 
@@ -182,4 +184,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-{% include 'footer.html' %} 
+{% endblock %} 

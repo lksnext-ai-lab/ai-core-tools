@@ -1,8 +1,10 @@
-{% include 'header.html' %}
+{% extends "base.html" %}
+
+{% block content %}
 
 Model {{ ai_service.name }}
 
 <p>Description: {{ ai_service.description }}</p>
 
 
-{% include 'footer.html' %}
+{% endblock %}

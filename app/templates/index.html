@@ -1,7 +1,8 @@
-{% include 'header.html' %}
+{% extends "base.html" %}
+
+{% block content %}
 
 <div class="container-fluid">
-    <!-- Hero section START -->
     <div class="row g-4 align-items-center py-5">
         <div class="col-lg-6">
             <h1 class="display-4 mb-3">Welcome to Mattin AI</h1>
@@ -85,4 +86,4 @@
     <!-- CTA section END -->
 </div>
 
-{% include 'footer.html' %}
+{% endblock %}

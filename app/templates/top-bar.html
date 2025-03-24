@@ -1,0 +1,166 @@
+<!-- Top bar START -->
+<nav class="navbar top-bar navbar-light py-0 py-xl-2">
+    <div class="container-fluid p-0">
+        <div class="d-flex align-items-center w-100">
+
+            <!-- Logo START -->
+            <div class="d-flex align-items-center d-xl-none">
+                <a class="navbar-brand" href="/">
+                    <img class="navbar-brand-item h-40px"
+                        src="{{ url_for('static', filename='img/mattin-ai.png') }}" alt="">
+                </a>
+            </div>
+            <!-- Logo END -->
+
+            <!-- Toggler for sidebar START -->
+            <div class="navbar-expand-xl sidebar-offcanvas-menu">
+                <button class="navbar-toggler me-auto p-2" type="button" data-bs-toggle="offcanvas"
+                    data-bs-target="#offcanvasSidebar" aria-controls="offcanvasSidebar" aria-expanded="false"
+                    aria-label="Toggle navigation" data-bs-auto-close="outside">
+                    <i class="bi bi-list text-primary fa-fw" data-bs-target="#offcanvasMenu"></i>
+                </button>
+            </div>
+            <!-- Toggler for sidebar END -->
+
+            <!-- Top bar left -->
+            <div class="navbar-expand-lg ms-auto ms-xl-0">
+                <!-- Toggler for menubar START -->
+                <button class="navbar-toggler ms-auto p-0" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#navbarTopContent" aria-controls="navbarTopContent" aria-expanded="false"
+                    aria-label="Toggle navigation">
+                    <i class="bi bi-search"></i>
+                </button>
+                <!-- Toggler for menubar END -->
+
+                <!-- Topbar menu START -->
+                <div class="collapse navbar-collapse w-100 z-index-1" id="navbarTopContent">
+                    <!-- Top search START -->
+                    <div class="nav my-3 my-xl-0 flex-nowrap align-items-center">
+                        <p class="titulo-app">Mattin AI by LKS Next</p>
+                    </div>
+                    <!-- Top search END -->
+                </div>
+                <!-- Topbar menu END -->
+            </div>
+            <!-- Top bar left END -->
+
+            {% if session and session['user'] %}
+            <!-- Top bar right START -->
+            <ul class="nav flex-row align-items-center list-unstyled ms-xl-auto">
+                <!-- Notification dropdown START -->
+                <li class="nav-item dropdown ms-3">
+                    <!-- Notification button -->
+                    <a class="nav-notification btn btn-light p-0 mb-0" href="#" role="button"
+                        data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                        <i class="bi bi-bell fa-fw"></i>
+                    </a>
+                    <!-- Notification dote -->
+                    <span class="notif-badge animation-blink"></span>
+
+                    <!-- Notification dropdown menu START -->
+                    <div
+                        class="dropdown-menu dropdown-animation dropdown-menu-end dropdown-menu-size-md shadow-lg p-0">
+                        <div class="card bg-transparent">
+                            <!-- Card header -->
+                            <div
+                                class="card-header bg-transparent d-flex justify-content-between align-items-center border-bottom">
+                                <h6 class="m-0">Notificaciones <span
+                                        class="badge bg-danger bg-opacity-10 text-danger ms-2">4 nuevas</span>
+                                </h6>
+                                <a class="small" href="#">Limpiar todas</a>
+                            </div>
+
+                            <!-- Card body START -->
+                            <div class="card-body p-0">
+                                <ul class="list-group list-group-flush list-unstyled p-2">
+                                    <!-- Notification item -->
+                                    <li>
+                                        <a href="#"
+                                            class="list-group-item list-group-item-action rounded notif-unread border-0 mb-1 p-3">
+                                            <h6 class="mb-2">Nuevo! Actualización importante</h6>
+                                            <p class="mb-0">Lorem ipsum dolor sit amet, consectetur adipiscing
+                                                elit.
+                                            </p>
+                                            <span class="mb-0 small">05/10/2023</span>
+                                        </a>
+                                    </li>
+                                    <!-- Notification item -->
+                                    <li>
+                                        <a href="#"
+                                            class="list-group-item list-group-item-action rounded border-0 mb-1 p-3">
+                                            <h6 class="mb-2">Nuevos equipos y heroes</h6>
+                                            <span class="mb-0 small">04/10/2023</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <!-- Card body END -->
+
+                            <!-- Card footer -->
+                            <div class="card-footer bg-transparent text-center border-top">
+                                <a href="#" class="btn btn-sm btn-link mb-0 p-0">Ver todas</a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Notification dropdown menu END -->
+                </li>
+                <!-- Notification dropdown END -->
+
+                <!-- Profile dropdown START -->
+                <li class="nav-item ms-3 dropdown">
+                    <!-- Avatar -->
+                    <a class="avatar avatar-sm p-0" href="#" id="profileDropdown" role="button"
+                        data-bs-auto-close="outside" data-bs-display="static" data-bs-toggle="dropdown"
+                        aria-expanded="false">
+                        <img loading="lazy" class="avatar-img rounded-circle shadow"
+                            src="{{session['user'].picture}}" alt="avatar">
+                    </a>
+
+                    <ul class="dropdown-menu dropdown-animation dropdown-menu-end shadow pt-3"
+                        aria-labelledby="profileDropdown">
+                        <!-- Profile info -->
+                        <li class="px-3 mb-3">
+                            <div class="d-flex align-items-center">
+                                <!-- Avatar -->
+                                <div class="avatar me-3">
+                                    <img loading="lazy" class="avatar-img rounded-circle shadow"
+                                        src="{{session['user'].picture}}" alt="avatar">
+                                </div>
+                                <div>
+                                    <a class="h6 mt-2 mt-sm-0" href="#">{{session['user'].name}}</a>
+                                    <p class="small m-0">{{session['user'].email}}</p>
+                                </div>
+                            </div>
+                        </li>
+
+                        <!-- Links -->
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li><a class="dropdown-item" href="#"><i
+                                    class="bi bi-gear fa-fw me-2"></i>Configuración</a>
+                        </li>
+                        <li><a class="dropdown-item" href="#"><i
+                                    class="bi bi-info-circle fa-fw me-2"></i>Ayuda</a>
+                        </li>
+                        <li><a class="dropdown-item bg-danger-soft-hover" href="{{ url_for('logout') }}"><i
+                                    class="bi bi-power fa-fw me-2"></i>Salir</a></li>
+                    </ul>
+                </li>
+                <!-- Profile dropdown END -->
+            </ul>
+            {% else %}
+            <ul class="nav flex-row align-items-center list-unstyled ms-xl-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                </li>
+            </ul>
+            {% endif %}
+            <!-- Top bar right END -->
+        </div>
+    </div>
+</nav>
+<!-- Top bar END -->
+
+
+
