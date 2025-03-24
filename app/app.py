@@ -37,7 +37,7 @@ from authlib.integrations.flask_client import OAuth
 load_dotenv()
 
 info = Info(title="Mattin AI", version="1.0.0")
-app = OpenAPI(__name__, info=info)
+app = OpenAPI(__name__, info=info, security_schemes={"api_key": {"type": "apiKey", "in": "header", "name": "X-API-KEY"}})
 
 app.secret_key = 'your-secret-key-SXSCDSDASD'
 app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
