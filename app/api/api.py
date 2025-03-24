@@ -3,7 +3,7 @@ from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel
 from agents.ocrAgent import process_pdf
 from model.agent import Agent
-import app.tools.aiServiceTools as aiServiceTools
+import tools.aiServiceTools as aiServiceTools
 from extensions import db
 import os
 import logging

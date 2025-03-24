@@ -1,7 +1,7 @@
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../app')))
 print(sys.path)
 
 from logging.config import fileConfig
@@ -12,8 +12,8 @@ from sqlalchemy import pool
 from alembic import context
 
 
-from app.db.base_class import Base
-from app.db import base
+from db.base_class import Base
+from db import base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -32,6 +32,15 @@ config.set_main_option('sqlalchemy.url',
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
+
+def include_name(name, type_, parent_names):
+    """Filter which tables to include in migrations"""
+    # Add the tables you want to ignore here
+    ignored_tables = [
+        'langchain_pg_collection',
+        'langchain_pg_embedding'
+    ]
+    return name not in ignored_tables
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -57,6 +66,7 @@ def run_migrations_offline():
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_name=include_name
     )
 
     with context.begin_transaction():
@@ -78,7 +88,9 @@ def run_migrations_online():
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            include_name=include_name
         )
 
         with context.begin_transaction():
