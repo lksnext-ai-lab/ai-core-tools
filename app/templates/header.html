@@ -109,6 +109,14 @@
                                         class="bi bi-file-text fa-fw me-2"></i>Silos</a>
                                 </li>
                                 <li class="nav-item">
+                                    <a class="nav-link" href="{{ url_for('ai_services.app_ai_services', app_id=session['app_id']) }}"><i
+                                        class="bi bi-robot fa-fw me-2"></i>AI Services</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="{{ url_for('embedding_services.app_embedding_services', app_id=session['app_id']) }}"><i
+                                        class="bi bi-database fa-fw me-2"></i>Embedding Services</a>
+                                </li>
+                                <li class="nav-item">
                                     <a class="nav-link" href="{{ url_for('api_keys.list_api_keys') }}"><i
                                             class="bi bi-ticket-perforated fa-fw me-2"></i>API Keys</a>
                                 </li>
@@ -138,16 +146,7 @@
                     <!-- Menu item -->
                     <li class="nav-item">
                         <a class="nav-link" href="#">Admin</a>
-                        <ul>
-                            <li>
-                                <a class="nav-link" href="{{ url_for('ai_services.ai_services') }}">AI Services</a>
-                            </li>
-                        </ul>
-                        <ul>
-                            <li>
-                                <a class="nav-link" href="{{ url_for('embedding_services.embedding_services') }}">Embedding Services</a>
-                            </li>
-                        </ul>
+
                         <ul>
                             <li>
                                 <a class="nav-link" href="#">Stats</a>

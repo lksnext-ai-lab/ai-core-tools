@@ -15,13 +15,7 @@
                     <input type="text" class="form-control" id="name" name="name" 
                            value="{{ service.name if service else '' }}" required>
                 </div>
-                
-                <div class="col-md-12 mb-4">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-control" id="description" name="description" 
-                              rows="3">{{ service.description if service else '' }}</textarea>
-                </div>
-                
+
                 <div class="col-md-6 mb-4">
                     <label class="form-label">Provider<span class="text-danger">*</span></label>
                     <select class="form-control" id="provider" name="provider" required>
@@ -36,6 +30,16 @@
                         {% endfor %}
                     </select>
                 </div>
+                
+                <div class="col-md-12 mb-4">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" 
+                              rows="3">{{ service.description if service else '' }}</textarea>
+                </div>
+                
+                
+
+                
                 
                 <div class="col-md-12 mb-4">
                     <label class="form-label">Endpoint</label>
@@ -54,7 +58,7 @@
         <div class="card-footer">
             <div class="col-12">
                 <button type="submit" class="btn btn-primary">{{ submit_button_text }}</button>
-                <a href="{{ url_for(cancel_url) }}" 
+                <a href="{{ url_for(cancel_url, app_id=app_id) }}" 
                    class="btn btn-primary-soft">Cancel</a>
             </div>
         </div>
