@@ -1,5 +1,5 @@
-from app.model.url import Url
-from app.extensions import db
+from model.url import Url
+from extensions import db
 
 class UrlService:
     @staticmethod

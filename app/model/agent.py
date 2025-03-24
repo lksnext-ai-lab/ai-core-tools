@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table
 from sqlalchemy.orm import relationship
-from app.db.base_class import Base
+from db.base_class import Base
 
 class AgentTool(Base):
     __tablename__ = 'agent_tools'

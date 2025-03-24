@@ -1,8 +1,8 @@
 from flask import render_template, Blueprint, request, redirect, url_for
-from app.extensions import db
-from app.model.embedding_service import EmbeddingService
-from app.model.embedding_service import EmbeddingProvider
-from app.model.app import App
+from extensions import db
+from model.embedding_service import EmbeddingService
+from model.embedding_service import EmbeddingProvider
+from model.app import App
 
 embedding_services_blueprint = Blueprint('embedding_services', __name__, url_prefix='/app/<int:app_id>/embedding_services')
 

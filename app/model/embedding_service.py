@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import Column, String, Integer, ForeignKey
 from sqlalchemy.orm import relationship
-from app.model.base_service import BaseService
+from model.base_service import BaseService
 
 class EmbeddingProvider(enum.Enum):
     OpenAI = "OpenAI"

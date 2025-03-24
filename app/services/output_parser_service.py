@@ -1,8 +1,8 @@
 from typing import List, Dict, Optional
-from app.extensions import db
-from app.model.output_parser import OutputParser
-from app.model.repository import Repository
-from app.model.domain import Domain
+from extensions import db
+from model.output_parser import OutputParser
+from model.repository import Repository
+from model.domain import Domain
 class OutputParserService:
     def __init__(self):
         self.field_types = ['str', 'int', 'float', 'bool', 'date', 'list']

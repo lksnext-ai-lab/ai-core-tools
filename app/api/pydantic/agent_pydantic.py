@@ -1,4 +1,4 @@
-from app.api.pydantic.pydantic import AppPath
+from api.pydantic.pydantic import AppPath
 from pydantic import BaseModel
 class AgentPath(AppPath):
     agent_id: int

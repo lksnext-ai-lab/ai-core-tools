@@ -1,5 +1,5 @@
 from flask import Blueprint, request, render_template
-from app.services.output_parser_service import OutputParserService
+from services.output_parser_service import OutputParserService
 
 output_parsers_blueprint = Blueprint('output_parsers', __name__)
 parser_service = OutputParserService()

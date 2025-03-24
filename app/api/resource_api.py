@@ -1,15 +1,15 @@
 from typing import List
 from flask import jsonify, request
 from flask_openapi3 import APIBlueprint, Tag
-from app.api.api_auth import require_auth
-from app.api.pydantic.repos_pydantic import RepoPath, CreateRepositoryRequest
-from app.services.repository_service import RepositoryService 
-from app.api.pydantic.pydantic import AppPath
-from app.model.repository import Repository
-from app.model.resource import Resource
-from app.api.pydantic.repos_pydantic import RepositorySchema
-from app.services.resource_service import ResourceService
-from app.api.pydantic.resources_pydantic import ResourceSchema, CreateResourceForm, ResourcePath
+from api.api_auth import require_auth
+from api.pydantic.repos_pydantic import RepoPath, CreateRepositoryRequest
+from services.repository_service import RepositoryService 
+from api.pydantic.pydantic import AppPath
+from model.repository import Repository
+from model.resource import Resource
+from api.pydantic.repos_pydantic import RepositorySchema
+from services.resource_service import ResourceService
+from api.pydantic.resources_pydantic import ResourceSchema, CreateResourceForm, ResourcePath
 
 resource_tag = Tag(name="Resource", description="Resource operations")
 

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from app.db.base_class import Base
-from app.model.url import Url
+from db.base_class import Base
+from model.url import Url
 
 class Domain(Base):
     '''Domain model class constructor'''

@@ -9,10 +9,10 @@ from langchain_community.document_loaders.pdf import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_postgres.vectorstores import PGVector
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from app.model.embedding_service import EmbeddingProvider
-from app.tools.embeddingTools import get_embeddings_model
+from model.embedding_service import EmbeddingProvider
+from tools.embeddingTools import get_embeddings_model
 
-from app.model.resource import Resource
+from model.resource import Resource
 from typing import Optional
 from langchain.schema import Document
 from typing import List

@@ -1,9 +1,9 @@
-from app.model.domain import Domain
-from app.extensions import db
-from app.services.silo_service import SiloService
-from app.services.output_parser_service import OutputParserService
-from app.model.silo import SiloType
-from app.model.url import Url
+from model.domain import Domain
+from extensions import db
+from services.silo_service import SiloService
+from services.output_parser_service import OutputParserService
+from model.silo import SiloType
+from model.url import Url
 class DomainService:
 
     @staticmethod

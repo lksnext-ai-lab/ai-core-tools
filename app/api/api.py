@@ -1,16 +1,16 @@
 from flask import session, request, jsonify
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel
-from app.agents.ocrAgent import process_pdf
-from app.model.agent import Agent
+from agents.ocrAgent import process_pdf
+from model.agent import Agent
 import app.tools.aiServiceTools as aiServiceTools
-from app.extensions import db
+from extensions import db
 import os
 import logging
-from app.api.api_auth import require_auth
-from app.agents.ocrAgent import OCRAgent
-from app.api.pydantic.agent_pydantic import AgentPath, ChatRequest
-from app.tools.agentTools import create_agent
+from api.api_auth import require_auth
+from agents.ocrAgent import OCRAgent
+from api.pydantic.agent_pydantic import AgentPath, ChatRequest
+from tools.agentTools import create_agent
 from langchain_core.messages import HumanMessage, AIMessage
 # Logging configuration
 logging.basicConfig(

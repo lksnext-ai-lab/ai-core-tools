@@ -1,9 +1,9 @@
-from app.model.api_key import APIKey
-from app.extensions import db
+from model.api_key import APIKey
+from extensions import db
 from datetime import datetime
 from functools import wraps
 from flask import request, jsonify, session
-from app.model.app import App
+from model.app import App
     
 # Authentication helper functions
 def is_valid_api_key(app_id, api_key):

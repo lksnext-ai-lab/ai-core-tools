@@ -1,7 +1,7 @@
 from typing import Union
-from app.model.agent import Agent
-from app.model.ocr_agent import OCRAgent
-from app.extensions import db
+from model.agent import Agent
+from model.ocr_agent import OCRAgent
+from extensions import db
 
 class AgentService:
     @staticmethod
@@ -66,7 +66,7 @@ class AgentService:
 
     @staticmethod
     def update_agent_tools(agent: Agent, tool_ids: list, form_data: dict = None):
-        from app.model.agent import AgentTool
+        from model.agent import AgentTool
         
         # Get existing tool associations
         existing_tools = {assoc.tool_id: assoc for assoc in agent.tool_associations}
@@ -114,7 +114,7 @@ class AgentService:
     @staticmethod
     def _remove_tool_references(tool_id: int):
         """Remove all references to an agent as a tool from other agents."""
-        from app.model.agent import AgentTool
+        from model.agent import AgentTool
         # Delete all tool associations where this agent is used as a tool
         db.session.query(AgentTool).filter(AgentTool.tool_id == tool_id).delete()
         db.session.commit()

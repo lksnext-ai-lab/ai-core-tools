@@ -1,13 +1,13 @@
 from flask import render_template, Blueprint, request
-from app.model.silo import Silo
-from app.model.agent import Agent
-from app.model.app import App
-from app.model.ocr_agent import OCRAgent
-from app.model.ai_service import AIService
-from app.model.output_parser import OutputParser
-from app.model.silo import Silo
-from app.extensions import db
-from app.services.agent_service import AgentService
+from model.silo import Silo
+from model.agent import Agent
+from model.app import App
+from model.ocr_agent import OCRAgent
+from model.ai_service import AIService
+from model.output_parser import OutputParser
+from model.silo import Silo
+from extensions import db
+from services.agent_service import AgentService
 import logging
 
 agents_blueprint = Blueprint('agents', __name__)

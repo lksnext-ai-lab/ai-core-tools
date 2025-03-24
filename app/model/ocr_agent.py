@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from app.model.agent import Agent
+from model.agent import Agent
 
 
 class OCRAgent(Agent):

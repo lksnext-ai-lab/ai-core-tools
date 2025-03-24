@@ -1,17 +1,17 @@
 from typing import Optional, List
-from app.model.silo import Silo
-from app.model.output_parser import OutputParser
-from app.extensions import db, engine
+from model.silo import Silo
+from model.output_parser import OutputParser
+from extensions import db, engine
 from sqlalchemy import text
 from langchain_core.documents import Document
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.document_loaders.pdf import PyPDFLoader
 import time
-from app.model.resource import Resource
-from app.tools.pgVectorTools import PGVectorTools
+from model.resource import Resource
+from tools.pgVectorTools import PGVectorTools
 import os
-from app.model.silo import SiloType
-from app.services.output_parser_service import OutputParserService
+from model.silo import SiloType
+from services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")

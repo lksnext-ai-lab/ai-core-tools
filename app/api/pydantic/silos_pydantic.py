@@ -1,4 +1,4 @@
-from app.api.pydantic.pydantic import AppPath
+from api.pydantic.pydantic import AppPath
 
 class SiloPath(AppPath):
     silo_id: int

@@ -1,6 +1,6 @@
 from langchain_openai import OpenAIEmbeddings
 from huggingface_hub import InferenceClient
-from app.model.embedding_service import EmbeddingProvider
+from model.embedding_service import EmbeddingProvider
 
 class HuggingFaceEmbeddingsAdapter:
     def __init__(self, client):

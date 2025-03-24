@@ -1,12 +1,12 @@
 from flask import render_template, Blueprint, request, redirect, url_for
-from app.model.silo import Silo
-from app.model.app import App
-from app.model.output_parser import OutputParser
-from app.model.embedding_service import EmbeddingService
+from model.silo import Silo
+from model.app import App
+from model.output_parser import OutputParser
+from model.embedding_service import EmbeddingService
 
-from app.extensions import db
-from app.services.silo_service import SiloService
-from app.services.output_parser_service import OutputParserService
+from extensions import db
+from services.silo_service import SiloService
+from services.output_parser_service import OutputParserService
 silos_blueprint = Blueprint('silos', __name__, url_prefix='/app/<int:app_id>/silos')
 
 '''

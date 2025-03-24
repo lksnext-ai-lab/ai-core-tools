@@ -13,14 +13,14 @@ from langchain.memory import ConversationBufferMemory
 from langchain_mistralai import ChatMistralAI
 from mistralai import Mistral
 
-from app.model.ai_service import ProviderEnum
-from app.model.agent import Agent
-from app.extensions import db
-from app.tools.pgVectorTools import PGVectorTools
-from app.tools.outputParserTools import get_parser_model_by_id
+from model.ai_service import ProviderEnum
+from model.agent import Agent
+from extensions import db
+from tools.pgVectorTools import PGVectorTools
+from tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
-from app.tools.embeddingTools import get_embeddings_model
+from tools.embeddingTools import get_embeddings_model
 
 load_dotenv()
 

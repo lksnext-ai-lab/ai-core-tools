@@ -1,12 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session
-from app.extensions import db
-from app.model.domain import Domain
-from app.model.url import Url
+from extensions import db
+from model.domain import Domain
+from model.url import Url
 from flask_paginate import Pagination, get_page_args
-from app.services.silo_service import SiloService
-from app.tools import scrapTools
-from app.services.url_service import UrlService
-from app.services.domain_service import DomainService
+from services.silo_service import SiloService
+from tools import scrapTools
+from services.url_service import UrlService
+from services.domain_service import DomainService
 domains_blueprint = Blueprint('domains', __name__, url_prefix='/domains')
 
 @domains_blueprint.route('/', methods=['GET'])

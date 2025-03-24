@@ -1,16 +1,16 @@
 from flask import render_template, Blueprint, request, redirect, url_for
-from app.model.repository import Repository
-from app.model.resource import Resource
-from app.model.silo import Silo
-from app.model.agent import Agent
-from app.extensions import db
-from app.tools.pgVectorTools import PGVectorTools
-from app.services.silo_service import SiloService
-from app.model.silo import SiloType
+from model.repository import Repository
+from model.resource import Resource
+from model.silo import Silo
+from model.agent import Agent
+from extensions import db
+from tools.pgVectorTools import PGVectorTools
+from services.silo_service import SiloService
+from model.silo import SiloType
 import os
-from app.services.repository_service import RepositoryService
-from app.services.output_parser_service import OutputParserService
-from app.model.embedding_service import EmbeddingService
+from services.repository_service import RepositoryService
+from services.output_parser_service import OutputParserService
+from model.embedding_service import EmbeddingService
 #TODO: should be accesed from silo service
 pgVectorTools = PGVectorTools(db)
 

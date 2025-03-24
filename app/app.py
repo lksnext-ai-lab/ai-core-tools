@@ -2,7 +2,7 @@ from flask import Flask, render_template, session, request, jsonify, redirect, u
 from flask_restful import Api, Resource
 from flask_session import Session
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
-from app.extensions import db, init_db, DATABASE_URL
+from extensions import db, init_db, DATABASE_URL
 from flask_openapi3 import OpenAPI
 from flask_openapi3 import Info, Tag
 from flask_openapi3 import Parameter
@@ -14,23 +14,23 @@ import uuid
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
-from app.model.app import App
-from app.model.user import User
+from model.app import App
+from model.user import User
 
-from app.blueprints.agents import agents_blueprint
-from app.blueprints.repositories import repositories_blueprint
-from app.blueprints.resources import resources_blueprint
-from app.blueprints.output_parsers import output_parsers_blueprint
-from app.blueprints.api_keys import api_keys_blueprint
-from app.blueprints.silos import silos_blueprint
-from app.blueprints.domains import domains_blueprint
-from app.blueprints.ai_services import ai_services_blueprint
-from app.blueprints.embeddings_services import embedding_services_blueprint
+from blueprints.agents import agents_blueprint
+from blueprints.repositories import repositories_blueprint
+from blueprints.resources import resources_blueprint
+from blueprints.output_parsers import output_parsers_blueprint
+from blueprints.api_keys import api_keys_blueprint
+from blueprints.silos import silos_blueprint
+from blueprints.domains import domains_blueprint
+from blueprints.ai_services import ai_services_blueprint
+from blueprints.embeddings_services import embedding_services_blueprint
 
-from app.api.api import api
-from app.api.silo_api import silo_api
-from app.api.repository_api import repo_api
-from app.api.resource_api import resource_api
+from api.api import api
+from api.silo_api import silo_api
+from api.repository_api import repo_api
+from api.resource_api import resource_api
 from authlib.integrations.flask_client import OAuth
 
 

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from flask_openapi3 import FileStorage
 
-from app.api.pydantic.repos_pydantic import RepoPath
+from api.pydantic.repos_pydantic import RepoPath
 
 class ResourcePath(RepoPath):
     resource_id: int

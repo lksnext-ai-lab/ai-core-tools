@@ -1,10 +1,10 @@
-from app.model.repository import Repository
-from app.model.resource import Resource
-from app.extensions import db
+from model.repository import Repository
+from model.resource import Resource
+from extensions import db
 from typing import Optional, List
-from app.services.silo_service import SiloService
-from app.model.silo import SiloType
-from app.services.output_parser_service import OutputParserService
+from services.silo_service import SiloService
+from model.silo import SiloType
+from services.output_parser_service import OutputParserService
 import os
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")

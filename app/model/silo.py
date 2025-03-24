@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from app.db.base_class import Base
+from db.base_class import Base
 from enum import Enum
 
 class SiloType(Enum):

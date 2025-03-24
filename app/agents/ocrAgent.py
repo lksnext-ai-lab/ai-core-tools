@@ -7,19 +7,19 @@ from dotenv import load_dotenv
 import logging
 from langsmith import Client
 
-from app.extensions import db
+from extensions import db
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
-from app.tools.aiServiceTools import MistralWrapper, getLLM
+from tools.aiServiceTools import MistralWrapper, getLLM
 from langchain_mistralai import ChatMistralAI
 
-from app.tools.outputParserTools import create_model_from_json_schema
-from app.model.ocr_agent import OCRAgent
-from app.tools.ocrAgentTools import (
+from tools.outputParserTools import create_model_from_json_schema
+from model.ocr_agent import OCRAgent
+from tools.ocrAgentTools import (
     convert_pdf_to_images, 
     convert_image_to_base64, 
     extract_text_from_image, 

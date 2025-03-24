@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_required, current_user
-from app.model.api_key import APIKey
-from app.model.app import App
-from app.extensions import db
+from model.api_key import APIKey
+from model.app import App
+from extensions import db
 import secrets
 import string
 from datetime import datetime

@@ -1,8 +1,8 @@
-from app.extensions import db
-from app.model.resource import Resource
+from extensions import db
+from model.resource import Resource
 from typing import List
 import os
-from app.services.silo_service import SiloService
+from services.silo_service import SiloService
 REPO_BASE_FOLDER = os.getenv('REPO_BASE_FOLDER')
 class ResourceService:
 

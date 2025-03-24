@@ -1,12 +1,12 @@
 from flask import jsonify, request
 from flask_openapi3 import APIBlueprint, Tag
 from sqlalchemy import text
-from app.model.silo import Silo
-from app.extensions import db
-from app.services.silo_service import SiloService
-from app.api.api_auth import require_auth
-from app.api.pydantic.silos_pydantic import SiloPath
-from app.api.pydantic.pydantic import AppPath
+from model.silo import Silo
+from extensions import db
+from services.silo_service import SiloService
+from api.api_auth import require_auth
+from api.pydantic.silos_pydantic import SiloPath
+from api.pydantic.pydantic import AppPath
 
 silo_tag = Tag(name="Silo", description="Silo description")
 

@@ -1,9 +1,9 @@
 from flask import render_template, Blueprint, request, redirect, url_for
-from app.extensions import db
-from app.model.ai_service import AIService
-from app.model.ai_service import ProviderEnum
-from app.model.agent import Agent
-from app.model.app import App
+from extensions import db
+from model.ai_service import AIService
+from model.ai_service import ProviderEnum
+from model.agent import Agent
+from model.app import App
 
 ai_services_blueprint = Blueprint('ai_services', __name__, url_prefix='/app/<int:app_id>/ai_services')
 

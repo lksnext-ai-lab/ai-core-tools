@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey 
 from sqlalchemy.orm import relationship
-from app.db.base_class import Base
-from app.model.output_parser import OutputParser
+from db.base_class import Base
+from model.output_parser import OutputParser
 
 class App(Base):
     '''User model class constructor'''

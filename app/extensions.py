@@ -2,7 +2,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import create_engine
 import os
-from app.db.base_class import Base
+from db.base_class import Base
 from dotenv import load_dotenv
 
 load_dotenv()

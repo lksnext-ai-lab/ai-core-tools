@@ -3,16 +3,16 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
-from app.model.agent import Agent
-from app.model.silo import Silo
+from model.agent import Agent
+from model.silo import Silo
 from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool
 import os
 from typing import Any
 from langchain.tools.retriever import create_retriever_tool
-from app.services.silo_service import SiloService
-from app.model.ai_service import ProviderEnum
+from services.silo_service import SiloService
+from model.ai_service import ProviderEnum
 def create_agent(agent: Agent):
     llm = getLLM(agent)
     if llm is None:

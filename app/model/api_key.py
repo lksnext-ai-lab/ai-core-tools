@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.db.base_class import Base
+from db.base_class import Base
 
 class APIKey(Base):
     '''API Key model for App authentication'''
