@@ -3,7 +3,7 @@
 <div class="row">
     <div class="d-sm-flex justify-content-between align-items-center">
         <h1 class="h4 mb-2 mb-sm-0">{{ service_title }}</h1>
-        <a href="{{ url_for(create_url) }}" class="btn btn-primary mt-3">
+        <a href="{{ url_for(create_url, app_id=app_id) }}" class="btn btn-primary mt-3">
             <i class="bi bi-plus"></i>
         </a>
     </div>
@@ -33,10 +33,10 @@
                 </td>
                 <td>
                     <div class="btn-group" role="group">
-                        <a href="{{ url_for(edit_url, service_id=service.service_id) }}" 
+                        <a href="{{ url_for(edit_url, service_id=service.service_id, app_id=app_id) }}" 
                            class="btn btn-sm btn-primary">Edit</a>
                         <form style="display: inline;" method="POST" 
-                              action="{{ url_for(delete_url, service_id=service.service_id) }}"
+                              action="{{ url_for(delete_url, service_id=service.service_id, app_id=app_id) }}"
                               onsubmit="return confirm('¿Estás seguro de que deseas eliminar este servicio?');">
                             <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                         </form>
