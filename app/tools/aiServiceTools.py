@@ -12,9 +12,8 @@ from langchain.chains.conversational_retrieval.base import ConversationalRetriev
 from langchain.memory import ConversationBufferMemory
 from langchain_mistralai import ChatMistralAI
 from mistralai import Mistral
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from app.model.embedding_service import EmbeddingProvider
 
+from app.model.ai_service import ProviderEnum
 from app.model.agent import Agent
 from app.extensions import db
 from app.tools.pgVectorTools import PGVectorTools
@@ -175,16 +174,16 @@ def getLLM(agent, is_vision=False):
         
     if ai_service is None:
         return None
-    if ai_service.provider.value == "OpenAI":
+    if ai_service.provider == ProviderEnum.OpenAI.value:
         return ChatOpenAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider.value == "Anthropic":
+    if ai_service.provider == ProviderEnum.Anthropic.value:
         return ChatAnthropic(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider.value == "MistralAI":
+    if ai_service.provider == ProviderEnum.MistralAI.value:
         if is_vision:
             mistral_client = Mistral(api_key=ai_service.api_key)
             return MistralWrapper(client=mistral_client, model_name=ai_service.name)
         return ChatMistralAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider.value == "Custom":
+    if ai_service.provider.value == ProviderEnum.Custom.value:
         service = ChatOllama(
             model=ai_service.name, 
             temperature=0,

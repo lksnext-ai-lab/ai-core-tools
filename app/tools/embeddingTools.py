@@ -1,6 +1,17 @@
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from huggingface_hub import InferenceClient
 from app.model.embedding_service import EmbeddingProvider
+
+class HuggingFaceEmbeddingsAdapter:
+    def __init__(self, client):
+        self.client = client
+        
+    def embed_query(self, text):
+        return self.client.feature_extraction(text).tolist()
+        
+    def embed_documents(self, documents):
+        return [self.embed_query(doc) for doc in documents]
+
 def get_embeddings_model(embedding_service):
     """Returns the appropriate embeddings model based on the service configuration"""
     if embedding_service is None:
@@ -12,15 +23,10 @@ def get_embeddings_model(embedding_service):
             openai_api_key=embedding_service.api_key
         )
     elif embedding_service.provider == EmbeddingProvider.Custom.value:
-        return HuggingFaceEmbeddings(
-            model_name=embedding_service.name,
-            encode_kwargs={'normalize_embeddings': True},
-            client_kwargs={
-                "verify": False,
-                "headers": {
-                    "Authorization": f"Bearer {embedding_service.api_key}"
-                }
-            }
+        client = InferenceClient(
+            model=embedding_service.endpoint,
+            api_key=embedding_service.api_key
         )
+        return HuggingFaceEmbeddingsAdapter(client)
     else:
         raise ValueError(f"Unsupported embedding provider: {embedding_service.provider}")
