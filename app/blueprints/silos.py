@@ -7,6 +7,7 @@ from model.embedding_service import EmbeddingService
 from extensions import db
 from services.silo_service import SiloService
 from services.output_parser_service import OutputParserService
+from services.embedding_service_service import EmbeddingServiceService
 silos_blueprint = Blueprint('silos', __name__, url_prefix='/app/<int:app_id>/silos')
 
 '''
@@ -22,9 +23,9 @@ def silos(app_id: int):
 @silos_blueprint.route('/<int:silo_id>', methods=['GET', 'POST'])
 def silo(app_id: int, silo_id: int):
     parser_service = OutputParserService()
+    parsers = parser_service.get_parsers_by_app(app_id)
     if request.method == 'GET':
-        output_parsers = db.session.query(OutputParser).all()
-        embedding_services = db.session.query(EmbeddingService).all()
+        embedding_services = EmbeddingServiceService.get_embedding_services_by_app_id(app_id)
         silo = SiloService.get_silo(silo_id)
         if silo is None:
             silo = Silo(name="New Silo", app_id=app_id, silo_id=0)
@@ -32,7 +33,7 @@ def silo(app_id: int, silo_id: int):
         docs_count = SiloService.count_docs_in_silo(silo_id)
         return render_template('silos/silo.html', 
                              silo=silo, 
-                             output_parsers=output_parsers,
+                             output_parsers=parsers,
                              embedding_services=embedding_services,
                              docs_count=docs_count)
     
