@@ -32,7 +32,8 @@ class SiloService:
     def get_silo_retriever(silo_id: int) -> Optional[VectorStoreRetriever]:
         pgVectorTools = PGVectorTools(db)
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        return pgVectorTools.get_pgvector_retriever(collection_name)
+        silo = SiloService.get_silo(silo_id)
+        return pgVectorTools.get_pgvector_retriever(collection_name, silo.embedding_service)
     
     @staticmethod
     def get_silos_by_app_id(app_id: int) -> List[Silo]:
@@ -183,7 +184,7 @@ class SiloService:
     def delete_resource(resource: Resource):
         collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}})
+        pgVectorTools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):

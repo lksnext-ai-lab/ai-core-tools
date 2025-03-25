@@ -20,7 +20,7 @@ repositories_blueprint = Blueprint('repositories', __name__)
 
 @repositories_blueprint.route('/app/<int:app_id>/repositories', methods=['GET'])
 def repositories(app_id: int):
-    repos = db.session.query(Repository).filter(Repository.app_id == app_id).all()
+    repos = RepositoryService.get_repositories_by_app_id(app_id)
     return render_template('repositories/repositories.html', repos=repos)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>', methods=['GET', 'POST'])
@@ -38,7 +38,7 @@ def repository(app_id: int, repository_id: int):
             repo = RepositoryService.create_repository(repo, embedding_service_id)
         else:
             # Actualizar repositorio existente
-            repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
+            repo = RepositoryService.get_repository(repository_id)
             repo.name = request.form['name']
             embedding_service_id = request.form.get('embedding_service_id')
             
@@ -54,16 +54,16 @@ def repository(app_id: int, repository_id: int):
                              repo=repo, 
                              embedding_services=embedding_services)
 
-    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
+    repo = RepositoryService.get_repository(repository_id)
     embedding_services = db.session.query(EmbeddingService).all()
-    return render_template('repositories/repository.html', 
+    return render_template('repositories/resources.html', 
                          app_id=app_id, 
                          repo=repo, 
                          embedding_services=embedding_services)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/settings', methods=['GET', 'POST'])
 def repository_settings(app_id: int, repository_id: int):
-    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
+    repo = RepositoryService.get_repository(repository_id)
     
     if request.method == 'POST':
         repo.name = request.form['name']
@@ -126,48 +126,3 @@ def resource_create(app_id: int, repository_id: int):
             SiloService.index_resource(resource)
         
         return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
-
-'''
-Agents
-'''
-@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agents', methods=['GET'])
-def repository_agents(app_id: int, repository_id: int):
-    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-    return render_template('repositories/agents.html', app_id=app_id, repo=repo)
-
-@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agent/<int:agent_id>', methods=['GET', 'POST'])
-def repository_agent(app_id: int, repository_id: int, agent_id: int):
-    if request.method == 'POST':
-        agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
-        if agent is None:
-            agent = Agent()
-        agent.name = request.form['name']
-        agent.description = request.form.get('description')
-        agent.system_prompt = request.form.get('system_prompt')
-        print(agent.system_prompt)
-        agent.prompt_template = request.form.get('prompt_template')
-        agent.type = request.form.get('type')
-        agent.status = request.form.get('status')
-        agent.model = request.form.get('model')
-        agent.repository_id = repository_id
-        db.session.add(agent)
-        db.session.commit()
-        return repository_agents(app_id, repository_id)
-    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-    agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
-    if agent is None:
-        agent = Agent(agent_id=0, name="")
-        
-    return render_template('repositories/agent.html', app_id=app_id, repo=repo, agent=agent)
-
-@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agent/<int:agent_id>/delete', methods=['GET'])
-def repository_agent_delete(app_id: int, repository_id: int, agent_id: int):
-    db.session.query(Agent).filter(Agent.agent_id == agent_id).delete()
-    db.session.commit()
-    return repository_agents(app_id, repository_id)
-
-@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/agent/<int:agent_id>/play', methods=['GET'])
-def repository_playground(app_id: int, repository_id: int, agent_id: int):
-    repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-    agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
-    return render_template('repositories/playground.html', app_id=app_id, repo=repo, agent=agent)

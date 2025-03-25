@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
+from datetime import datetime
 
 class AgentTool(Base):
     __tablename__ = 'agent_tools'
@@ -17,6 +18,7 @@ class Agent(Base):
     agent_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     description = Column(String(1000))
+    create_date = Column(DateTime, default=datetime.now)
     system_prompt = Column(Text)
     prompt_template = Column(Text)
     type = Column(String(45), nullable=False, default='agent')

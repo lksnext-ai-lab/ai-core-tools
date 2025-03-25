@@ -1,12 +1,13 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey 
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
-
+from datetime import datetime
 
 class Repository(Base):
     __tablename__ = 'Repository'
     repository_id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    create_date = Column(DateTime, default=datetime.now)
     type = Column(String(45))
     status = Column(String(45))
     app_id = Column(Integer,

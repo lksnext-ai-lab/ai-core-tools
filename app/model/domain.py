@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
 from model.url import Url
+from datetime import datetime
 
 class Domain(Base):
     '''Domain model class constructor'''
     __tablename__ = 'Domain'
     domain_id = Column(Integer, primary_key=True)
     name = Column(String(45))
+    create_date = Column(DateTime, default=datetime.now)
     description = Column(String(1000))
     base_url = Column(String(255))
     content_tag = Column(String(255))
