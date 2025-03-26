@@ -43,16 +43,16 @@
                             <li class="nav-item">
                                 <a class="nav-link"
                                     href="{{url_for('agents.app_agents', app_id=session['app_id']) }}"><i
-                                        class="bi bi-person fa-fw me-2"></i>Agents</a>
+                                        class="bi bi-robot fa-fw me-2"></i>Agents</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link"
                                     href="{{url_for('repositories.repositories', app_id=session['app_id']) }}"><i
-                                        class="bi bi-person fa-fw me-2"></i>Repositories</a>
+                                        class="bi bi-folder fa-fw me-2"></i>Repositories</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('domains.domains') }}"><i
-                                        class="bi bi-person fa-fw me-2"></i>Domains</a>
+                                        class="bi bi-diagram-3 fa-fw me-2"></i>Domains</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link"
@@ -62,15 +62,15 @@
                             </li>
                             <li class="nav-item"></li>
                             <a class="nav-link" href="{{ url_for('silos.silos', app_id=session['app_id']) }}"><i
-                                    class="bi bi-file-text fa-fw me-2"></i>Silos</a>
+                                    class="bi bi-database fa-fw me-2"></i>Silos</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('ai_services.app_ai_services', app_id=session['app_id']) }}"><i
-                                    class="bi bi-robot fa-fw me-2"></i>AI Services</a>
+                                    class="bi bi-hdd-rack fa-fw me-2"></i>AI Services</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('embedding_services.app_embedding_services', app_id=session['app_id']) }}"><i
-                                    class="bi bi-database fa-fw me-2"></i>Embedding Services</a>
+                                    class="bi bi-hdd-rack fa-fw me-2"></i>Embedding Services</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('api_keys.list_api_keys') }}"><i
@@ -95,27 +95,25 @@
 
                 {% if session %}
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('my_apps') }}">My Apps</a>
+                    <a class="nav-link" href="{{ url_for('my_apps') }}"><i
+                        class="bi bi-window-stack fa-fw me-2"></i>My Apps</a>
                 </li>
                 {% endif %}
 
                 <!-- Menu item -->
                 <li class="nav-item">
-                    <a class="nav-link" href="#">Admin</a>
-
-                    <ul>
-                        <li>
-                            <a class="nav-link" href="#">Stats</a>
-                        </li>
-                    </ul>
-                    
+                    <a class="nav-link" href="#">
+                        <i
+                            class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
+                    </a>
                 </li>
                 <li>
                     <a class="nav-link" href="/openapi/swagger" target="_blank"><i
                         class="bi bi-braces fa-fw me-2"></i>Swagger <i class="bi bi-box-arrow-up-right"></i></a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('about') }}">About</a>
+                    <a class="nav-link" href="{{ url_for('about') }}"><i
+                        class="bi bi-info-circle fa-fw me-2"></i>About</a>
                 </li>
                 
                 

@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
 from enum import Enum
+from datetime import datetime
 
 class SiloType(Enum):
     CUSTOM = "CUSTOM"
@@ -13,6 +14,7 @@ class Silo(Base):
     silo_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     description = Column(Text)
+    create_date = Column(DateTime, default=datetime.now)
     status = Column(String(45))
     silo_type = Column(String(45))  # Store as String in DB
     app_id = Column(Integer, ForeignKey('App.app_id'))

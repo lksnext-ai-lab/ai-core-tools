@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey 
+from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
 from model.output_parser import OutputParser
+from datetime import datetime
 
 class App(Base):
     '''User model class constructor'''
     __tablename__ = 'App'
     app_id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    create_date = Column(DateTime, default=datetime.now)
 
     repositories = relationship('Repository', lazy=True)
     domains = relationship('Domain', back_populates='app', lazy=True)

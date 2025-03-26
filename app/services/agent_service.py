@@ -4,6 +4,10 @@ from model.ocr_agent import OCRAgent
 from extensions import db
 
 class AgentService:
+
+    def get_agents(self, app_id: int) -> list[Agent]:
+        return db.session.query(Agent).filter(Agent.app_id == app_id).order_by(Agent.create_date.desc()).all()
+
     @staticmethod
     def get_agent(agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
         if agent_type == 'ocr':

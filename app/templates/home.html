@@ -19,7 +19,8 @@
             <th scope="col">Name</th>
             <th scope="col">Agents</th>
             <th scope="col">Repos</th>
-            <th scope="col">Crawlers</th>
+            <th scope="col">Domains</th>
+            <th scope="col">Silos</th>
         </tr>
     </thead>
     <tbody>
@@ -35,7 +36,10 @@
                 {{app.repositories|length}}
             </td>
             <td>
-                0
+                {{app.domains|length}}
+            </td>
+            <td>
+                {{app.silos|length}}
             </td>
 
         </tr>

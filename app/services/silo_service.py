@@ -45,7 +45,8 @@ class SiloService:
         
         pgVectorTools = PGVectorTools(db)
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        return pgVectorTools.get_pgvector_retriever(collection_name, embedding_service=silo.embedding_service)
+        silo = SiloService.get_silo(silo_id)
+        return pgVectorTools.get_pgvector_retriever(collection_name, silo.embedding_service)
     
     @staticmethod
     def get_silos_by_app_id(app_id: int) -> List[Silo]:
@@ -229,12 +230,7 @@ class SiloService:
             return
 
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(
-            collection_name, 
-            ids={"resource_id": {"$eq": resource.resource_id}},
-            embedding_service=silo.embedding_service
-        )
-        logger.info(f"Recurso {resource.resource_id} eliminado correctamente")
+        pgVectorTools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):

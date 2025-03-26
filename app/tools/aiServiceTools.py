@@ -130,7 +130,7 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
 
     retriever = None 
     if agent.silo:
-        retriever = pgVectorTools.get_pgvector_retriever("silo_" + str(agent.silo.silo_id))
+        retriever = pgVectorTools.get_pgvector_retriever("silo_" + str(agent.silo.silo_id), agent.silo.embedding_service)
     if agent.silo is None:
         retriever = VoidRetriever()
     template = """

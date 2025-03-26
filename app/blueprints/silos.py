@@ -15,6 +15,8 @@ Silos
 @silos_blueprint.route('/', methods=['GET'])
 def silos(app_id: int):
     silos = SiloService.get_silos_by_app_id(app_id)
+    for silo in silos:
+        silo.docs_count = SiloService.count_docs_in_silo(silo.silo_id)
     return render_template('silos/silos.html', app_id=app_id, silos=silos)
 
 @silos_blueprint.route('/<int:silo_id>', methods=['GET', 'POST'])
