@@ -5,8 +5,9 @@ from model.silo import Silo
 from extensions import db
 from services.silo_service import SiloService
 from api.api_auth import require_auth
-from api.pydantic.silos_pydantic import SiloPath, SiloSearch, SiloIndexBody
+from api.pydantic.silos_pydantic import SiloPath, SiloSearch, SiloIndexBody, DocResponse,DocsResponse
 from api.pydantic.pydantic import AppPath
+from typing import List
 
 silo_tag = Tag(name="Silo", description="Silo description")
 security=[{"api_key":[]}]
@@ -43,9 +44,10 @@ def delete_all_docs_in_collection(path: SiloPath):
     SiloService.delete_collection(path.silo_id)
     return jsonify({"message": "docs deleted"})
 
-@silo_api.post('/<int:silo_id>/docs/find', summary="find docs in collection", tags=[silo_tag])
+@silo_api.post('/<int:silo_id>/docs/find', summary="find docs in collection", tags=[silo_tag],
+               responses={"200": DocsResponse})
 @require_auth
-def find_docs_in_collection(path: SiloPath, body: SiloSearch) -> list[dict]:
+def find_docs_in_collection(path: SiloPath, body: SiloSearch):
     query = body.query
     filter_metadata = body.filter_metadata
     docs = SiloService.find_docs_in_collection(path.silo_id, query, filter_metadata)
