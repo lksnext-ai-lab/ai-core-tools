@@ -35,6 +35,7 @@ def silo(app_id: int, silo_id: int):
                              docs_count=docs_count)
     
     if request.method == 'POST':
+
         SiloService.create_or_update_silo(request.form)
         return redirect(url_for('silos.silos', app_id=app_id))
     

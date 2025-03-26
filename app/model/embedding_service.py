@@ -5,6 +5,7 @@ from model.base_service import BaseService
 
 class EmbeddingProvider(enum.Enum):
     OpenAI = "OpenAI"
+    Ollama = "Ollama"
     Custom = "Custom"
 
 class EmbeddingService(BaseService):

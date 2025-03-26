@@ -10,3 +10,6 @@ class SiloSearch(BaseModel):
     query: str
     filter_metadata: Optional[dict] = {}
 
+class SiloIndexBody(BaseModel):
+    content: str
+    metadata: Optional[dict] = {}

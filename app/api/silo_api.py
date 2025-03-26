@@ -5,7 +5,7 @@ from model.silo import Silo
 from extensions import db
 from services.silo_service import SiloService
 from api.api_auth import require_auth
-from api.pydantic.silos_pydantic import SiloPath, SiloSearch
+from api.pydantic.silos_pydantic import SiloPath, SiloSearch, SiloIndexBody
 from api.pydantic.pydantic import AppPath
 
 silo_tag = Tag(name="Silo", description="Silo description")
@@ -21,10 +21,10 @@ def count_docs_in_silo(path: SiloPath):
 
 @silo_api.post('/<int:silo_id>/docs/index', summary="index content", tags=[silo_tag])
 @require_auth
-def index_content(path: SiloPath):
-    data = request.get_json()
-    content = data.get('content')
-    metadata = data.get('metadata')
+def index_content(path: SiloPath, body: SiloIndexBody):
+    #data = request.get_json()
+    content = body.content
+    metadata = body.metadata
     #TODO: validate metadata
     SiloService.index_content(path.silo_id, content, metadata)
     return jsonify({"message": "test"})
