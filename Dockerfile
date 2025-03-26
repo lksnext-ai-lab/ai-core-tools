@@ -33,6 +33,8 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir -r ./requirements.txt
 # Luego instala huggingface-hub sin dependencias
 RUN pip install --no-cache-dir --no-deps huggingface-hub==0.27.1
+RUN pip install -U flask-openapi3[swagger]
+
 # Expose port 4321 to the outside world
 EXPOSE 4321
 

@@ -9,8 +9,8 @@ from api.pydantic.silos_pydantic import SiloPath, SiloSearch, SiloIndexBody
 from api.pydantic.pydantic import AppPath
 
 silo_tag = Tag(name="Silo", description="Silo description")
-
-silo_api = APIBlueprint('silo_api', __name__, url_prefix='/api/silo/app/<int:app_id>/silos')
+security=[{"api_key":[]}]
+silo_api = APIBlueprint('silo_api', __name__, url_prefix='/api/silo/app/<int:app_id>/silos', abp_security=security)
 
 
 @silo_api.get('/<int:silo_id>/docs', summary="count docs in silo", tags=[silo_tag])
@@ -45,14 +45,12 @@ def delete_all_docs_in_collection(path: SiloPath):
 
 @silo_api.post('/<int:silo_id>/docs/find', summary="find docs in collection", tags=[silo_tag])
 @require_auth
-def find_docs_in_collection(path: SiloPath, body: SiloSearch):
+def find_docs_in_collection(path: SiloPath, body: SiloSearch) -> list[dict]:
     query = body.query
     filter_metadata = body.filter_metadata
     docs = SiloService.find_docs_in_collection(path.silo_id, query, filter_metadata)
     
-    docs_dict = [{"page_content": doc.page_content, "metadata": doc.metadata} for doc in docs]
-    
-    return jsonify(docs_dict)
+    return [{"page_content": doc.page_content, "metadata": doc.metadata} for doc in docs]
 
 
 @silo_api.get('/test', summary="get silos", tags=[silo_tag])

@@ -12,8 +12,8 @@ from services.resource_service import ResourceService
 from api.pydantic.resources_pydantic import ResourceSchema, CreateResourceForm, ResourcePath
 
 resource_tag = Tag(name="Resource", description="Resource operations")
-
-resource_api = APIBlueprint('resource_api', __name__, url_prefix='/api/resource/app/<int:app_id>/repos/<int:repo_id>')
+security=[{"api_key":[]}]
+resource_api = APIBlueprint('resource_api', __name__, url_prefix='/api/resource/app/<int:app_id>/repos/<int:repo_id>', abp_security=security)
 
 
 @resource_api.get('/', 

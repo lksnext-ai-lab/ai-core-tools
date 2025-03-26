@@ -8,8 +8,8 @@ from model.repository import Repository
 from api.pydantic.repos_pydantic import RepositorySchema
 
 repo_tag = Tag(name="Repository", description="Repository operations")
-
-repo_api = APIBlueprint('repo_api', __name__, url_prefix='/api/repo/app/<int:app_id>/repos')
+security=[{"api_key":[]}]
+repo_api = APIBlueprint('repo_api', __name__, url_prefix='/api/repo/app/<int:app_id>/repos', abp_security=security)
 
 
 @repo_api.get('/', 
