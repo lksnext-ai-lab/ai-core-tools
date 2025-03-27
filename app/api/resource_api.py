@@ -9,7 +9,10 @@ from model.repository import Repository
 from model.resource import Resource
 from api.pydantic.repos_pydantic import RepositorySchema
 from services.resource_service import ResourceService
-from api.pydantic.resources_pydantic import ResourceSchema, CreateResourceForm, ResourcePath
+from api.pydantic.resources_pydantic import (
+    ResourceSchema, CreateResourceForm, ResourcePath,
+    ResourceListResponse, ResourceResponse, MessageResponse
+)
 
 resource_tag = Tag(name="Resource", description="Resource operations")
 security=[{"api_key":[]}]
@@ -18,7 +21,8 @@ resource_api = APIBlueprint('resource_api', __name__, url_prefix='/api/resource/
 
 @resource_api.get('/', 
     summary="Get all resources in repo", 
-    tags=[resource_tag]
+    tags=[resource_tag],
+    responses={"200": ResourceListResponse}
 )
 @require_auth
 def get_all_resources(path: RepoPath) -> List[ResourceSchema]:
@@ -27,7 +31,8 @@ def get_all_resources(path: RepoPath) -> List[ResourceSchema]:
 
 @resource_api.post('/', 
     summary="Create resource", 
-    tags=[resource_tag]
+    tags=[resource_tag],
+    responses={"201": ResourceResponse}
 )
 @require_auth
 def create_resource(path: RepoPath, form: CreateResourceForm) -> ResourceSchema:
@@ -42,7 +47,8 @@ def create_resource(path: RepoPath, form: CreateResourceForm) -> ResourceSchema:
 
 @resource_api.delete('/<int:resource_id>', 
     summary="Delete resource", 
-    tags=[resource_tag]
+    tags=[resource_tag],
+    responses={"200": MessageResponse}
 )
 @require_auth
 def delete_resource(path: ResourcePath):

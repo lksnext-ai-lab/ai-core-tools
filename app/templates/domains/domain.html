@@ -27,6 +27,18 @@
         <label for="content_id">Content ID</label>
         <input type="text" class="form-control" id="content_id" name="content_id" value="{{ domain.content_id }}">
     </div>
+    <div class="form-group">
+        <label for="embedding_service_id">Embedding Service</label>
+        <select name="embedding_service_id" class="form-control" required>
+            <option value="">-- Select an Embedding Service --</option>
+            {% for service in embedding_services %}
+            <option value="{{ service.service_id }}" 
+                {% if domain.silo and domain.silo.embedding_service_id == service.service_id %}selected{% endif %}>
+                {{ service.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
     <button type="submit" class="btn btn-primary">Save</button>
     <a href="{{ url_for('domains.domains') }}" class="btn btn-secondary">Cancel</a>
 </form>

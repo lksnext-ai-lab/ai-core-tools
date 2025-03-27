@@ -11,7 +11,7 @@ class DomainService:
         return db.session.query(Domain).filter(Domain.domain_id == domain_id).first()
     
     @staticmethod
-    def create_or_update_domain(domain: Domain) -> Domain:
+    def create_or_update_domain(domain: Domain, embedding_service_id=None) -> Domain:
         if domain.domain_id is None or domain.domain_id == '0':
             silo_service = SiloService()
             silo_data = {
@@ -20,7 +20,8 @@ class DomainService:
                 'description': 'silo for domain ' + domain.name,
                 'status': 'active',
                 'app_id': domain.app_id,
-                'fixed_metadata': False
+                'fixed_metadata': False,
+                'embedding_service_id': embedding_service_id
             }
             silo = silo_service.create_or_update_silo(silo_data, SiloType.DOMAIN)
             domain.silo_id = silo.silo_id

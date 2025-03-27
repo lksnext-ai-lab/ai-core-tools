@@ -20,8 +20,8 @@ def domain(domain_id):
         # Add app_id from session to the form data
         form_data = request.form.copy()
         form_data['app_id'] = session['app_id']
-        
-        domain = DomainService.create_or_update_domain(Domain(**form_data))
+        embedding_service_id = request.form.get('embedding_service_id')
+        domain = DomainService.create_or_update_domain(Domain(**form_data),embedding_service_id=embedding_service_id)
         return render_template('domains/domain.html', domain=domain)
     else:
         if domain_id is None or domain_id == 0:

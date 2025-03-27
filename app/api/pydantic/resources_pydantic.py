@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from flask_openapi3 import FileStorage
+from pydantic import RootModel
 
 from api.pydantic.repos_pydantic import RepoPath
 
@@ -24,3 +25,13 @@ class CreateResourceForm(BaseModel):
     type: Optional[str] = Field(None, description="Resource type")
     status: Optional[str] = Field(None, description="Resource status")
     file: FileStorage = Field(..., description="Uploaded file")
+
+class ResourceListResponse(RootModel):
+    root: List[ResourceSchema]
+
+class ResourceResponse(BaseModel):
+    message: str
+    resource: ResourceSchema
+
+class MessageResponse(BaseModel):
+    message: str
