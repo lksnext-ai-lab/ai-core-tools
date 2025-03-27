@@ -10,3 +10,4 @@ data:
   LANGCHAIN_TRACING_V2: "true"
   LANGCHAIN_PROJECT: "ia-core-tools"
   LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com" 
+  REPO_BASE_FOLDER: "/app/repositories/"

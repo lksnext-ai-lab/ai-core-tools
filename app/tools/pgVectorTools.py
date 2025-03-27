@@ -102,10 +102,10 @@ class PGVectorTools:
             ids_array = [doc.id for doc in results]
             vector_store.delete(ids=ids_array)
 
-    def delete_collection(self, collection_name : str):
+    def delete_collection(self, collection_name : str, embedding_service=None):
         """Deletes a collection from the pgvector database."""
         vector_store = PGVector(
-            embeddings=get_embeddings_model(None),
+            embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
             connection=self.db.engine,
         )

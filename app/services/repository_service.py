@@ -1,12 +1,15 @@
 from model.repository import Repository
 from model.resource import Resource
+from model.output_parser import OutputParser
 from extensions import db
 from typing import Optional, List
 from services.silo_service import SiloService
 from model.silo import SiloType
 from services.output_parser_service import OutputParserService
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 
 class RepositoryService:
@@ -54,7 +57,18 @@ class RepositoryService:
     @staticmethod
     def delete_repository(repository: Repository):
         silo = repository.silo
+        # Obtener el ID del parser antes de eliminar el silo
+        parser_id = silo.metadata_definition_id if silo else None
+        
+        # Primero eliminar los recursos
         db.session.query(Resource).filter(Resource.repository_id == repository.repository_id).delete()
+        # Luego eliminar el repositorio
         db.session.delete(repository)
-        SiloService.delete_silo(silo.silo_id)
+        # Eliminar la colección de vectores antes de eliminar el silo
+        SiloService.delete_collection(silo.silo_id)
+        # Eliminar el output parser si existe
+        if parser_id:
+            db.session.query(OutputParser).filter_by(parser_id=parser_id).delete()
+        # Finalmente eliminar el silo
+        db.session.delete(silo)
         db.session.commit()

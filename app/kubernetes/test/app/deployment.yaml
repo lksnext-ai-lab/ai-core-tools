@@ -106,6 +106,16 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: LANGCHAIN_ENDPOINT
+            - name: REPO_BASE_FOLDER
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: REPO_BASE_FOLDER
+            - name: DOWNLOADS_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: DOWNLOADS_PATH
       imagePullSecrets:
         - name: lks-registry
       volumes:

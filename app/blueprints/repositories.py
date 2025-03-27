@@ -8,11 +8,14 @@ from tools.pgVectorTools import PGVectorTools
 from services.silo_service import SiloService
 from model.silo import SiloType
 import os
+from dotenv import load_dotenv
 from services.repository_service import RepositoryService
 from services.output_parser_service import OutputParserService
 from services.embedding_service_service import EmbeddingServiceService
 from model.embedding_service import EmbeddingService
 #TODO: should be accesed from silo service
+
+load_dotenv()
 pgVectorTools = PGVectorTools(db)
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
@@ -113,13 +116,16 @@ def resource_create(app_id: int, repository_id: int):
         if 'file' not in request.files:
             return redirect(request.url)
         file = request.files['file']
-        # if user does not select file, browser submits an empty file with no filename
         if file.filename == '':
             return redirect(request.url)
-        if file : #and allowed_file(file.filename):
-            file.save(os.path.join(REPO_BASE_FOLDER, str(repository_id), file.filename))
-            resource = Resource(name=request.form['name'], uri=file.filename, repository_id=repository_id)
+        if file:
+            repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
+            os.makedirs(repository_path, exist_ok=True)
             
+            file_path = os.path.join(repository_path, file.filename)
+            file.save(file_path)
+            
+            resource = Resource(name=request.form['name'], uri=file.filename, repository_id=repository_id)
             db.session.add(resource)
             db.session.commit()
             db.session.refresh(resource)

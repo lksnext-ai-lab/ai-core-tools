@@ -5,7 +5,8 @@ from model.silo import Silo
 from extensions import db
 from services.silo_service import SiloService
 from api.api_auth import require_auth
-from api.pydantic.silos_pydantic import SiloPath, SiloSearch, SiloIndexBody, DocResponse,DocsResponse
+from api.pydantic.silos_pydantic import (SiloPath, SiloSearch, SiloIndexBody,
+                                         DocsResponse, CountResponse, MessageResponse)
 from api.pydantic.pydantic import AppPath
 from typing import List
 
@@ -14,13 +15,15 @@ security=[{"api_key":[]}]
 silo_api = APIBlueprint('silo_api', __name__, url_prefix='/api/silo/app/<int:app_id>/silos', abp_security=security)
 
 
-@silo_api.get('/<int:silo_id>/docs', summary="count docs in silo", tags=[silo_tag])
+@silo_api.get('/<int:silo_id>/docs', summary="count docs in silo", tags=[silo_tag],
+              responses={"200": CountResponse})
 @require_auth
 def count_docs_in_silo(path: SiloPath):
     count = SiloService.count_docs_in_silo(path.silo_id)
-    return jsonify(count)
+    return jsonify({"count": count})
 
-@silo_api.post('/<int:silo_id>/docs/index', summary="index content", tags=[silo_tag])
+@silo_api.post('/<int:silo_id>/docs/index', summary="index content", tags=[silo_tag],
+               responses={"200": MessageResponse})
 @require_auth
 def index_content(path: SiloPath, body: SiloIndexBody):
     #data = request.get_json()
@@ -28,9 +31,10 @@ def index_content(path: SiloPath, body: SiloIndexBody):
     metadata = body.metadata
     #TODO: validate metadata
     SiloService.index_content(path.silo_id, content, metadata)
-    return jsonify({"message": "test"})
+    return jsonify({"message": "content indexed successfully"})
 
-@silo_api.delete('/<int:silo_id>/docs/delete', summary="delete docs in collection", tags=[silo_tag])
+@silo_api.delete('/<int:silo_id>/docs/delete', summary="delete docs in collection", tags=[silo_tag],
+                 responses={"200": MessageResponse})
 @require_auth
 def delete_docs_in_collection(path: SiloPath):
     data = request.get_json()
@@ -38,7 +42,8 @@ def delete_docs_in_collection(path: SiloPath):
     SiloService.delete_docs_in_collection(path.silo_id, ids)
     return jsonify({"message": "docs deleted"})
 
-@silo_api.delete('/<int:silo_id>/docs/delete/all', summary="delete all docs in collection", tags=[silo_tag])
+@silo_api.delete('/<int:silo_id>/docs/delete/all', summary="delete all docs in collection", tags=[silo_tag],
+                 responses={"200": MessageResponse})
 @require_auth
 def delete_all_docs_in_collection(path: SiloPath):
     SiloService.delete_collection(path.silo_id)
@@ -52,7 +57,7 @@ def find_docs_in_collection(path: SiloPath, body: SiloSearch):
     filter_metadata = body.filter_metadata
     docs = SiloService.find_docs_in_collection(path.silo_id, query, filter_metadata)
     
-    return [{"page_content": doc.page_content, "metadata": doc.metadata} for doc in docs]
+    return {"docs":[{"page_content": doc.page_content, "metadata": doc.metadata} for doc in docs]}
 
 
 @silo_api.get('/test', summary="get silos", tags=[silo_tag])

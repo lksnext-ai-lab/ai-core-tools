@@ -259,11 +259,12 @@ class SiloService:
 
     @staticmethod
     def delete_collection(silo_id: int):
-        if not SiloService.check_silo_collection_exists(silo_id):
+        silo = SiloService.get_silo(silo_id)
+        if not silo or not SiloService.check_silo_collection_exists(silo_id):
             return
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_collection(collection_name)
+        pgVectorTools.delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str]):

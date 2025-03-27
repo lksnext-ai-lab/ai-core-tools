@@ -5,7 +5,6 @@ from typing import Optional, Dict, Any, List
 class SiloPath(AppPath):
     silo_id: int
 
-
 class SiloSearch(BaseModel):
     query: str
     filter_metadata: Optional[dict] = {}
@@ -20,3 +19,9 @@ class DocResponse(BaseModel):
 
 class DocsResponse(BaseModel):
     docs: List[DocResponse]
+
+class CountResponse(BaseModel):
+    count: int
+
+class MessageResponse(BaseModel):
+    message: str
