@@ -136,12 +136,12 @@ class SiloService:
         """
         Delete a silo by its ID
         """
+
         silo = db.session.query(Silo).filter(Silo.silo_id == silo_id).first()
         if silo:
+            SiloService.delete_collection(silo)
             db.session.delete(silo)
             db.session.commit()
-
-        SiloService.delete_collection(silo_id)
 
         output_parser_service = OutputParserService()
         output_parser_service.delete_parser(silo.metadata_definition_id)
@@ -258,11 +258,10 @@ class SiloService:
         logger.info(f"Contenido {content_id} eliminado correctamente del silo {silo_id}")
 
     @staticmethod
-    def delete_collection(silo_id: int):
-        silo = SiloService.get_silo(silo_id)
-        if not silo or not SiloService.check_silo_collection_exists(silo_id):
+    def delete_collection(silo):
+        if not SiloService.check_silo_collection_exists(silo.silo_id):
             return
-        collection_name = COLLECTION_PREFIX + str(silo_id)
+        collection_name = COLLECTION_PREFIX + str(silo.silo_id)
         pgVectorTools = PGVectorTools(db)
         pgVectorTools.delete_collection(collection_name, silo.embedding_service)
 

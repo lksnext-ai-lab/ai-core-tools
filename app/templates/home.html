@@ -21,6 +21,7 @@
             <th scope="col">Repos</th>
             <th scope="col">Domains</th>
             <th scope="col">Silos</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -41,7 +42,9 @@
             <td>
                 {{app.silos|length}}
             </td>
-
+            <td>
+                <a href="{{ url_for('delete_app', app_id=app.app_id) }}" class="btn btn-danger">Delete</a>
+            </td>
         </tr>
         {% endfor %}
     </tbody>

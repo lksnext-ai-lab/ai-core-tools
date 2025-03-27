@@ -1,12 +1,11 @@
-from flask import Flask, render_template, session, request, jsonify, redirect, url_for
+from flask import Flask, render_template, session, request, redirect, url_for
 from flask_restful import Api, Resource
 from flask_session import Session
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
 from extensions import db, init_db, DATABASE_URL
 from flask_openapi3 import OpenAPI
-from flask_openapi3 import Info, Tag
-from flask_openapi3 import Parameter
-
+from flask_openapi3 import Info
+from services.app_service import AppService
 import os
 import json
 import requests
@@ -93,7 +92,7 @@ def index():
 @app.route('/home')
 @login_required
 def home():
-    apps = db.session.query(App).filter(App.user_id == session['user_id']).all()
+    apps = AppService.get_apps(current_user.get_id())
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
     return render_template('home.html', apps=apps)
@@ -101,7 +100,7 @@ def home():
 @app.route('/app/<int:app_id>', methods=['GET'])
 @login_required
 def app_index(app_id: int):
-    selected_app = db.session.query(App).filter(App.app_id == app_id).first()
+    selected_app = AppService.get_app(app_id)
     session['app_id'] = app_id
     session['app_name'] = selected_app.name
     
@@ -111,10 +110,7 @@ def app_index(app_id: int):
 @login_required
 def create_app():
     name = request.form['name']
-    new_app = App(name=name, user_id=current_user.get_id())
-    db.session.add(new_app)
-    db.session.commit()
-    db.session.refresh(new_app)
+    new_app = AppService.create_or_update_app({'name': name, 'user_id': current_user.get_id()})
     return app_index(new_app.app_id)
 
 #@app.route('/leave')
@@ -124,6 +120,12 @@ def my_apps():
     session.pop('app_id', None)
     session.pop('app_name', None)
     return home()
+
+@app.route('/delete-app/<int:app_id>', methods=['GET'])
+@login_required
+def delete_app(app_id: int):
+    AppService.delete_app(app_id)
+    return redirect(url_for('home'))
 
 
 @app.route("/login")
