@@ -13,9 +13,12 @@ import os
 from model.silo import SiloType
 from services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
+import logging
 
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 COLLECTION_PREFIX = 'silo_'
+
+logger = logging.getLogger(__name__)
 
 class SiloService:
 
@@ -30,6 +33,16 @@ class SiloService:
     
     @staticmethod
     def get_silo_retriever(silo_id: int) -> Optional[VectorStoreRetriever]:
+        """
+        Get retriever for a silo with its corresponding embedding service
+        """
+        silo = SiloService.get_silo(silo_id)
+        if not silo:
+            logger.error(f"Silo con id {silo_id} no existe")
+            return None
+
+        logger.debug(f"Obteniendo retriever para silo {silo_id} con embedding service: {silo.embedding_service.name if silo.embedding_service else 'None'}")
+        
         pgVectorTools = PGVectorTools(db)
         collection_name = COLLECTION_PREFIX + str(silo_id)
         silo = SiloService.get_silo(silo_id)
@@ -47,7 +60,10 @@ class SiloService:
         """
         Create a new silo or update an existing one
         """
+        logger.info(f"Datos recibidos (silo_data): {silo_data}")
+        
         silo_id = int(silo_data.get('silo_id'))
+        
         silo = SiloService.get_silo(silo_id) if silo_id else None
         
         if not silo:    
@@ -60,12 +76,19 @@ class SiloService:
         if silo_type == SiloType.REPO:
             silo.metadata_definition_id = 0
 
-        if silo_data.get('embedding_service_id'):
-            silo.embedding_service_id = silo_data.get('embedding_service_id')
-            
+        if 'embedding_service_id' in silo_data and silo_data['embedding_service_id']:
+            silo.embedding_service_id = int(silo_data['embedding_service_id'])
+        
         SiloService._update_silo(silo, silo_data)
-        db.session.add(silo)
-        db.session.commit()
+        
+        try:
+            db.session.add(silo)
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Error al guardar el silo en la base de datos: {str(e)}")
+            db.session.rollback()
+            raise
+        
         return silo
     
     @staticmethod
@@ -149,18 +172,31 @@ class SiloService:
     
     @staticmethod
     def index_content(silo_id: int, content: str, metadata: dict):
+        """
+        Index content in a silo with the corresponding embedding service
+        """
+        logger.info(f"Indexando contenido en silo {silo_id}")
+        
         silo = SiloService.get_silo(silo_id)
         if not silo:
+            logger.error(f"Silo con id {silo_id} no existe")
             raise ValueError(f"Silo with id {silo_id} does not exist")
         
-        #if not SiloService.check_silo_collection_exists(silo_id):
-        #    raise ValueError(f"Silo collection for silo_id {silo_id} does not exist")
-
+        logger.debug(f"Usando embedding service: {silo.embedding_service.name if silo.embedding_service else 'None'}")
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.index_documents(collection_name, [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})])
-    
+        
+        try:
+            pgVectorTools.index_documents(
+                collection_name, 
+                [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})],
+                embedding_service=silo.embedding_service
+            )
+            logger.info(f"Contenido indexado correctamente en silo {silo_id}")
+        except Exception as e:
+            logger.error(f"Error al indexar contenido en silo {silo_id}: {str(e)}")
+            raise
 
     @staticmethod
     def index_resource(resource: Resource):
@@ -182,17 +218,44 @@ class SiloService:
 
     @staticmethod
     def delete_resource(resource: Resource):
+        """
+        Delete a resource using its silo's embedding service
+        """
+        logger.info(f"Eliminando recurso {resource.resource_id} del silo {resource.repository.silo_id}")
         collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
+        
+        silo = SiloService.get_silo(resource.repository.silo_id)
+        if not silo:
+            logger.error(f"Silo no encontrado para el recurso {resource.resource_id}")
+            return
+
         pgVectorTools = PGVectorTools(db)
         pgVectorTools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):
+        """
+        Delete content from a silo using its embedding service
+        """
+        logger.info(f"Eliminando contenido {content_id} del silo {silo_id}")
+        
         if not SiloService.check_silo_collection_exists(silo_id):
+            logger.warning(f"La colección para el silo {silo_id} no existe")
             return
+
+        silo = SiloService.get_silo(silo_id)
+        if not silo:
+            logger.error(f"Silo {silo_id} no encontrado")
+            return
+
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(collection_name, filter_metadata={"id": {"$eq": content_id}})
+        pgVectorTools.delete_documents(
+            collection_name, 
+            filter_metadata={"id": {"$eq": content_id}},
+            embedding_service=silo.embedding_service
+        )
+        logger.info(f"Contenido {content_id} eliminado correctamente del silo {silo_id}")
 
     @staticmethod
     def delete_collection(silo_id: int):
@@ -204,11 +267,28 @@ class SiloService:
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str]):
+        """
+        Delete documents from a silo using its embedding service
+        """
+        logger.info(f"Eliminando documentos {ids} del silo {silo_id}")
+        
         if not SiloService.check_silo_collection_exists(silo_id):
+            logger.warning(f"La colección para el silo {silo_id} no existe")
             return
+
+        silo = SiloService.get_silo(silo_id)
+        if not silo:
+            logger.error(f"Silo {silo_id} no encontrado")
+            return
+
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(collection_name, ids)
+        pgVectorTools.delete_documents(
+            collection_name, 
+            ids=ids,
+            embedding_service=silo.embedding_service
+        )
+        logger.info(f"Documentos eliminados correctamente del silo {silo_id}")
 
     @staticmethod
     def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None) -> List[Document]:

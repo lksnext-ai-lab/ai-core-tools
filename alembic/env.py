@@ -1,8 +1,9 @@
 import sys
 import os
 
+# Añadir ambas rutas posibles para cubrir tanto desarrollo local como Docker
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../app')))
-print(sys.path)
+sys.path.append('/app')  # Ruta absoluta en Docker
 
 from logging.config import fileConfig
 
@@ -11,13 +12,24 @@ from sqlalchemy import pool
 
 from alembic import context
 
-
-from db.base_class import Base
-from db import base
+# Importar después de ajustar el path
+try:
+    from db.base_class import Base
+    from db import base
+except ImportError as e:
+    print(f"Error al importar: {e}")
+    sys.exit(1)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Asegurarse de que la ubicación de scripts sea correcta
+script_location = os.path.dirname(os.path.dirname(__file__))
+if os.path.exists('/alembic'):
+    # Estamos en el contenedor Docker
+    script_location = '/alembic'
+config.set_main_option('script_location', script_location)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

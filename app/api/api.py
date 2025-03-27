@@ -20,7 +20,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 api_tag = Tag(name="API", description="Main API endpoints")
-api = APIBlueprint('api', __name__, url_prefix='/api/app/<int:app_id>')
+security=[{"api_key":[]}]
+api = APIBlueprint('api', __name__, url_prefix='/api/app/<int:app_id>',abp_security=security)
 
 MSG_LIST = "MSG_LIST"
 

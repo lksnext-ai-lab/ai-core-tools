@@ -15,17 +15,17 @@ spec:
     spec:
       containers:
         - name: ia-core-tools-app-test
-          image: registry.lksnext.com/ia-core-tools/ia-core-tools:latest
+          image: registry.lksnext.com/ia-core-tools/ia-core-tools:v0.1
           imagePullPolicy: Always
           ports:
             - containerPort: 4321
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "1000m"
+              memory: "128Mi"
+              cpu: "100m"
             limits:
               memory: "512Mi"
-              cpu: "1000m"
+              cpu: "300m"
           volumeMounts:
             - name: temp-storage
               mountPath: /app/temp
