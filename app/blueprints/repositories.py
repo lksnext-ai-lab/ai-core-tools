@@ -10,6 +10,7 @@ from model.silo import SiloType
 import os
 from services.repository_service import RepositoryService
 from services.output_parser_service import OutputParserService
+from services.embedding_service_service import EmbeddingServiceService
 from model.embedding_service import EmbeddingService
 #TODO: should be accesed from silo service
 pgVectorTools = PGVectorTools(db)
@@ -45,17 +46,17 @@ def repository(app_id: int, repository_id: int):
             repo = RepositoryService.update_repository(repo, embedding_service_id)
         
         return redirect(url_for('repositories.repositories', app_id=app_id))
+    
+    embedding_services = EmbeddingServiceService.get_embedding_services_by_app_id(app_id)
 
     if repository_id == 0:
         repo = Repository(name="New Repository", app_id=app_id, repository_id=0)
-        embedding_services = db.session.query(EmbeddingService).all()
         return render_template('repositories/repository.html', 
                              app_id=app_id, 
                              repo=repo, 
                              embedding_services=embedding_services)
 
     repo = RepositoryService.get_repository(repository_id)
-    embedding_services = db.session.query(EmbeddingService).all()
     return render_template('repositories/resources.html', 
                          app_id=app_id, 
                          repo=repo, 
@@ -76,7 +77,7 @@ def repository_settings(app_id: int, repository_id: int):
         db.session.commit()
         return redirect(url_for('repositories.repositories', app_id=app_id))
     
-    embedding_services = db.session.query(EmbeddingService).all()
+    embedding_services = EmbeddingServiceService.get_embedding_services_by_app_id(app_id)
     return render_template('repositories/repository.html', 
                          app_id=app_id, 
                          repo=repo, 
