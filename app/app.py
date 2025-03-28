@@ -13,8 +13,9 @@ import uuid
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
-from model.app import App
+#from model.app import App
 from model.user import User
+from model.mcp_config import MCPConfig
 
 from blueprints.agents import agents_blueprint
 from blueprints.repositories import repositories_blueprint
