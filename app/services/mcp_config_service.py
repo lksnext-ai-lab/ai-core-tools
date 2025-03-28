@@ -63,6 +63,12 @@ class MCPConfigService:
         if config:
             db.session.delete(config)
             db.session.commit()
+    
+    @staticmethod
+    def delete_by_app_id(app_id: int):
+        """Delete all MCP configs for an app"""
+        db.session.query(MCPConfig).filter(MCPConfig.app_id == app_id).delete()
+        db.session.commit()
 
     @staticmethod
     def validate_mcp_config(config_data: dict) -> bool:

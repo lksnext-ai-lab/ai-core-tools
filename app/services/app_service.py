@@ -11,7 +11,7 @@ from services.output_parser_service import OutputParserService
 from services.embedding_service_service import EmbeddingServiceService
 from services.ai_service_service import AIServiceService
 from services.api_key_service import APIKeyService
-
+from services.mcp_config_service import MCPConfigService
 class AppService:
 
     @staticmethod
@@ -83,6 +83,9 @@ class AppService:
             
             # Delete all API keys
             APIKeyService.delete_by_app_id(app.app_id)
+
+            # Delete all MCP configs
+            MCPConfigService.delete_by_app_id(app.app_id)
             
             # Finally delete the app itself
             db.session.delete(app)

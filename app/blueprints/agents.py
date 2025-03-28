@@ -6,6 +6,7 @@ from model.ocr_agent import OCRAgent
 from model.ai_service import AIService
 from model.output_parser import OutputParser
 from model.silo import Silo
+from model.mcp_config import MCPConfig
 from extensions import db
 from services.agent_service import AgentService
 import logging
@@ -43,7 +44,7 @@ def app_agent(app_id: int, agent_id: int):
     silos = db.session.query(Silo).filter(Silo.app_id == app_id).all()
     output_parsers = db.session.query(OutputParser).filter(OutputParser.app_id == app_id).all()
     tools = db.session.query(Agent).filter(Agent.is_tool == True, Agent.app_id == app_id, Agent.agent_id != agent_id).all()
-    silos = db.session.query(Silo).filter(Silo.app_id == app_id).all()
+    mcp_configs = db.session.query(MCPConfig).filter(MCPConfig.app_id == app_id).all()
 
     template = 'agents/agent.html'
     agent = Agent(agent_id=0, name="")
@@ -53,7 +54,8 @@ def app_agent(app_id: int, agent_id: int):
             agent = agent_service.get_agent(agent_id, 'ocr')
             template = 'agents/ocr_agent.html'
 
-    return render_template(template, app_id=app_id, agent=agent, ai_services=ai_services, output_parsers=output_parsers, tools=tools, silos=silos)
+    return render_template(template, app_id=app_id, agent=agent, ai_services=ai_services, 
+                         output_parsers=output_parsers, tools=tools, silos=silos, mcp_configs=mcp_configs)
 
         
 
