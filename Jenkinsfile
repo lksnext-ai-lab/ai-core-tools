@@ -63,5 +63,25 @@ pipeline {
                 }
             }
         }
+
+        stage('Clean Docker Images') {
+            steps {
+                script {
+                    sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "echo 'Docker images cleaned successfully'"
+                }
+            }
+        }
+    }
+    post {
+        success {
+            sh "echo 'Pipeline completed successfully'"
+        }
+        failure {
+            sh "echo 'Pipeline failed'"
+        }
+        always {
+            deleteDir()
+        }
     }
 }
