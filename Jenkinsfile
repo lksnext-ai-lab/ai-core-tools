@@ -57,7 +57,7 @@ pipeline {
                         -v "$(pwd)":/app \
                         -v $KUBE_CONFIG:/.kube/config \
                         $IMAGE_KUBECTL \
-                        apply -f /app/kubernetes/test/app/deployment.yaml
+                        apply -f app/kubernetes/test/app/deployment.yaml
                     '''
                     sh "echo 'Deployment applied successfully'"
                 }
