@@ -21,3 +21,9 @@ class RepositorySchema(BaseModel):
 class CreateRepositoryRequest(BaseModel):
     name: str
     description: Optional[str]
+
+class RepositoriesResponse(BaseModel):
+    repositories: List[RepositorySchema]
+
+class RepositoryResponse(BaseModel):
+    repository: RepositorySchema

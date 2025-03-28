@@ -9,7 +9,7 @@ import os
 import logging
 from api.api_auth import require_auth
 from agents.ocrAgent import OCRAgent
-from api.pydantic.agent_pydantic import AgentPath, ChatRequest
+from api.pydantic.agent_pydantic import AgentPath, ChatRequest, AgentResponse, OCRResponse
 from tools.agentTools import create_agent
 from langchain_core.messages import HumanMessage, AIMessage
 # Logging configuration
@@ -26,7 +26,11 @@ api = APIBlueprint('api', __name__, url_prefix='/api/app/<int:app_id>',abp_secur
 MSG_LIST = "MSG_LIST"
 
 
-@api.post('/call/<int:agent_id>', summary="Call agent", tags=[api_tag])
+@api.post('/call/<int:agent_id>', 
+    summary="Call agent", 
+    tags=[api_tag],
+    responses={"200": AgentResponse}
+)
 @require_auth
 def call_agent(path: AgentPath, body: ChatRequest):
     question = body.question
@@ -79,7 +83,11 @@ def call_agent(path: AgentPath, body: ChatRequest):
 
     return jsonify(data)
 
-@api.post('/ocr/<int:agent_id>', summary="Process OCR", tags=[api_tag])
+@api.post('/ocr/<int:agent_id>', 
+    summary="Process OCR", 
+    tags=[api_tag],
+    responses={"200": OCRResponse}
+)
 @require_auth
 def process_ocr(path: AgentPath):
     
@@ -134,4 +142,3 @@ def process_ocr(path: AgentPath):
     except Exception as e:
         logger.error(f"Error during OCR processing: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
-    

@@ -3,6 +3,7 @@ from extensions import db
 from model.domain import Domain
 from model.url import Url
 from flask_paginate import Pagination, get_page_args
+from services.embedding_service_service import EmbeddingServiceService
 from services.silo_service import SiloService
 from tools import scrapTools
 from services.url_service import UrlService
@@ -20,15 +21,20 @@ def domain(domain_id):
         # Add app_id from session to the form data
         form_data = request.form.copy()
         form_data['app_id'] = session['app_id']
-        embedding_service_id = request.form.get('embedding_service_id')
-        domain = DomainService.create_or_update_domain(Domain(**form_data),embedding_service_id=embedding_service_id)
+        
+        # Extract embedding_service_id before creating Domain instance
+        embedding_service_id = form_data.pop('embedding_service_id', None)
+        
+        # Create or update domain
+        domain = DomainService.create_or_update_domain(Domain(**form_data), embedding_service_id)
         return render_template('domains/domain.html', domain=domain)
     else:
+        embedding_services = EmbeddingServiceService.get_embedding_services_by_app_id(session['app_id'])
         if domain_id is None or domain_id == 0:
             domain = Domain(domain_id=0)
         else:
             domain = DomainService.get_domain(domain_id)
-        return render_template('domains/domain.html', domain=domain)
+        return render_template('domains/domain.html', domain=domain, embedding_services=embedding_services)
     
 @domains_blueprint.route('/<int:domain_id>/delete', methods=['GET'])
 def domain_delete(domain_id):

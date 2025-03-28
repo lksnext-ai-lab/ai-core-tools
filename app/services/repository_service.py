@@ -60,8 +60,9 @@ class RepositoryService:
         # Obtener el ID del parser antes de eliminar el silo
         parser_id = silo.metadata_definition_id if silo else None
         
-        # Primero eliminar los recursos
+        # Delete all resources first (this will also delete their files and vector embeddings)
         db.session.query(Resource).filter(Resource.repository_id == repository.repository_id).delete()
+        
         # Luego eliminar el repositorio
         db.session.delete(repository)
         # Eliminar la colección de vectores antes de eliminar el silo

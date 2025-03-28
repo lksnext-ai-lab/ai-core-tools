@@ -28,4 +28,3 @@ class ResourceService:
         os.remove(os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri))
         db.session.delete(resource)
         db.session.commit()
-        

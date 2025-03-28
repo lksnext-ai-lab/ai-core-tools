@@ -2,16 +2,20 @@ from typing import Optional
 from model.app import App
 from extensions import db
 from datetime import datetime
+from services.silo_service import SiloService
 from services.resource_service import ResourceService
 from services.repository_service import RepositoryService
 from services.domain_service import DomainService
 from services.agent_service import AgentService
 from services.output_parser_service import OutputParserService
 from services.embedding_service_service import EmbeddingServiceService
+from services.ai_service_service import AIServiceService
+from services.api_key_service import APIKeyService
+
 class AppService:
 
     @staticmethod
-    def get_apps( user_id: int) -> list[App]:
+    def get_apps(user_id: int) -> list[App]:
         """Get all apps for a specific user ordered by creation date"""
         return db.session.query(App)\
             .filter(App.user_id == user_id)\
@@ -51,10 +55,8 @@ class AppService:
         """Delete an app and all its related data"""
         app = db.session.query(App).filter(App.app_id == app_id).first()
         if app:
-            # Delete all resources and repositories
+            # Delete all repositories (this will also delete their resources)
             for repository in app.repositories:
-                for resource in repository.resources:
-                    ResourceService.delete_resource(resource.resource_id)
                 RepositoryService.delete_repository(repository)
             
             # Delete all domains and their URLs
@@ -70,17 +72,17 @@ class AppService:
                 OutputParserService().delete_parser(parser.parser_id)
             
             # Delete all AI services
-            # TODO: Create a service for this
-            for service in app.ai_services:
-                db.session.delete(service)
-            
+            AIServiceService.delete_by_app_id(app.app_id)
+
+            # Delete all silos
+            for silo in app.silos:
+                SiloService.delete_silo(silo.silo_id)
+
             # Delete all embedding services
             EmbeddingServiceService.delete_by_app_id(app.app_id)
             
             # Delete all API keys
-            # TODO: Create a service for this
-            for key in app.api_keys:
-                db.session.delete(key)
+            APIKeyService.delete_by_app_id(app.app_id)
             
             # Finally delete the app itself
             db.session.delete(app)

@@ -136,15 +136,22 @@ class SiloService:
         """
         Delete a silo by its ID
         """
-
         silo = db.session.query(Silo).filter(Silo.silo_id == silo_id).first()
         if silo:
             SiloService.delete_collection(silo)
+            
+            silo.embedding_service_id = None
+            db.session.add(silo)
+            db.session.commit()
+            
+            # Now delete the silo
             db.session.delete(silo)
             db.session.commit()
 
-        output_parser_service = OutputParserService()
-        output_parser_service.delete_parser(silo.metadata_definition_id)
+            # Finally delete the output parser if it exists
+            output_parser_service = OutputParserService()
+            if silo.metadata_definition_id:
+                output_parser_service.delete_parser(silo.metadata_definition_id)
 
     '''SILO and DATA Operations'''
 
