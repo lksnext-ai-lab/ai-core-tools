@@ -50,7 +50,7 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    sh "sed -i 's|${IMAGE_NAME}:.*|${IMAGE_NAME}:${IMAGE_TAG}|g' kubernetes/test/app/deployment.yaml"
+                    sh "sed -i 's|${IMAGE_NAME}:.*|${IMAGE_NAME}:${IMAGE_TAG}|g' app/kubernetes/test/app/deployment.yaml"
                     sh "echo 'Tag de la imagen: ${IMAGE_TAG}'"
                     sh '''
                         docker run --rm \
