@@ -54,8 +54,9 @@ pipeline {
                     sh "echo 'Tag de la imagen: ${IMAGE_TAG}'"
                     sh '''
                         docker run --rm \
-                        -v "$(pwd)":/app \
+                        -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
                         $IMAGE_KUBECTL \
                         apply -f app/kubernetes/test/app/deployment.yaml
                     '''
