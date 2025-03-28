@@ -65,10 +65,11 @@ class RepositoryService:
         # Luego eliminar el repositorio
         db.session.delete(repository)
         # Eliminar la colección de vectores antes de eliminar el silo
-        SiloService.delete_collection(silo.silo_id)
+        SiloService.delete_collection(silo)
+        
+        db.session.delete(silo)
         # Eliminar el output parser si existe
         if parser_id:
             db.session.query(OutputParser).filter_by(parser_id=parser_id).delete()
-        # Finalmente eliminar el silo
-        db.session.delete(silo)
+        
         db.session.commit()
