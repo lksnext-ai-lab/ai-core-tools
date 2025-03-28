@@ -10,7 +10,7 @@ pipeline {
         KUBE_NAMESPACE = "test"
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
-        IMAGE_KUBECTL = "docker.io/bitnami/kubectl:1.28.0"
+        IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
     }
     
     stages {
