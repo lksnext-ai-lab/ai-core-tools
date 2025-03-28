@@ -13,15 +13,11 @@
 
     <div class="offcanvas offcanvas-start flex-row custom-scrollbar h-100" data-bs-backdrop="true" tabindex="-1"
         id="offcanvasSidebar">
-
-
-        {% if session and session['app_name'] %}
-        <div class="offcanvas-lg offcanvas-end" tabindex="-1" id="offcanvasSidebar">
-
-            <!-- Offcanvas body -->
-            <div class="offcanvas-body p-3 p-lg-0">
+        <div class="offcanvas-body p-0">
+            <div class="d-flex flex-column h-100">
+                {% if session and session['app_name'] %}
+                <!-- App specific menu -->
                 <div class="card bg-light w-100">
-
                     <!-- Edit profile button -->
                     <div class="position-absolute top-0 end-0 p-3">
                         <a href="{{ url_for('my_apps') }}" class="text-primary-hover" data-bs-toggle="tooltip"
@@ -60,9 +56,9 @@
                                     <i class="bi bi-file-text fa-fw me-2"></i>Data Structures
                                 </a>
                             </li>
-                            <li class="nav-item"></li>
-                            <a class="nav-link" href="{{ url_for('silos.silos', app_id=session['app_id']) }}"><i
-                                    class="bi bi-database fa-fw me-2"></i>Silos</a>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('silos.silos', app_id=session['app_id']) }}"><i
+                                        class="bi bi-database fa-fw me-2"></i>Silos</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('ai_services.app_ai_services', app_id=session['app_id']) }}"><i
@@ -73,72 +69,60 @@
                                     class="bi bi-hdd-rack fa-fw me-2"></i>Embedding Services</a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('mcp_configs.app_mcp_configs', app_id=session['app_id']) }}"><i
+                                    class="bi bi-plug fa-fw me-2"></i>MCP Configs</a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('api_keys.list_api_keys') }}"><i
                                         class="bi bi-ticket-perforated fa-fw me-2"></i>API Keys</a>
                             </li>
-                            
-
                         </ul>
                         <!-- Sidebar menu item END -->
                     </div>
                     <!-- Card body END -->
                 </div>
-            </div>
-        </div>
-        {% endif %}
-
-
-        <div class="offcanvas-body sidebar-content d-flex flex-column pt-4">
-
-            <!-- Sidebar menu START -->
-            <ul class="navbar-nav flex-column" id="navbar-sidebar">
-
-                {% if session %}
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('my_apps') }}"><i
-                        class="bi bi-window-stack fa-fw me-2"></i>My Apps</a>
-                </li>
                 {% endif %}
 
-                <!-- Menu item -->
-                <li class="nav-item">
-                    <a class="nav-link" href="#">
-                        <i
-                            class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
-                    </a>
-                </li>
-                <li>
-                    <a class="nav-link" href="/openapi/swagger" target="_blank"><i
-                        class="bi bi-braces fa-fw me-2"></i>Swagger <i class="bi bi-box-arrow-up-right"></i></a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('about') }}"><i
-                        class="bi bi-info-circle fa-fw me-2"></i>About</a>
-                </li>
-                
-                
-                
-            </ul>
+                <!-- Global menu -->
+                <ul class="navbar-nav flex-column mt-3">
+                    {% if session %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('my_apps') }}"><i
+                            class="bi bi-window-stack fa-fw me-2"></i>My Apps</a>
+                    </li>
+                    {% endif %}
 
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <i class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/openapi/swagger" target="_blank"><i
+                            class="bi bi-braces fa-fw me-2"></i>Swagger <i class="bi bi-box-arrow-up-right"></i></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('about') }}"><i
+                            class="bi bi-info-circle fa-fw me-2"></i>About</a>
+                    </li>
+                </ul>
 
-
-            <!-- Sidebar menu end -->
-
-            <!-- Sidebar footer START -->
-            <div class="d-flex align-items-center justify-content-between text-primary-hover mt-auto p-3">
-                {% if session and session['user'] %}
-                <a class="h6 fw-light mb-0 text-body" href="{{ url_for('logout') }}" data-bs-toggle="tooltip"
-                    data-bs-placement="top" aria-label="Sign out">
-                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Log out
-                </a>
-                <a class="h6 mb-0 text-body" href="admin-settings.html" data-bs-toggle="tooltip"
-                    data-bs-placement="top" aria-label="Settings">
-                    <i class="bi bi-gear-fill"></i>
-                </a>
-                {% endif %}
+                <!-- Sidebar footer -->
+                <div class="mt-auto p-3">
+                    {% if session and session['user'] %}
+                    <div class="d-flex align-items-center justify-content-between text-primary-hover">
+                        <a class="h6 fw-light mb-0 text-body" href="{{ url_for('logout') }}" data-bs-toggle="tooltip"
+                            data-bs-placement="top" aria-label="Sign out">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i> Log out
+                        </a>
+                        <a class="h6 mb-0 text-body" href="admin-settings.html" data-bs-toggle="tooltip"
+                            data-bs-placement="top" aria-label="Settings">
+                            <i class="bi bi-gear-fill"></i>
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            <!-- Sidebar footer END -->
-
         </div>
     </div>
 </nav>

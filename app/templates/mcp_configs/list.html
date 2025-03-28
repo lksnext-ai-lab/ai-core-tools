@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header border-bottom">
+                    <div class="row g-4 align-items-center">
+                        <div class="col-sm">
+                            <div class="d-flex">
+                                <h5 class="card-title mb-0">MCP Configs</h5>
+                            </div>
+                        </div>
+                        <div class="col-sm-auto">
+                            <a href="{{ url_for('mcp_configs.new_mcp_config', app_id=app_id) }}" class="btn btn-primary">
+                                <i class="bi bi-plus-lg me-2"></i>New MCP Config
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Description</th>
+                                    <th>Transport Type</th>
+                                    <th>Server Name</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for config in configs %}
+                                <tr>
+                                    <td>{{ config.name }}</td>
+                                    <td>{{ config.description or '' }}</td>
+                                    <td>{{ config.transport_type.value }}</td>
+                                    <td>{{ config.server_name }}</td>
+                                    <td>{{ config.create_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>
+                                        <div class="d-flex gap-2">
+                                            <a href="{{ url_for('mcp_configs.edit_mcp_config', app_id=app_id, config_id=config.config_id) }}" 
+                                               class="btn btn-sm btn-light">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <form action="{{ url_for('mcp_configs.delete_mcp_config', app_id=app_id, config_id=config.config_id) }}" 
+                                                  method="POST" class="d-inline">
+                                                <button type="submit" class="btn btn-sm btn-light" 
+                                                        onclick="return confirm('Are you sure you want to delete this MCP config?')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center">No MCP configs found</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
