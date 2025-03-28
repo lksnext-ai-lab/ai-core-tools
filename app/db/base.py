@@ -12,3 +12,4 @@ from model.domain import Domain
 from model.url import Url
 from model.embedding_service import EmbeddingService
 from model.base_service import BaseService
+from model.mcp_config import MCPConfig

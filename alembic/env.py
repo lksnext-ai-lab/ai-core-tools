@@ -1,6 +1,8 @@
 import sys
 import os
 
+print("Importing sys and os")
+
 # Añadir ambas rutas posibles para cubrir tanto desarrollo local como Docker
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../app')))
 sys.path.append('/app')  # Ruta absoluta en Docker
@@ -11,6 +13,8 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+print("Importing base_class")
 
 # Importar después de ajustar el path
 try:
