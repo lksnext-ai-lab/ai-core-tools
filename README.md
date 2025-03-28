@@ -1,12 +1,30 @@
-# LKS Next Semantic Search Engine
+# Mattin AI - Your AI Toolbox
 
 ## Description
 
-The LKS Next Semantic Search Engine is an Inner Source project that focuses on implementing a generic semantic indexer and search engine based on Large Language Models (LLMs) and implements Retrieval-Augmented Generation (RAG). This project aims to improve the search experience by understanding the context and intent behind user queries, providing more accurate and relevant results.
+Mattin AI is a comprehensive AI toolbox that provides a wide range of artificial intelligence capabilities and tools. This project offers various AI functionalities including:
+
+- Large Language Models (LLMs) integration and management
+- Retrieval-Augmented Generation (RAG) systems
+- Semantic search capabilities
+- Vector database management
+- AI agents and automation
+- And more...
+
+The project aims to simplify the integration and use of AI technologies within LKS Next, providing a unified platform for various AI-powered solutions.
+
+## Features
+
+- **LLM Integration**: Easy access and management of various Large Language Models
+- **RAG Systems**: Implementation of Retrieval-Augmented Generation for enhanced AI responses
+- **Semantic Search**: Advanced search capabilities using semantic understanding
+- **Vector Databases**: Efficient storage and retrieval of vector embeddings
+- **AI Agents**: Framework for building and deploying AI agents
+- **Modular Architecture**: Easy to extend and customize for specific needs
 
 ## Contributing
 
-We welcome contributions from the LKS S. Coop. community! To contribute to this project, please follow these guidelines:
+We welcome contributions from LKS Next community! To contribute to this project, please follow these guidelines:
 
 1. Fork the repository and create a new branch for your changes.
 2. Ensure your changes adhere to the project's coding standards and best practices.

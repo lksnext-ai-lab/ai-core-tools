@@ -22,6 +22,7 @@ class App(Base):
     user = relationship('User', back_populates='apps')
     
     api_keys = relationship('APIKey', back_populates='app', lazy=True)
+    mcp_configs = relationship('MCPConfig', back_populates='app', lazy=True)
 
     silos = relationship('Silo', back_populates='app', lazy=True)
     ai_services = relationship('AIService', back_populates='app', lazy=True)
