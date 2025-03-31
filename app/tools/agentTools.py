@@ -11,8 +11,12 @@ from langchain_core.tools import BaseTool
 import os
 from typing import Any
 from langchain.tools.retriever import create_retriever_tool
+from langchain_mcp_adapters.tools import load_mcp_tools
 from services.silo_service import SiloService
 from model.ai_service import ProviderEnum
+from langchain_mcp_adapters.client import MultiServerMCPClient
+import asyncio
+
 def create_agent(agent: Agent):
     llm = getLLM(agent)
     if llm is None:
@@ -27,9 +31,35 @@ def create_agent(agent: Agent):
         retrieverTool = getRetrieverTool(agent.silo)
         if retrieverTool is not None:
             tools.append(retrieverTool)
+
+    # Run the async load_mcp_tools_for_agent in a synchronous context
+    mcp_tools = asyncio.run(load_mcp_tools_for_agent(agent))
+    if len(mcp_tools) > 0:
+        tools.extend(mcp_tools)
     
     state_modifier = SystemMessage(content=agent.system_prompt)
     return create_react_agent(llm, tools, debug=True, state_modifier=state_modifier)
+
+async def load_mcp_tools_for_agent(agent: Agent):
+    if agent.mcp_config is None:
+        return []
+    
+    connections = {}
+
+    connection = {
+        "weather": {
+        # make sure you start your weather server on port 8000
+        "url": "http://localhost:8000/sse",
+        "transport": "sse",
+        }
+    }
+
+    connections[agent.mcp_config.server_name] = connection
+
+    mcp_client = MultiServerMCPClient(
+        connections=connections
+    )
+    return await load_mcp_tools(mcp_client)
 
 
 
