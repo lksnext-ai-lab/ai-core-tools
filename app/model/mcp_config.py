@@ -38,6 +38,7 @@ class MCPConfig(Base):
     # Foreign keys and relationships
     app_id = Column(Integer, ForeignKey('App.app_id'))
     app = relationship('App', back_populates='mcp_configs')
+    agents = relationship('Agent', back_populates='mcp_config')
 
     def to_connection_dict(self) -> dict:
         """Convert the model to a connection dictionary format expected by MultiServerMCPClient"""

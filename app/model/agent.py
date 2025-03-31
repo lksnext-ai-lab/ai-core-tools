@@ -34,6 +34,9 @@ class Agent(Base):
     app_id = Column(Integer,
                         ForeignKey('App.app_id'),
                         nullable=True)
+    mcp_config_id = Column(Integer,
+                        ForeignKey('MCPConfig.config_id'),
+                        nullable=True)
     has_memory = Column(Boolean)
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
@@ -49,6 +52,9 @@ class Agent(Base):
     app = relationship('App',
                            back_populates='agents',
                            foreign_keys=[app_id])
+    
+    mcp_config = relationship('MCPConfig',
+                           foreign_keys=[mcp_config_id])
     
     output_parser = relationship('OutputParser',
                            foreign_keys=[output_parser_id])
