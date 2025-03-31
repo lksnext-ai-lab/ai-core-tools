@@ -61,6 +61,16 @@ pipeline {
                         apply -f app/kubernetes/test/app/deployment.yaml
                     '''
                     sh "echo 'Deployment applied successfully'"
+                    
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout restart deployment/ia-core-tools-app-test -n $KUBE_NAMESPACE
+                    '''
+                    sh "echo 'Deployment restarted successfully'"
                 }
             }
         }
