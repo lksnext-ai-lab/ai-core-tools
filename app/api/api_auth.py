@@ -4,8 +4,15 @@ from datetime import datetime
 from functools import wraps
 from flask import request, jsonify, session
 from model.app import App
+import os
     
 # Authentication helper functions
+def is_omniadmin(email):
+    if not email:
+        return False
+    omniadmins = os.getenv('IACT_OMNIADMINS', '').split(',')
+    return email in omniadmins
+
 def is_valid_api_key(app_id, api_key):
     if api_key is None:
         return False

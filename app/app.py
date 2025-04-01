@@ -6,6 +6,7 @@ from extensions import db, init_db, DATABASE_URL
 from flask_openapi3 import OpenAPI
 from flask_openapi3 import Info
 from services.app_service import AppService
+from api.api_auth import is_omniadmin
 import os
 import json
 import requests
@@ -154,6 +155,7 @@ def auth_callback():
         return "Error: Unable to fetch user info!", 400
     
     session["user"] = user_info 
+    session["is_omniadmin"] = is_omniadmin(user_info['email'])
 
     user = db.session.query(User).filter_by(email=user_info['email']).first()
     if not user:

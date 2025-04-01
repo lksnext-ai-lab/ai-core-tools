@@ -92,11 +92,24 @@
                     </li>
                     {% endif %}
 
+                    {% if session and session['is_omniadmin'] %}
                     <li class="nav-item">
-                        <a class="nav-link" href="#">
-                            <i class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
+                        <a class="nav-link" data-bs-toggle="collapse" href="#adminSubmenu" role="button" aria-expanded="false" aria-controls="adminSubmenu">
+                            <i class="bi bi-shield-lock fa-fw me-2"></i>Admin
+                            <i class="bi bi-chevron-down float-end"></i>
                         </a>
+                        <div class="collapse" id="adminSubmenu">
+                            <ul class="nav flex-column ms-3">
+                                <li class="nav-item">
+                                    <a class="nav-link" href="#">
+                                        <i class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
+                    {% endif %}
+
                     <li class="nav-item">
                         <a class="nav-link" href="/openapi/swagger" target="_blank"><i
                             class="bi bi-braces fa-fw me-2"></i>Swagger <i class="bi bi-box-arrow-up-right"></i></a>
