@@ -26,7 +26,7 @@
                         {% endif %}
                         {% for provider in providers %}
                         <option value="{{ provider.name }}" 
-                                {% if service and provider.name == service.provider.name %}selected{% endif %}>
+                                {% if service and provider.name == service.provider %}selected{% endif %}>
                             {{ provider.value }}
                         </option>
                         {% endfor %}

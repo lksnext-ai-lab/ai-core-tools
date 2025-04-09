@@ -1,5 +1,6 @@
 from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
+from langchain_mistralai import MistralAIEmbeddings
 from huggingface_hub import InferenceClient
 from model.embedding_service import EmbeddingProvider
 import logging
@@ -30,8 +31,15 @@ def get_embeddings_model(embedding_service):
     if embedding_service.provider == EmbeddingProvider.OpenAI.value:
         return OpenAIEmbeddings(
             model=embedding_service.name,
-            openai_api_key=embedding_service.api_key
+            api_key=embedding_service.api_key
         )
+    
+    elif embedding_service.provider == EmbeddingProvider.MistralAI.value:
+        return MistralAIEmbeddings(
+            model=embedding_service.name,
+            api_key=embedding_service.api_key
+        )
+    
     elif embedding_service.provider == EmbeddingProvider.Custom.value:
         client = InferenceClient(
             model=embedding_service.endpoint,
