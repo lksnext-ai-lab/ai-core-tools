@@ -16,7 +16,7 @@ class HuggingFaceEmbeddingsAdapter:
         self.client = client
         
     def embed_query(self, text):
-        return self.client.feature_extraction(text).tolist()
+        return self.client.feature_extraction(text).tolist()[0]
         
     def embed_documents(self, documents):
         return [self.embed_query(doc) for doc in documents]
