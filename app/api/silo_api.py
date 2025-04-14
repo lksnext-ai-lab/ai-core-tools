@@ -33,7 +33,7 @@ def index_single_document(path: SiloPath, body: SingleDocumentIndex):
     SiloService.index_single_content(path.silo_id, content, metadata)
     return jsonify({"message": "content indexed successfully"})
 
-@silo_api.post('/<int:silo_id>/docs/bulk-index', summary="index multiple documents", tags=[silo_tag],
+@silo_api.post('/<int:silo_id>/docs/multiple-index', summary="index multiple documents", tags=[silo_tag],
                responses={"200": MessageResponse})
 @require_auth
 def index_multiple_document(path: SiloPath, body: MultipleDocumentIndex):
