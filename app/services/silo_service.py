@@ -178,31 +178,51 @@ class SiloService:
         return result.fetchone()[0]
     
     @staticmethod
-    def index_content(silo_id: int, content: str, metadata: dict):
-        """
-        Index content in a silo with the corresponding embedding service
-        """
-        logger.info(f"Indexando contenido en silo {silo_id}")
-        
+    def _get_silo_for_indexing(silo_id: int):
+        """Helper method to get silo and validate it exists"""
         silo = SiloService.get_silo(silo_id)
         if not silo:
             logger.error(f"Silo con id {silo_id} no existe")
             raise ValueError(f"Silo with id {silo_id} does not exist")
+        return silo
+
+    @staticmethod
+    def _create_documents_for_indexing(silo_id: int, contents: List[dict]) -> List[Document]:
+        """Helper method to create Document objects for indexing"""
+        return [
+            Document(
+                page_content=doc['content'],
+                metadata={"silo_id": silo_id, **(doc.get('metadata', {}))}
+            )
+            for doc in contents
+        ]
+
+    @staticmethod
+    def index_single_content(silo_id: int, content: str, metadata: dict):
+        """Index single content in a silo"""
+        SiloService.index_multiple_content(silo_id, [{'content': content, 'metadata': metadata}])
+
+    @staticmethod
+    def index_multiple_content(silo_id: int, documents: List[dict]):
+        """Index multiple documents in a silo with the corresponding embedding service"""
+        logger.info(f"Indexando documentos en silo {silo_id}")
         
+        silo = SiloService._get_silo_for_indexing(silo_id)
         logger.debug(f"Usando embedding service: {silo.embedding_service.name if silo.embedding_service else 'None'}")
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
         
         try:
+            docs = SiloService._create_documents_for_indexing(silo_id, documents)
             pgVectorTools.index_documents(
-                collection_name, 
-                [Document(page_content=content, metadata={"silo_id": silo_id, **metadata})],
+                collection_name,
+                docs,
                 embedding_service=silo.embedding_service
             )
-            logger.info(f"Contenido indexado correctamente en silo {silo_id}")
+            logger.info(f"Documentos indexados correctamente en silo {silo_id}")
         except Exception as e:
-            logger.error(f"Error al indexar contenido en silo {silo_id}: {str(e)}")
+            logger.error(f"Error al indexar documentos en silo {silo_id}: {str(e)}")
             raise
 
     @staticmethod

@@ -5,7 +5,7 @@ from model.silo import Silo
 from extensions import db
 from services.silo_service import SiloService
 from api.api_auth import require_auth
-from api.pydantic.silos_pydantic import (SiloPath, SiloSearch, SiloIndexBody,
+from api.pydantic.silos_pydantic import (SiloPath, SiloSearch, SingleDocumentIndex, MultipleDocumentIndex,
                                          DocsResponse, CountResponse, MessageResponse)
 from api.pydantic.pydantic import AppPath
 from typing import List
@@ -25,13 +25,20 @@ def count_docs_in_silo(path: SiloPath):
 @silo_api.post('/<int:silo_id>/docs/index', summary="index content", tags=[silo_tag],
                responses={"200": MessageResponse})
 @require_auth
-def index_content(path: SiloPath, body: SiloIndexBody):
+def index_single_document(path: SiloPath, body: SingleDocumentIndex):
     #data = request.get_json()
     content = body.content
     metadata = body.metadata
     #TODO: validate metadata
-    SiloService.index_content(path.silo_id, content, metadata)
+    SiloService.index_single_content(path.silo_id, content, metadata)
     return jsonify({"message": "content indexed successfully"})
+
+@silo_api.post('/<int:silo_id>/docs/bulk-index', summary="index multiple documents", tags=[silo_tag],
+               responses={"200": MessageResponse})
+@require_auth
+def index_multiple_document(path: SiloPath, body: MultipleDocumentIndex):
+    SiloService.index_multiple_content(path.silo_id, body.documents)
+    return jsonify({"message": "documents indexed successfully"})
 
 @silo_api.delete('/<int:silo_id>/docs/delete', summary="delete docs in collection", tags=[silo_tag],
                  responses={"200": MessageResponse})
