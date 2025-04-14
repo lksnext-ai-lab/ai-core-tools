@@ -9,9 +9,12 @@ class SiloSearch(BaseModel):
     query: str
     filter_metadata: Optional[dict] = {}
 
-class SiloIndexBody(BaseModel):
+class SingleDocumentIndex(BaseModel):
     content: str
     metadata: Optional[dict] = {}
+
+class MultipleDocumentIndex(BaseModel):
+    documents: List[SingleDocumentIndex]
 
 class DocResponse(BaseModel):
     page_content: str

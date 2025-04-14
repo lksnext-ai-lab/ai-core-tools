@@ -58,7 +58,7 @@ def add_url(domain_id):
     domain = db.session.query(Domain).filter(Domain.domain_id == domain_id).first()
     url = UrlService.create_url(urlValue, domain.domain_id)
     content = scrapTools.get_text_from_url(domain.base_url + urlValue)
-    SiloService.index_content(domain.silo_id, content, {"url": domain.base_url + urlValue})
+    SiloService.index_single_content(domain.silo_id, content, {"url": domain.base_url + urlValue})
     return redirect(url_for('domains.view_domain_urls', domain_id=domain.domain_id))
 
 @domains_blueprint.route('/domain/create', methods=['POST'])
