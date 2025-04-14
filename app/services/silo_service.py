@@ -285,10 +285,16 @@ class SiloService:
         logger.info(f"Contenido {content_id} eliminado correctamente del silo {silo_id}")
 
     @staticmethod
-    def delete_collection(silo):
-        if not SiloService.check_silo_collection_exists(silo.silo_id):
+    def delete_collection(silo_id: int):
+        """Delete a collection using its silo's embedding service"""
+        if not SiloService.check_silo_collection_exists(silo_id):
             return
-        collection_name = COLLECTION_PREFIX + str(silo.silo_id)
+            
+        silo = SiloService.get_silo(silo_id)
+        if not silo:
+            return
+            
+        collection_name = COLLECTION_PREFIX + str(silo_id)
         pgVectorTools = PGVectorTools(db)
         pgVectorTools.delete_collection(collection_name, silo.embedding_service)
 
