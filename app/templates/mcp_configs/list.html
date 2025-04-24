@@ -36,7 +36,7 @@
                                 {% for config in configs %}
                                 <tr>
                                     <td>{{ config.name }}</td>
-                                    <td>{{ config.description or '' }}</td>
+                                    <td style="max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ config.description or '' }}</td>
                                     <td>{{ config.transport_type.value }}</td>
                                     <td>{{ config.server_name }}</td>
                                     <td>{{ config.create_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
@@ -69,4 +69,4 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

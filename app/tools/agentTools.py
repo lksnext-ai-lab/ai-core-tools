@@ -24,13 +24,13 @@ def create_agent(agent: Agent):
     
     tools = []
     for tool in agent.tool_associations:
-        subAgnet = tool.tool
-        tools.append(IACTTool(subAgnet))
+        sub_agent = tool.tool
+        tools.append(IACTTool(sub_agent))
 
     if agent.silo_id is not None:
-        retrieverTool = getRetrieverTool(agent.silo)
-        if retrieverTool is not None:
-            tools.append(retrieverTool)
+        retriever_tool = getRetrieverTool(agent.silo)
+        if retriever_tool is not None:
+            tools.append(retriever_tool)
 
     # Run the async load_mcp_tools_for_agent in a synchronous context
     mcp_tools = asyncio.run(load_mcp_tools_for_agent(agent))

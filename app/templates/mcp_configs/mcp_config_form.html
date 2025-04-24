@@ -59,12 +59,12 @@
                             <div class="col-md-6">
                                 <label class="form-label">Arguments (JSON array) *</label>
                                 <input type="text" class="form-control" name="args"
-                                       value="{{ mcp_config.args|tojson if mcp_config and mcp_config.transport_type.value == 'stdio' else '[]' }}">
+                                       value="{{ mcp_config.args if mcp_config and mcp_config.transport_type.value == 'stdio' else '[]' }}">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Environment Variables (JSON object)</label>
                                 <input type="text" class="form-control" name="env"
-                                       value="{{ mcp_config.env|tojson if mcp_config and mcp_config.transport_type.value == 'stdio' else '{}' }}">
+                                       value="{{ mcp_config.env if mcp_config and mcp_config.transport_type.value == 'stdio' else '{}' }}">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Encoding</label>
