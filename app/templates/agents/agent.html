@@ -68,36 +68,6 @@
                                         correctamente</small>
                                 </div>
 
-                                {% if silos %}
-                                <div class="col-md-6 mb-4">
-                                    <label class="form-label">Silo</label>
-                                    <select name="silo_id" class="form-control">
-                                        <option value="">-- Select a Silo --</option>
-                                        {% for silo in silos %}
-                                        <option value="{{ silo.silo_id }}" {% if agent.silo_id==silo.silo_id
-                                            %}selected{% endif %}>
-                                            {{ silo.name }}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                {% endif %}
-
-                                {% if mcp_configs %}
-                                <div class="col-md-6 mb-4">
-                                    <label class="form-label">MCP Config</label>
-                                    <select name="mcp_config_id" class="form-control">
-                                        <option value="">-- Select an MCP Config --</option>
-                                        {% for mcp_config in mcp_configs %}
-                                        <option value="{{ mcp_config.config_id }}" {% if agent.mcp_config_id==mcp_config.config_id
-                                            %}selected{% endif %}>
-                                            {{ mcp_config.name }} ({{ mcp_config.transport_type.value }})
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                {% endif %}
-
                                 <div class="col-6">
 
                                     <label class="form-label">Conversational (With mem.)</label>
@@ -140,8 +110,65 @@
                                     </div>
                                 </div>
 
+                                {% if silos %}
+                                <div class="col-md-6 mb-4">
+                                    <label class="form-label">Silo</label>
+                                    <select name="silo_id" class="form-control">
+                                        <option value="">-- Select a Silo --</option>
+                                        {% for silo in silos %}
+                                        <option value="{{ silo.silo_id }}" {% if agent.silo_id==silo.silo_id
+                                            %}selected{% endif %}>
+                                            {{ silo.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                {% endif %}
+
+                                {% if mcp_configs %}
+                                <div class="col-md-12" id="mcpSelector">
+                                    {% with 
+                                        title="MCP servers",
+                                        article="an",
+                                        item_type="MCP server",
+                                        select_id="available_mcps",
+                                        add_button_id="addMcpBtn",
+                                        container_id="selected_mcps_container",
+                                        no_items_id="no_mcps_message",
+                                        items=mcp_configs,
+                                        selected_items=[{"config_id": agent.mcp_config_id, "name": agent.mcp_config.name if agent.mcp_config else "", "description": ""}] if agent.mcp_config_id else [],
+                                        id_field="config_id",
+                                        assoc_id_field="config_id",
+                                        item_name_field="name",
+                                        description_field="mcp_description",
+                                        hidden_field="mcp_config_id",
+                                        remove_function="removeMcp"
+                                    %}
+                                    {% include 'agents/_mcp_selector.html' %}
+                                    {% endwith %}
+                                </div>
+                                {% endif %}
+
                                 <div class="col-md-12" id="toolSelector">
-                                    {% include 'agents/_tool_selector.html' %}
+                                    {% with 
+                                        title="Tools",
+                                        article="a",
+                                        item_type="Tool",
+                                        select_id="available_tools",
+                                        add_button_id="addToolBtn",
+                                        container_id="selected_tools_container",
+                                        no_items_id="no_tools_message",
+                                        items=tools,
+                                        selected_items=agent.tool_associations,
+                                        id_field="agent_id",
+                                        assoc_id_field="tool_id",
+                                        item_name_field="name",
+                                        description_field="tool_description",
+                                        hidden_field="tool_id",
+                                        remove_function="removeTool"
+                                    %}
+                                    {% include 'agents/_tool_selector.html' with context %}
+                                    {% endwith %}
                                 </div>
                             </div>
                         </div>

@@ -38,7 +38,11 @@ class MCPConfig(Base):
     # Foreign keys and relationships
     app_id = Column(Integer, ForeignKey('App.app_id'))
     app = relationship('App', back_populates='mcp_configs')
-    agents = relationship('Agent', back_populates='mcp_config')
+    agent_associations = relationship('AgentMCP', back_populates='mcp', cascade="all, delete-orphan")
+    
+    def get_associated_agents(self):
+        """Retrieve all agents associated with this MCPConfig."""
+        return [association.agent for association in self.agent_associations]
 
     def to_connection_dict(self) -> dict:
         """Convert the model to a connection dictionary format expected by MultiServerMCPClient"""
@@ -66,4 +70,4 @@ class MCPConfig(Base):
                 "sse_read_timeout": self.sse_read_timeout
             })
             
-        return base_config 
+        return base_config
