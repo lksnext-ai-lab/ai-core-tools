@@ -10,6 +10,7 @@ class App(Base):
     app_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     create_date = Column(DateTime, default=datetime.now)
+    langsmith_api_key = Column(String(255))
 
     repositories = relationship('Repository', lazy=True)
     domains = relationship('Domain', back_populates='app', lazy=True)

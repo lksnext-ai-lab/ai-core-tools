@@ -76,6 +76,10 @@
                                 <a class="nav-link" href="{{ url_for('api_keys.list_api_keys') }}"><i
                                         class="bi bi-ticket-perforated fa-fw me-2"></i>API Keys</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('app_settings.app_settings', app_id=session['app_id']) }}"><i
+                                        class="bi bi-gear fa-fw me-2"></i>Settings</a>
+                            </li>
                         </ul>
                         <!-- Sidebar menu item END -->
                     </div>

@@ -12,6 +12,9 @@ from agents.ocrAgent import OCRAgent
 from api.pydantic.agent_pydantic import AgentPath, ChatRequest, AgentResponse, OCRResponse
 from tools.agentTools import create_agent
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain.callbacks.tracers import LangChainTracer
+from langsmith import Client
+
 # Logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +36,9 @@ MSG_LIST = "MSG_LIST"
 )
 @require_auth
 def call_agent(path: AgentPath, body: ChatRequest):
+
+    
+    
     question = body.question
     agent = db.session.query(Agent).filter(Agent.agent_id == path.agent_id).first()
     
@@ -44,10 +50,23 @@ def call_agent(path: AgentPath, body: ChatRequest):
     agent.request_count += 1
     db.session.commit()
 
+    tracer = None
+    if agent.app.langsmith_api_key is not None and agent.app.langsmith_api_key != "":
+        client = Client(api_key=agent.app.langsmith_api_key)
+        tracer = LangChainTracer(client=client, project_name=agent.app.name)
+        
+
     agentX = create_agent(agent)
     formatted_prompt = agent.prompt_template.format(question=question)
     messages = [HumanMessage(content=formatted_prompt)]
-    result = agentX.invoke({"messages": messages})
+
+    config = {}
+    if tracer is not None:
+        config = {"callbacks": [tracer]}
+    
+    result = agentX.invoke({"messages": messages}, config=config)
+    
+
     '''result = ""
     if agent.has_memory:
         result = aiServiceTools.invoke_ConversationalRetrievalChain(agent, question, session)
@@ -55,6 +74,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
         result = aiServiceTools.invoke_with_RAG(agent, question)
     else:
         result = aiServiceTools.invoke(agent, question)'''
+    
     
     # Get the last AIMessage from the messages list
     final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)

@@ -28,6 +28,7 @@ from blueprints.domains import domains_blueprint
 from blueprints.ai_services import ai_services_blueprint
 from blueprints.embeddings_services import embedding_services_blueprint
 from blueprints.mcp_configs import mcp_configs
+from blueprints.app_settings import app_settings_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -57,6 +58,7 @@ app.register_blueprint(ai_services_blueprint)
 app.register_blueprint(domains_blueprint)
 app.register_blueprint(embedding_services_blueprint)
 app.register_blueprint(mcp_configs)
+app.register_blueprint(app_settings_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)
