@@ -44,7 +44,15 @@
                 <div class="selected-item card mb-2" data-item-id="{{ assoc[assoc_id_field] }}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="card-title mb-0">{{ assoc[item_name_field] }}</h6>
+                            <h6 class="card-title mb-0">
+                                {% if assoc.mcp %}
+                                    {{ assoc.mcp.name }}
+                                {% elif assoc.tool %}
+                                    {{ assoc.tool.name }}
+                                {% else %}
+                                    {{ assoc[item_name_field] }}
+                                {% endif %}
+                            </h6>
                             <button type="button" class="btn-close" onclick="{{ remove_function }}(this)"></button>
                         </div>
                         <div class="form-group">

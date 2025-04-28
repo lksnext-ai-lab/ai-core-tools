@@ -28,12 +28,9 @@ class AgentService:
         agent.type = agent_type
         db.session.add(agent)
         db.session.commit()
-
-        # Update MCP associations
-        AgentService.update_agent_mcps(agent, agent_data.getlist('mcp_config_id'), agent_data)
         
         return agent
-    
+
     @staticmethod
     def _update_ocr_agent(agent: OCRAgent, data: dict):
         was_tool = agent.is_tool
@@ -111,6 +108,12 @@ class AgentService:
     
     @staticmethod
     def update_agent_mcps(agent: Agent, mcp_ids: list, form_data: dict = None):
+        # Convert mcp_ids to list if it's not already
+        if isinstance(mcp_ids, str):
+            mcp_ids = [mcp_ids]
+        elif not isinstance(mcp_ids, list):
+            mcp_ids = []
+
         # Get existing MCP associations
         existing_mcps = {assoc.config_id: assoc for assoc in agent.mcp_associations}
         

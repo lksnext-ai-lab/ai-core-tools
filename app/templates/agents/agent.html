@@ -136,7 +136,7 @@
                                         container_id="selected_mcps_container",
                                         no_items_id="no_mcps_message",
                                         items=mcp_configs,
-                                        selected_items=[{"config_id": agent.mcp_config_id, "name": agent.mcp_config.name if agent.mcp_config else "", "description": ""}] if agent.mcp_config_id else [],
+                                        selected_items=agent.mcp_associations,
                                         id_field="config_id",
                                         assoc_id_field="config_id",
                                         item_name_field="name",

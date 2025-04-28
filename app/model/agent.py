@@ -43,6 +43,7 @@ class Agent(Base):
     app_id = Column(Integer,
                         ForeignKey('App.app_id'),
                         nullable=True)
+
     has_memory = Column(Boolean)
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
