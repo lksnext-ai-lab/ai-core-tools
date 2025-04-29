@@ -1,4 +1,4 @@
-from flask import session, request, jsonify
+from flask import session, request, jsonify, current_app
 from flask_openapi3 import APIBlueprint, Tag
 from pydantic import BaseModel
 from agents.ocrAgent import process_pdf
@@ -12,6 +12,8 @@ from agents.ocrAgent import OCRAgent
 from api.pydantic.agent_pydantic import AgentPath, ChatRequest, AgentResponse, OCRResponse
 from tools.agentTools import create_agent
 from langchain_core.messages import HumanMessage, AIMessage
+from tools.agentTools import MCPClientManager
+
 # Logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -33,55 +35,93 @@ MSG_LIST = "MSG_LIST"
 )
 @require_auth
 def call_agent(path: AgentPath, body: ChatRequest):
-    question = body.question
-    agent = db.session.query(Agent).filter(Agent.agent_id == path.agent_id).first()
-    
-    if agent is None:
-        return jsonify({"error": "Agent not found"}), 404
-    
-    if agent.request_count is None:
-        agent.request_count = 0
-    agent.request_count += 1
-    db.session.commit()
+    """
+    Punto de entrada para llamadas al agente que garantiza que la conexión permanezca
+    abierta hasta que se complete la respuesta del agente.
+    """
+    try:
+        question = body.question
+        agent = db.session.query(Agent).filter(Agent.agent_id == path.agent_id).first()
+        
+        if agent is None:
+            return {"error": "Agent not found"}, 404
+        
+        if agent.request_count is None:
+            agent.request_count = 0
+        agent.request_count += 1
+        db.session.commit()
+        
+        # Crear una tarea asíncrona pero ejecutarla de forma sincrónica
+        # para mantener la conexión abierta
+        result = current_app.ensure_sync(process_agent_request)(agent, question)
+        
+        # Manejar y formatear el resultado
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], int):
+            # Es una respuesta de error
+            return result
+        
+        # Es una respuesta exitosa
+        if MSG_LIST not in session:
+            session[MSG_LIST] = []
+        session[MSG_LIST].append(result["generated_text"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in call_agent: {str(e)}", exc_info=True)
+        return {"error": str(e)}, 500
 
-    agentX = create_agent(agent)
-    formatted_prompt = agent.prompt_template.format(question=question)
-    messages = [HumanMessage(content=formatted_prompt)]
-    result = agentX.invoke({"messages": messages})
-    '''result = ""
-    if agent.has_memory:
-        result = aiServiceTools.invoke_ConversationalRetrievalChain(agent, question, session)
-    elif agent.silo is not None:
-        result = aiServiceTools.invoke_with_RAG(agent, question)
-    else:
-        result = aiServiceTools.invoke(agent, question)'''
-    
-    # Get the last AIMessage from the messages list
-    final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
-    response_text = final_message.content if final_message else str(result)
 
-    data = {
-        "input": question,
-        "generated_text": response_text,
-        "control": {
-            "temperature": 0.8,
-            "max_tokens": 100,
-            "top_p": 0.9,
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.5,
-            "stop_sequence": "\n\n"
-        },
-        "metadata": {
-            "model_name": agent.ai_service.name,
-            "timestamp": "2024-04-04T12:00:00Z"
+async def process_agent_request(agent, question):
+    """
+    Procesa la solicitud del agente de forma asíncrona.
+    """
+    try:
+        logger.info(f"Processing agent request for agent {agent.agent_id}: {question[:50]}...")
+        
+        # Crear el agente usando la función create_agent
+        agentX = await create_agent(agent)
+        
+        # Formatear el prompt según la plantilla del agente
+        formatted_prompt = agent.prompt_template.format(question=question)
+        messages = [HumanMessage(content=formatted_prompt)]
+        
+        # Invocar al agente y esperar la respuesta
+        logger.info(f"Invoking agent {agent.agent_id}...")
+        result = await agentX.ainvoke({"messages": messages})
+        logger.info(f"Agent {agent.agent_id} response received")
+        
+        # Obtener el último mensaje AIMessage de la lista de mensajes
+        final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
+        response_text = final_message.content if final_message else str(result)
+        
+        # Formatear la respuesta
+        data = {
+            "input": question,
+            "generated_text": response_text,
+            "control": {
+                "temperature": 0.8,
+                "max_tokens": 100,
+                "top_p": 0.9,
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.5,
+                "stop_sequence": "\n\n"
+            },
+            "metadata": {
+                "model_name": agent.ai_service.name,
+                "timestamp": "2024-04-04T12:00:00Z"
+            }
         }
-    }
+        
+        return data
+    
+    except Exception as e:
+        logger.error(f"Error processing agent request: {str(e)}", exc_info=True)
+        return {"error": str(e)}, 500
+    finally:
+        # Close MCP client when the application shuts down
+        await MCPClientManager().close()
 
-    if MSG_LIST not in session:
-        session[MSG_LIST] = []
-    session[MSG_LIST].append(response_text)
-
-    return jsonify(data)
 
 @api.post('/ocr/<int:agent_id>', 
     summary="Process OCR", 
