@@ -46,9 +46,19 @@ class AppService:
     
     @staticmethod
     def _update_app(app: App, data: dict):
-        """Update app attributes"""
-        app.name = data['name']
-        app.user_id = data['user_id']
+        """Update app attributes with the provided data.
+        Only updates attributes that are present in the data dictionary.
+        
+        Args:
+            app (App): The app instance to update
+            data (dict): Dictionary containing the attributes to update
+        """
+        if 'name' in data:
+            app.name = data['name']
+        if 'user_id' in data:
+            app.user_id = data['user_id']
+        if 'langsmith_api_key' in data:
+            app.langsmith_api_key = data['langsmith_api_key']
         
     @staticmethod
     def delete_app(app_id: int):
