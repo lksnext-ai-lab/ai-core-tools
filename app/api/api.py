@@ -10,9 +10,10 @@ import logging
 from api.api_auth import require_auth
 from agents.ocrAgent import OCRAgent
 from api.pydantic.agent_pydantic import AgentPath, ChatRequest, AgentResponse, OCRResponse
-from tools.agentTools import create_agent
+from tools.agentTools import create_agent, MCPClientManager
 from langchain_core.messages import HumanMessage, AIMessage
-from tools.agentTools import MCPClientManager
+from langchain.callbacks.tracers import LangChainTracer
+from langsmith import Client
 
 # Logging configuration
 logging.basicConfig(
@@ -51,9 +52,14 @@ def call_agent(path: AgentPath, body: ChatRequest):
         agent.request_count += 1
         db.session.commit()
         
+        tracer = None
+        if agent.app.langsmith_api_key is not None and agent.app.langsmith_api_key != "":
+            client = Client(api_key=agent.app.langsmith_api_key)
+            tracer = LangChainTracer(client=client, project_name=agent.app.name)
+
         # Crear una tarea asíncrona pero ejecutarla de forma sincrónica
         # para mantener la conexión abierta
-        result = current_app.ensure_sync(process_agent_request)(agent, question)
+        result = current_app.ensure_sync(process_agent_request)(agent, question, tracer)
         
         # Manejar y formatear el resultado
         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], int):
@@ -72,7 +78,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
         return {"error": str(e)}, 500
 
 
-async def process_agent_request(agent, question):
+async def process_agent_request(agent, question, tracer):
     """
     Procesa la solicitud del agente de forma asíncrona.
     """
@@ -85,6 +91,11 @@ async def process_agent_request(agent, question):
         # Formatear el prompt según la plantilla del agente
         formatted_prompt = agent.prompt_template.format(question=question)
         messages = [HumanMessage(content=formatted_prompt)]
+
+        config = {}
+        if tracer is not None:
+            config = {"callbacks": [tracer]}
+
         
         # Invocar al agente y esperar la respuesta
         logger.info(f"Invoking agent {agent.agent_id}...")
