@@ -43,10 +43,10 @@ class SiloService:
 
         logger.debug(f"Obteniendo retriever para silo {silo_id} con embedding service: {silo.embedding_service.name if silo.embedding_service else 'None'}")
         
-        pgVectorTools = PGVectorTools(db)
+        pg_vector_tools = PGVectorTools(db)
         collection_name = COLLECTION_PREFIX + str(silo_id)
         silo = SiloService.get_silo(silo_id)
-        return pgVectorTools.get_pgvector_retriever(collection_name, silo.embedding_service)
+        return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service)
     
     @staticmethod
     def get_silos_by_app_id(app_id: int) -> List[Silo]:
@@ -211,11 +211,11 @@ class SiloService:
         logger.debug(f"Usando embedding service: {silo.embedding_service.name if silo.embedding_service else 'None'}")
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        pgVectorTools = PGVectorTools(db)
+        pg_vector_tools = PGVectorTools(db)
         
         try:
             docs = SiloService._create_documents_for_indexing(silo_id, documents)
-            pgVectorTools.index_documents(
+            pg_vector_tools.index_documents(
                 collection_name,
                 docs,
                 embedding_service=silo.embedding_service
@@ -238,9 +238,9 @@ class SiloService:
             doc.metadata["resource_id"] = resource.resource_id
             doc.metadata["silo_id"] = resource.repository.silo_id
 
-        pgVectorTools = PGVectorTools(db)
+        pg_vector_tools = PGVectorTools(db)
         embedding_service = resource.repository.silo.embedding_service
-        pgVectorTools.index_documents(collection_name, docs, embedding_service)
+        pg_vector_tools.index_documents(collection_name, docs, embedding_service)
 
 
     @staticmethod
@@ -256,8 +256,8 @@ class SiloService:
             logger.error(f"Silo no encontrado para el recurso {resource.resource_id}")
             return
 
-        pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
+        pg_vector_tools = PGVectorTools(db)
+        pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
 
     @staticmethod
     def delete_content(silo_id: int, content_id: str):
@@ -276,8 +276,8 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(
+        pg_vector_tools = PGVectorTools(db)
+        pg_vector_tools.delete_documents(
             collection_name, 
             filter_metadata={"id": {"$eq": content_id}},
             embedding_service=silo.embedding_service
@@ -295,8 +295,8 @@ class SiloService:
             return
             
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_collection(collection_name, silo.embedding_service)
+        pg_vector_tools = PGVectorTools(db)
+        pg_vector_tools.delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str]):
@@ -315,8 +315,8 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        pgVectorTools = PGVectorTools(db)
-        pgVectorTools.delete_documents(
+        pg_vector_tools = PGVectorTools(db)
+        pg_vector_tools.delete_documents(
             collection_name, 
             ids=ids,
             embedding_service=silo.embedding_service
@@ -330,8 +330,8 @@ class SiloService:
             return []
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        pgVectorTools = PGVectorTools(db)
-        return pgVectorTools.search_similar_documents(
+        pg_vector_tools = PGVectorTools(db)
+        return pg_vector_tools.search_similar_documents(
             collection_name, 
             query, 
             embedding_service=silo.embedding_service,

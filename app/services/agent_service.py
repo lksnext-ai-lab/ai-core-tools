@@ -1,5 +1,5 @@
 from typing import Union
-from model.agent import Agent
+from model.agent import Agent, AgentMCP
 from model.ocr_agent import OCRAgent
 from extensions import db
 
@@ -28,8 +28,9 @@ class AgentService:
         agent.type = agent_type
         db.session.add(agent)
         db.session.commit()
+        
         return agent
-    
+
     @staticmethod
     def _update_ocr_agent(agent: OCRAgent, data: dict):
         was_tool = agent.is_tool
@@ -102,6 +103,43 @@ class AgentService:
                     description=description
                 )
                 agent.tool_associations.append(tool_assoc)
+        
+        db.session.commit()
+    
+    @staticmethod
+    def update_agent_mcps(agent: Agent, mcp_ids: list, form_data: dict = None):
+        # Convert mcp_ids to list if it's not already
+        if isinstance(mcp_ids, str):
+            mcp_ids = [mcp_ids]
+        elif not isinstance(mcp_ids, list):
+            mcp_ids = []
+
+        # Get existing MCP associations
+        existing_mcps = {assoc.config_id: assoc for assoc in agent.mcp_associations}
+        
+        # Convert mcp_ids to set of integers
+        valid_mcp_ids = {int(id) for id in mcp_ids if id}
+        
+        # Remove associations that are no longer needed
+        for mcp_id in list(existing_mcps.keys()):
+            if mcp_id not in valid_mcp_ids:
+                db.session.delete(existing_mcps[mcp_id])
+        
+        # Update or create associations
+        for mcp_id in valid_mcp_ids:
+            description = form_data.get(f'mcp_description_{mcp_id}') if form_data else None
+            
+            if mcp_id in existing_mcps:
+                # Update existing association
+                existing_mcps[mcp_id].description = description
+            else:
+                # Create new association
+                mcp_assoc = AgentMCP(
+                    agent_id=agent.agent_id,
+                    config_id=mcp_id,
+                    description=description
+                )
+                agent.mcp_associations.append(mcp_assoc)
         
         db.session.commit()
     

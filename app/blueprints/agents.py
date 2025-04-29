@@ -36,7 +36,10 @@ def app_agent(app_id: int, agent_id: int):
         agent_type = request.form.get('type', 'agent')
         agent = agent_service.create_or_update_agent(agent_data, agent_type)
 
+        # Update tools and MCPs
         agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
+        agent_service.update_agent_mcps(agent, request.form.getlist('mcp_config_id'), request.form)
+        
         return app_agents(app_id)
     
     #TODO: avoid using db session from blueprints. Move to services

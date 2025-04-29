@@ -3,6 +3,15 @@ from sqlalchemy.orm import relationship
 from db.base_class import Base
 from datetime import datetime
 
+class AgentMCP(Base):
+    __tablename__ = 'agent_mcps'
+    agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
+    config_id = Column(Integer, ForeignKey('MCPConfig.config_id'), primary_key=True)
+    description = Column(Text, nullable=True)  # Description of what this MCP is used for
+    
+    agent = relationship('Agent', foreign_keys=[agent_id], back_populates='mcp_associations')
+    mcp = relationship('MCPConfig', foreign_keys=[config_id])
+
 class AgentTool(Base):
     __tablename__ = 'agent_tools'
     agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
@@ -34,9 +43,7 @@ class Agent(Base):
     app_id = Column(Integer,
                         ForeignKey('App.app_id'),
                         nullable=True)
-    mcp_config_id = Column(Integer,
-                        ForeignKey('MCPConfig.config_id'),
-                        nullable=True)
+
     has_memory = Column(Boolean)
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
@@ -53,9 +60,6 @@ class Agent(Base):
                            back_populates='agents',
                            foreign_keys=[app_id])
     
-    mcp_config = relationship('MCPConfig',
-                           foreign_keys=[mcp_config_id])
-    
     output_parser = relationship('OutputParser',
                            foreign_keys=[output_parser_id])
     
@@ -64,8 +68,13 @@ class Agent(Base):
                                    primaryjoin=(agent_id == AgentTool.agent_id),
                                    back_populates='agent')
     
+    # Add new MCP relationship
+    mcp_associations = relationship('AgentMCP',
+                                  primaryjoin=(agent_id == AgentMCP.agent_id),
+                                  back_populates='agent')
+    
     __mapper_args__ = {
         'polymorphic_identity': 'agent',
         'polymorphic_on': type
     }
-    
+

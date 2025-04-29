@@ -12,6 +12,7 @@ class App(Base):
     create_date = Column(DateTime, default=datetime.now)
     langsmith_api_key = Column(String(255))
 
+
     repositories = relationship('Repository', lazy=True)
     domains = relationship('Domain', back_populates='app', lazy=True)
     agents = relationship('Agent', lazy=True)
