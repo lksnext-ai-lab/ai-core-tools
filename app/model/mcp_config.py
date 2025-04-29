@@ -58,23 +58,22 @@ class MCPConfig(Base):
             inputs = self.inputs if isinstance(self.inputs, list) else json.loads(self.inputs) if self.inputs else None
             
             config = {
-                "mcp": {
-                    "servers": {
                         self.server_name: {
                             "command": self.command,
-                            "args": args
+                            "args": args,
+                            "transport": self.transport_type.value
                         }
                     }
-                }
-            }
-            
+            """
             # Add env if exists
             if env:
-                config["mcp"]["servers"][self.server_name]["env"] = env
+                config[self.server_name]["env"] = env
             
             # Add inputs if exists
             if inputs:
-                config["mcp"]["inputs"] = inputs
+                config["inputs"] = inputs            
+            """
+
                 
             return config
             
