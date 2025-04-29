@@ -28,16 +28,27 @@ class MCPClientManager:
             cls._instance = super(MCPClientManager, cls).__new__(cls)
         return cls._instance
 
-    async def get_client(self):
-        if self._client is None:
-            connections = {
-                "weather": {
-                    "url": "http://localhost:8000/sse",
-                    "transport": "sse",
-                }
-            }
-            self._client = MultiServerMCPClient(connections=connections)
-            await self._client.__aenter__()
+    async def get_client(self, agent: Agent = None):
+        if self._client is None and agent is not None:
+            connections = {}
+            for mcp_assoc in agent.mcp_associations:
+                mcp_config = mcp_assoc.mcp
+                try:
+                    # Store the config directly without additional wrapping
+                    connection_config = mcp_config.to_connection_dict()
+                    if connection_config:
+                        connections.update(connection_config)
+                except ValueError as e:
+                    logger.error(f"Error configuring MCP {mcp_config.name}: {e}")
+                    continue
+                
+            if connections:
+                logger.info(f"Creating MCP client with connections: {connections}")
+                self._client = MultiServerMCPClient(connections=connections)
+                await self._client.__aenter__()
+            else:
+                logger.warning("No valid MCP configurations found for agent")
+                
         return self._client
 
     async def close(self):
@@ -62,11 +73,12 @@ async def create_agent(agent: Agent):
 
     try:
         logger.info("Starting MCP tools loading...")
-        mcp_client = await MCPClientManager().get_client()
-        mcp_tools = mcp_client.get_tools()
-        logger.info(f"MCP tools loaded successfully: {mcp_tools}")
-        if mcp_tools:
-            tools.extend(mcp_tools)
+        mcp_client = await MCPClientManager().get_client(agent)
+        if mcp_client:
+            mcp_tools = mcp_client.get_tools()
+            logger.info(f"MCP tools loaded successfully: {mcp_tools}")
+            if mcp_tools:
+                tools.extend(mcp_tools)
     except Exception as e:
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)
     

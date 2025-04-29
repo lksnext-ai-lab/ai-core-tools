@@ -48,6 +48,7 @@ class MCPConfigService:
             config.command = data.get('command')
             config.args = data.get('args')
             config.env = data.get('env')
+            config.inputs = data.get('inputs')
             config.encoding = data.get('encoding', 'utf-8')
             config.encoding_error_handler = data.get('encoding_error_handler', 'strict')
         elif config.transport_type == TransportType.SSE:
@@ -94,4 +95,4 @@ class MCPConfigService:
             if not config_data.get('url'):
                 raise ValueError("URL is required for SSE transport")
 
-        return True 
+        return True

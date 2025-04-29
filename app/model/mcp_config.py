@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from db.base_class import Base
 from datetime import datetime
 import enum
+import json
 
 class TransportType(enum.Enum):
     STDIO = "stdio"
@@ -26,6 +27,7 @@ class MCPConfig(Base):
     command = Column(String(255))
     args = Column(JSON)  # List of strings
     env = Column(JSON)   # Dictionary of environment variables
+    inputs = Column(JSON)  # List of input configurations
     encoding = Column(String(10), default="utf-8")
     encoding_error_handler = Column(String(10), default="strict")
     
@@ -46,28 +48,54 @@ class MCPConfig(Base):
 
     def to_connection_dict(self) -> dict:
         """Convert the model to a connection dictionary format expected by MultiServerMCPClient"""
-        base_config = {
-            "transport": self.transport_type.value
-        }
-        
         if self.transport_type == TransportType.STDIO:
             if not self.command or not self.args:
                 raise ValueError("Command and args are required for STDIO transport")
-            base_config.update({
-                "command": self.command,
-                "args": self.args,
-                "env": self.env,
-                "encoding": self.encoding,
-                "encoding_error_handler": self.encoding_error_handler
-            })
+            
+            # Ensure args and env are proper Python objects, not strings
+            args = self.args if isinstance(self.args, list) else json.loads(self.args)
+            env = self.env if isinstance(self.env, dict) else json.loads(self.env) if self.env else None
+            inputs = self.inputs if isinstance(self.inputs, list) else json.loads(self.inputs) if self.inputs else None
+            
+            config = {
+                "mcp": {
+                    "servers": {
+                        self.server_name: {
+                            "command": self.command,
+                            "args": args
+                        }
+                    }
+                }
+            }
+            
+            # Add env if exists
+            if env:
+                config["mcp"]["servers"][self.server_name]["env"] = env
+            
+            # Add inputs if exists
+            if inputs:
+                config["mcp"]["inputs"] = inputs
+                
+            return config
+            
         elif self.transport_type == TransportType.SSE:
             if not self.url:
                 raise ValueError("URL is required for SSE transport")
-            base_config.update({
-                "url": self.url,
-                "headers": self.headers,
-                "timeout": self.timeout,
-                "sse_read_timeout": self.sse_read_timeout
-            })
+            base_config = {
+                self.server_name: {
+                    "transport": self.transport_type.value,
+                    "url": self.url
+                }
+            }
             
-        return base_config
+            """
+            # Añadir headers si existen
+            if self.headers:
+                base_config["headers"] = self.headers
+            if self.timeout:
+                base_config["timeout"] = self.timeout
+            if self.sse_read_timeout:
+                base_config["sse_read_timeout"] = self.sse_read_timeout            
+            """
+
+            return base_config

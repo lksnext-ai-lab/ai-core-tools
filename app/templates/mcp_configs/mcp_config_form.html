@@ -76,6 +76,11 @@
                                 <input type="text" class="form-control" name="encoding_error_handler"
                                        value="{{ mcp_config.encoding_error_handler if mcp_config and mcp_config.transport_type.value == 'stdio' else 'strict' }}">
                             </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Inputs (JSON array)</label>
+                                <textarea class="form-control" name="inputs" rows="4">{{ mcp_config.inputs|tojson if mcp_config and mcp_config.transport_type.value == 'stdio' else '[]' }}</textarea>
+                                <small class="form-text text-muted">Example: [{"type": "promptString", "id": "pg_url", "description": "PostgreSQL URL"}]</small>
+                            </div>
                         </div>
 
                         <!-- SSE specific fields -->
@@ -136,4 +141,4 @@ document.addEventListener('DOMContentLoaded', function() {
     updateFields(); // Initial state
 });
 </script>
-{% endblock %} 
+{% endblock %}
