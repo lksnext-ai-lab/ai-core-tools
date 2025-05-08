@@ -99,6 +99,9 @@ async def create_agent(agent: Agent):
         retriever_tool = getRetrieverTool(agent.silo)
         if retriever_tool is not None:
             tools.append(retriever_tool)
+    
+    #if agent.has_memory:
+
 
     try:
         logger.info("Starting MCP tools loading...")
