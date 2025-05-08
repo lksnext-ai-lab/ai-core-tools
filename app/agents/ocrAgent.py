@@ -14,9 +14,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
-from tools.aiServiceTools import MistralWrapper, getLLM
-from langchain_mistralai import ChatMistralAI
-
+from tools.aiServiceTools import getLLM
 from tools.outputParserTools import create_model_from_json_schema
 from model.ocr_agent import OCRAgent
 from tools.ocrAgentTools import (
@@ -29,9 +27,6 @@ from tools.ocrAgentTools import (
     format_data_from_vision
 )
 
-from langchain_anthropic import ChatAnthropic
-from langchain_ollama.llms import OllamaLLM
-
 load_dotenv()
 
 client = Client()
@@ -40,6 +35,13 @@ os.environ["LANGCHAIN_PROJECT"] = "ia-core-tools"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PDF_TEXT_CHECKER="pdf text checker"
+PDF_TEXT_EXTRACTOR="pdf text extractor"
+PDF_TO_IMAGES_CONVERTER="pdf to images converter"
+VISION_DATA_EXTRACTOR="vision data extractor"
+DATA_ANALYZER="data analyzer and formatter llm"
+DOCUMENT_DATA_INTEGRATOR="document data integration by pages"
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -72,28 +74,28 @@ def get_or_create_graph():
     # Añadir nodos al grafo
     graph_builder.add_node("get_agent_llms", get_agent_llms)
     graph_builder.add_node("get_agent_output_parser", get_agent_output_parser)
-    graph_builder.add_node("pdf text checker", check_pdf_contains_plain_text)
-    graph_builder.add_node("pdf text extractor", extract_text_from_pdf)
-    graph_builder.add_node("pdf to images converter", pdf_to_images)
-    graph_builder.add_node("vision data extractor", extract_data_from_images)
-    graph_builder.add_node("data analyzer and formatter llm", get_and_format_data_with_llm)
-    graph_builder.add_node("document data integration by pages", get_final_output)
+    graph_builder.add_node(PDF_TEXT_CHECKER, check_pdf_contains_plain_text)
+    graph_builder.add_node(PDF_TEXT_EXTRACTOR, extract_text_from_pdf)
+    graph_builder.add_node(PDF_TO_IMAGES_CONVERTER, pdf_to_images)
+    graph_builder.add_node(VISION_DATA_EXTRACTOR, extract_data_from_images)
+    graph_builder.add_node(DATA_ANALYZER, get_and_format_data_with_llm)
+    graph_builder.add_node(DOCUMENT_DATA_INTEGRATOR, get_final_output)
 
     # Conexiones
     graph_builder.add_edge(START, "get_agent_llms")
     graph_builder.add_edge("get_agent_llms", "get_agent_output_parser")
-    graph_builder.add_edge("get_agent_output_parser", "pdf text checker")
+    graph_builder.add_edge("get_agent_output_parser", PDF_TEXT_CHECKER)
     
     # Conexiones para el flujo con visión
     graph_builder.add_conditional_edges(
-        source="pdf text checker",
+        source=PDF_TEXT_CHECKER,
         path=determine_path_with_vision
     )
-    graph_builder.add_edge("pdf text extractor", "pdf to images converter")
-    graph_builder.add_edge("pdf to images converter", "vision data extractor")
-    graph_builder.add_edge("vision data extractor", "data analyzer and formatter llm")
-    graph_builder.add_edge("data analyzer and formatter llm", "document data integration by pages")
-    graph_builder.add_edge("document data integration by pages", END)
+    graph_builder.add_edge(PDF_TEXT_EXTRACTOR, PDF_TO_IMAGES_CONVERTER)
+    graph_builder.add_edge(PDF_TO_IMAGES_CONVERTER, VISION_DATA_EXTRACTOR)
+    graph_builder.add_edge(VISION_DATA_EXTRACTOR, DATA_ANALYZER)
+    graph_builder.add_edge(DATA_ANALYZER, DOCUMENT_DATA_INTEGRATOR)
+    graph_builder.add_edge(DOCUMENT_DATA_INTEGRATOR, END)
     
     return graph_builder.compile()
 
@@ -267,7 +269,7 @@ def get_final_output(state: State):
 def determine_path_with_vision(state: State) -> Literal["pdf text extractor", "pdf to images converter"]:
     """Determina el siguiente nodo basado en el resultado del PDF checker"""
     has_text = state.get("has_plain_text", False)
-    return "pdf text extractor" if has_text else "pdf to images converter"
+    return PDF_TEXT_EXTRACTOR if has_text else PDF_TO_IMAGES_CONVERTER
 
 def process_pdf(agent_id: int, pdf_path: str, images_path: str):
     try:
@@ -321,6 +323,6 @@ def process_pdf(agent_id: int, pdf_path: str, images_path: str):
                 for file in os.listdir(images_path):
                     os.remove(os.path.join(images_path, file))
                 os.rmdir(images_path)
-        except:
+        except Exception:
             pass
         raise e

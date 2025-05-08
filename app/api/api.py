@@ -1,9 +1,7 @@
 from flask import session, request, jsonify, current_app
 from flask_openapi3 import APIBlueprint, Tag
-from pydantic import BaseModel
 from agents.ocrAgent import process_pdf
 from model.agent import Agent
-import tools.aiServiceTools as aiServiceTools
 from extensions import db
 import os
 import logging
@@ -14,6 +12,7 @@ from tools.agentTools import create_agent, MCPClientManager
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
+from services.agent_cache_service import AgentCacheService
 
 # Logging configuration
 logging.basicConfig(
@@ -58,7 +57,6 @@ def call_agent(path: AgentPath, body: ChatRequest):
             tracer = LangChainTracer(client=client, project_name=agent.app.name)
 
         # Crear una tarea asíncrona pero ejecutarla de forma sincrónica
-        # para mantener la conexión abierta
         result = current_app.ensure_sync(process_agent_request)(agent, question, tracer)
         
         # Manejar y formatear el resultado
@@ -85,8 +83,14 @@ async def process_agent_request(agent, question, tracer):
     try:
         logger.info(f"Processing agent request for agent {agent.agent_id}: {question[:50]}...")
         
-        # Crear el agente usando la función create_agent
-        agentX = await create_agent(agent)
+        # Try to get agent from cache first
+        agent_x = AgentCacheService.get_cached_agent(agent.agent_id)
+        
+        if agent_x is None:
+            # Create new agent instance if not in cache
+            logger.info(f"Creating new agent instance for {agent.agent_id}")
+            agent_x = await create_agent(agent)
+            AgentCacheService.cache_agent(agent.agent_id, agent_x)
         
         # Formatear el prompt según la plantilla del agente
         formatted_prompt = agent.prompt_template.format(question=question)
@@ -99,7 +103,7 @@ async def process_agent_request(agent, question, tracer):
         
         # Invocar al agente y esperar la respuesta
         logger.info(f"Invoking agent {agent.agent_id}...")
-        result = await agentX.ainvoke({"messages": messages})
+        result = await agent_x.ainvoke({"messages": messages})
         logger.info(f"Agent {agent.agent_id} response received")
         
         # Obtener el último mensaje AIMessage de la lista de mensajes
