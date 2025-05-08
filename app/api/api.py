@@ -88,25 +88,39 @@ async def process_agent_request(agent, question, tracer):
         # Crear el agente usando la función create_agent
         agentX = await create_agent(agent)
         
-        # Formatear el prompt según la plantilla del agente
-        formatted_prompt = agent.prompt_template.format(question=question)
-        messages = [HumanMessage(content=formatted_prompt)]
-
-        config = {}
-        if tracer is not None:
-            config = {"callbacks": [tracer]}
-
+        config = {
+            "configurable": {
+                "question": question
+            }
+        }
         
+        if tracer is not None:
+            config["callbacks"] = [tracer]
+
         # Invocar al agente y esperar la respuesta
         logger.info(f"Invoking agent {agent.agent_id}...")
-        result = await agentX.ainvoke({"messages": messages})
+        
+        # Initialize with empty messages list
+        initial_state = {
+            "messages": []
+        }
+        
+        result = await agentX.ainvoke(initial_state, config=config)
         logger.info(f"Agent {agent.agent_id} response received")
         
-        # Obtener el último mensaje AIMessage de la lista de mensajes
-        final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
-        response_text = final_message.content if final_message else str(result)
+        # Determinar la respuesta basada en si tenemos structured_response o mensajes
+        response_text = ""
+        if "structured_response" in result:
+            # Convertir la respuesta estructurada a dict
+            structured_response = result["structured_response"]
+            if hasattr(structured_response, "model_dump"):
+                response_text = structured_response.model_dump()
+            else:
+                response_text = str(structured_response)
+        else:
+            final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
+            response_text = final_message.content if final_message else str(result)
         
-        # Formatear la respuesta
         data = {
             "input": question,
             "generated_text": response_text,
