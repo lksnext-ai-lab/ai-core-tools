@@ -260,6 +260,21 @@ class SiloService:
         pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
 
     @staticmethod
+    def delete_url(silo_id: int, url: str):
+        """
+        Delete a resource using its silo's embedding service
+        """
+        logger.info(f"Eliminando URL {url} del silo {silo_id}")
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        
+        silo = SiloService.get_silo(silo_id= silo_id)
+        if not silo:
+            logger.error(f"Silo no encontrado para la url {url}")
+            return
+
+        pg_vector_tools = PGVectorTools(db)
+        pg_vector_tools.delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=silo.embedding_service)
+    @staticmethod
     def delete_content(silo_id: int, content_id: str):
         """
         Delete content from a silo using its embedding service

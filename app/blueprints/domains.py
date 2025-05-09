@@ -83,3 +83,8 @@ def create_domain():
         # Handle validation errors or other exceptions
         return render_template('domains/list.html', error=str(e))
 
+@domains_blueprint.route('/<int:domain_id>/url/<int:url_id>/delete', methods=['GET'])
+def delete_url(domain_id, url_id):
+    UrlService.delete_url(url_id, domain_id)
+    return redirect(url_for('domains.view_domain_urls', domain_id=domain_id))
+
