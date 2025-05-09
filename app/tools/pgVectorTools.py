@@ -16,6 +16,8 @@ from model.resource import Resource
 from typing import Optional
 from langchain.schema import Document
 from typing import List
+from extensions import async_engine
+
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
 #TODO: pgVector should not know abot silos
 COLLECTION_PREFIX = 'silo_'
@@ -24,7 +26,8 @@ class PGVectorTools:
     def __init__(self, db):
         """Initializes the PGVectorTools with a SQLAlchemy engine."""
         self.Session = db.session
-        self.db = db    
+        self.db = db
+        self._async_engine = async_engine    
 
     @deprecation.deprecated(
         deprecated_in="0.1.0",
@@ -160,8 +163,9 @@ class PGVectorTools:
         vector_store = PGVector(
             embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
-            connection=self.db.engine,
+            connection=self._async_engine,
             use_jsonb=True,
+            async_mode=True
         )
         return vector_store.as_retriever()
 

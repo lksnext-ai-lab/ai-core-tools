@@ -18,16 +18,13 @@ def domains():
 @domains_blueprint.route('/<int:domain_id>', methods=['GET', 'POST'])
 def domain(domain_id):
     if request.method == 'POST':
-        # Add app_id from session to the form data
         form_data = request.form.copy()
         form_data['app_id'] = session['app_id']
         
-        # Extract embedding_service_id before creating Domain instance
         embedding_service_id = form_data.pop('embedding_service_id', None)
         
-        # Create or update domain
-        domain = DomainService.create_or_update_domain(Domain(**form_data), embedding_service_id)
-        return render_template('domains/domain.html', domain=domain)
+        DomainService.create_or_update_domain(Domain(**form_data), embedding_service_id)
+        return redirect(url_for('domains.domains'))
     else:
         embedding_services = EmbeddingServiceService.get_embedding_services_by_app_id(session['app_id'])
         if domain_id is None or domain_id == 0:
