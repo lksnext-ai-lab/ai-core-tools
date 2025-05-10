@@ -109,17 +109,12 @@ async def process_agent_request(agent, question, tracer):
         }
         
         result = await agent_x.ainvoke(initial_state, config=config)
-        logger.info(f"Agent {agent.agent_id} response received")
-        
+        logger.info(f"Agent {agent.agent_id} response: {result}")
         # Determinar la respuesta basada en si tenemos structured_response o mensajes
         response_text = ""
         if "structured_response" in result:
             # Convertir la respuesta estructurada a dict
-            structured_response = result["structured_response"]
-            if hasattr(structured_response, "model_dump"):
-                response_text = structured_response
-            else:
-                response_text = str(structured_response)
+            response_text = result["structured_response"].model_dump()
         else:
             final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
             response_text = final_message.content if final_message else str(result)
