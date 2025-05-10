@@ -99,7 +99,6 @@ async def create_agent(agent: Agent):
                 
         messages.extend([
             SystemMessage(content=agent.system_prompt),
-            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
             HumanMessage(content=formatted_human_prompt)
         ])
         return messages

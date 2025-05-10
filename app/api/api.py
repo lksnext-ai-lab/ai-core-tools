@@ -117,7 +117,7 @@ async def process_agent_request(agent, question, tracer):
             # Convertir la respuesta estructurada a dict
             structured_response = result["structured_response"]
             if hasattr(structured_response, "model_dump"):
-                response_text = structured_response.model_dump()
+                response_text = structured_response
             else:
                 response_text = str(structured_response)
         else:
