@@ -4,6 +4,7 @@ from agents.ocrAgent import process_pdf
 from model.agent import Agent
 from extensions import db
 import os
+import json
 import logging
 from api.api_auth import require_auth
 from agents.ocrAgent import OCRAgent
@@ -117,12 +118,23 @@ async def process_agent_request(agent, question, tracer):
         
         result = await agent_x.ainvoke(initial_state, config=config)
         logger.info(f"Agent {agent.agent_id} response: {result}")
-        # Determinar la respuesta basada en si tenemos structured_response o mensajes
         response_text = ""
-        if "structured_response" in result:
-            response_text = result["structured_response"].model_dump()
+        final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
+        
+        if agent.output_parser_id is not None and final_message:
+            # Clean up the content by removing markdown code block formatting
+            content = final_message.content.strip()
+            if content.startswith('```json'):
+                content = content[7:]  # Remove ```json
+            if content.endswith('```'):
+                content = content[:-3]  # Remove closing ```
+            content = content.strip()  # Remove any extra whitespace
+            try:
+                response_text = json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.error(f"Error parsing JSON response: {e}")
+                response_text = final_message.content
         else:
-            final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
             response_text = final_message.content if final_message else str(result)
         
         data = {
