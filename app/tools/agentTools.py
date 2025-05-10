@@ -78,11 +78,25 @@ async def create_agent(agent: Agent):
             logger.error(f"Error getting Pydantic model: {str(e)}")
             pydantic_model = None
 
+    # Initialize checkpointer if memory is enabled
+    checkpointer = None
+    if agent.has_memory:
+        logger.info("Agent has memory enabled, initializing checkpointer...")
+        checkpointer = MemorySaver()
+
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-        question = config.get("configurable", {}).get("question", "")
-        formatted_human_prompt = agent.prompt_template.format(question=question)
+        # Get the initial question from config
+        initial_question = config.get("configurable", {}).get("question", "")
+        formatted_human_prompt = agent.prompt_template.format(question=initial_question)
         
-        messages = state.get("messages", [])
+        # Get existing messages from memory if available
+        messages = []
+        if agent.has_memory:
+            messages = state.get("messages", [])
+            checkpoint = state.get("checkpoint")
+            if checkpoint:
+                logger.info(f"Memory checkpoint: {checkpoint}")
+                
         messages.extend([
             SystemMessage(content=agent.system_prompt),
             SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
@@ -99,9 +113,6 @@ async def create_agent(agent: Agent):
         retriever_tool = getRetrieverTool(agent.silo)
         if retriever_tool is not None:
             tools.append(retriever_tool)
-    
-    #if agent.has_memory:
-
 
     try:
         logger.info("Starting MCP tools loading...")
@@ -117,21 +128,30 @@ async def create_agent(agent: Agent):
     if pydantic_model:
         # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
         structured_prompt = f"Given the conversation, generate a response following this format: {format_instructions}"
-        return create_react_agent(
+        agent_chain = create_react_agent(
             model=llm,
             prompt=prompt,
             response_format=(structured_prompt, pydantic_model),
             tools=tools, 
-            debug=True
+            checkpointer=checkpointer,
+            debug=False  # Set debug to False since we handle logging explicitly
         )
     else:
         # Si no hay modelo Pydantic, usamos el agente sin formato estructurado
-        return create_react_agent(
+        agent_chain = create_react_agent(
             model=llm,
             prompt=prompt,
             tools=tools, 
-            debug=True
+            checkpointer=checkpointer,  # Add checkpointer if memory is enabled
+            debug=False  # Set debug to False since we handle logging explicitly
         )
+
+    # Add logging for the created agent
+    logger.info(f"Created agent with {len(tools)} tools")
+    logger.info(f"Memory enabled: {agent.has_memory}")
+    logger.info(f"Output parser: {agent.output_parser_id is not None}")
+    
+    return agent_chain
 
 
 class IACTTool(BaseTool):
@@ -162,7 +182,12 @@ class IACTTool(BaseTool):
             if retriever_tool is not None:
                 tools.append(retriever_tool)
 
-        self.react_agent = create_react_agent(self.llm, tools, debug=True, state_modifier=state_modifier)
+        self.react_agent = create_react_agent(
+            self.llm, 
+            tools, 
+            debug=False,  # Set debug to False
+            state_modifier=state_modifier
+        )
 
     def _run(self, query: str, *args, **kwargs) -> str:
         formatted_prompt = self.agent.prompt_template.format(question=query)

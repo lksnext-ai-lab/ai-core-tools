@@ -90,24 +90,43 @@ async def process_agent_request(agent, question, tracer):
         
         config = {
             "configurable": {
-                "question": question
+                "question": question,
+                "thread_id": f"thread_{agent.agent_id}"  # Add unique thread id based on agent id
             }
         }
         
         if tracer is not None:
             config["callbacks"] = [tracer]
 
-        # Invocar al agente y esperar la respuesta
-        logger.info(f"Invoking agent {agent.agent_id}...")
-        
-        # Initialize with empty messages list
+        # Initialize state with messages and checkpoint if memory is enabled
         initial_state = {
-            "messages": []
+            "messages": [],
+            "checkpoint": None if not agent.has_memory else {}
         }
         
         result = await agentX.ainvoke(initial_state, config=config)
         logger.info(f"Agent {agent.agent_id} response received")
         
+        # Log checkpoint data if memory is enabled
+        if agent.has_memory and 'checkpoint' in result:
+            logger.info("Memory Checkpoint Data:")
+            logger.info("---------------------")
+            logger.info(result['checkpoint'])
+            logger.info("---------------------")
+        
+        # Log messages by type
+        for msg in result.get('messages', []):
+            if isinstance(msg, HumanMessage):
+                logger.info(f"Human Message: {msg.content}")
+            elif isinstance(msg, AIMessage):
+                logger.info(f"AI Message: {msg.content}")
+            else:
+                logger.info(f"Other Message ({type(msg).__name__}): {msg.content}")
+        
+        # Log checkpoint data if available
+        if 'checkpoint' in result:
+            logger.info(f"Checkpoint Data: {result['checkpoint']}")
+
         # Determinar la respuesta basada en si tenemos structured_response o mensajes
         response_text = ""
         if "structured_response" in result:
