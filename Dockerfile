@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     python3-dev \
     gcc \
+    g++ \
     musl-dev \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
