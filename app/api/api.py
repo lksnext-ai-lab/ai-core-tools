@@ -83,14 +83,21 @@ async def process_agent_request(agent, question, tracer):
     try:
         logger.info(f"Processing agent request for agent {agent.agent_id}: {question[:50]}...")
         
-        # Try to get agent from cache first
-        agent_x = AgentCacheService.get_cached_agent(agent.agent_id)
+        # Only try to get agent from cache if it has memory enabled
+        agent_x = None
+        if agent.has_memory:
+            agent_x = AgentCacheService.get_cached_agent(agent.agent_id)
         
         if agent_x is None:
-            # Create new agent instance if not in cache
+            # Create new agent instance if not in cache or if agent has no memory
             logger.info(f"Creating new agent instance for {agent.agent_id}")
             agent_x = await create_agent(agent)
-            AgentCacheService.cache_agent(agent.agent_id, agent_x)
+            # Only cache if agent has memory enabled
+            if agent.has_memory:
+                AgentCacheService.cache_agent(agent.agent_id, agent_x)
+                logger.info(f"Agent {agent.agent_id} cached successfully")
+            else:
+                logger.info(f"Agent {agent.agent_id} not cached as it has no memory enabled")
         
         config = {
             "configurable": {
@@ -113,7 +120,6 @@ async def process_agent_request(agent, question, tracer):
         # Determinar la respuesta basada en si tenemos structured_response o mensajes
         response_text = ""
         if "structured_response" in result:
-            # Convertir la respuesta estructurada a dict
             response_text = result["structured_response"].model_dump()
         else:
             final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)

@@ -99,6 +99,7 @@ async def create_agent(agent: Agent):
                 
         messages.extend([
             SystemMessage(content=agent.system_prompt),
+            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
             HumanMessage(content=formatted_human_prompt)
         ])
         return messages
@@ -133,7 +134,7 @@ async def create_agent(agent: Agent):
             response_format=(structured_prompt, pydantic_model),
             tools=tools, 
             checkpointer=checkpointer,
-            debug=True  # Set debug to False since we handle logging explicitly
+            debug=True  
         )
     else:
         # Si no hay modelo Pydantic, usamos el agente sin formato estructurado
@@ -141,7 +142,7 @@ async def create_agent(agent: Agent):
             model=llm,
             prompt=prompt,
             tools=tools, 
-            checkpointer=checkpointer,  # Add checkpointer if memory is enabled
+            checkpointer=checkpointer,  
             debug=True
         )
 
