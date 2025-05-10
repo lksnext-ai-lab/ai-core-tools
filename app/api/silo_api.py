@@ -26,7 +26,6 @@ def count_docs_in_silo(path: SiloPath):
                responses={"200": MessageResponse})
 @require_auth
 def index_single_document(path: SiloPath, body: SingleDocumentIndex):
-    #data = request.get_json()
     content = body.content
     metadata = body.metadata
     #TODO: validate metadata

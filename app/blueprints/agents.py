@@ -9,6 +9,7 @@ from model.silo import Silo
 from model.mcp_config import MCPConfig
 from extensions import db
 from services.agent_service import AgentService
+from services.agent_cache_service import AgentCacheService
 import logging
 
 agents_blueprint = Blueprint('agents', __name__)
@@ -35,6 +36,9 @@ def app_agent(app_id: int, agent_id: int):
         logger.info(f"agent_data: {agent_data}")
         agent_type = request.form.get('type', 'agent')
         agent = agent_service.create_or_update_agent(agent_data, agent_type)
+        
+        # Invalidate agent cache when updated
+        AgentCacheService.invalidate_agent(agent_id)
 
         # Update tools and MCPs
         agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
@@ -65,6 +69,8 @@ def app_agent(app_id: int, agent_id: int):
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/delete', methods=['GET'])
 def app_agent_delete(app_id: int, agent_id: int):
     agent_service = AgentService()
+    # Invalidate agent cache when deleted
+    AgentCacheService.invalidate_agent(agent_id)
     agent_service.delete_agent(agent_id)
     return app_agents(app_id)
 

@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
-from model.output_parser import OutputParser
 from datetime import datetime
 
 class App(Base):

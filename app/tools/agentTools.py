@@ -134,7 +134,7 @@ async def create_agent(agent: Agent):
             response_format=(structured_prompt, pydantic_model),
             tools=tools, 
             checkpointer=checkpointer,
-            debug=False  # Set debug to False since we handle logging explicitly
+            debug=True  # Set debug to False since we handle logging explicitly
         )
     else:
         # Si no hay modelo Pydantic, usamos el agente sin formato estructurado
@@ -143,7 +143,7 @@ async def create_agent(agent: Agent):
             prompt=prompt,
             tools=tools, 
             checkpointer=checkpointer,  # Add checkpointer if memory is enabled
-            debug=False  # Set debug to False since we handle logging explicitly
+            debug=True
         )
 
     # Add logging for the created agent
