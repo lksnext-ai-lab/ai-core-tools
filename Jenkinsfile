@@ -32,7 +32,6 @@ pipeline {
                         -e SONAR_HOST_URL=$SONARENTERPRISE_URL \
                         -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
                         -e JOB_ACTION=sonar \
-                        -e CHECK_QG=$CHECK_QG \
                         -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
                         $IMAGE_NODE \
                         -Dsonar.branch.name=$SONAR_BRANCH
