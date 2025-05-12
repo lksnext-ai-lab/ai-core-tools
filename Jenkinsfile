@@ -11,6 +11,12 @@ pipeline {
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
+
+        //Sonar Related
+        SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
+        SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
+        SONAR_BRANCH = "develop"
+        IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
     }
     
     stages {
@@ -20,6 +26,22 @@ pipeline {
             }
         }
         
+        stage('Sonar') {
+            steps {
+                script {
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/app \
+                        -e SONAR_HOST_URL=$SONARENTERPRISE_URL \
+                        -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
+                        -e JOB_ACTION=sonar \
+                        -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
+                        $IMAGE_NODE
+                    '''
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 script {
