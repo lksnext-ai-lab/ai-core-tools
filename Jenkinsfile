@@ -4,17 +4,19 @@ pipeline {
     }
     
     environment {
-        SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
-        SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
-        SONAR_BRANCH = "develop"
         REGISTRY_USER = credentials('lks-docker-registry-user')
         REGISTRY_PASSWORD = credentials('lks-docker-registry-password')
         IMAGE_NAME = "ia-core-tools/ia-core-tools"
-        IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
         KUBE_NAMESPACE = "test"
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
+
+        //Sonar Related
+        SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
+        SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
+        SONAR_BRANCH = "develop"
+        IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
     }
     
     stages {
