@@ -33,8 +33,7 @@ pipeline {
                         -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
                         -e JOB_ACTION=sonar \
                         -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
-                        $IMAGE_NODE \
-                        -Dsonar.branch.name=$SONAR_BRANCH
+                        $IMAGE_NODE
                     '''
                 }
             }
