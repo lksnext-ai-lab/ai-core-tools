@@ -89,15 +89,18 @@ async def create_agent(agent: Agent):
         initial_question = config.get("configurable", {}).get("question", "")
         formatted_human_prompt = agent.prompt_template.format(question=initial_question)
         
-        messages = state.get("messages", [])
+        messages = []
         
-        if not messages:
-            messages.extend([
-                SystemMessage(content=agent.system_prompt),
-                SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
-                HumanMessage(content=formatted_human_prompt)
+        messages.extend([
+            SystemMessage(content=agent.system_prompt),
+            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
         ])
 
+        history = state.get("messages", [])
+        messages.extend(history)
+        # Add the new human message
+        messages.append(HumanMessage(content=formatted_human_prompt))
+        
         return messages
 
     tools = []

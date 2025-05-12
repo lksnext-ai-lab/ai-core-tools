@@ -102,10 +102,10 @@ async def process_agent_request(agent, question, tracer):
         
         config = {
             "configurable": {
-                "question": question,
+                #"question": question,
                 "thread_id": f"thread_{agent.agent_id}"  # Add unique thread id based on agent id
             },
-            "recursion_limit": 10,
+            "recursion_limit": 200,
         }
         
         if tracer is not None:
@@ -117,7 +117,7 @@ async def process_agent_request(agent, question, tracer):
             "checkpoint": None if not agent.has_memory else {}
         }
         
-        result = await agent_x.ainvoke(initial_state, config=config)
+        result = await agent_x.ainvoke({"messages": [{"role": "user", "content": f"{question}"}]}, config)
         logger.info(f"Agent {agent.agent_id} response: {result}")
         response_text = ""
         final_message = next((msg for msg in reversed(result['messages']) if isinstance(msg, AIMessage)), None)
