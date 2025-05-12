@@ -4,6 +4,9 @@ pipeline {
     }
     
     environment {
+        SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
+        SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
+        SONAR_BRANCH = develop
         REGISTRY_USER = credentials('lks-docker-registry-user')
         REGISTRY_PASSWORD = credentials('lks-docker-registry-password')
         IMAGE_NAME = "ia-core-tools/ia-core-tools"
@@ -20,6 +23,60 @@ pipeline {
             }
         }
         
+        stage('Dependency-check task') {
+            when {
+                    environment name: 'JOB_ACTION', value: 'test'
+            }
+            steps {
+                script {
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/app \
+                        -w /app \
+                        -u $(id -u):$(id -g) \
+                        -e npm_config_cache=/tmp \
+                        ${IMAGE_NODE} \
+                        npm ci
+                    '''
+
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/app \
+                        -u 1000:$(id -g) \
+                        registry.lksnext.com/owasp/dependency-check:12.1.0 \
+                    --nvdDatafeed https://vulnz.devops.lksnext.com/ \
+                    --scan /app \
+                    --project "developer-roadmap" \
+                    --out /app \
+                    -f ALL \
+                    --disablePnpmAudit --disableYarnAudit
+                        '''
+                }
+            }
+        }
+        
+        stage('Sonar') {
+            when {
+                environment name: 'JOB_ACTION', value: 'build'
+            }
+            steps {
+                script {
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/app \
+                        -e SONAR_HOST_URL=$SONARENTERPRISE_URL \
+                        -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
+                        -e JOB_ACTION=sonar \
+                        -e CHECK_QG=$CHECK_QG \
+                        -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
+                        $IMAGE_NODE \
+                        -Dsonar.branch.name=$SONAR_BRANCH
+                    '''
+                }
+
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 script {
