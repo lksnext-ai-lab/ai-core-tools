@@ -10,6 +10,7 @@ pipeline {
         REGISTRY_USER = credentials('lks-docker-registry-user')
         REGISTRY_PASSWORD = credentials('lks-docker-registry-password')
         IMAGE_NAME = "ia-core-tools/ia-core-tools"
+        IMAGE_NODE = "ia-core-tools/ia-core-tools\latest"
         KUBE_NAMESPACE = "test"
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
@@ -33,7 +34,7 @@ pipeline {
                         -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
                         -e JOB_ACTION=sonar \
                         -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
-                        $IMAGE_NAME\latest
+                        $IMAGE_NODE
                     '''
                 }
             }
