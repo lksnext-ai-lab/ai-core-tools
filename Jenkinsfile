@@ -34,7 +34,7 @@ pipeline {
                         -e JOB_ACTION=sonar \
                         -e CHECK_QG=$CHECK_QG \
                         -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
-                        $IMAGE_NODE \
+                        $IMAGE_NODE
                     '''
                 }
 
