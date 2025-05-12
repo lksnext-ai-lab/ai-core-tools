@@ -10,7 +10,7 @@ pipeline {
         REGISTRY_USER = credentials('lks-docker-registry-user')
         REGISTRY_PASSWORD = credentials('lks-docker-registry-password')
         IMAGE_NAME = "ia-core-tools/ia-core-tools"
-        IMAGE_NODE = "ia-core-tools/ia-core-tools/latest"
+        IMAGE_NODE = "ia-core-tools/ia-core-tools"
         KUBE_NAMESPACE = "test"
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
