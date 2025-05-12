@@ -24,9 +24,6 @@ pipeline {
         }
         
         stage('Dependency-check task') {
-            when {
-                    environment name: 'JOB_ACTION', value: 'test'
-            }
             steps {
                 script {
                     sh '''
@@ -56,9 +53,6 @@ pipeline {
         }
         
         stage('Sonar') {
-            when {
-                environment name: 'JOB_ACTION', value: 'build'
-            }
             steps {
                 script {
                     sh '''
