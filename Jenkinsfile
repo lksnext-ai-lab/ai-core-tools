@@ -23,35 +23,6 @@ pipeline {
             }
         }
         
-        stage('Dependency-check task') {
-            steps {
-                script {
-                    sh '''
-                        docker run --rm \
-                        -v "$(pwd)":/app \
-                        -w /app \
-                        -u $(id -u):$(id -g) \
-                        -e npm_config_cache=/tmp \
-                        ${IMAGE_NODE} \
-                        npm ci
-                    '''
-
-                    sh '''
-                        docker run --rm \
-                        -v "$(pwd)":/app \
-                        -u 1000:$(id -g) \
-                        registry.lksnext.com/owasp/dependency-check:12.1.0 \
-                    --nvdDatafeed https://vulnz.devops.lksnext.com/ \
-                    --scan /app \
-                    --project "developer-roadmap" \
-                    --out /app \
-                    -f ALL \
-                    --disablePnpmAudit --disableYarnAudit
-                        '''
-                }
-            }
-        }
-        
         stage('Sonar') {
             steps {
                 script {
