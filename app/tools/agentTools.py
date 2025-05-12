@@ -1,7 +1,7 @@
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from model.agent import Agent
 from model.silo import Silo
@@ -82,26 +82,22 @@ async def create_agent(agent: Agent):
     checkpointer = None
     if agent.has_memory:
         logger.info("Agent has memory enabled, initializing checkpointer...")
-        checkpointer = MemorySaver()
+        checkpointer = InMemorySaver()
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
         # Get the initial question from config
         initial_question = config.get("configurable", {}).get("question", "")
         formatted_human_prompt = agent.prompt_template.format(question=initial_question)
         
-        # Get existing messages from memory if available
-        messages = []
-        if agent.has_memory:
-            messages = state.get("messages", [])
-            checkpoint = state.get("checkpoint")
-            if checkpoint:
-                logger.info(f"Memory checkpoint: {checkpoint}")
-                
-        messages.extend([
-            SystemMessage(content=agent.system_prompt),
-            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
-            HumanMessage(content=formatted_human_prompt)
+        messages = state.get("messages", [])
+        
+        if not messages:
+            messages.extend([
+                SystemMessage(content=agent.system_prompt),
+                SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
+                HumanMessage(content=formatted_human_prompt)
         ])
+
         return messages
 
     tools = []
@@ -120,7 +116,7 @@ async def create_agent(agent: Agent):
         if (mcp_client):
             mcp_tools = mcp_client.get_tools()
             logger.info(f"MCP tools loaded successfully: {mcp_tools}")
-            if mcp_tools:
+            if (mcp_tools):
                 tools.extend(mcp_tools)
     except Exception as e:
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)

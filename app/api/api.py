@@ -104,7 +104,8 @@ async def process_agent_request(agent, question, tracer):
             "configurable": {
                 "question": question,
                 "thread_id": f"thread_{agent.agent_id}"  # Add unique thread id based on agent id
-            }
+            },
+            "recursion_limit": 10,
         }
         
         if tracer is not None:
