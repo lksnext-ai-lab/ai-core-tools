@@ -1,13 +1,8 @@
-from typing import List
-from flask import jsonify, request
+from flask import jsonify, Response
 from flask_openapi3 import APIBlueprint, Tag
 from api.api_auth import require_auth
-from api.pydantic.repos_pydantic import RepoPath, CreateRepositoryRequest
-from services.repository_service import RepositoryService 
-from api.pydantic.pydantic import AppPath
-from model.repository import Repository
+from api.pydantic.repos_pydantic import RepoPath
 from model.resource import Resource
-from api.pydantic.repos_pydantic import RepositorySchema
 from services.resource_service import ResourceService
 from api.pydantic.resources_pydantic import (
     ResourceSchema, CreateResourceForm, ResourcePath,
@@ -25,7 +20,7 @@ resource_api = APIBlueprint('resource_api', __name__, url_prefix='/api/resource/
     responses={"200": ResourceListResponse}
 )
 @require_auth
-def get_all_resources(path: RepoPath) -> List[ResourceSchema]:
+def get_all_resources(path: RepoPath) -> Response:
     resources = ResourceService.get_resources_by_repo_id(path.repo_id)
     return jsonify([ResourceSchema.model_validate(resource).model_dump() for resource in resources])
 

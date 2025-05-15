@@ -51,9 +51,9 @@ def get_output_parser(agent):
         return StrOutputParser()
 
 def invoke(agent, input):
-    print('AGENT ' + agent.name)
+    print(agent.name)
     
-    model = getLLM(agent)
+    model = get_llm(agent)
     if model is None:
         raise ValueError("No se pudo inicializar el modelo para el agente")
         
@@ -77,12 +77,12 @@ def invoke(agent, input):
     logger.info(f"Response: {response}")
     return response
 
-def invoke_with_RAG(agent: Agent, input):
+def invoke_with_rag(agent: Agent, input):
     if agent.silo is None:
-        print('AGENT ' + agent.name + ' has no silo to relay on.')
+        print(agent.name + ' has no silo to relay on.')
         return invoke(agent, input)
     
-    print('AGENT ' + agent.name)
+    print(agent.name)
 
     embed = get_embedding(input)
     similar_resources = pgVectorTools.search_similar_resources(agent.silo, embed, RESULTS=1)
@@ -90,7 +90,6 @@ def invoke_with_RAG(agent: Agent, input):
     print(similar_resources)
     for result in similar_resources:
         print(result)
-        #info += "\n\nINFO CHUNK: " + result[0].page_content  + "\nSource: " + result[0].metadata["source"] + " page:" + str(result[0].metadata["page"]) + "\n\n"
         info += "\n\nINFO CHUNK: " + result.page_content
     
     if agent.output_parser_id is None:
@@ -111,13 +110,13 @@ def invoke_with_RAG(agent: Agent, input):
         ])
     
 
-    model = getLLM(agent)
+    model = get_llm(agent)
     chain = prompt | model | output_parser
 
     return chain.invoke({"question": input})
 
 
-def invoke_ConversationalRetrievalChain(agent, input, session):
+def invoke_conversational_retrieval_chain(agent, input, session):
     print("app_id 1: ", session['app_id'])
     MEM_KEY = "MEM_KEY-" + str(agent.agent_id)
     if MEM_KEY not in session:
@@ -126,7 +125,7 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     print("MEMORIES: ", session[MEM_KEY])
     print("app_id 2: ", session['app_id'])
     
-    llm = getLLM(agent)
+    llm = get_llm(agent)
 
     retriever = None 
     if agent.silo:
@@ -160,7 +159,7 @@ def invoke_ConversationalRetrievalChain(agent, input, session):
     
     return result["answer"]
 
-def getLLM(agent, is_vision=False):
+def get_llm(agent, is_vision=False):
     """
     Función base para obtener cualquier modelo LLM
     Args:

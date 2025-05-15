@@ -1,4 +1,4 @@
-from flask import render_template, Blueprint, request, redirect, url_for
+from flask import render_template, Blueprint, request, redirect, url_for, flash
 from extensions import db
 from model.ai_service import AIService
 from model.ai_service import ProviderEnum
@@ -27,23 +27,13 @@ def ai_service(app_id: int, service_id: int):
     ).first()
     return render_template('ai_services/ai_service.html', ai_service=ai_service)
 
-@ai_services_blueprint.route('/<int:service_id>/edit', methods=['GET', 'POST'])
+@ai_services_blueprint.route('/<int:service_id>/edit', methods=['GET'])
 def edit_ai_service(app_id: int, service_id: int):
     ai_service = db.session.query(AIService).filter(
         AIService.service_id == service_id,
         AIService.app_id == app_id
     ).first()
     
-    if request.method == 'POST':
-        ai_service.name = request.form['name']
-        ai_service.description = request.form['description']
-        ai_service.provider = request.form['provider']
-        ai_service.endpoint = request.form['endpoint']
-        ai_service.api_key = request.form['api_key']
-        
-        db.session.commit()
-        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
-        
     return render_template('ai_services/edit_ai_service.html', 
                          service=ai_service, 
                          providers=ProviderEnum,
@@ -51,6 +41,32 @@ def edit_ai_service(app_id: int, service_id: int):
                          form_title="Edit AI service",
                          submit_button_text="Save changes",
                          cancel_url=TEMPLATE_TO_RENDER)
+
+@ai_services_blueprint.route('/<int:service_id>/edit', methods=['POST'])
+def update_ai_service(app_id: int, service_id: int):
+    ai_service = db.session.query(AIService).filter(
+        AIService.service_id == service_id,
+        AIService.app_id == app_id
+    ).first()
+    
+    if not ai_service:
+        flash('Service not found', 'error')
+        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
+    
+    try:
+        ai_service.name = request.form['name']
+        ai_service.description = request.form['description']
+        ai_service.provider = request.form['provider']
+        ai_service.endpoint = request.form['endpoint']
+        ai_service.api_key = request.form['api_key']
+        
+        db.session.commit()
+        flash('Service updated successfully', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Error updating service', 'error')
+        
+    return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
 
 @ai_services_blueprint.route('/<int:service_id>/delete', methods=['POST'])
 def delete_ai_service(app_id: int, service_id: int):
@@ -70,9 +86,18 @@ def delete_ai_service(app_id: int, service_id: int):
         db.session.rollback()
         return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id)), 500
 
-@ai_services_blueprint.route('/create', methods=['GET', 'POST'])
+@ai_services_blueprint.route('/create', methods=['GET'])
 def create_ai_service(app_id: int):
-    if request.method == 'POST':
+    return render_template('ai_services/create_ai_service.html', 
+                         providers=ProviderEnum,
+                         app_id=app_id,
+                         form_title="Create new AI service",
+                         submit_button_text="Create service",
+                         cancel_url=TEMPLATE_TO_RENDER)
+
+@ai_services_blueprint.route('/create', methods=['POST'])
+def save_ai_service(app_id: int):
+    try:
         new_service = AIService(
             name=request.form['name'],
             description=request.form['description'],
@@ -84,12 +109,10 @@ def create_ai_service(app_id: int):
         
         db.session.add(new_service)
         db.session.commit()
-        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
+        flash('Service created successfully', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Error creating service', 'error')
         
-    return render_template('ai_services/create_ai_service.html', 
-                         providers=ProviderEnum,
-                         app_id=app_id,
-                         form_title="Create new AI service",
-                         submit_button_text="Create service",
-                         cancel_url=TEMPLATE_TO_RENDER)
+    return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
 

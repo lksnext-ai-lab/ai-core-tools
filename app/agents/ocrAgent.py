@@ -14,7 +14,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
-from tools.aiServiceTools import getLLM
+from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from model.ocr_agent import OCRAgent
 from tools.ocrAgentTools import (
@@ -98,8 +98,8 @@ def get_or_create_graph():
 
 def get_agent_llms(state: State):
     """Obtiene los modelos específicos para el agente OCR"""
-    vision_model = getLLM(state["agent"], is_vision=True)
-    text_model = getLLM(state["agent"], is_vision=False)
+    vision_model = get_llm(state["agent"], is_vision=True)
+    text_model = get_llm(state["agent"], is_vision=False)
     
     if vision_model is None or text_model is None:
         raise ValueError("No se pudieron inicializar los modelos necesarios")

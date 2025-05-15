@@ -10,7 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import BaseTool
 import os
 from tools.outputParserTools import get_parser_model_by_id
-from tools.aiServiceTools import getLLM, get_output_parser
+from tools.aiServiceTools import get_llm, get_output_parser
 from typing import Any
 from langchain.tools.retriever import create_retriever_tool
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -61,7 +61,7 @@ class MCPClientManager:
             self._client = None
 
 async def create_agent(agent: Agent):
-    llm = getLLM(agent)
+    llm = get_llm(agent)
     if llm is None:
         raise ValueError("No LLM found for agent")
     
@@ -109,7 +109,7 @@ async def create_agent(agent: Agent):
         tools.append(IACTTool(sub_agent))
 
     if agent.silo_id is not None:
-        retriever_tool = getRetrieverTool(agent.silo)
+        retriever_tool = get_retriever_tool(agent.silo)
         if retriever_tool is not None:
             tools.append(retriever_tool)
 
@@ -166,7 +166,7 @@ class IACTTool(BaseTool):
         self.agent = agent  
         self.name = agent.name.replace(" ", "_")
         self.description = agent.description
-        self.llm = getLLM(agent)
+        self.llm = get_llm(agent)
         if self.llm is None:
             raise ValueError("No LLM found for agent")
         
@@ -177,7 +177,7 @@ class IACTTool(BaseTool):
         state_modifier = SystemMessage(content=agent.system_prompt)
 
         if agent.silo_id is not None:
-            retriever_tool = getRetrieverTool(agent.silo)
+            retriever_tool = get_retriever_tool(agent.silo)
             if retriever_tool is not None:
                 tools.append(retriever_tool)
 
@@ -193,7 +193,7 @@ class IACTTool(BaseTool):
         messages = [HumanMessage(content=formatted_prompt)]
         return self.react_agent.invoke({"messages": messages})
 
-def getRetrieverTool(silo: Silo):
+def get_retriever_tool(silo: Silo):
     if silo.silo_id is not None:
         retriever = SiloService.get_silo_retriever(silo.silo_id)
         name = "silo_retriever"
