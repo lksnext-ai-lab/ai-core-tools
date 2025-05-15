@@ -22,7 +22,7 @@
                         <h5 class="mb-0">Agente: {{agent.name}}</h5>
                     </div>
                     <form
-                        action="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}"
+                        action="{{ url_for('agents.app_agent_post', app_id=session['app_id'], agent_id=agent.agent_id, type='basic') }}"
                         method="POST" onsubmit="return validateAgentForm()">
                         <input type="hidden" name="app_id" value="{{app_id}}">
 

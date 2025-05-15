@@ -5,7 +5,7 @@
 <div class="row">
     <div class="d-sm-flex justify-content-between align-items-center mb-4">
         <h1 class="h4 mb-2 mb-sm-0">Agents</h1>
-        <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=0) }}" class="btn btn-primary">
+        <a href="{{ url_for('agents.app_agent_get', app_id=session['app_id'], agent_id=0) }}" class="btn btn-primary">
             <i class="bi bi-plus"></i> New Agent
         </a>
     </div>
@@ -68,14 +68,15 @@
                 </div>
 
                 <div class="d-flex gap-2 mt-auto">
-                    <a href="{{ url_for('agents.app_agent', app_id=session['app_id'], agent_id=agent.agent_id) }}"
+                    <a href="{{ url_for('agents.app_agent_get', app_id=session['app_id'], agent_id=agent.agent_id) }}"
                         class="btn btn-sm btn-outline-primary flex-grow-1">
                         <i class="bi bi-pencil"></i> Edit
                     </a>
-                    <a href="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}"
-                        class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-trash"></i>
-                    </a>
+                    <form method="POST" action="{{ url_for('agents.app_agent_delete', app_id=session['app_id'], agent_id=agent.agent_id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
                 </div>
 
                 {% set playground_urls = {

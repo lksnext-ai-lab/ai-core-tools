@@ -24,27 +24,9 @@ def app_agents(app_id: int):
     agents = AgentService().get_agents(app_id)
     return render_template('agents/agents.html', app_id=app_id, app=app, agents=agents)
 
-@agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>', methods=['GET', 'POST'])
-def app_agent(app_id: int, agent_id: int):
+@agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>', methods=['GET'])
+def app_agent_get(app_id: int, agent_id: int):
     agent_service = AgentService()
-    if request.method == 'POST':
-        agent_data = {
-            'agent_id': agent_id,
-            'app_id': app_id,
-            **request.form.to_dict()
-        }
-        logger.info(f"agent_data: {agent_data}")
-        agent_type = request.form.get('type', 'agent')
-        agent = agent_service.create_or_update_agent(agent_data, agent_type)
-        
-        # Invalidate agent cache when updated
-        AgentCacheService.invalidate_agent(agent_id)
-
-        # Update tools and MCPs
-        agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
-        agent_service.update_agent_mcps(agent, request.form.getlist('mcp_config_id'), request.form)
-        
-        return app_agents(app_id)
     
     #TODO: avoid using db session from blueprints. Move to services
     ai_services = db.session.query(AIService).filter(AIService.app_id == app_id).all()
@@ -64,9 +46,28 @@ def app_agent(app_id: int, agent_id: int):
     return render_template(template, app_id=app_id, agent=agent, ai_services=ai_services, 
                          output_parsers=output_parsers, tools=tools, silos=silos, mcp_configs=mcp_configs)
 
-        
+@agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>', methods=['POST'])
+def app_agent_post(app_id: int, agent_id: int):
+    agent_service = AgentService()
+    agent_data = {
+        'agent_id': agent_id,
+        'app_id': app_id,
+        **request.form.to_dict()
+    }
+    logger.info(f"agent_data: {agent_data}")
+    agent_type = request.form.get('type', 'agent')
+    agent = agent_service.create_or_update_agent(agent_data, agent_type)
+    
+    # Invalidate agent cache when updated
+    AgentCacheService.invalidate_agent(agent_id)
 
-@agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/delete', methods=['GET'])
+    # Update tools and MCPs
+    agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
+    agent_service.update_agent_mcps(agent, request.form.getlist('mcp_config_id'), request.form)
+    
+    return app_agents(app_id)
+
+@agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/delete', methods=['POST'])
 def app_agent_delete(app_id: int, agent_id: int):
     agent_service = AgentService()
     # Invalidate agent cache when deleted
