@@ -26,9 +26,9 @@ class DomainService:
             silo = silo_service.create_or_update_silo(silo_data, SiloType.DOMAIN)
             domain.silo_id = silo.silo_id
             output_parser_service = OutputParserService()
-            filter = output_parser_service.create_default_filter_for_domain(domain)
-            silo.metadata_definition_id = filter.parser_id
-            
+            domain_filter = output_parser_service.create_default_filter_for_domain(domain)
+            silo.metadata_definition_id = domain_filter.parser_id
+
             # For new domains, set id to None and add
             domain.domain_id = None
             

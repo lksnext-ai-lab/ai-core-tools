@@ -14,7 +14,6 @@ import uuid
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
-#from model.app import App
 from model.user import User
 from model.mcp_config import MCPConfig
 

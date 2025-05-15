@@ -24,7 +24,7 @@ def app_settings(app_id):
             AppService.create_or_update_app(app_data)
             flash('Settings updated successfully', 'success')
             return redirect(url_for('app_settings.app_settings', app_id=app_id))
-        except Exception as e:
+        except Exception:
             flash('An error occurred while updating settings', 'error')
     
     return render_template('app_settings/settings.html', app=app) 

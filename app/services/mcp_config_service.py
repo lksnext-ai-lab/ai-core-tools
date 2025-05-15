@@ -88,11 +88,9 @@ class MCPConfigService:
             raise ValueError(f"Invalid transport type: {config_data['transport_type']}")
 
         # Validate transport-specific fields
-        if transport_type == TransportType.STDIO:
-            if not config_data.get('command') or not config_data.get('args'):
-                raise ValueError("Command and args are required for STDIO transport")
-        elif transport_type == TransportType.SSE:
-            if not config_data.get('url'):
-                raise ValueError("URL is required for SSE transport")
+        if transport_type == TransportType.STDIO and (not config_data.get('command') or not config_data.get('args')):
+            raise ValueError("Command and args are required for STDIO transport")
+        elif transport_type == TransportType.SSE and not config_data.get('url'):
+            raise ValueError("URL is required for SSE transport")
 
         return True

@@ -37,8 +37,8 @@ class RepositoryService:
         silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO)
         repository.silo_id = silo.silo_id
         output_parser_service = OutputParserService()
-        filter = output_parser_service.create_default_filter_for_repo(repository)
-        silo.metadata_definition_id = filter.parser_id
+        repo_filter = output_parser_service.create_default_filter_for_repo(repository)
+        silo.metadata_definition_id = repo_filter.parser_id
         db.session.add(repository)
         db.session.commit()
         db.session.refresh(repository)

@@ -62,9 +62,9 @@ def playground(app_id: int, silo_id: int):
     results = None
     if request.method == 'POST':
         query = request.form.get('query')
-        filter = SiloService.get_metadata_filter_from_form(silo, request.form)
-        results = SiloService.find_docs_in_collection(silo_id, query=query, filter_metadata=filter)
-    
+        metadata_filter = SiloService.get_metadata_filter_from_form(silo, request.form)
+        results = SiloService.find_docs_in_collection(silo_id, query=query, filter_metadata=metadata_filter)
+
     return render_template('silos/silo_playground.html', silo=silo, results=results)
 
 @silos_blueprint.route('/<int:silo_id>/content/<string:content_id>/delete', methods=['GET'])

@@ -25,18 +25,18 @@
                     <form method="POST" class="row g-4">
                         <!-- Common fields -->
                         <div class="col-md-6">
-                            <label class="form-label">Name *</label>
-                            <input type="text" class="form-control" name="name" required
+                            <label class="form-label" for="name">Name *</label>
+                            <input type="text" class="form-control" id="name" name="name" required
                                    value="{{ mcp_config.name if mcp_config else '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Server Name *</label>
-                            <input type="text" class="form-control" name="server_name" required
+                            <label class="form-label" for="server_name">Server Name *</label>
+                            <input type="text" class="form-control" id="server_name" name="server_name" required
                                    value="{{ mcp_config.server_name if mcp_config else '' }}">
                         </div>
                         <div class="col-12">
-                            <label class="form-label">Description</label>
-                            <textarea class="form-control" name="description" rows="2">{{ mcp_config.description if mcp_config else '' }}</textarea>
+                            <label class="form-label" for="description">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="2">{{ mcp_config.description if mcp_config else '' }}</textarea>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Transport Type *</label>
@@ -52,13 +52,13 @@
                         <!-- STDIO specific fields -->
                         <div id="stdioFields" class="row g-4" style="display: none;">
                             <div class="col-md-6">
-                                <label class="form-label">Command *</label>
-                                <input type="text" class="form-control" name="command"
+                                <label class="form-label" for="command">Command *</label>
+                                <input type="text" class="form-control" id="command" name="command"
                                        value="{{ mcp_config.command if mcp_config and mcp_config.transport_type.value == 'stdio' else '' }}">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Arguments (JSON array) *</label>
-                                <input type="text" class="form-control" name="args"
+                                <label class="form-label" for="args">Arguments (JSON array) *</label>
+                                <input type="text" class="form-control" id="args" name="args"
                                        value="{{ mcp_config.args if mcp_config and mcp_config.transport_type.value == 'stdio' else '[]' }}">
                             </div>
                             <div class="col-md-6">
@@ -86,8 +86,8 @@
                         <!-- SSE specific fields -->
                         <div id="sseFields" class="row g-4" style="display: none;">
                             <div class="col-md-6">
-                                <label class="form-label">URL *</label>
-                                <input type="text" class="form-control" name="url"
+                                <label class="form-label" for="url">URL *</label>
+                                <input type="text" class="form-control" id="url" name="url"
                                        value="{{ mcp_config.url if mcp_config and mcp_config.transport_type.value == 'sse' else '' }}">
                             </div>
                             <div class="col-md-6">

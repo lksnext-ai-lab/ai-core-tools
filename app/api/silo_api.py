@@ -69,7 +69,6 @@ def find_docs_in_collection(path: SiloPath, body: SiloSearch):
 @silo_api.get('/test', summary="get silos", tags=[silo_tag])
 @require_auth
 def get_silos(path: AppPath):
-    silos = db.session.query(Silo).filter(Silo.app_id == path.app_id).all()
     sql = text("SELECT * FROM langchain_pg_embedding WHERE cmetadata @> '{\"topic\": \"animals\"}';")
     result = db.session.execute(sql)
     for row in result:

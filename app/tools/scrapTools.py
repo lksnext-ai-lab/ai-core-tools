@@ -11,18 +11,18 @@ def remove_duplicates_and_sort(arr):
     return sorted_arr
 
 def get_text_from_url( url, tag="body", id=None, class_name=None):
-        attrDict = {}
+        attr_dict = {}
         if id:
-            attrDict["id"] = id
+            attr_dict["id"] = id
         if class_name:
-            attrDict["class"] = class_name
-        
-        print(f"Getting text from {url} with tag {tag} and attrs {attrDict}")
+            attr_dict["class"] = class_name
+
+        print(f"Getting text from {url} with tag {tag} and attrs {attr_dict}")
 
         try:
-            response = requests.get(url, verify=False)
+            response = requests.get(url)
             soup = BeautifulSoup(response.content, "html.parser")
-            main_content = soup.find(tag, attrs=attrDict)
+            main_content = soup.find(tag, attrs=attr_dict)
             if main_content == None:
                 print("WARNING: No main content found")
                 return ""
