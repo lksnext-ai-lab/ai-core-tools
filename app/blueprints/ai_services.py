@@ -5,6 +5,7 @@ from model.ai_service import ProviderEnum
 from model.agent import Agent
 from model.app import App
 
+TEMPLATE_TO_RENDER = "ai_services.app_ai_services"
 ai_services_blueprint = Blueprint('ai_services', __name__, url_prefix='/app/<int:app_id>/ai_services')
 
 @ai_services_blueprint.route('/', methods=['GET'])
@@ -41,7 +42,7 @@ def edit_ai_service(app_id: int, service_id: int):
         ai_service.api_key = request.form['api_key']
         
         db.session.commit()
-        return redirect(url_for('ai_services.app_ai_services', app_id=app_id))
+        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
         
     return render_template('ai_services/edit_ai_service.html', 
                          service=ai_service, 
@@ -49,7 +50,7 @@ def edit_ai_service(app_id: int, service_id: int):
                          app_id=app_id,
                          form_title="Edit AI service",
                          submit_button_text="Save changes",
-                         cancel_url='ai_services.app_ai_services')
+                         cancel_url=TEMPLATE_TO_RENDER)
 
 @ai_services_blueprint.route('/<int:service_id>/delete', methods=['POST'])
 def delete_ai_service(app_id: int, service_id: int):
@@ -64,10 +65,10 @@ def delete_ai_service(app_id: int, service_id: int):
         ).first()
         db.session.delete(ai_service)
         db.session.commit()
-        return redirect(url_for('ai_services.app_ai_services', app_id=app_id))
-    except Exception as e:
+        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
+    except Exception:
         db.session.rollback()
-        return redirect(url_for('ai_services.app_ai_services', app_id=app_id)), 500
+        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id)), 500
 
 @ai_services_blueprint.route('/create', methods=['GET', 'POST'])
 def create_ai_service(app_id: int):
@@ -83,12 +84,12 @@ def create_ai_service(app_id: int):
         
         db.session.add(new_service)
         db.session.commit()
-        return redirect(url_for('ai_services.app_ai_services', app_id=app_id))
+        return redirect(url_for(TEMPLATE_TO_RENDER, app_id=app_id))
         
     return render_template('ai_services/create_ai_service.html', 
                          providers=ProviderEnum,
                          app_id=app_id,
                          form_title="Create new AI service",
                          submit_button_text="Create service",
-                         cancel_url='ai_services.app_ai_services')
+                         cancel_url=TEMPLATE_TO_RENDER)
 

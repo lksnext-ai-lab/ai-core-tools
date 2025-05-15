@@ -71,7 +71,6 @@ def get_or_create_graph():
     """Crea y retorna un nuevo grafo compilado"""
     graph_builder = StateGraph(State)
     
-    # Añadir nodos al grafo
     graph_builder.add_node("get_agent_llms", get_agent_llms)
     graph_builder.add_node("get_agent_output_parser", get_agent_output_parser)
     graph_builder.add_node(PDF_TEXT_CHECKER, check_pdf_contains_plain_text)
@@ -81,12 +80,10 @@ def get_or_create_graph():
     graph_builder.add_node(DATA_ANALYZER, get_and_format_data_with_llm)
     graph_builder.add_node(DOCUMENT_DATA_INTEGRATOR, get_final_output)
 
-    # Conexiones
     graph_builder.add_edge(START, "get_agent_llms")
     graph_builder.add_edge("get_agent_llms", "get_agent_output_parser")
     graph_builder.add_edge("get_agent_output_parser", PDF_TEXT_CHECKER)
     
-    # Conexiones para el flujo con visión
     graph_builder.add_conditional_edges(
         source=PDF_TEXT_CHECKER,
         path=determine_path_with_vision
@@ -200,7 +197,7 @@ def extract_data_from_images(state: State):
     vision_output = []
     try:
         for image_path in state["images"]:
-            logging.info(f"Procesando imagen: {image_path}")
+            logging.info("Procesando imagen")
             base64_image = convert_image_to_base64(image_path)
             extracted_text = extract_text_from_image(base64_image, state["agent"].vision_system_prompt, state["vision_model"], state["pdf_path"].split("/")[-1])
             logging.info(f"Texto extraído de la imagen: {extracted_text}")
@@ -275,7 +272,7 @@ def process_pdf(agent_id: int, pdf_path: str, images_path: str):
     try:
         agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
         if not agent:
-            raise ValueError(f"No se encontró el agente con ID {agent_id}")
+            raise ValueError(f"No se encontró el agente")
         
         graph = get_or_create_graph()
         
@@ -300,16 +297,16 @@ def process_pdf(agent_id: int, pdf_path: str, images_path: str):
         try:
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
-                logging.info(f"PDF eliminado: {pdf_path}")
+                logging.info("PDF eliminado")
 
             if os.path.exists(images_path):
                 for file in os.listdir(images_path):
                     file_path = os.path.join(images_path, file)
                     if os.path.isfile(file_path):
                         os.remove(file_path)
-                        logging.info(f"Imagen eliminada: {file_path}")
+                        logging.info("Imagen eliminada")
                 os.rmdir(images_path)
-                logging.info(f"Directorio de imágenes eliminado: {images_path}")
+                logging.info("Directorio de imágenes eliminado")
         except Exception as cleanup_error:
             logging.error(f"Error al limpiar archivos: {cleanup_error}")
 
