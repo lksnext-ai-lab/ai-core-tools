@@ -16,6 +16,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
 load_dotenv()
 
+INFORMATION_EXTRACTION_SYSTEM_PROMPT = "Extract all information from this image and return it ONLY as a JSON object."
 IMAGES_PATH = os.getenv("IMAGES_PATH")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -32,9 +33,9 @@ def convert_pdf_to_images(pdf_path: str, output_folder: str) -> list[str]:
     try:
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-            logging.info(f"Carpeta creada: {output_folder}")
+            logging.info("Carpeta creada")
         
-        logging.info(f"Convirtiendo PDF: {pdf_path}")
+        logging.info("Convirtiendo PDF")
         images = convert_from_path(
             pdf_path,
             dpi=200,
@@ -48,8 +49,6 @@ def convert_pdf_to_images(pdf_path: str, output_folder: str) -> list[str]:
             return []
         
         logging.info(f"Imágenes generadas: {len(images)}")
-        for img_path in images:
-            logging.info(f"Imagen guardada en: {img_path}")
         
         return images
         
@@ -71,7 +70,7 @@ def extract_text_from_image(base64_image: str, vision_system_prompt, vision_mode
             SystemMessage(content=f"You are an expert in analyzing documents and performing OCR on images. Your task is to extract all possible information from the provided document image. You are analyzing the document: {document_title}"),
             SystemMessage(content="You MUST extract all text and data from the image and return it as a JSON object. Do not include any explanations or additional text outside the JSON object."),
             HumanMessage(content=[
-                {"type": "text", "text": f"Extract all information from this image and return it ONLY as a JSON object."}, 
+                {"type": "text", "text": INFORMATION_EXTRACTION_SYSTEM_PROMPT}, 
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
             ])
         ])
@@ -85,7 +84,7 @@ def extract_text_from_image(base64_image: str, vision_system_prompt, vision_mode
             SystemMessage(content=f"You are an expert in analyzing documents and performing OCR on images. Your task is to extract all possible information from the provided document image. You are analyzing the document: {document_title}"),
             SystemMessage(content="You MUST extract all text and data from the image and return it as a JSON object. Do not include any explanations or additional text outside the JSON object."),
             HumanMessage(content=[
-                {"type": "text", "text": f"Extract all information from this image and return it ONLY as a JSON object."}, 
+                {"type": "text", "text": INFORMATION_EXTRACTION_SYSTEM_PROMPT}, 
                 {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
             ])
         ])
@@ -114,7 +113,7 @@ def extract_text_from_image(base64_image: str, vision_system_prompt, vision_mode
                 "content": [
                     {
                         "type": "text",
-                        "text": f"Extract all information from this image and return it ONLY as a JSON object."
+                        "text": INFORMATION_EXTRACTION_SYSTEM_PROMPT
                     },
                     {
                         "type": "image_url",
@@ -315,7 +314,7 @@ def format_data_with_text_llm(vision_output: list, text_model, pydantic_class, t
     """Formatea los datos cuando hay texto plano disponible usando el LLM"""
     formatted_data_by_page = []
     for output in vision_output:
-        logging.info(f"Formateando datos para imagen: {output['image_path']}")
+        logging.info("Formateando datos para imagen.")
         formatted_text = get_data_from_extracted_text(
             output["extracted_text"], 
             text_model, 

@@ -125,7 +125,7 @@ def get_agent_output_parser(state: State):
 
 def check_pdf_contains_plain_text(state: State):
     """Verifica si el PDF contiene texto plano o es una imagen escaneada"""
-    logging.info(f"Verificando si el PDF '{state['pdf_path']}' contiene texto plano...")
+    logging.info("Verificando si el PDF contiene texto plano...")
     try:
         logging.info("Iniciando verificación de texto en PDF...")
         pdf_text = cargar_pdf(state["pdf_path"])
@@ -268,58 +268,86 @@ def determine_path_with_vision(state: State) -> Literal["pdf text extractor", "p
     has_text = state.get("has_plain_text", False)
     return PDF_TEXT_EXTRACTOR if has_text else PDF_TO_IMAGES_CONVERTER
 
-def process_pdf(agent_id: int, pdf_path: str, images_path: str):
+def _cleanup_files(pdf_path: str, images_path: str) -> None:
+    """Helper function to clean up temporary files."""
     try:
-        agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
-        if not agent:
-            raise ValueError(f"No se encontró el agente")
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+            logging.info("PDF eliminated")
+
+        if os.path.exists(images_path):
+            for file in os.listdir(images_path):
+                file_path = os.path.join(images_path, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    logging.info("Image eliminated")
+            os.rmdir(images_path)
+            logging.info("Images directory eliminated")
+    except Exception as e:
+        logging.error(f"Error during cleanup: {e}")
+
+def _get_agent(agent_id: int) -> OCRAgent:
+    """Helper function to get and validate agent."""
+    agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+    if not agent:
+        raise ValueError("Agent not found")
+    return agent
+
+def _prepare_initial_state(pdf_path: str, images_path: str, agent: OCRAgent) -> dict:
+    """Helper function to prepare initial graph state."""
+    return {
+        "pdf_path": pdf_path,
+        "images_path": images_path,
+        "images": [],
+        "vision_output": [],
+        "formatted_llm_text_output": {},
+        "final_output": {},
+        "pdf_text": "",
+        "has_plain_text": False,
+        "messages": [HumanMessage(content="Starting PDF processing")],
+        "agent": agent,
+        "vision_model": None,
+        "text_model": None,
+        "pydantic_class": None,
+    }
+
+def process_pdf(agent_id: int, pdf_path: str, images_path: str):
+    """
+    Process a PDF file using OCR and extract structured data.
+    
+    Args:
+        agent_id (int): The ID of the OCR agent to use
+        pdf_path (str): Path to the PDF file
+        images_path (str): Path where temporary images will be stored
         
+    Returns:
+        dict: Extracted and structured data from the PDF
+        
+    Raises:
+        ValueError: If agent is not found
+        Exception: For other processing errors
+    """
+    try:
+        # Get and validate agent
+        agent = _get_agent(agent_id)
+        
+        # Get graph instance
         graph = get_or_create_graph()
         
-        extracted_data = graph.invoke({
-            "pdf_path": pdf_path,
-            "images_path": images_path,
-            "images": [],
-            "vision_output": [],
-            "formatted_llm_text_output": {},
-            "final_output": {},
-            "pdf_text": "",
-            "has_plain_text": False,
-            "messages": [
-                HumanMessage(content="Inicio del procesamiento del PDF")
-            ],
-            "agent": agent,
-            "vision_model": None,
-            "text_model": None,
-            "pydantic_class": None,
-        })["final_output"]
-
-        try:
-            if os.path.exists(pdf_path):
-                os.remove(pdf_path)
-                logging.info("PDF eliminado")
-
-            if os.path.exists(images_path):
-                for file in os.listdir(images_path):
-                    file_path = os.path.join(images_path, file)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                        logging.info("Imagen eliminada")
-                os.rmdir(images_path)
-                logging.info("Directorio de imágenes eliminado")
-        except Exception as cleanup_error:
-            logging.error(f"Error al limpiar archivos: {cleanup_error}")
-
+        # Prepare initial state
+        initial_state = _prepare_initial_state(pdf_path, images_path, agent)
+        
+        # Process PDF and extract data
+        result = graph.invoke(initial_state)
+        extracted_data = result["final_output"]
+        
+        # Cleanup temporary files
+        _cleanup_files(pdf_path, images_path)
+        
         return extracted_data
 
     except Exception as e:
-        try:
-            if os.path.exists(pdf_path):
-                os.remove(pdf_path)
-            if os.path.exists(images_path):
-                for file in os.listdir(images_path):
-                    os.remove(os.path.join(images_path, file))
-                os.rmdir(images_path)
-        except Exception:
-            pass
+        logging.error(f"Error in process_pdf: {str(e)}")
+        # Ensure cleanup on error
+        _cleanup_files(pdf_path, images_path)
         raise e
