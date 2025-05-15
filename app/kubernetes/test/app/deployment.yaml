@@ -13,6 +13,7 @@ spec:
       labels:
         app: ia-core-tools-app-test
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: ia-core-tools-app-test
           image: registry.lksnext.com/ia-core-tools/ia-core-tools:${IMAGE_TAG}
@@ -23,9 +24,11 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "1Gi"
             limits:
               memory: "512Mi"
               cpu: "300m"
+              ephemeral-storage: "2Gi"
           volumeMounts:
             - name: temp-storage
               mountPath: /app/temp

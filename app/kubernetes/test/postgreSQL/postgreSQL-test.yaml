@@ -13,6 +13,7 @@ spec:
       labels:
         app: ia-core-tools-postgresql-test
     spec:
+      automountServiceAccountToken: false  # Deshabilitar automontaje
       containers:
         - name: postgresql
           image: pgvector/pgvector:pg15
@@ -41,9 +42,11 @@ spec:
             requests:
               memory: "500Mi"
               cpu: "50m"
+              ephemeral-storage: "1Gi"  # Añadir request de almacenamiento
             limits:
               memory: "750Mi"
               cpu: "100m"
+              ephemeral-storage: "2Gi"  # Añadir límite de almacenamiento
       volumes:
         - name: ia-core-tools-postgresql-data-test
           persistentVolumeClaim:
