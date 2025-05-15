@@ -46,55 +46,40 @@ class MCPConfig(Base):
         """Retrieve all agents associated with this MCPConfig."""
         return [association.agent for association in self.agent_associations]
 
+    def _parse_json_field(self, field, expected_type):
+        """Helper to parse JSON fields safely"""
+        if isinstance(field, expected_type):
+            return field
+        return json.loads(field) if field else None
+
+    def _create_stdio_config(self) -> dict:
+        """Create configuration for STDIO transport"""
+        if not self.command or not self.args:
+            raise ValueError("Command and args are required for STDIO transport")
+        
+        args = self._parse_json_field(self.args, list)
+        return {
+            self.server_name: {
+                "command": self.command,
+                "args": args,
+                "transport": self.transport_type.value
+            }
+        }
+
+    def _create_sse_config(self) -> dict:
+        """Create configuration for SSE transport"""
+        if not self.url:
+            raise ValueError("URL is required for SSE transport")
+            
+        return {
+            self.server_name: {
+                "transport": self.transport_type.value,
+                "url": self.url
+            }
+        }
+
     def to_connection_dict(self) -> dict:
         """Convert the model to a connection dictionary format expected by MultiServerMCPClient"""
         if self.transport_type == TransportType.STDIO:
-            if not self.command or not self.args:
-                raise ValueError("Command and args are required for STDIO transport")
-            
-            # Ensure args and env are proper Python objects, not strings
-            args = self.args if isinstance(self.args, list) else json.loads(self.args)
-            env = self.env if isinstance(self.env, dict) else json.loads(self.env) if self.env else None
-            inputs = self.inputs if isinstance(self.inputs, list) else json.loads(self.inputs) if self.inputs else None
-            
-            config = {
-                        self.server_name: {
-                            "command": self.command,
-                            "args": args,
-                            "transport": self.transport_type.value
-                        }
-                    }
-            """
-            # Add env if exists
-            if env:
-                config[self.server_name]["env"] = env
-            
-            # Add inputs if exists
-            if inputs:
-                config["inputs"] = inputs            
-            """
-
-                
-            return config
-            
-        elif self.transport_type == TransportType.SSE:
-            if not self.url:
-                raise ValueError("URL is required for SSE transport")
-            base_config = {
-                self.server_name: {
-                    "transport": self.transport_type.value,
-                    "url": self.url
-                }
-            }
-            
-            """
-            # Añadir headers si existen
-            if self.headers:
-                base_config["headers"] = self.headers
-            if self.timeout:
-                base_config["timeout"] = self.timeout
-            if self.sse_read_timeout:
-                base_config["sse_read_timeout"] = self.sse_read_timeout            
-            """
-
-            return base_config
+            return self._create_stdio_config()
+        return self._create_sse_config()

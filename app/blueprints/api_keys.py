@@ -8,6 +8,8 @@ import string
 from datetime import datetime
 from flask import session
 
+CREATE_TEMPLATE='api_keys.create_api_key'
+LIST_TEMPLATE='api_keys.list_api_keys'
 api_keys_blueprint = Blueprint('api_keys', __name__, url_prefix='/api_keys')
 
 def generate_api_key(length=48):
@@ -33,13 +35,13 @@ def create_api_key():
         
         if not name or not app_id:
             flash('Name and App are required', 'error')
-            return redirect(url_for('api_keys.create_api_key'))
+            return redirect(url_for(CREATE_TEMPLATE))
         
         # Verify app exists and user has access to it
         app = db.session.query(App).filter_by(app_id=app_id).first()
         if not app or app.user_id != current_user.get_id():
             flash('Invalid app selected', 'error')
-            return redirect(url_for('api_keys.create_api_key'))
+            return redirect(url_for(CREATE_TEMPLATE))
         
         api_key = APIKey(
             key=generate_api_key(),
@@ -52,12 +54,11 @@ def create_api_key():
             db.session.add(api_key)
             db.session.commit()
             flash('API key created successfully', 'success')
-            return redirect(url_for('api_keys.list_api_keys'))
-        except Exception as e:
+            return redirect(url_for(LIST_TEMPLATE))
+        except Exception:
             db.session.rollback()
             flash('Error creating API key', 'error')
-            return redirect(url_for('api_keys.create_api_key'))
-    
+            return redirect(url_for(CREATE_TEMPLATE))
     
     return render_template('api_keys/create.html')
 
@@ -69,17 +70,17 @@ def delete_api_key(key_id):
     api_key = db.session.query(APIKey).filter_by(key_id=key_id, user_id=current_user.get_id()).first()
     if not api_key:
         flash('API key not found', 'error')
-        return redirect(url_for('api_keys.list_api_keys'))
-    
+        return redirect(url_for(LIST_TEMPLATE))
+
     try:
         db.session.delete(api_key)
         db.session.commit()
         flash('API key deleted successfully', 'success')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         flash('Error deleting API key', 'error')
-    
-    return redirect(url_for('api_keys.list_api_keys'))
+
+    return redirect(url_for(LIST_TEMPLATE))
 
 @api_keys_blueprint.route('/<int:key_id>/toggle', methods=['POST'])
 @login_required
@@ -88,15 +89,15 @@ def toggle_api_key(key_id):
     api_key = db.session.query(APIKey).filter_by(key_id=key_id, user_id=current_user.get_id()).first()
     if not api_key:
         flash('API key not found', 'error')
-        return redirect(url_for('api_keys.list_api_keys'))
-    
+        return redirect(url_for(LIST_TEMPLATE))
+
     try:
         api_key.is_active = not api_key.is_active
         db.session.commit()
         status = 'activated' if api_key.is_active else 'deactivated'
         flash(f'API key {status} successfully', 'success')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         flash('Error toggling API key status', 'error')
-    
-    return redirect(url_for('api_keys.list_api_keys'))
+
+    return redirect(url_for(LIST_TEMPLATE))

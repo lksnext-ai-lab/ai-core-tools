@@ -4,7 +4,7 @@ from model.mcp_config import TransportType
 from flask_login import login_required
 
 mcp_configs = Blueprint('mcp_configs', __name__)
-
+LIST_TEMPLATE = 'mcp_configs.app_mcp_configs'
 @mcp_configs.route('/app/<int:app_id>/mcp_configs')
 @login_required
 def app_mcp_configs(app_id):
@@ -23,7 +23,7 @@ def new_mcp_config(app_id):
             MCPConfigService.validate_mcp_config(config_data)
             MCPConfigService.create_or_update_mcp_config(config_data)
             flash('MCP config created successfully', 'success')
-            return redirect(url_for('mcp_configs.app_mcp_configs', app_id=app_id))
+            return redirect(url_for(LIST_TEMPLATE, app_id=app_id))
         except ValueError as e:
             flash(str(e), 'error')
         except Exception as e:
@@ -38,8 +38,8 @@ def edit_mcp_config(app_id, config_id):
     mcp_config = MCPConfigService.get_mcp_config(config_id)
     if not mcp_config:
         flash('MCP config not found', 'error')
-        return redirect(url_for('mcp_configs.app_mcp_configs', app_id=app_id))
-    
+        return redirect(url_for(LIST_TEMPLATE, app_id=app_id))
+
     if request.method == 'POST':
         try:
             config_data = request.form.to_dict()
@@ -48,7 +48,7 @@ def edit_mcp_config(app_id, config_id):
             MCPConfigService.validate_mcp_config(config_data)
             MCPConfigService.create_or_update_mcp_config(config_data)
             flash('MCP config updated successfully', 'success')
-            return redirect(url_for('mcp_configs.app_mcp_configs', app_id=app_id))
+            return redirect(url_for(LIST_TEMPLATE, app_id=app_id))
         except ValueError as e:
             flash(str(e), 'error')
         except Exception as e:
@@ -63,7 +63,7 @@ def delete_mcp_config(app_id, config_id):
     try:
         MCPConfigService.delete_mcp_config(config_id)
         flash('MCP config deleted successfully', 'success')
-    except Exception as e:
+    except Exception:
         flash('An error occurred while deleting the MCP config', 'error')
     
-    return redirect(url_for('mcp_configs.app_mcp_configs', app_id=app_id)) 
+    return redirect(url_for(LIST_TEMPLATE, app_id=app_id)) 

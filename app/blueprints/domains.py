@@ -10,6 +10,7 @@ from services.url_service import UrlService
 from services.domain_service import DomainService
 domains_blueprint = Blueprint('domains', __name__, url_prefix='/domains')
 
+LIST_TEMPLATE = 'domains.domains'
 @domains_blueprint.route('/', methods=['GET'])
 def domains():
     domains = db.session.query(Domain).all()
@@ -24,7 +25,7 @@ def domain(domain_id):
         embedding_service_id = form_data.pop('embedding_service_id', None)
         
         DomainService.create_or_update_domain(Domain(**form_data), embedding_service_id)
-        return redirect(url_for('domains.domains'))
+        return redirect(url_for(LIST_TEMPLATE))
     else:
         embedding_services = EmbeddingServiceService.get_embedding_services_by_app_id(session['app_id'])
         if domain_id is None or domain_id == 0:
@@ -37,7 +38,7 @@ def domain(domain_id):
 def domain_delete(domain_id):
     domain = DomainService.get_domain(domain_id)
     DomainService.delete_domain(domain)
-    return redirect(url_for('domains.domains'))
+    return redirect(url_for(LIST_TEMPLATE))
 
 
 @domains_blueprint.route('/<int:domain_id>/urls', methods=['GET'])
@@ -51,11 +52,11 @@ def view_domain_urls(domain_id):
 
 @domains_blueprint.route('/<int:domain_id>/urls/add', methods=['POST'])
 def add_url(domain_id):
-    urlValue = request.form['url'].split('?')[0]
+    url_value = request.form['url'].split('?')[0]
     domain = db.session.query(Domain).filter(Domain.domain_id == domain_id).first()
-    url = UrlService.create_url(urlValue, domain.domain_id)
-    content = scrapTools.get_text_from_url(domain.base_url + urlValue)
-    SiloService.index_single_content(domain.silo_id, content, {"url": domain.base_url + urlValue})
+    UrlService.create_url(url_value, domain.domain_id)
+    content = scrapTools.get_text_from_url(domain.base_url + url_value)
+    SiloService.index_single_content(domain.silo_id, content, {"url": domain.base_url + url_value})
     return redirect(url_for('domains.view_domain_urls', domain_id=domain.domain_id))
 
 @domains_blueprint.route('/domain/create', methods=['POST'])
@@ -73,12 +74,8 @@ def create_domain():
             "silo_id": request.form.get('silo_id', type=int)
         }
         
-        
-        # Create domain using service
-        domain = DomainService.create_or_update_domain(Domain(**form_data))
-
-        
-        return redirect(url_for('domains.domains'))
+        DomainService.create_or_update_domain(Domain(**form_data))
+        return redirect(url_for(LIST_TEMPLATE))
     except Exception as e:
         # Handle validation errors or other exceptions
         return render_template('domains/list.html', error=str(e))

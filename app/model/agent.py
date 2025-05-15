@@ -3,9 +3,11 @@ from sqlalchemy.orm import relationship
 from db.base_class import Base
 from datetime import datetime
 
+AGENT_ID = 'Agent.agent_id'
+
 class AgentMCP(Base):
     __tablename__ = 'agent_mcps'
-    agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
+    agent_id = Column(Integer, ForeignKey(AGENT_ID), primary_key=True)
     config_id = Column(Integer, ForeignKey('MCPConfig.config_id'), primary_key=True)
     description = Column(Text, nullable=True)  # Description of what this MCP is used for
     
@@ -14,8 +16,8 @@ class AgentMCP(Base):
 
 class AgentTool(Base):
     __tablename__ = 'agent_tools'
-    agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
-    tool_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
+    agent_id = Column(Integer, ForeignKey(AGENT_ID), primary_key=True)
+    tool_id = Column(Integer, ForeignKey(AGENT_ID), primary_key=True)
     description = Column(Text, nullable=True)  # Description of what this tool is used for
     
     # Add relationships to both the agent and the tool

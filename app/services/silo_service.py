@@ -172,7 +172,6 @@ class SiloService:
         if not SiloService.check_silo_collection_exists(silo_id):
             return 0
         collection_uuid = SiloService.get_silo_collection_uuid(silo_id)
-        #sql = text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE cmetadata @> '{\"silo_id\": :silo_id}'::jsonb;")
         sql = text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = :collection_uuid;")
         result = db.session.execute(sql, {'collection_uuid': collection_uuid})
         return result.fetchone()[0]
@@ -354,28 +353,42 @@ class SiloService:
         )
 
     @staticmethod
+    def _get_filter_value_by_type(field_value: str, field_type: str) -> dict:
+        """Helper method to convert field value to the appropriate type for filtering"""
+        if field_type == 'int':
+            return {"$eq": int(field_value)}
+        elif field_type == 'float':
+            return {"$eq": float(field_value)}
+        elif field_type == 'bool':
+            return {"$eq": field_value}
+        elif field_type in ['str', 'date']:
+            return {"$eq": field_value}
+        return {"$eq": field_value}  # default case
+
+    @staticmethod
     def get_metadata_filter_from_form(silo: Silo, form_data: dict) -> dict:
-        filter_prefix = 'filter_'
         filter_dict = {}
         if not silo.metadata_definition:
             return filter_dict
-        field_definitions = silo.metadata_definition.fields
+
+        field_definitions = {f['name']: f for f in silo.metadata_definition.fields}
+        filter_prefix = 'filter_'
         
         for field_name, field_value in form_data.items():
-            if field_value and field_value != '':
-                if field_name.startswith(filter_prefix):
-                    name = field_name[len(filter_prefix):]
-                    field_definition = next((f for f in field_definitions if f['name'] == name), None)
-                    if field_definition:
-                        if field_definition['type'] == 'str':
-                            filter_dict[field_definition['name']] = {"$eq": f"{field_value}"}
-                        elif field_definition['type'] == 'int':
-                            filter_dict[field_definition['name']] = {"$eq": int(field_value)}
-                        elif field_definition['type'] == 'bool':
-                            filter_dict[field_definition['name']] = {"$eq": field_value}
-                        elif field_definition['type'] == 'float':
-                            filter_dict[field_definition['name']] = {"$eq": float(field_value)}
-                        elif field_definition['type'] == 'date':
-                            filter_dict[field_definition['name']] = {"$eq": field_value}
+            if not field_value or field_value == '':
+                continue
                 
+            if not field_name.startswith(filter_prefix):
+                continue
+                
+            name = field_name[len(filter_prefix):]
+            if name not in field_definitions:
+                continue
+                
+            field_definition = field_definitions[name]
+            filter_dict[name] = SiloService._get_filter_value_by_type(
+                field_value, 
+                field_definition['type']
+            )
+        
         return filter_dict
