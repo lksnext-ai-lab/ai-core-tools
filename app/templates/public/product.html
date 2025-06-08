@@ -8,10 +8,17 @@
     <div class="container">
         <div class="row align-items-center">
             <div class="col-lg-6">
+                {% if aict_mode == 'SELF-HOSTED' %}
+                <h1 class="display-4 fw-bold mb-4">Welcome to Mattin AI</h1>
+                <p class="lead mb-4">Your self-hosted AI platform is ready. Build, deploy, and scale AI applications with our comprehensive suite of tools.</p>
+                <a href="{{ url_for('login') }}" class="btn btn-light btn-lg me-3">Sign In</a>
+                <a href="#features" class="btn btn-outline-light btn-lg">Explore Features</a>
+                {% else %}
                 <h1 class="display-4 fw-bold mb-4">Powerful AI Platform</h1>
                 <p class="lead mb-4">Build, deploy, and scale AI applications with our comprehensive platform. From intelligent agents to data management, we provide everything you need.</p>
                 <a href="{{ url_for('login') }}" class="btn btn-light btn-lg me-3">Get Started</a>
                 <a href="#features" class="btn btn-outline-light btn-lg">Learn More</a>
+                {% endif %}
             </div>
             <div class="col-lg-6">
                 <img src="{{ url_for('static', filename='img/mattin-ai.png') }}" alt="Mattin AI Platform" class="img-fluid">
@@ -147,10 +154,17 @@
     <div class="container">
         <div class="row">
             <div class="col-12 text-center">
+                {% if aict_mode == 'SELF-HOSTED' %}
+                <h2 class="display-5 fw-bold mb-4">Ready to Start Building?</h2>
+                <p class="lead text-muted mb-4">Your AI platform is configured and ready to use</p>
+                <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg me-3">Access Platform</a>
+                <a href="/openapi/swagger" target="_blank" class="btn btn-outline-primary btn-lg">API Documentation</a>
+                {% else %}
                 <h2 class="display-5 fw-bold mb-4">Ready to Get Started?</h2>
                 <p class="lead text-muted mb-4">Join thousands of developers building the future with AI</p>
                 <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg me-3">Start Building</a>
                 <a href="{{ url_for('public.pricing') }}" class="btn btn-outline-primary btn-lg">View Pricing</a>
+                {% endif %}
             </div>
         </div>
     </div>

@@ -50,6 +50,10 @@ app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
 app.config["GOOGLE_DISCOVERY_URL"] = os.getenv('GOOGLE_DISCOVERY_URL')
 
+# AICT Mode configuration - determines if this is a service or self-hosted
+AICT_MODE = os.getenv('AICT_MODE', 'ONLINE').split('#')[0].strip()  # 'ONLINE' or 'SELF-HOSTED'
+app.config['AICT_MODE'] = AICT_MODE
+
 
 app.register_blueprint(agents_blueprint)
 app.register_blueprint(repositories_blueprint)
@@ -91,6 +95,11 @@ Session(app)
 with app.app_context():
     init_db()
 
+@app.context_processor
+def inject_aict_mode():
+    """Make AICT_MODE available in all templates"""
+    return dict(aict_mode=AICT_MODE)
+
 @app.before_request
 def before_request():
     if 'session_id' not in session:
@@ -102,7 +111,8 @@ def index():
     # If user is logged in, redirect to their dashboard
     if session.get('user'):
         return redirect(url_for('home'))
-    # Otherwise redirect to the product page (our main marketing page)
+    
+    # In both modes, redirect to the product page (accessible in both ONLINE and SELF-HOSTED)
     return redirect(url_for('public.product'))
 
 @app.route('/home')
