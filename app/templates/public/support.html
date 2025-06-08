@@ -1,0 +1,195 @@
+{% extends "public/base_public.html" %}
+
+{% block title %}Support - Mattin AI{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="bg-light py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center">
+                <h1 class="display-4 fw-bold mb-4">How Can We Help You?</h1>
+                <p class="lead text-muted mb-0">Get the support you need to succeed with Mattin AI</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Contact Options -->
+<section class="py-5">
+    <div class="container">
+        <div class="row g-4">
+            
+            <!-- Contact Sales -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-primary bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-briefcase text-primary" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Sales Inquiries</h3>
+                        <p class="text-muted mb-4">Ready to get started? Our sales team is here to help you find the right plan.</p>
+                        <a href="mailto:sales@mattin-ai.com" class="btn btn-primary">Contact Sales</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Support -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-success bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-tools text-success" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Technical Support</h3>
+                        <p class="text-muted mb-4">Need help with implementation? Our technical team is ready to assist.</p>
+                        <a href="mailto:support@mattin-ai.com" class="btn btn-success">Get Support</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- General Questions -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-info bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-question-circle text-info" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">General Questions</h3>
+                        <p class="text-muted mb-4">Have questions about our platform? We're here to help with any inquiries.</p>
+                        <a href="mailto:info@mattin-ai.com" class="btn btn-info">Ask Questions</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ Section -->
+<section class="bg-light py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center mb-5">
+                <h2 class="display-5 fw-bold">Frequently Asked Questions</h2>
+            </div>
+        </div>
+        
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="accordion" id="supportFAQ">
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                How do I get started with Mattin AI?
+                            </button>
+                        </h2>
+                        <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#supportFAQ">
+                            <div class="accordion-body">
+                                Simply sign up for a free account and you can start building AI agents immediately. Our platform includes tutorials and documentation to help you get started quickly.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                What kind of support do you offer?
+                            </button>
+                        </h2>
+                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#supportFAQ">
+                            <div class="accordion-body">
+                                We offer multiple support channels including email support, documentation, community forums, and for enterprise customers, dedicated support representatives and phone support.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                Do you offer training or onboarding?
+                            </button>
+                        </h2>
+                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#supportFAQ">
+                            <div class="accordion-body">
+                                Yes! We provide comprehensive onboarding for new customers, including guided tutorials, best practices documentation, and for enterprise customers, personalized training sessions.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                What are your support hours?
+                            </button>
+                        </h2>
+                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#supportFAQ">
+                            <div class="accordion-body">
+                                Our standard support is available Monday-Friday, 9 AM - 6 PM EST. Enterprise customers have access to 24/7 priority support with guaranteed response times.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Resources Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center mb-5">
+                <h2 class="display-5 fw-bold">Self-Service Resources</h2>
+                <p class="lead text-muted">Find answers and learn at your own pace</p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-lg-3 col-md-6 text-center">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <i class="bi bi-book text-primary mb-3" style="font-size: 3rem;"></i>
+                        <h4 class="fw-bold">Documentation</h4>
+                        <p class="text-muted">Comprehensive guides and API references</p>
+                        <a href="{{ url_for('public.documentation') }}" class="btn btn-outline-primary">View Docs</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 text-center">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <i class="bi bi-code-square text-success mb-3" style="font-size: 3rem;"></i>
+                        <h4 class="fw-bold">API Reference</h4>
+                        <p class="text-muted">Complete API documentation with examples</p>
+                        <a href="/openapi/swagger" target="_blank" class="btn btn-outline-success">View API</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 text-center">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <i class="bi bi-play-circle text-warning mb-3" style="font-size: 3rem;"></i>
+                        <h4 class="fw-bold">Video Tutorials</h4>
+                        <p class="text-muted">Step-by-step video guides</p>
+                        <a href="#" class="btn btn-outline-warning">Watch Videos</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 text-center">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <i class="bi bi-people text-info mb-3" style="font-size: 3rem;"></i>
+                        <h4 class="fw-bold">Community</h4>
+                        <p class="text-muted">Connect with other developers</p>
+                        <a href="#" class="btn btn-outline-info">Join Community</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

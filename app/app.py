@@ -30,6 +30,7 @@ from blueprints.mcp_configs import mcp_configs
 from blueprints.app_settings import app_settings_blueprint
 from blueprints.admin.users import admin_users_blueprint
 from blueprints.admin.stats import admin_stats_blueprint
+from blueprints.public import public_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -63,6 +64,7 @@ app.register_blueprint(mcp_configs)
 app.register_blueprint(app_settings_blueprint)
 app.register_blueprint(admin_users_blueprint)
 app.register_blueprint(admin_stats_blueprint)
+app.register_blueprint(public_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)
@@ -97,7 +99,11 @@ def before_request():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # If user is logged in, redirect to their dashboard
+    if session.get('user'):
+        return redirect(url_for('home'))
+    # Otherwise redirect to the product page (our main marketing page)
+    return redirect(url_for('public.product'))
 
 @app.route('/home')
 @login_required
@@ -190,9 +196,7 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return db.session.query(User).get(int(user_id))
 
-@app.route('/about')
-def about():
-    return render_template('about.html')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4321, debug=True)

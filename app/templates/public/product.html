@@ -1,0 +1,158 @@
+{% extends "public/base_public.html" %}
+
+{% block title %}Product - Mattin AI{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="bg-primary text-white py-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 fw-bold mb-4">Powerful AI Platform</h1>
+                <p class="lead mb-4">Build, deploy, and scale AI applications with our comprehensive platform. From intelligent agents to data management, we provide everything you need.</p>
+                <a href="{{ url_for('login') }}" class="btn btn-light btn-lg me-3">Get Started</a>
+                <a href="#features" class="btn btn-outline-light btn-lg">Learn More</a>
+            </div>
+            <div class="col-lg-6">
+                <img src="{{ url_for('static', filename='img/mattin-ai.png') }}" alt="Mattin AI Platform" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center mb-5">
+                <h2 class="display-5 fw-bold">Platform Capabilities</h2>
+                <p class="lead text-muted">Everything you need to build intelligent applications</p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <!-- AI Agents -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-primary bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center">
+                            <i class="bi bi-robot text-primary" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">AI Agents</h3>
+                        <p class="text-muted">Create intelligent agents that can understand, reason, and act autonomously to solve complex problems.</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Natural language processing</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Multi-modal capabilities</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Custom workflows</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Management -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-success bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center">
+                            <i class="bi bi-database text-success" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Data Management</h3>
+                        <p class="text-muted">Organize, store, and manage your data with our advanced repository and silo systems.</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Version control</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Data silos</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Secure storage</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Services -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-warning bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center">
+                            <i class="bi bi-hdd-rack text-warning" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">AI Services</h3>
+                        <p class="text-muted">Connect to multiple AI providers and manage your AI services from a single platform.</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Multiple providers</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Unified API</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Cost optimization</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Integration -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-info bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center">
+                            <i class="bi bi-code-square text-info" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">API Integration</h3>
+                        <p class="text-muted">Seamlessly integrate with external services and manage your API keys securely.</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check-circle text-success me-2"></i>RESTful APIs</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Secure key management</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Rate limiting</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Domain Management -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-purple bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center">
+                            <i class="bi bi-diagram-3 text-purple" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Domain Management</h3>
+                        <p class="text-muted">Organize your applications by domains and manage complex business logic efficiently.</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Domain modeling</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Business rules</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Workflow automation</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-danger bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center">
+                            <i class="bi bi-graph-up text-danger" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Analytics & Monitoring</h3>
+                        <p class="text-muted">Monitor your AI applications with comprehensive analytics and performance metrics.</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Real-time monitoring</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Performance metrics</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Usage analytics</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA Section -->
+<section class="bg-light py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center">
+                <h2 class="display-5 fw-bold mb-4">Ready to Get Started?</h2>
+                <p class="lead text-muted mb-4">Join thousands of developers building the future with AI</p>
+                <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg me-3">Start Building</a>
+                <a href="{{ url_for('public.pricing') }}" class="btn btn-outline-primary btn-lg">View Pricing</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 
