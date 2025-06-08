@@ -10,6 +10,7 @@ from model.mcp_config import MCPConfig
 from extensions import db
 from services.agent_service import AgentService
 from services.agent_cache_service import AgentCacheService
+from utils.pricing_decorators import check_usage_limit, require_feature
 import logging
 
 agents_blueprint = Blueprint('agents', __name__)
@@ -47,6 +48,7 @@ def app_agent_get(app_id: int, agent_id: int):
                          output_parsers=output_parsers, tools=tools, silos=silos, mcp_configs=mcp_configs)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>', methods=['POST'])
+@check_usage_limit('agents')  # Check agent creation limits
 def app_agent_post(app_id: int, agent_id: int):
     agent_service = AgentService()
     agent_data = {
@@ -79,6 +81,13 @@ def app_agent_delete(app_id: int, agent_id: int):
 def app_agent_playground(app_id: int, agent_id: int):
     agent = db.session.query(Agent).filter(Agent.agent_id == int(agent_id)).first()
     return render_template('agents/playground.html', app_id=app_id, agent=agent)
+
+@agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/analytics', methods=['GET'])
+@require_feature('advanced_analytics')
+def app_agent_analytics(app_id: int, agent_id: int):
+    """Advanced analytics - premium feature"""
+    agent = db.session.query(Agent).filter(Agent.agent_id == int(agent_id)).first()
+    return render_template('agents/analytics.html', app_id=app_id, agent=agent)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/ocr_play', methods=['GET'])
 def app_ocr_playground(app_id: int, agent_id: int):

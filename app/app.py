@@ -31,6 +31,7 @@ from blueprints.app_settings import app_settings_blueprint
 from blueprints.admin.users import admin_users_blueprint
 from blueprints.admin.stats import admin_stats_blueprint
 from blueprints.public import public_blueprint
+from blueprints.subscription import subscription_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -69,6 +70,7 @@ app.register_blueprint(app_settings_blueprint)
 app.register_blueprint(admin_users_blueprint)
 app.register_blueprint(admin_stats_blueprint)
 app.register_blueprint(public_blueprint)
+app.register_blueprint(subscription_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)
@@ -94,6 +96,9 @@ Session(app)
 
 with app.app_context():
     init_db()
+    # Initialize default pricing plans
+    from services.subscription_service import SubscriptionService
+    SubscriptionService.initialize_default_plans()
 
 @app.context_processor
 def inject_aict_mode():
@@ -121,7 +126,12 @@ def home():
     apps = AppService.get_apps(current_user.get_id())
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
-    return render_template('home.html', apps=apps)
+    
+    # Get subscription information for the dashboard
+    from services.subscription_service import SubscriptionService
+    subscription_info = SubscriptionService.get_user_subscription_info(current_user.get_id())
+    
+    return render_template('home.html', apps=apps, subscription_info=subscription_info)
 
 @app.route('/app/<int:app_id>', methods=['GET'])
 @login_required
@@ -184,6 +194,10 @@ def auth_callback():
         user = User(email=user_info['email'], name=user_info['name'])
         db.session.add(user)
         db.session.commit()
+        
+        # Create free subscription for new user
+        from services.subscription_service import SubscriptionService
+        SubscriptionService.create_free_subscription(user.user_id)
     
     session['user_id'] = user.user_id
     login_user(user)

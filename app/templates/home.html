@@ -2,8 +2,239 @@
 
 {% block title %}Mattin AI{% endblock %}
 
-
 {% block content %}
+
+<!-- Subscription Status Card -->
+{% if subscription_info %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center">
+                            <div class="avatar avatar-lg bg-primary bg-opacity-10 rounded-3 me-3">
+                                <i class="bi bi-credit-card text-primary fa-fw"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1">{{ subscription_info.plan.display_name }} Plan</h6>
+                                <p class="mb-0 text-muted small">
+                                    {% if subscription_info.subscription.status == 'trial' %}
+                                        <span class="badge bg-warning text-dark">Trial</span>
+                                        {% if subscription_info.subscription.trial_ends_at %}
+                                            Trial expires {{ subscription_info.subscription.trial_ends_at[:10] }}
+                                        {% endif %}
+                                    {% elif subscription_info.subscription.status == 'active' %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ subscription_info.subscription.status|title }}</span>
+                                    {% endif %}
+                                    {% if subscription_info.plan.price > 0 %}
+                                        • ${{ "%.0f"|format(subscription_info.plan.price) }}/month
+                                    {% else %}
+                                        • Free
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <a href="{{ url_for('subscription.dashboard') }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-gear me-1"></i>Manage Subscription
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Plan Limits Explanation -->
+                <div class="row mt-3 pt-3 border-top">
+                    <div class="col-12">
+                        <h6 class="text-muted mb-3 text-center">What do these limits mean?</h6>
+                        <div class="row text-start">
+                            <div class="col-md-4 mb-2">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-robot text-primary me-2 mt-1"></i>
+                                    <div>
+                                        <strong class="small">AI Agents:</strong>
+                                        <div class="text-muted small">The number of different AI assistants you can create. Each agent can be specialized for different tasks like customer support, content writing, or data analysis.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-lightning text-warning me-2 mt-1"></i>
+                                    <div>
+                                        <strong class="small">API Calls:</strong>
+                                        <div class="text-muted small">Each time someone interacts with your AI agents (via API, web interface, or integrations), it counts as one API call. Resets monthly.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-globe text-info me-2 mt-1"></i>
+                                    <div>
+                                        <strong class="small">Custom Domains:</strong>
+                                        <div class="text-muted small">Websites your AI agents can access to extract information, learn from content, or monitor for updates. Each unique domain counts toward your limit.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Usage Statistics -->
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <div class="text-muted small d-flex align-items-center justify-content-center">
+                                <i class="bi bi-robot me-1"></i>
+                                AI Agents
+                            </div>
+                            <div class="fw-bold">
+                                {{ subscription_info.usage.agents.current }}
+                                {% if subscription_info.usage.agents.limit != 'unlimited' %}
+                                    / {{ subscription_info.usage.agents.limit }}
+                                {% else %}
+                                    / ∞
+                                {% endif %}
+                            </div>
+                            {% if subscription_info.usage.agents.limit != 'unlimited' %}
+                            {% set usage_percent = (subscription_info.usage.agents.current / subscription_info.usage.agents.limit * 100) if subscription_info.usage.agents.limit > 0 else 0 %}
+                            <div class="progress mt-1" style="height: 4px;">
+                                <div class="progress-bar {% if usage_percent >= 90 %}bg-danger{% elif usage_percent >= 70 %}bg-warning{% else %}bg-success{% endif %}" 
+                                     style="width: {{ usage_percent }}%"></div>
+                            </div>
+                            {% endif %}
+                            <div class="text-muted small mt-1">
+                                {% if subscription_info.usage.agents.limit != 'unlimited' %}
+                                    {% if subscription_info.usage.agents.remaining > 0 %}
+                                        {{ subscription_info.usage.agents.remaining }} remaining
+                                    {% else %}
+                                        <span class="text-danger">Limit reached</span>
+                                    {% endif %}
+                                {% else %}
+                                    Unlimited
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <div class="text-muted small d-flex align-items-center justify-content-center">
+                                <i class="bi bi-lightning me-1"></i>
+                                API Calls
+                            </div>
+                            <div class="fw-bold">
+                                {{ "{:,}".format(subscription_info.usage.api_calls.current) }}
+                                {% if subscription_info.usage.api_calls.limit != 'unlimited' %}
+                                    / {{ "{:,}".format(subscription_info.usage.api_calls.limit) }}
+                                {% else %}
+                                    / ∞
+                                {% endif %}
+                            </div>
+                            {% if subscription_info.usage.api_calls.limit != 'unlimited' %}
+                            {% set usage_percent = (subscription_info.usage.api_calls.current / subscription_info.usage.api_calls.limit * 100) if subscription_info.usage.api_calls.limit > 0 else 0 %}
+                            <div class="progress mt-1" style="height: 4px;">
+                                <div class="progress-bar {% if usage_percent >= 90 %}bg-danger{% elif usage_percent >= 70 %}bg-warning{% else %}bg-success{% endif %}" 
+                                     style="width: {{ usage_percent }}%"></div>
+                            </div>
+                            {% endif %}
+                            <div class="text-muted small mt-1">
+                                {% if subscription_info.usage.api_calls.limit != 'unlimited' %}
+                                    {% if subscription_info.usage.api_calls.remaining > 0 %}
+                                        {{ "{:,}".format(subscription_info.usage.api_calls.remaining) }} remaining
+                                    {% else %}
+                                        <span class="text-danger">Limit reached</span>
+                                    {% endif %}
+                                {% else %}
+                                    Unlimited
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <div class="text-muted small d-flex align-items-center justify-content-center">
+                                <i class="bi bi-globe me-1"></i>
+                                Custom Domains
+                            </div>
+                            <div class="fw-bold">
+                                {{ subscription_info.usage.domains.current }}
+                                {% if subscription_info.usage.domains.limit != 'unlimited' %}
+                                    / {{ subscription_info.usage.domains.limit }}
+                                {% else %}
+                                    / ∞
+                                {% endif %}
+                            </div>
+                            {% if subscription_info.usage.domains.limit != 'unlimited' %}
+                            {% set usage_percent = (subscription_info.usage.domains.current / subscription_info.usage.domains.limit * 100) if subscription_info.usage.domains.limit > 0 else 0 %}
+                            <div class="progress mt-1" style="height: 4px;">
+                                <div class="progress-bar {% if usage_percent >= 90 %}bg-danger{% elif usage_percent >= 70 %}bg-warning{% else %}bg-success{% endif %}" 
+                                     style="width: {{ usage_percent }}%"></div>
+                            </div>
+                            {% endif %}
+                            <div class="text-muted small mt-1">
+                                {% if subscription_info.usage.domains.limit != 'unlimited' %}
+                                    {% if subscription_info.usage.domains.remaining > 0 %}
+                                        {{ subscription_info.usage.domains.remaining }} remaining
+                                    {% else %}
+                                        <span class="text-danger">Limit reached</span>
+                                    {% endif %}
+                                {% else %}
+                                    Unlimited
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Plan Features Summary -->
+                <div class="row mt-3 pt-3 border-top">
+                    <div class="col-12">
+                        <h6 class="text-muted mb-3 text-center">Included Features</h6>
+                        <div class="d-flex flex-wrap gap-3 justify-content-center">
+                            {% if subscription_info.plan.features.has_priority_support %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary">
+                                <i class="bi bi-headset me-1"></i>Priority Support
+                            </span>
+                            {% endif %}
+                            {% if subscription_info.plan.features.has_advanced_analytics %}
+                            <span class="badge bg-info bg-opacity-10 text-info">
+                                <i class="bi bi-graph-up me-1"></i>Advanced Analytics
+                            </span>
+                            {% endif %}
+                            {% if subscription_info.plan.features.has_team_collaboration %}
+                            <span class="badge bg-success bg-opacity-10 text-success">
+                                <i class="bi bi-people me-1"></i>Team Collaboration
+                            </span>
+                            {% endif %}
+                            {% if subscription_info.plan.features.has_custom_integrations %}
+                            <span class="badge bg-warning bg-opacity-10 text-warning">
+                                <i class="bi bi-puzzle me-1"></i>Custom Integrations
+                            </span>
+                            {% endif %}
+                            {% if subscription_info.plan.features.has_on_premise %}
+                            <span class="badge bg-dark bg-opacity-10 text-dark">
+                                <i class="bi bi-server me-1"></i>On-Premise Deployment
+                            </span>
+                            {% endif %}
+                            {% if subscription_info.plan.features.max_storage_gb > 0 %}
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                                <i class="bi bi-hdd me-1"></i>
+                                {% if subscription_info.plan.features.max_storage_gb == -1 %}
+                                    Unlimited Storage
+                                {% else %}
+                                    {{ subscription_info.plan.features.max_storage_gb }}GB Storage
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="row">
 

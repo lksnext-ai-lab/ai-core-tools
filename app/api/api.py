@@ -7,6 +7,7 @@ import os
 import json
 import logging
 from api.api_auth import require_auth
+from utils.pricing_decorators import check_api_usage_limit
 from agents.ocrAgent import OCRAgent
 from api.pydantic.agent_pydantic import AgentPath, ChatRequest, AgentResponse, OCRResponse
 from tools.agentTools import create_agent, MCPClientManager
@@ -39,6 +40,7 @@ MSG_LIST = "MSG_LIST"
     responses={"200": AgentResponse}
 )
 @require_auth
+@check_api_usage_limit('api_calls')
 def call_agent(path: AgentPath, body: ChatRequest):
     """
     Punto de entrada para llamadas al agente que garantiza que la conexión permanezca
@@ -51,10 +53,12 @@ def call_agent(path: AgentPath, body: ChatRequest):
         if agent is None:
             return {"error": "Agent not found"}, 404
         
-        if agent.request_count is None:
-            agent.request_count = 0
-        agent.request_count += 1
-        db.session.commit()
+        # Only increment if not already counted by the usage limit decorator
+        if not hasattr(request, 'api_usage_already_counted'):
+            if agent.request_count is None:
+                agent.request_count = 0
+            agent.request_count += 1
+            db.session.commit()
         
         tracer = None
         if agent.app.langsmith_api_key is not None and agent.app.langsmith_api_key != "":
@@ -201,6 +205,7 @@ class OCRRequest(BaseModel):
     responses={"200": OCRResponse}
 )
 @require_auth
+@check_api_usage_limit('api_calls')
 def process_ocr(path: AgentPath):
     try:
         # Get and validate agent_id
@@ -221,8 +226,12 @@ def process_ocr(path: AgentPath):
         if agent is None:
             return jsonify({"error": "Agent not found"}), 404
         
-        agent.request_count += 1
-        db.session.commit()
+        # Only increment if not already counted by the usage limit decorator
+        if not hasattr(request, 'api_usage_already_counted'):
+            if agent.request_count is None:
+                agent.request_count = 0
+            agent.request_count += 1
+            db.session.commit()
 
         if 'pdf' not in request.files:
             logger.error("No PDF file provided in request")

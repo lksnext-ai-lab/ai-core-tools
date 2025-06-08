@@ -11,6 +11,10 @@ class DomainService:
         return db.session.query(Domain).filter(Domain.domain_id == domain_id).first()
     
     @staticmethod
+    def get_domains_by_app_id(app_id: int) -> list[Domain]:
+        return db.session.query(Domain).filter(Domain.app_id == app_id).all()
+    
+    @staticmethod
     def create_or_update_domain(domain: Domain, embedding_service_id=None) -> Domain:
         if domain.domain_id is None or domain.domain_id == '0':
             silo_service = SiloService()

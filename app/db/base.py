@@ -5,7 +5,6 @@ from model.agent import Agent
 from model.ai_service import AIService
 from model.repository import Repository
 from model.resource import Resource
-from model.user import User
 from model.output_parser import OutputParser
 from model.ocr_agent import OCRAgent
 from model.silo import Silo
@@ -13,3 +12,6 @@ from model.domain import Domain
 from model.url import Url
 from model.embedding_service import EmbeddingService
 from model.base_service import BaseService
+from model.subscription import Plan, Subscription
+from model.api_usage import APIUsage
+from model.user import User

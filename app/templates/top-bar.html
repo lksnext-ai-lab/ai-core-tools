@@ -57,6 +57,11 @@
                                 </a>
                             </li>
                             {% endif %}
+                            <li class="nav-item">
+                                <a class="nav-link px-3 {% if request.endpoint == 'subscription.dashboard' %}active{% endif %}" href="{{ url_for('subscription.dashboard') }}">
+                                    <i class="bi bi-credit-card me-1"></i>Subscription
+                                </a>
+                            </li>
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle px-3" href="#" id="resourcesDropdown" role="button" 
                                    data-bs-toggle="dropdown" aria-expanded="false">
@@ -151,6 +156,11 @@
                                 </a>
                             </li>
                             {% endif %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('subscription.dashboard') }}">
+                                    <i class="bi bi-credit-card me-2"></i>Subscription
+                                </a>
+                            </li>
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" id="resourcesDropdownMobile" role="button" 
                                    data-bs-toggle="dropdown" aria-expanded="false">

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from extensions import db
 from model.domain import Domain
 from model.url import Url
@@ -8,19 +8,38 @@ from services.silo_service import SiloService
 from tools import scrapTools
 from services.url_service import UrlService
 from services.domain_service import DomainService
+from utils.pricing_decorators import check_usage_limit
 domains_blueprint = Blueprint('domains', __name__, url_prefix='/domains')
 
 LIST_TEMPLATE = 'domains.domains'
 @domains_blueprint.route('/', methods=['GET'])
 def domains():
-    domains = db.session.query(Domain).all()
+    app_id = session.get('app_id')
+    domains = DomainService.get_domains_by_app_id(app_id)
     return render_template('domains/list.html', domains=domains)
+
+def _check_domain_creation_limit():
+    """Helper function to check domain creation limits"""
+    from services.subscription_service import SubscriptionService
+    user_id = session.get('user_id')
+    if user_id:
+        usage_check = SubscriptionService.check_usage_limits(user_id, 'domains')
+        if not usage_check['allowed']:
+            flash(f"Domain limit exceeded. Current plan allows {usage_check.get('limit', 0)} domains. Please upgrade your plan to continue.", 'warning')
+            return redirect(url_for('subscription.dashboard'))
+    return None
 
 @domains_blueprint.route('/<int:domain_id>', methods=['GET', 'POST'])
 def domain(domain_id):
     if request.method == 'POST':
         form_data = request.form.copy()
         form_data['app_id'] = session['app_id']
+        
+        # Check if this is a new domain creation (domain_id is 0 or None)
+        if domain_id == 0 or domain_id is None:
+            limit_check = _check_domain_creation_limit()
+            if limit_check:
+                return limit_check
         
         embedding_service_id = form_data.pop('embedding_service_id', None)
         
@@ -60,6 +79,7 @@ def add_url(domain_id):
     return redirect(url_for('domains.view_domain_urls', domain_id=domain.domain_id))
 
 @domains_blueprint.route('/domain/create', methods=['POST'])
+@check_usage_limit('domains')
 def create_domain():
     try:
         # Create Pydantic model from form data
@@ -75,10 +95,12 @@ def create_domain():
         }
         
         DomainService.create_or_update_domain(Domain(**form_data))
+        flash('Domain created successfully!', 'success')
         return redirect(url_for(LIST_TEMPLATE))
     except Exception as e:
         # Handle validation errors or other exceptions
-        return render_template('domains/list.html', error=str(e))
+        flash(f'Error creating domain: {str(e)}', 'error')
+        return redirect(url_for(LIST_TEMPLATE))
 
 @domains_blueprint.route('/<int:domain_id>/url/<int:url_id>/delete', methods=['GET'])
 def delete_url(domain_id, url_id):
