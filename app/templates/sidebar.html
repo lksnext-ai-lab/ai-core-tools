@@ -105,6 +105,11 @@
                         <div class="collapse" id="adminSubmenu">
                             <ul class="nav flex-column ms-3">
                                 <li class="nav-item">
+                                    <a class="nav-link" href="{{ url_for('admin_users.list_users') }}">
+                                        <i class="bi bi-people fa-fw me-2"></i>Users
+                                    </a>
+                                </li>
+                                <li class="nav-item">
                                     <a class="nav-link" href="#">
                                         <i class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
                                     </a>
