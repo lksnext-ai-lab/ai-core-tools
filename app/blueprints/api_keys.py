@@ -1,103 +1,85 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session
 from flask_login import login_required, current_user
-from model.api_key import APIKey
-from model.app import App
-from extensions import db
-import secrets
-import string
-from datetime import datetime
-from flask import session
+from services.api_key_service import APIKeyService
+from utils.logger import get_logger
+from utils.error_handlers import handle_web_errors, AppError
 
-CREATE_TEMPLATE='api_keys.create_api_key'
-LIST_TEMPLATE='api_keys.list_api_keys'
+logger = get_logger(__name__)
+
+CREATE_TEMPLATE = 'api_keys.create_api_key'
+LIST_TEMPLATE = 'api_keys.list_api_keys'
 api_keys_blueprint = Blueprint('api_keys', __name__, url_prefix='/api_keys')
 
-def generate_api_key(length=48):
-    """Generate a secure random API key"""
-    alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 @api_keys_blueprint.route('/')
 @login_required
+@handle_web_errors(redirect_url=LIST_TEMPLATE)
 def list_api_keys():
     """List all API keys belonging to the current user"""
-    print("app id: ", session['app_id'])
-    api_keys = db.session.query(APIKey).filter_by(app_id=session['app_id']).all()
+    app_id = session.get('app_id')
+    user_id = current_user.get_id()
+    
+    logger.info(f"User {user_id} accessing API keys for app {app_id}")
+    
+    # Get API keys using the service
+    api_keys = APIKeyService.get_api_keys_by_app(app_id, user_id)
+    
     return render_template('api_keys/api_key_list.html', api_keys=api_keys)
+
 
 @api_keys_blueprint.route('/create', methods=['GET', 'POST'])
 @login_required
+@handle_web_errors(redirect_url=CREATE_TEMPLATE)
 def create_api_key():
     """Create a new API key"""
     if request.method == 'POST':
         name = request.form.get('name')
-        app_id = session['app_id']
+        app_id = session.get('app_id')
+        user_id = current_user.get_id()
         
-        if not name or not app_id:
-            flash('Name and App are required', 'error')
-            return redirect(url_for(CREATE_TEMPLATE))
+        logger.info(f"User {user_id} creating API key '{name}' for app {app_id}")
         
-        # Verify app exists and user has access to it
-        app = db.session.query(App).filter_by(app_id=app_id).first()
-        if not app or app.user_id != current_user.get_id():
-            flash('Invalid app selected', 'error')
-            return redirect(url_for(CREATE_TEMPLATE))
+        # Create API key using the service
+        api_key = APIKeyService.create_api_key(name, app_id, user_id)
         
-        api_key = APIKey(
-            key=generate_api_key(),
-            name=name,
-            app_id=app_id,
-            user_id=current_user.get_id()
-        )
-        
-        try:
-            db.session.add(api_key)
-            db.session.commit()
-            flash('API key created successfully', 'success')
-            return redirect(url_for(LIST_TEMPLATE))
-        except Exception:
-            db.session.rollback()
-            flash('Error creating API key', 'error')
-            return redirect(url_for(CREATE_TEMPLATE))
+        flash('API key created successfully', 'success')
+        logger.info(f"Successfully created API key {api_key.key_id} for user {user_id}")
+        return redirect(url_for(LIST_TEMPLATE))
     
     return render_template('api_keys/create.html')
 
 
 @api_keys_blueprint.route('/<int:key_id>/delete', methods=['POST'])
 @login_required
+@handle_web_errors(redirect_url=LIST_TEMPLATE)
 def delete_api_key(key_id):
     """Delete an API key"""
-    api_key = db.session.query(APIKey).filter_by(key_id=key_id, user_id=current_user.get_id()).first()
-    if not api_key:
-        flash('API key not found', 'error')
-        return redirect(url_for(LIST_TEMPLATE))
-
-    try:
-        db.session.delete(api_key)
-        db.session.commit()
-        flash('API key deleted successfully', 'success')
-    except Exception:
-        db.session.rollback()
-        flash('Error deleting API key', 'error')
-
+    user_id = current_user.get_id()
+    
+    logger.info(f"User {user_id} deleting API key {key_id}")
+    
+    # Delete API key using the service
+    APIKeyService.delete_api_key(key_id, user_id)
+    
+    flash('API key deleted successfully', 'success')
+    logger.info(f"Successfully deleted API key {key_id} for user {user_id}")
     return redirect(url_for(LIST_TEMPLATE))
+
 
 @api_keys_blueprint.route('/<int:key_id>/toggle', methods=['POST'])
 @login_required
+@handle_web_errors(redirect_url=LIST_TEMPLATE)
 def toggle_api_key(key_id):
     """Toggle API key active status"""
-    api_key = db.session.query(APIKey).filter_by(key_id=key_id, user_id=current_user.get_id()).first()
-    if not api_key:
-        flash('API key not found', 'error')
-        return redirect(url_for(LIST_TEMPLATE))
-
-    try:
-        api_key.is_active = not api_key.is_active
-        db.session.commit()
-        status = 'activated' if api_key.is_active else 'deactivated'
-        flash(f'API key {status} successfully', 'success')
-    except Exception:
-        db.session.rollback()
-        flash('Error toggling API key status', 'error')
-
+    user_id = current_user.get_id()
+    
+    logger.info(f"User {user_id} toggling API key {key_id}")
+    
+    # Toggle API key using the service
+    updated_key = APIKeyService.toggle_api_key(key_id, user_id)
+    
+    status = 'activated' if updated_key.is_active else 'deactivated'
+    flash(f'API key {status} successfully', 'success')
+    logger.info(f"Successfully {status} API key {key_id} for user {user_id}")
+    
     return redirect(url_for(LIST_TEMPLATE))
