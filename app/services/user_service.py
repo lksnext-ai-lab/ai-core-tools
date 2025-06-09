@@ -445,4 +445,226 @@ class UserService:
                     raise ValidationError("Name cannot exceed 255 characters")
                 cleaned_data['name'] = name or None
         
-        return cleaned_data 
+        return cleaned_data
+
+    # ============================================================================
+    # BUSINESS LOGIC METHODS (extracted from User model)
+    # ============================================================================
+    
+    @staticmethod
+    @handle_database_errors("get_user_subscription")
+    def get_user_subscription(user_id: int) -> Optional['Subscription']:
+        """
+        Get user's most recent active subscription, or most recent subscription if none active
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            Subscription instance or None if no subscription found
+        """
+        if not user_id or user_id <= 0:
+            return None
+        
+        def subscription_operation():
+            from model.subscription import Subscription, SubscriptionStatus
+            
+            # First, try to get the most recent active subscription
+            active_subscription = db.session.query(Subscription).filter(
+                Subscription.user_id == user_id,
+                Subscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL])
+            ).order_by(Subscription.created_at.desc()).first()
+            
+            if active_subscription and active_subscription.is_active:
+                logger.debug(f"Found active subscription for user {user_id}: {active_subscription.subscription_id}")
+                return active_subscription
+            
+            # If no active subscription, get the most recent subscription regardless of status
+            most_recent = db.session.query(Subscription).filter(
+                Subscription.user_id == user_id
+            ).order_by(Subscription.created_at.desc()).first()
+            
+            if most_recent:
+                logger.debug(f"Found most recent subscription for user {user_id}: {most_recent.subscription_id} (status: {most_recent.status})")
+            else:
+                logger.debug(f"No subscription found for user {user_id}")
+            
+            return most_recent
+        
+        return safe_db_execute(subscription_operation, "get_user_subscription")
+    
+    @staticmethod
+    @handle_database_errors("get_user_current_plan")
+    def get_user_current_plan(user_id: int) -> Optional['Plan']:
+        """
+        Get user's current active plan
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            Plan instance (user's active plan or free plan as fallback)
+        """
+        if not user_id or user_id <= 0:
+            logger.warning("Invalid user_id provided to get_user_current_plan")
+            return UserService._get_free_plan()
+        
+        def plan_operation():
+            from model.subscription import Plan
+            
+            # Get user's current subscription
+            current_subscription = UserService.get_user_subscription(user_id)
+            
+            if current_subscription and current_subscription.is_active:
+                plan = current_subscription.plan
+                if plan:
+                    logger.debug(f"User {user_id} has active plan: {plan.name}")
+                    return plan
+            
+            # Return free plan if no active subscription
+            logger.debug(f"User {user_id} has no active subscription, returning free plan")
+            return UserService._get_free_plan()
+        
+        return safe_db_execute(plan_operation, "get_user_current_plan") or UserService._get_free_plan()
+    
+    @staticmethod
+    @handle_database_errors("can_user_create_agent")
+    def can_user_create_agent(user_id: int) -> bool:
+        """
+        Check if user can create more agents based on their plan limits
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            True if user can create more agents, False otherwise
+        """
+        if not user_id or user_id <= 0:
+            return False
+        
+        def check_operation():
+            # Get user's current plan
+            current_plan = UserService.get_user_current_plan(user_id)
+            if not current_plan:
+                logger.warning(f"No plan found for user {user_id}, denying agent creation")
+                return False
+            
+            # If unlimited agents (-1), allow creation
+            if current_plan.max_agents == -1:
+                logger.debug(f"User {user_id} has unlimited agents")
+                return True
+            
+            # Count current agents across all user's apps
+            user = UserService.get_user_by_id(user_id)
+            if not user:
+                return False
+            
+            current_agent_count = 0
+            for app in user.apps:
+                if hasattr(app, 'agents'):
+                    current_agent_count += len(app.agents)
+            
+            can_create = current_agent_count < current_plan.max_agents
+            logger.debug(f"User {user_id} has {current_agent_count}/{current_plan.max_agents} agents, can_create: {can_create}")
+            return can_create
+        
+        return safe_db_execute(check_operation, "can_user_create_agent", default_return=False)
+    
+    @staticmethod
+    @handle_database_errors("can_user_create_domain")
+    def can_user_create_domain(user_id: int) -> bool:
+        """
+        Check if user can create more domains based on their plan limits
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            True if user can create more domains, False otherwise
+        """
+        if not user_id or user_id <= 0:
+            return False
+        
+        def check_operation():
+            # Get user's current plan
+            current_plan = UserService.get_user_current_plan(user_id)
+            if not current_plan:
+                logger.warning(f"No plan found for user {user_id}, denying domain creation")
+                return False
+            
+            # If unlimited domains (-1), allow creation
+            if current_plan.max_domains == -1:
+                logger.debug(f"User {user_id} has unlimited domains")
+                return True
+            
+            # Count current domains across all user's apps
+            user = UserService.get_user_by_id(user_id)
+            if not user:
+                return False
+            
+            current_domain_count = 0
+            for app in user.apps:
+                if hasattr(app, 'domains'):
+                    current_domain_count += len(app.domains)
+            
+            can_create = current_domain_count < current_plan.max_domains
+            logger.debug(f"User {user_id} has {current_domain_count}/{current_plan.max_domains} domains, can_create: {can_create}")
+            return can_create
+        
+        return safe_db_execute(check_operation, "can_user_create_domain", default_return=False)
+    
+    @staticmethod
+    @handle_database_errors("user_has_feature")
+    def user_has_feature(user_id: int, feature_name: str) -> bool:
+        """
+        Check if user has access to a specific feature based on their plan
+        
+        Args:
+            user_id: ID of the user
+            feature_name: Name of the feature to check (e.g., 'priority_support', 'advanced_analytics')
+            
+        Returns:
+            True if user has access to the feature, False otherwise
+        """
+        if not user_id or user_id <= 0:
+            return False
+        
+        if not feature_name or not feature_name.strip():
+            logger.warning("Empty feature_name provided to user_has_feature")
+            return False
+        
+        feature_name = feature_name.strip()
+        
+        def feature_check_operation():
+            # Get user's current plan
+            current_plan = UserService.get_user_current_plan(user_id)
+            if not current_plan:
+                logger.warning(f"No plan found for user {user_id}, denying feature {feature_name}")
+                return False
+            
+            # Check if plan has the feature
+            feature_attr = f'has_{feature_name}'
+            has_feature = getattr(current_plan, feature_attr, False)
+            
+            logger.debug(f"User {user_id} plan '{current_plan.name}' has feature '{feature_name}': {has_feature}")
+            return has_feature
+        
+        return safe_db_execute(feature_check_operation, "user_has_feature", default_return=False)
+    
+    @staticmethod
+    @handle_database_errors("_get_free_plan")
+    def _get_free_plan() -> Optional['Plan']:
+        """
+        Get the free plan (internal helper method)
+        
+        Returns:
+            Free Plan instance or None if not found
+        """
+        def get_free_plan_operation():
+            from model.subscription import Plan
+            return db.session.query(Plan).filter_by(name='free').first()
+        
+        plan = safe_db_execute(get_free_plan_operation, "_get_free_plan")
+        if not plan:
+            logger.error("Free plan not found in database - this is a critical error")
+        return plan 
