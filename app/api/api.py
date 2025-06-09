@@ -5,7 +5,6 @@ from model.agent import Agent
 from extensions import db
 import os
 import json
-import logging
 from api.api_auth import require_auth
 from utils.pricing_decorators import check_api_usage_limit
 from agents.ocrAgent import OCRAgent
@@ -20,12 +19,14 @@ from pydantic import BaseModel, conint
 import uuid
 import pathlib
 
-# Logging configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Use centralized logging
+from utils.logger import get_logger
+from utils.error_handlers import (
+    handle_api_errors, NotFoundError, ValidationError, safe_execute,
+    validate_required_fields, validate_field_types
 )
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 api_tag = Tag(name="API", description="Main API endpoints")
 security=[{"api_key":[]}]
@@ -41,48 +42,53 @@ MSG_LIST = "MSG_LIST"
 )
 @require_auth
 @check_api_usage_limit('api_calls')
+@handle_api_errors(include_traceback=False)
 def call_agent(path: AgentPath, body: ChatRequest):
     """
-    Punto de entrada para llamadas al agente que garantiza que la conexión permanezca
-    abierta hasta que se complete la respuesta del agente.
+    Entry point for agent calls that ensures the connection remains
+    open until the agent response is complete.
     """
-    try:
-        question = body.question
-        agent = db.session.query(Agent).filter(Agent.agent_id == path.agent_id).first()
-        
-        if agent is None:
-            return {"error": "Agent not found"}, 404
-        
-        # Only increment if not already counted by the usage limit decorator
-        if not hasattr(request, 'api_usage_already_counted'):
-            if agent.request_count is None:
-                agent.request_count = 0
-            agent.request_count += 1
-            db.session.commit()
-        
-        tracer = None
-        if agent.app.langsmith_api_key is not None and agent.app.langsmith_api_key != "":
-            client = Client(api_key=agent.app.langsmith_api_key)
-            tracer = LangChainTracer(client=client, project_name=agent.app.name)
-
-        # Crear una tarea asíncrona pero ejecutarla de forma sincrónica
-        result = current_app.ensure_sync(process_agent_request)(agent, question, tracer)
-        
-        # Manejar y formatear el resultado
-        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], int):
-            # Es una respuesta de error
-            return result
-        
-        # Es una respuesta exitosa
-        if MSG_LIST not in session:
-            session[MSG_LIST] = []
-        session[MSG_LIST].append(result["generated_text"])
-        
+    # Validate input
+    if not body.question or not body.question.strip():
+        raise ValidationError("Question cannot be empty")
+    
+    question = body.question.strip()
+    
+    # Get agent
+    agent = db.session.query(Agent).filter(Agent.agent_id == path.agent_id).first()
+    if agent is None:
+        raise NotFoundError(f"Agent with ID {path.agent_id} not found", "agent")
+    
+    logger.info(f"Processing request for agent {agent.agent_id}: {question[:50]}...")
+    
+    # Update request count if not already counted by the usage limit decorator
+    if not hasattr(request, 'api_usage_already_counted'):
+        agent.request_count = (agent.request_count or 0) + 1
+        result, error = safe_execute(db.session.commit, log_errors=True)
+        if error:
+            logger.warning(f"Failed to update request count: {error}")
+    
+    # Setup tracer if configured
+    tracer = None
+    if agent.app.langsmith_api_key:
+        client = Client(api_key=agent.app.langsmith_api_key)
+        tracer = LangChainTracer(client=client, project_name=agent.app.name)
+    
+    # Process agent request
+    result = current_app.ensure_sync(process_agent_request)(agent, question, tracer)
+    
+    # Handle response format
+    if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], int):
+        # Error response tuple
         return result
-        
-    except Exception as e:
-        logger.error(f"Error in call_agent: {str(e)}", exc_info=True)
-        return {"error": str(e)}, 500
+    
+    # Successful response - store in session
+    if MSG_LIST not in session:
+        session[MSG_LIST] = []
+    session[MSG_LIST].append(result["generated_text"])
+    
+    logger.info(f"Successfully processed request for agent {agent.agent_id}")
+    return result
 
 
 async def _get_or_create_agent(agent):
@@ -206,80 +212,76 @@ class OCRRequest(BaseModel):
 )
 @require_auth
 @check_api_usage_limit('api_calls')
+@handle_api_errors(include_traceback=False)
 def process_ocr(path: AgentPath):
+    # Validate agent_id from form data
+    raw_agent_id = request.form.get('agent_id')
+    if not raw_agent_id:
+        raise ValidationError('Missing agent_id parameter')
+    
     try:
-        # Get and validate agent_id
-        raw_agent_id = request.form.get('agent_id')
-        if not raw_agent_id:
-            logger.error("Missing agent_id in request")
-            return jsonify({'error': 'Missing agent_id parameter'}), 400
-            
-        try:
-            # Validate using Pydantic
-            validated_data = OCRRequest(agent_id=int(raw_agent_id))
-            agent_id = validated_data.agent_id
-        except (ValueError, TypeError):
-            logger.error("Invalid agent_id format")
-            return jsonify({'error': 'Invalid agent_id format'}), 400
-            
-        agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
-        if agent is None:
-            return jsonify({"error": "Agent not found"}), 404
-        
-        # Only increment if not already counted by the usage limit decorator
-        if not hasattr(request, 'api_usage_already_counted'):
-            if agent.request_count is None:
-                agent.request_count = 0
-            agent.request_count += 1
-            db.session.commit()
-
-        if 'pdf' not in request.files:
-            logger.error("No PDF file provided in request")
-            return jsonify({'error': 'No PDF file provided'}), 400
-
-        pdf_file = request.files['pdf']
-        
-        if not pdf_file or not agent_id:
-            logger.error(f"Incomplete data - pdf_file: {bool(pdf_file)}")
-            return jsonify({'error': 'Missing required data'}), 400
-
-        # Validate file extension
-        original_filename = pdf_file.filename
-        file_ext = pathlib.Path(original_filename).suffix.lower()
-        if file_ext != '.pdf':
-            logger.error("Invalid file type")
-            return jsonify({'error': 'Only PDF files are allowed'}), 400
-
-        # Generate secure filename
-        secure_filename = f"{uuid.uuid4()}{file_ext}"
-        
-        # Get paths from environment variables
-        downloads_dir = os.getenv('DOWNLOADS_PATH', '/app/temp/downloads/')
-        images_dir = os.getenv('IMAGES_PATH', '/app/temp/images/')
-        
-        os.makedirs(downloads_dir, exist_ok=True)
-        os.makedirs(images_dir, exist_ok=True)
-            
-        # Save PDF temporarily using secure filename
-        temp_path = os.path.join(downloads_dir, secure_filename)
-        images_path = os.path.join(images_dir, secure_filename[:-4])  # remove .pdf
-        
-        logger.info(f"Processing file: {secure_filename}")
-        
-        # Clean up old files if they exist
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        
-        pdf_file.save(temp_path)
-        
-        try:
-            logger.info("Starting OCR processing with agent")
-            result = process_pdf(int(agent_id), temp_path, images_path)
-            logger.info("OCR process completed successfully")
-            return jsonify(result)
-        except Exception as e:
-            logger.error(f"Error during OCR processing: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+        validated_data = OCRRequest(agent_id=int(raw_agent_id))
+        agent_id = validated_data.agent_id
+    except (ValueError, TypeError):
+        raise ValidationError('Invalid agent_id format')
+    
+    # Get OCR agent
+    agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+    if agent is None:
+        raise NotFoundError(f"OCR Agent with ID {agent_id} not found", "ocr_agent")
+    
+    # Update request count if not already counted by the usage limit decorator
+    if not hasattr(request, 'api_usage_already_counted'):
+        agent.request_count = (agent.request_count or 0) + 1
+        result, error = safe_execute(db.session.commit, log_errors=True)
+        if error:
+            logger.warning(f"Failed to update request count: {error}")
+    
+    # Validate PDF file upload
+    if 'pdf' not in request.files:
+        raise ValidationError('No PDF file provided')
+    
+    pdf_file = request.files['pdf']
+    if not pdf_file or not pdf_file.filename:
+        raise ValidationError('Missing or empty PDF file')
+    
+    # Validate file extension
+    original_filename = pdf_file.filename
+    file_ext = pathlib.Path(original_filename).suffix.lower()
+    if file_ext != '.pdf':
+        raise ValidationError('Only PDF files are allowed')
+    
+    # Generate secure filename
+    secure_filename = f"{uuid.uuid4()}{file_ext}"
+    
+    # Get paths from environment variables with defaults
+    downloads_dir = os.getenv('DOWNLOADS_PATH', '/app/temp/downloads/')
+    images_dir = os.getenv('IMAGES_PATH', '/app/temp/images/')
+    
+    # Ensure directories exist
+    os.makedirs(downloads_dir, exist_ok=True)
+    os.makedirs(images_dir, exist_ok=True)
+    
+    # Setup file paths
+    temp_path = os.path.join(downloads_dir, secure_filename)
+    images_path = os.path.join(images_dir, secure_filename[:-4])  # remove .pdf
+    
+    logger.info(f"Processing OCR for file: {secure_filename} with agent {agent_id}")
+    
+    # Clean up old files if they exist
+    if os.path.exists(temp_path):
+        safe_execute(os.remove, temp_path, log_errors=False)
+    
+    # Save PDF file
+    pdf_file.save(temp_path)
+    
+    try:
+        logger.info("Starting OCR processing with agent")
+        result = process_pdf(int(agent_id), temp_path, images_path)
+        logger.info("OCR process completed successfully")
+        return jsonify(result)
     except Exception as e:
-        logger.error(f"Error in process_ocr: {str(e)}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error during OCR processing: {str(e)}", exc_info=True)
+        # Clean up files on error
+        safe_execute(os.remove, temp_path, log_errors=False)
+        raise

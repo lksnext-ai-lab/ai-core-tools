@@ -14,6 +14,12 @@ import uuid
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
+# Import our utility modules
+from utils.logger import get_logger
+from utils.config import Config, get_app_config
+from utils.error_handlers import handle_web_errors, safe_execute
+from utils.database import check_db_connection
+
 from model.user import User
 from model.mcp_config import MCPConfig
 
@@ -43,17 +49,31 @@ from services.agent_cache_service import AgentCacheService
 
 load_dotenv()
 
+# Initialize logging
+logger = get_logger(__name__)
+logger.info("Starting Mattin AI application...")
+
+# Validate configuration
+try:
+    app_config = get_app_config()
+    logger.info("Configuration validation successful")
+except Exception as e:
+    logger.error(f"Configuration validation failed: {str(e)}")
+    raise
+
 info = Info(title="Mattin AI", version="1.0.0")
 app = OpenAPI(__name__, info=info, security_schemes={"api_key": {"type": "apiKey", "in": "header", "name": "X-API-KEY"}})
 
-app.secret_key = 'your-secret-key-SXSCDSDASD'
+# Use configuration from our config utility
+app.secret_key = app_config['SECRET_KEY']
 app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
 app.config["GOOGLE_DISCOVERY_URL"] = os.getenv('GOOGLE_DISCOVERY_URL')
 
-# AICT Mode configuration - determines if this is a service or self-hosted
-AICT_MODE = os.getenv('AICT_MODE', 'ONLINE').split('#')[0].strip()  # 'ONLINE' or 'SELF-HOSTED'
+# AICT Mode configuration
+AICT_MODE = app_config['AICT_MODE']
 app.config['AICT_MODE'] = AICT_MODE
+logger.info(f"Application running in {AICT_MODE} mode")
 
 
 app.register_blueprint(agents_blueprint)
@@ -95,10 +115,27 @@ app.config.from_object(__name__)
 Session(app)
 
 with app.app_context():
-    init_db()
+    # Check database connection
+    if not check_db_connection():
+        logger.error("Database connection failed - application cannot start")
+        raise SystemExit("Database connection failed")
+    
+    # Initialize database
+    try:
+        init_db()
+        logger.info("Database initialization completed")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {str(e)}")
+        raise
+    
     # Initialize default pricing plans
-    from services.subscription_service import SubscriptionService
-    SubscriptionService.initialize_default_plans()
+    try:
+        from services.subscription_service import SubscriptionService
+        SubscriptionService.initialize_default_plans()
+        logger.info("Default pricing plans initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize pricing plans: {str(e)}")
+        # Don't fail the app start for this
 
 @app.context_processor
 def inject_aict_mode():
@@ -122,14 +159,29 @@ def index():
 
 @app.route('/home')
 @login_required
+@handle_web_errors(redirect_url='public.product')
 def home():
-    apps = AppService.get_apps(current_user.get_id())
+    user_id = current_user.get_id()
+    logger.info(f"User {user_id} accessing home page")
+    
+    # Get user's apps
+    apps = AppService.get_apps(user_id)
+    
+    # If user has a selected app, redirect to it
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
     
     # Get subscription information for the dashboard
     from services.subscription_service import SubscriptionService
-    subscription_info = SubscriptionService.get_user_subscription_info(current_user.get_id())
+    subscription_info, error = safe_execute(
+        lambda: SubscriptionService.get_user_subscription_info(user_id),
+        default_return=None,
+        log_errors=True
+    )
+    
+    if error:
+        logger.warning(f"Failed to get subscription info for user {user_id}: {error}")
+        subscription_info = None
     
     return render_template('home.html', apps=apps, subscription_info=subscription_info)
 
