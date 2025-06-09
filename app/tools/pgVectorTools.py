@@ -99,6 +99,7 @@ class PGVectorTools:
         if isinstance(ids, list):
             vector_store.delete(ids=ids)
         else:
+            #TODO: for deleting docs embedding_service should not be needed. In fact, if api key  fails we can not delete docs.
             results = vector_store.similarity_search(
                 "", k=1000, filter=ids
             )
