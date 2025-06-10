@@ -221,7 +221,7 @@ class SubscriptionService:
     @staticmethod
     def get_all_plans() -> List[Plan]:
         """Get all available plans"""
-        return db.session.query(Plan).filter_by(is_active=True).all()
+        return db.session.query(Plan).filter_by(is_active=True).order_by(Plan.plan_id.asc()).all()
     
     @staticmethod
     def get_user_subscription_info(user_id: int) -> dict:

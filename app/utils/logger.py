@@ -11,6 +11,50 @@ from datetime import datetime
 class LoggerConfig:
     """Centralized logger configuration"""
     
+    # Class-level shared handlers to ensure single file logging
+    _shared_file_handler = None
+    _shared_error_handler = None
+    _handlers_initialized = False
+    
+    @classmethod
+    def _initialize_shared_handlers(cls):
+        """Initialize shared file handlers once"""
+        if cls._handlers_initialized:
+            return
+        
+        # Create formatters
+        detailed_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        
+        # File handler with rotation for all logs
+        log_dir = os.getenv('LOG_DIR', 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        
+        log_file = os.path.join(log_dir, 'app.log')
+        cls._shared_file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        cls._shared_file_handler.setLevel(logging.DEBUG)
+        cls._shared_file_handler.setFormatter(detailed_formatter)
+        
+        # Error file handler for all error logs
+        error_log_file = os.path.join(log_dir, 'app_errors.log')
+        cls._shared_error_handler = RotatingFileHandler(
+            error_log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        cls._shared_error_handler.setLevel(logging.ERROR)
+        cls._shared_error_handler.setFormatter(detailed_formatter)
+        
+        cls._handlers_initialized = True
+    
     @staticmethod
     def setup_logger(name: str = None, level: str = None) -> logging.Logger:
         """
@@ -38,12 +82,7 @@ class LoggerConfig:
         log_level = level or os.getenv('LOG_LEVEL', 'INFO')
         logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
         
-        # Create formatters
-        detailed_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        
+        # Create simple formatter for console
         simple_formatter = logging.Formatter(
             '%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
@@ -55,32 +94,12 @@ class LoggerConfig:
         console_handler.setFormatter(simple_formatter)
         logger.addHandler(console_handler)
         
-        # File handler with rotation
-        log_dir = os.getenv('LOG_DIR', 'logs')
-        os.makedirs(log_dir, exist_ok=True)
+        # Initialize shared handlers if needed
+        LoggerConfig._initialize_shared_handlers()
         
-        log_file = os.path.join(log_dir, f'{name.replace(".", "_")}.log')
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(detailed_formatter)
-        logger.addHandler(file_handler)
-        
-        # Error file handler
-        error_log_file = os.path.join(log_dir, f'{name.replace(".", "_")}_errors.log')
-        error_file_handler = RotatingFileHandler(
-            error_log_file,
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        error_file_handler.setLevel(logging.ERROR)
-        error_file_handler.setFormatter(detailed_formatter)
-        logger.addHandler(error_file_handler)
+        # Add shared file handlers
+        logger.addHandler(LoggerConfig._shared_file_handler)
+        logger.addHandler(LoggerConfig._shared_error_handler)
         
         return logger
     

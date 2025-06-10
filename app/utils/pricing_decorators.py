@@ -1,6 +1,7 @@
 from functools import wraps
 from flask import session, jsonify, flash, redirect, url_for, request
 from services.subscription_service import SubscriptionService
+from utils.config import is_self_hosted
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,6 +11,10 @@ def require_plan(min_plan='free'):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip all checks in self-hosted mode
+            if is_self_hosted():
+                return f(*args, **kwargs)
+                
             if not session.get('user_id'):
                 flash('Please log in to access this feature', 'error')
                 return redirect(url_for('login'))
@@ -37,6 +42,10 @@ def require_feature(feature_name):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip all checks in self-hosted mode
+            if is_self_hosted():
+                return f(*args, **kwargs)
+                
             if not session.get('user_id'):
                 flash('Please log in to access this feature', 'error')
                 return redirect(url_for('login'))
@@ -55,6 +64,10 @@ def check_usage_limit(resource_type):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip all checks in self-hosted mode
+            if is_self_hosted():
+                return f(*args, **kwargs)
+                
             if not session.get('user_id'):
                 if request.is_json:
                     return jsonify({'error': 'Authentication required'}), 401
@@ -88,6 +101,10 @@ def subscription_required(f):
     """Decorator to ensure user has an active subscription"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Skip all checks in self-hosted mode
+        if is_self_hosted():
+            return f(*args, **kwargs)
+            
         if not session.get('user_id'):
             flash('Please log in to access this feature', 'error')
             return redirect(url_for('login'))
@@ -107,6 +124,10 @@ def check_api_usage_limit(resource_type):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip all checks in self-hosted mode
+            if is_self_hosted():
+                return f(*args, **kwargs)
+                
             from model.api_key import APIKey
             from model.user import User
             from model.api_usage import APIUsage

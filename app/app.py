@@ -37,7 +37,6 @@ from blueprints.app_settings import app_settings_blueprint
 from blueprints.admin.users import admin_users_blueprint
 from blueprints.admin.stats import admin_stats_blueprint
 from blueprints.public import public_blueprint
-from blueprints.subscription import subscription_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -90,7 +89,14 @@ app.register_blueprint(app_settings_blueprint)
 app.register_blueprint(admin_users_blueprint)
 app.register_blueprint(admin_stats_blueprint)
 app.register_blueprint(public_blueprint)
-app.register_blueprint(subscription_blueprint)
+
+# Only register subscription blueprint in SaaS mode
+if AICT_MODE == 'ONLINE':
+    from blueprints.subscription import subscription_blueprint
+    app.register_blueprint(subscription_blueprint)
+    logger.info("Subscription blueprint registered (SaaS mode)")
+else:
+    logger.info("Subscription blueprint skipped (self-hosted mode)")
 
 app.register_api(silo_api)
 app.register_api(api)
@@ -128,14 +134,17 @@ with app.app_context():
         logger.error(f"Database initialization failed: {str(e)}")
         raise
     
-    # Initialize default pricing plans
-    try:
-        from services.subscription_service import SubscriptionService
-        SubscriptionService.initialize_default_plans()
-        logger.info("Default pricing plans initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize pricing plans: {str(e)}")
-        # Don't fail the app start for this
+    # Initialize default pricing plans (only in SaaS mode)
+    if AICT_MODE == 'ONLINE':
+        try:
+            from services.subscription_service import SubscriptionService
+            SubscriptionService.initialize_default_plans()
+            logger.info("Default pricing plans initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize pricing plans: {str(e)}")
+            # Don't fail the app start for this
+    else:
+        logger.info("Pricing plans initialization skipped (self-hosted mode)")
 
 @app.context_processor
 def inject_aict_mode():
@@ -171,17 +180,19 @@ def home():
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
     
-    # Get subscription information for the dashboard
-    from services.subscription_service import SubscriptionService
-    subscription_info, error = safe_execute(
-        lambda: SubscriptionService.get_user_subscription_info(user_id),
-        default_return=None,
-        log_errors=True
-    )
-    
-    if error:
-        logger.warning(f"Failed to get subscription info for user {user_id}: {error}")
-        subscription_info = None
+    # Get subscription information for the dashboard (only in SaaS mode)
+    subscription_info = None
+    if AICT_MODE == 'ONLINE':
+        from services.subscription_service import SubscriptionService
+        subscription_info, error = safe_execute(
+            lambda: SubscriptionService.get_user_subscription_info(user_id),
+            default_return=None,
+            log_errors=True
+        )
+        
+        if error:
+            logger.warning(f"Failed to get subscription info for user {user_id}: {error}")
+            subscription_info = None
     
     return render_template('home.html', apps=apps, subscription_info=subscription_info)
 

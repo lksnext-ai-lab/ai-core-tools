@@ -8,7 +8,7 @@ from sqlalchemy import func, or_
 from utils.logger import get_logger
 from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
-    validate_required_fields, safe_execute
+    validate_required_fields
 )
 from utils.database import safe_db_execute
 
@@ -16,6 +16,10 @@ logger = get_logger(__name__)
 
 
 class UserService:
+    
+    # ============================================================================
+    # CORE USER CRUD OPERATIONS
+    # ============================================================================
     
     @staticmethod
     @handle_database_errors("get_all_users")
@@ -73,6 +77,29 @@ class UserService:
         user = safe_db_execute(query_operation, "get_user_by_id")
         if user:
             logger.debug(f"Retrieved user {user_id}: {user.email}")
+        return user
+    
+    @staticmethod
+    @handle_database_errors("get_user_basic")
+    def get_user_basic(user_id: int) -> Optional[User]:
+        """
+        Get user by ID without loading relationships (lighter query)
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            User instance or None if not found
+        """
+        if not user_id or user_id <= 0:
+            return None
+        
+        def query_operation():
+            return db.session.query(User).filter(User.user_id == user_id).first()
+        
+        user = safe_db_execute(query_operation, "get_user_basic")
+        if user:
+            logger.debug(f"Retrieved basic user info for {user_id}")
         return user
     
     @staticmethod
@@ -152,7 +179,7 @@ class UserService:
         Returns:
             Updated User instance or None if not found
         """
-        user = UserService.get_user_by_id(user_id)
+        user = UserService.get_user_basic(user_id)  # Use basic version for update
         if not user:
             raise NotFoundError(f"User with ID {user_id} not found", "user")
         
@@ -197,7 +224,7 @@ class UserService:
         Returns:
             True if deletion was successful
         """
-        user = UserService.get_user_by_id(user_id)
+        user = UserService.get_user_by_id(user_id)  # Need relationships for proper deletion
         if not user:
             raise NotFoundError(f"User with ID {user_id} not found", "user")
         
@@ -230,40 +257,9 @@ class UserService:
         logger.info(f"Successfully deleted user: {user_email} (ID: {user_id})")
         return result
     
-    @staticmethod
-    @handle_database_errors("get_user_stats")
-    def get_user_stats() -> Dict[str, Any]:
-        """
-        Get user statistics for admin dashboard
-        
-        Returns:
-            Dictionary containing user statistics
-        """
-        def stats_operation():
-            # Total users count
-            total_users = db.session.query(User).count()
-            
-            # Get recent users (last 10)
-            recent_users = db.session.query(User).order_by(User.create_date.desc()).limit(10).all()
-            
-            # Get users with most apps
-            users_with_apps = db.session.query(
-                User.name, 
-                User.email, 
-                func.count(App.app_id).label('app_count')
-            ).join(App).group_by(User.user_id, User.name, User.email).order_by(
-                func.count(App.app_id).desc()
-            ).limit(5).all()
-            
-            return {
-                'total_users': total_users,
-                'recent_users': recent_users,
-                'users_with_apps': users_with_apps
-            }
-        
-        stats = safe_db_execute(stats_operation, "get_user_stats")
-        logger.info(f"Generated user stats: {stats['total_users']} total users")
-        return stats
+    # ============================================================================
+    # QUERY AND SEARCH OPERATIONS
+    # ============================================================================
     
     @staticmethod
     @handle_database_errors("search_users")
@@ -311,27 +307,43 @@ class UserService:
         return users, total
     
     @staticmethod
-    @handle_database_errors("get_user_basic")
-    def get_user_basic(user_id: int) -> Optional[User]:
+    @handle_database_errors("get_user_stats")
+    def get_user_stats() -> Dict[str, Any]:
         """
-        Get user by ID without loading relationships (lighter query)
+        Get user statistics for admin dashboard
         
-        Args:
-            user_id: ID of the user
-            
         Returns:
-            User instance or None if not found
+            Dictionary containing user statistics
         """
-        if not user_id or user_id <= 0:
-            return None
+        def stats_operation():
+            # Total users count
+            total_users = db.session.query(User).count()
+            
+            # Get recent users (last 10)
+            recent_users = db.session.query(User).order_by(User.create_date.desc()).limit(10).all()
+            
+            # Get users with most apps
+            users_with_apps = db.session.query(
+                User.name, 
+                User.email, 
+                func.count(App.app_id).label('app_count')
+            ).join(App).group_by(User.user_id, User.name, User.email).order_by(
+                func.count(App.app_id).desc()
+            ).limit(5).all()
+            
+            return {
+                'total_users': total_users,
+                'recent_users': recent_users,
+                'users_with_apps': users_with_apps
+            }
         
-        def query_operation():
-            return db.session.query(User).filter(User.user_id == user_id).first()
-        
-        user = safe_db_execute(query_operation, "get_user_basic")
-        if user:
-            logger.debug(f"Retrieved basic user info for {user_id}")
-        return user
+        stats = safe_db_execute(stats_operation, "get_user_stats")
+        logger.info(f"Generated user stats: {stats['total_users']} total users")
+        return stats
+    
+    # ============================================================================
+    # UTILITY METHODS
+    # ============================================================================
     
     @staticmethod
     @handle_database_errors("get_or_create_user")
@@ -469,7 +481,7 @@ class UserService:
         def subscription_operation():
             from model.subscription import Subscription, SubscriptionStatus
             
-            # First, try to get the most recent active subscription
+            # First, try to get the most recent active subscription (sorted by created_at desc)
             active_subscription = db.session.query(Subscription).filter(
                 Subscription.user_id == user_id,
                 Subscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL])
@@ -479,7 +491,7 @@ class UserService:
                 logger.debug(f"Found active subscription for user {user_id}: {active_subscription.subscription_id}")
                 return active_subscription
             
-            # If no active subscription, get the most recent subscription regardless of status
+            # If no active subscription, get the most recent subscription regardless of status (sorted by created_at desc)
             most_recent = db.session.query(Subscription).filter(
                 Subscription.user_id == user_id
             ).order_by(Subscription.created_at.desc()).first()
@@ -492,7 +504,7 @@ class UserService:
             return most_recent
         
         return safe_db_execute(subscription_operation, "get_user_subscription")
-    
+
     @staticmethod
     @handle_database_errors("get_user_current_plan")
     def get_user_current_plan(user_id: int) -> Optional['Plan']:
@@ -554,8 +566,8 @@ class UserService:
                 logger.debug(f"User {user_id} has unlimited agents")
                 return True
             
-            # Count current agents across all user's apps
-            user = UserService.get_user_by_id(user_id)
+            # Count current agents across all user's apps (use lighter query)
+            user = UserService.get_user_by_id(user_id)  # Need apps relationship
             if not user:
                 return False
             
@@ -597,8 +609,8 @@ class UserService:
                 logger.debug(f"User {user_id} has unlimited domains")
                 return True
             
-            # Count current domains across all user's apps
-            user = UserService.get_user_by_id(user_id)
+            # Count current domains across all user's apps (use lighter query)
+            user = UserService.get_user_by_id(user_id)  # Need apps relationship
             if not user:
                 return False
             

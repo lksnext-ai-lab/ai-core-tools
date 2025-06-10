@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, desc
 from sqlalchemy.orm import relationship
 from db.base_class import Base
 from flask_login import UserMixin
@@ -15,14 +15,14 @@ class User(UserMixin, Base):
     # Relationships
     apps = relationship('App', back_populates='user', lazy=True)
     api_keys = relationship('APIKey', back_populates='user', lazy=True)
-    subscriptions = relationship('Subscription', back_populates='user', lazy=True, order_by='Subscription.created_at.desc()')
+    subscriptions = relationship('Subscription', back_populates='user', lazy=True)
 
     def get_id(self):
         return self.user_id
     
     @property
     def subscription(self):
-        """Get user's most recent active subscription, or most recent subscription if none active"""
+        """Get user's current active subscription (or most recent if none active)"""
         from services.user_service import UserService
         return UserService.get_user_subscription(self.user_id)
     

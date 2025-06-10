@@ -257,4 +257,9 @@ def get_log_level() -> str:
 
 def get_aict_mode() -> str:
     """Get AICT mode"""
-    return Config.get_env_var('AICT_MODE', Config.DEFAULTS['AICT_MODE']) 
+    return Config.get_env_var('AICT_MODE', Config.DEFAULTS['AICT_MODE'])
+
+
+def is_self_hosted() -> bool:
+    """Check if we're running in self-hosted mode"""
+    return get_aict_mode() == 'SELF-HOSTED' 
