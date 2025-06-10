@@ -96,6 +96,13 @@ class SiloService:
         """
         logger.info(f"Received silo data: {silo_data}")
         
+        # Convert ImmutableMultiDict to regular dict if needed
+        if hasattr(silo_data, 'to_dict'):
+            silo_data = silo_data.to_dict()
+        else:
+            # Create a mutable copy if it's any other immutable type
+            silo_data = dict(silo_data)
+        
         # Validate required fields
         required_fields = ['name', 'app_id']
         validate_required_fields(silo_data, required_fields)
