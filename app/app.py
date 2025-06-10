@@ -203,7 +203,22 @@ def app_index(app_id: int):
     session['app_id'] = app_id
     session['app_name'] = selected_app.name
     
-    return render_template('app_index.html', app=selected_app)
+    # Collect statistics for the dashboard
+    from services.agent_service import AgentService
+    from services.repository_service import RepositoryService
+    from services.output_parser_service import OutputParserService
+    from services.silo_service import SiloService
+    from services.domain_service import DomainService
+    
+    stats = {
+        'agents': len(AgentService().get_agents(app_id)),
+        'repositories': len(RepositoryService.get_repositories_by_app_id(app_id)),
+        'output_parsers': len(OutputParserService().get_parsers_by_app(app_id)),
+        'silos': len(SiloService.get_silos_by_app_id(app_id)),
+        'domains': len(DomainService.get_domains_by_app_id(app_id))
+    }
+    
+    return render_template('app_index.html', app=selected_app, stats=stats)
 
 @app.route('/create-app', methods=['POST'])
 @login_required
