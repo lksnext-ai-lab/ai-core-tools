@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- App Settings Header -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="bi bi-gear me-2"></i>App Settings - {{session['app_name']}}
+                </h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('home') }}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('app_index', app_id=session['app_id']) }}">{{session['app_name']}}</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Settings</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Settings Navigation Tabs -->
+    <div class="row">
+        <div class="col-12">
+            <ul class="nav nav-tabs mb-4" id="appSettingsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'ai_services' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('ai_services.app_ai_services', app_id=session['app_id']) }}">
+                        <i class="bi bi-hdd-rack me-2"></i>AI Services
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'embedding_services' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('embedding_services.app_embedding_services', app_id=session['app_id']) }}">
+                        <i class="bi bi-hdd-rack me-2"></i>Embedding Services
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'mcp_configs' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('mcp_configs.app_mcp_configs', app_id=session['app_id']) }}">
+                        <i class="bi bi-plug me-2"></i>MCP Configs
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'api_keys' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('api_keys.list_api_keys') }}">
+                        <i class="bi bi-ticket-perforated me-2"></i>API Keys
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'output_parsers' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}">
+                        <i class="bi bi-file-text me-2"></i>Data Structures
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'app_settings.app_settings' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('app_settings.app_settings', app_id=session['app_id']) }}">
+                        <i class="bi bi-gear me-2"></i>General Settings
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- App Settings Content -->
+    <div class="row">
+        <div class="col-12">
+            {% block app_settings_content %}
+            <!-- App settings page content goes here -->
+            {% endblock %}
+        </div>
+    </div>
+</div>
+
+<!-- Custom App Settings Styles -->
+<style>
+.nav-tabs .nav-link {
+    color: var(--bs-gray-600);
+    border: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--bs-primary);
+    border-color: var(--bs-gray-200) var(--bs-gray-200) var(--bs-primary);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--bs-primary);
+    background-color: var(--bs-body-bg);
+    border-color: var(--bs-gray-200) var(--bs-gray-200) var(--bs-primary);
+    border-bottom: 2px solid var(--bs-primary);
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    content: ">";
+}
+</style>
+{% endblock %} 
