@@ -14,6 +14,12 @@ import uuid
 from datetime import timedelta, datetime
 from dotenv import load_dotenv
 
+# Import our utility modules
+from utils.logger import get_logger
+from utils.config import Config, get_app_config
+from utils.error_handlers import handle_web_errors, safe_execute
+from utils.database import check_db_connection
+
 from model.user import User
 from model.mcp_config import MCPConfig
 
@@ -42,17 +48,31 @@ from services.agent_cache_service import AgentCacheService
 
 load_dotenv()
 
+# Initialize logging
+logger = get_logger(__name__)
+logger.info("Starting Mattin AI application...")
+
+# Validate configuration
+try:
+    app_config = get_app_config()
+    logger.info("Configuration validation successful")
+except Exception as e:
+    logger.error(f"Configuration validation failed: {str(e)}")
+    raise
+
 info = Info(title="Mattin AI", version="1.0.0")
 app = OpenAPI(__name__, info=info, security_schemes={"api_key": {"type": "apiKey", "in": "header", "name": "X-API-KEY"}})
 
-app.secret_key = 'your-secret-key-SXSCDSDASD'
+# Use configuration from our config utility
+app.secret_key = app_config['SECRET_KEY']
 app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
 app.config["GOOGLE_DISCOVERY_URL"] = os.getenv('GOOGLE_DISCOVERY_URL')
 
-# AICT Mode configuration - determines if this is a service or self-hosted
-AICT_MODE = os.getenv('AICT_MODE', 'ONLINE').split('#')[0].strip()  # 'ONLINE' or 'SELF-HOSTED'
+# AICT Mode configuration
+AICT_MODE = app_config['AICT_MODE']
 app.config['AICT_MODE'] = AICT_MODE
+logger.info(f"Application running in {AICT_MODE} mode")
 
 
 app.register_blueprint(agents_blueprint)
@@ -69,6 +89,14 @@ app.register_blueprint(app_settings_blueprint)
 app.register_blueprint(admin_users_blueprint)
 app.register_blueprint(admin_stats_blueprint)
 app.register_blueprint(public_blueprint)
+
+# Only register subscription blueprint in SaaS mode
+if AICT_MODE == 'ONLINE':
+    from blueprints.subscription import subscription_blueprint
+    app.register_blueprint(subscription_blueprint)
+    logger.info("Subscription blueprint registered (SaaS mode)")
+else:
+    logger.info("Subscription blueprint skipped (self-hosted mode)")
 
 app.register_api(silo_api)
 app.register_api(api)
@@ -93,7 +121,30 @@ app.config.from_object(__name__)
 Session(app)
 
 with app.app_context():
-    init_db()
+    # Check database connection
+    if not check_db_connection():
+        logger.error("Database connection failed - application cannot start")
+        raise SystemExit("Database connection failed")
+    
+    # Initialize database
+    try:
+        init_db()
+        logger.info("Database initialization completed")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {str(e)}")
+        raise
+    
+    # Initialize default pricing plans (only in SaaS mode)
+    if AICT_MODE == 'ONLINE':
+        try:
+            from services.subscription_service import SubscriptionService
+            SubscriptionService.initialize_default_plans()
+            logger.info("Default pricing plans initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize pricing plans: {str(e)}")
+            # Don't fail the app start for this
+    else:
+        logger.info("Pricing plans initialization skipped (self-hosted mode)")
 
 @app.context_processor
 def inject_aict_mode():
@@ -117,11 +168,33 @@ def index():
 
 @app.route('/home')
 @login_required
+@handle_web_errors(redirect_url='public.product')
 def home():
-    apps = AppService.get_apps(current_user.get_id())
+    user_id = current_user.get_id()
+    logger.info(f"User {user_id} accessing home page")
+    
+    # Get user's apps
+    apps = AppService.get_apps(user_id)
+    
+    # If user has a selected app, redirect to it
     if session.get('app_id') is not None:
         return app_index(session['app_id'])
-    return render_template('home.html', apps=apps)
+    
+    # Get subscription information for the dashboard (only in SaaS mode)
+    subscription_info = None
+    if AICT_MODE == 'ONLINE':
+        from services.subscription_service import SubscriptionService
+        subscription_info, error = safe_execute(
+            lambda: SubscriptionService.get_user_subscription_info(user_id),
+            default_return=None,
+            log_errors=True
+        )
+        
+        if error:
+            logger.warning(f"Failed to get subscription info for user {user_id}: {error}")
+            subscription_info = None
+    
+    return render_template('home.html', apps=apps, subscription_info=subscription_info)
 
 @app.route('/app/<int:app_id>', methods=['GET'])
 @login_required
@@ -130,7 +203,22 @@ def app_index(app_id: int):
     session['app_id'] = app_id
     session['app_name'] = selected_app.name
     
-    return render_template('app_index.html', app=selected_app)
+    # Collect statistics for the dashboard
+    from services.agent_service import AgentService
+    from services.repository_service import RepositoryService
+    from services.output_parser_service import OutputParserService
+    from services.silo_service import SiloService
+    from services.domain_service import DomainService
+    
+    stats = {
+        'agents': len(AgentService().get_agents(app_id)),
+        'repositories': len(RepositoryService.get_repositories_by_app_id(app_id)),
+        'output_parsers': len(OutputParserService().get_parsers_by_app(app_id)),
+        'silos': len(SiloService.get_silos_by_app_id(app_id)),
+        'domains': len(DomainService.get_domains_by_app_id(app_id))
+    }
+    
+    return render_template('app_index.html', app=selected_app, stats=stats)
 
 @app.route('/create-app', methods=['POST'])
 @login_required
@@ -184,6 +272,10 @@ def auth_callback():
         user = User(email=user_info['email'], name=user_info['name'])
         db.session.add(user)
         db.session.commit()
+        
+        # Create free subscription for new user
+        from services.subscription_service import SubscriptionService
+        SubscriptionService.create_free_subscription(user.user_id)
     
     session['user_id'] = user.user_id
     login_user(user)

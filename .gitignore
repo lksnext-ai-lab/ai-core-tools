@@ -43,3 +43,4 @@ data/
 **/secret.yaml
 *-secret.yaml
 *.code-workspace
+logs/

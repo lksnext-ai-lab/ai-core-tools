@@ -116,6 +116,24 @@
                         <button id="send-btn" class="btn btn-sm btn-primary ms-2 px-4 mb-0 flex-shrink-0"><i
                                 class="fas fa-paper-plane fs-5"></i></button>
                     </div>
+                    {% if agent.silo and agent.silo.metadata_definition %}
+                    <div class="mt-3">
+                        <h6>Filter by metadata:</h6>
+                        <div class="row">
+                            {% for field in agent.silo.metadata_definition.fields %}
+                            <div class="col-md-4 mb-2">
+                                <label for="filter_{{ field.name }}" class="form-label">
+                                    <span class="fw-bold">{{ field.name }}</span>
+                                    <small class="text-muted d-block">{{ field.description }}</small>
+                                </label>
+                                <input type="text" class="form-control form-control-sm" 
+                                    id="filter_{{ field.name }}" 
+                                    data-field-type="{{ field.type }}">
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
 
             </div>
@@ -138,6 +156,21 @@
         
         // Limpiar el input inmediatamente después de obtener su valor
         $('#question').val('');
+
+        // Collect filter values if they exist
+        var search_params = null;
+        {% if agent.silo and agent.silo.metadata_definition %}
+        var filter = {};
+        {% for field in agent.silo.metadata_definition.fields %}
+        var value = $('#filter_{{ field.name }}').val();
+        if (value) {
+            filter['{{ field.name }}'] = {"$eq": value};
+        }
+        {% endfor %}
+        if (Object.keys(filter).length > 0) {
+            search_params = { filter: filter };
+        }
+        {% endif %}
         
         // Crear y mostrar el div de la pregunta
         var qDiv = $('#referenece').clone();
@@ -169,7 +202,10 @@
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ question: question }),
+            body: JSON.stringify({ 
+                question: question,
+                search_params: search_params
+            }),
             signal: controller.signal
         })
         .then(async response => {

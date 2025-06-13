@@ -51,30 +51,8 @@
                                         class="bi bi-diagram-3 fa-fw me-2"></i>Domains</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link"
-                                    href="{{ url_for('output_parsers.app_output_parsers', app_id=session['app_id']) }}">
-                                    <i class="bi bi-file-text fa-fw me-2"></i>Data Structures
-                                </a>
-                            </li>
-                            <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('silos.silos', app_id=session['app_id']) }}"><i
                                         class="bi bi-database fa-fw me-2"></i>Silos</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('ai_services.app_ai_services', app_id=session['app_id']) }}"><i
-                                    class="bi bi-hdd-rack fa-fw me-2"></i>AI Services</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('embedding_services.app_embedding_services', app_id=session['app_id']) }}"><i
-                                    class="bi bi-hdd-rack fa-fw me-2"></i>Embedding Services</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('mcp_configs.app_mcp_configs', app_id=session['app_id']) }}"><i
-                                    class="bi bi-plug fa-fw me-2"></i>MCP Configs</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('api_keys.list_api_keys') }}"><i
-                                        class="bi bi-ticket-perforated fa-fw me-2"></i>API Keys</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('app_settings.app_settings', app_id=session['app_id']) }}"><i

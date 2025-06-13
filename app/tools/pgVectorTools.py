@@ -99,6 +99,7 @@ class PGVectorTools:
         if isinstance(ids, list):
             vector_store.delete(ids=ids)
         else:
+            #TODO: for deleting docs embedding_service should not be needed. In fact, if api key  fails we can not delete docs.
             results = vector_store.similarity_search(
                 "", k=1000, filter=ids
             )
@@ -158,7 +159,7 @@ class PGVectorTools:
             )
         return results
     
-    def get_pgvector_retriever(self, collection_name: str, embedding_service=None):
+    def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None):
         """Returns a retriever object for the pgvector collection."""
         vector_store = PGVector(
             embeddings=get_embeddings_model(embedding_service),
@@ -167,6 +168,8 @@ class PGVectorTools:
             use_jsonb=True,
             async_mode=True
         )
+        if search_params is not None:
+            return vector_store.as_retriever(search_kwargs=search_params)
         return vector_store.as_retriever()
 
 

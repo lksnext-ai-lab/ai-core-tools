@@ -1,11 +1,24 @@
 from api.pydantic.pydantic import AppPath
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class AgentPath(AppPath):
     agent_id: int
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(
+        description="The question or query to send to the agent",
+        example="What is artificial intelligence?"
+    )
+    search_params: dict | None = Field(
+        description="Optional search parameters for vector search filtering. Use this to filter documents by metadata fields.",
+        example={
+            "filter": {
+                "source": "documentation",
+                "category": "AI",
+                "language": "en"
+            }
+        }
+    )
 
 class OCRRequest(BaseModel):
     agent_id: str

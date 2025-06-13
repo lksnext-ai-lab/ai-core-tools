@@ -1,21 +1,7 @@
-{% extends "base.html" %}
+{% extends "app_settings/app_settings_base.html" %}
 
-{% block content %}
-<div class="container-fluid">
-    <!-- Page title START -->
-    <div class="row g-4 align-items-center mb-4">
-        <div class="col">
-            <h1 class="h3 mb-0">App Settings</h1>
-        </div>
-        <div class="col-auto">
-            <a href="{{ url_for('app_index', app_id=app.app_id) }}" class="btn btn-light">
-                <i class="bi bi-arrow-left me-2"></i>Back to App
-            </a>
-        </div>
-    </div>
-    <!-- Page title END -->
-
-    <div class="row g-4">
+{% block app_settings_content %}
+<div class="row g-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
@@ -44,5 +30,4 @@
             </div>
         </div>
     </div>
-</div>
 {% endblock %} 
