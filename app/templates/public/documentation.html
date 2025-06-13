@@ -1,0 +1,169 @@
+{% extends "public/base_public.html" %}
+
+{% block title %}Documentation - Mattin AI{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="bg-primary text-white py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center">
+                <h1 class="display-4 fw-bold mb-4">Documentation</h1>
+                <p class="lead mb-0">Everything you need to build with Mattin AI</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Documentation Sections -->
+<section class="py-5">
+    <div class="container">
+        <div class="row g-4">
+            
+            <!-- Getting Started -->
+            <div class="col-lg-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="icon-lg bg-success bg-opacity-10 rounded-3 me-3 d-flex align-items-center justify-content-center">
+                                <i class="bi bi-play-circle text-success" style="font-size: 1.5rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold mb-0">Getting Started</h3>
+                        </div>
+                        <p class="text-muted mb-3">Quick start guides to get you up and running with Mattin AI in minutes.</p>
+                        <ul class="list-unstyled">
+                            <li><a href="#" class="text-decoration-none">🚀 Quick Start Guide</a></li>
+                            <li><a href="#" class="text-decoration-none">🔧 Installation & Setup</a></li>
+                            <li><a href="#" class="text-decoration-none">👤 Creating Your First Agent</a></li>
+                            <li><a href="#" class="text-decoration-none">📊 Dashboard Overview</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Reference -->
+            <div class="col-lg-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="icon-lg bg-primary bg-opacity-10 rounded-3 me-3 d-flex align-items-center justify-content-center">
+                                <i class="bi bi-code-square text-primary" style="font-size: 1.5rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold mb-0">API Reference</h3>
+                        </div>
+                        <p class="text-muted mb-3">Complete API documentation with examples and interactive testing.</p>
+                        <ul class="list-unstyled">
+                            <li><a href="/openapi/swagger" target="_blank" class="text-decoration-none">📖 Interactive API Docs</a></li>
+                            <li><a href="#" class="text-decoration-none">🔑 Authentication Guide</a></li>
+                            <li><a href="#" class="text-decoration-none">📝 Code Examples</a></li>
+                            <li><a href="#" class="text-decoration-none">⚡ Rate Limits & Quotas</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents -->
+            <div class="col-lg-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="icon-lg bg-warning bg-opacity-10 rounded-3 me-3 d-flex align-items-center justify-content-center">
+                                <i class="bi bi-robot text-warning" style="font-size: 1.5rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold mb-0">AI Agents</h3>
+                        </div>
+                        <p class="text-muted mb-3">Learn how to create, configure, and deploy intelligent AI agents.</p>
+                        <ul class="list-unstyled">
+                            <li><a href="#" class="text-decoration-none">🤖 Agent Architecture</a></li>
+                            <li><a href="#" class="text-decoration-none">⚙️ Configuration Options</a></li>
+                            <li><a href="#" class="text-decoration-none">🔧 Custom Tools & Functions</a></li>
+                            <li><a href="#" class="text-decoration-none">📈 Performance Optimization</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Management -->
+            <div class="col-lg-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="icon-lg bg-info bg-opacity-10 rounded-3 me-3 d-flex align-items-center justify-content-center">
+                                <i class="bi bi-database text-info" style="font-size: 1.5rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold mb-0">Data Management</h3>
+                        </div>
+                        <p class="text-muted mb-3">Organize and manage your data with repositories and silos.</p>
+                        <ul class="list-unstyled">
+                            <li><a href="#" class="text-decoration-none">📁 Repository Management</a></li>
+                            <li><a href="#" class="text-decoration-none">🗄️ Data Silos</a></li>
+                            <li><a href="#" class="text-decoration-none">🔄 Version Control</a></li>
+                            <li><a href="#" class="text-decoration-none">🔒 Security & Permissions</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Integrations -->
+            <div class="col-lg-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="icon-lg bg-purple bg-opacity-10 rounded-3 me-3 d-flex align-items-center justify-content-center">
+                                <i class="bi bi-plug text-purple" style="font-size: 1.5rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold mb-0">Integrations</h3>
+                        </div>
+                        <p class="text-muted mb-3">Connect with external services and AI providers.</p>
+                        <ul class="list-unstyled">
+                            <li><a href="#" class="text-decoration-none">🔌 AI Service Providers</a></li>
+                            <li><a href="#" class="text-decoration-none">🔑 API Key Management</a></li>
+                            <li><a href="#" class="text-decoration-none">🌐 Webhooks & Events</a></li>
+                            <li><a href="#" class="text-decoration-none">📊 Third-party Analytics</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Best Practices -->
+            <div class="col-lg-6">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="icon-lg bg-danger bg-opacity-10 rounded-3 me-3 d-flex align-items-center justify-content-center">
+                                <i class="bi bi-star text-danger" style="font-size: 1.5rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold mb-0">Best Practices</h3>
+                        </div>
+                        <p class="text-muted mb-3">Learn industry best practices and optimization techniques.</p>
+                        <ul class="list-unstyled">
+                            <li><a href="#" class="text-decoration-none">✨ Design Patterns</a></li>
+                            <li><a href="#" class="text-decoration-none">🚀 Performance Tips</a></li>
+                            <li><a href="#" class="text-decoration-none">🔒 Security Guidelines</a></li>
+                            <li><a href="#" class="text-decoration-none">💰 Cost Optimization</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Search Section -->
+<section class="bg-light py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-6 text-center">
+                <h2 class="h3 fw-bold mb-4">Can't find what you're looking for?</h2>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Search documentation..." aria-label="Search">
+                    <button class="btn btn-primary" type="button">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+                <p class="text-muted">Or <a href="{{ url_for('public.support') }}" class="text-decoration-none">contact our support team</a> for personalized help.</p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

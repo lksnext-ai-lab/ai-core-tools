@@ -10,7 +10,7 @@ import os
 def is_omniadmin(email):
     if not email:
         return False
-    omniadmins = os.getenv('IACT_OMNIADMINS', '').split(',')
+    omniadmins = os.getenv('AICT_OMNIADMINS', '').split(',')
     return email in omniadmins
 
 def is_valid_api_key(app_id, api_key):

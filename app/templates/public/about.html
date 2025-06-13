@@ -1,0 +1,191 @@
+{% extends "public/base_public.html" %}
+
+{% block title %}About Us - Mattin AI{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="bg-primary text-white py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center">
+                <h1 class="display-4 fw-bold mb-4">About Mattin AI</h1>
+                <p class="lead mb-0">Empowering the future of AI development</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Mission Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h2 class="display-5 fw-bold mb-4">Our Mission</h2>
+                <p class="lead text-muted mb-4">We believe that artificial intelligence should be accessible, powerful, and easy to implement for businesses of all sizes.</p>
+                <p class="mb-4">Mattin AI was created to bridge the gap between complex AI technologies and practical business applications. Our platform empowers developers, businesses, and innovators to build intelligent solutions without the traditional barriers of AI development.</p>
+                <p class="mb-0">By providing a comprehensive suite of tools for AI agent creation, data management, and service integration, we're making it possible for anyone to harness the power of artificial intelligence.</p>
+            </div>
+            <div class="col-lg-6">
+                <img src="{{ url_for('static', filename='img/mattin-ai.png') }}" alt="Mattin AI Platform" class="img-fluid rounded-3 shadow">
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Values Section -->
+<section class="bg-light py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center mb-5">
+                <h2 class="display-5 fw-bold">Our Values</h2>
+                <p class="lead text-muted">The principles that guide everything we do</p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-primary bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-lightbulb text-primary" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Innovation</h3>
+                        <p class="text-muted">We continuously push the boundaries of what's possible with AI technology, staying at the forefront of innovation.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-success bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-people text-success" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Accessibility</h3>
+                        <p class="text-muted">AI should be accessible to everyone. We design our platform to be intuitive and user-friendly for all skill levels.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-warning bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-shield-check text-warning" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Security</h3>
+                        <p class="text-muted">We prioritize the security and privacy of your data with enterprise-grade protection and compliance standards.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-info bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-gear text-info" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Reliability</h3>
+                        <p class="text-muted">Our platform is built for mission-critical applications with 99.9% uptime and robust infrastructure.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-purple bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-heart text-purple" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Customer Focus</h3>
+                        <p class="text-muted">Our customers' success is our success. We're committed to providing exceptional support and service.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 border-0 text-center">
+                    <div class="card-body p-4">
+                        <div class="icon-lg bg-danger bg-opacity-10 rounded-3 mb-4 d-flex align-items-center justify-content-center mx-auto">
+                            <i class="bi bi-globe text-danger" style="font-size: 2rem;"></i>
+                        </div>
+                        <h3 class="h5 fw-bold">Global Impact</h3>
+                        <p class="text-muted">We believe AI can solve global challenges and create positive impact for communities worldwide.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Company Info Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 mx-auto text-center">
+                <h2 class="display-5 fw-bold mb-4">Built by LKS Next</h2>
+                <p class="lead text-muted mb-4">Mattin AI is developed by LKS Next, a leading technology company specializing in innovative software solutions and artificial intelligence.</p>
+                <p class="mb-4">With years of experience in enterprise software development and a deep understanding of AI technologies, our team is dedicated to creating tools that make artificial intelligence more accessible and practical for businesses worldwide.</p>
+                <p class="text-muted">We're headquartered in the Basque Country, Spain, and serve customers globally with our cloud-based AI platform.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Stats Section -->
+<section class="bg-light py-5">
+    <div class="container">
+        <div class="row text-center">
+            <div class="col-lg-3 col-md-6 mb-4">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <h3 class="display-4 fw-bold text-primary">1000+</h3>
+                        <p class="text-muted mb-0">AI Agents Created</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-4">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <h3 class="display-4 fw-bold text-success">50+</h3>
+                        <p class="text-muted mb-0">Enterprise Customers</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-4">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <h3 class="display-4 fw-bold text-warning">99.9%</h3>
+                        <p class="text-muted mb-0">Platform Uptime</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-4">
+                <div class="card border-0 h-100">
+                    <div class="card-body">
+                        <h3 class="display-4 fw-bold text-info">24/7</h3>
+                        <p class="text-muted mb-0">Support Available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-12 text-center">
+                <h2 class="display-5 fw-bold mb-4">Ready to Join Us?</h2>
+                <p class="lead text-muted mb-4">Start building intelligent applications with Mattin AI today</p>
+                <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg me-3">Get Started</a>
+                <a href="{{ url_for('public.support') }}" class="btn btn-outline-primary btn-lg">Contact Us</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

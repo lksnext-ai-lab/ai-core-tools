@@ -28,6 +28,9 @@ from blueprints.ai_services import ai_services_blueprint
 from blueprints.embeddings_services import embedding_services_blueprint
 from blueprints.mcp_configs import mcp_configs
 from blueprints.app_settings import app_settings_blueprint
+from blueprints.admin.users import admin_users_blueprint
+from blueprints.admin.stats import admin_stats_blueprint
+from blueprints.public import public_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -47,6 +50,10 @@ app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
 app.config["GOOGLE_DISCOVERY_URL"] = os.getenv('GOOGLE_DISCOVERY_URL')
 
+# AICT Mode configuration - determines if this is a service or self-hosted
+AICT_MODE = os.getenv('AICT_MODE', 'ONLINE').split('#')[0].strip()  # 'ONLINE' or 'SELF-HOSTED'
+app.config['AICT_MODE'] = AICT_MODE
+
 
 app.register_blueprint(agents_blueprint)
 app.register_blueprint(repositories_blueprint)
@@ -59,6 +66,9 @@ app.register_blueprint(domains_blueprint)
 app.register_blueprint(embedding_services_blueprint)
 app.register_blueprint(mcp_configs)
 app.register_blueprint(app_settings_blueprint)
+app.register_blueprint(admin_users_blueprint)
+app.register_blueprint(admin_stats_blueprint)
+app.register_blueprint(public_blueprint)
 
 app.register_api(silo_api)
 app.register_api(api)
@@ -85,6 +95,11 @@ Session(app)
 with app.app_context():
     init_db()
 
+@app.context_processor
+def inject_aict_mode():
+    """Make AICT_MODE available in all templates"""
+    return dict(aict_mode=AICT_MODE)
+
 @app.before_request
 def before_request():
     if 'session_id' not in session:
@@ -93,7 +108,12 @@ def before_request():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # If user is logged in, redirect to their dashboard
+    if session.get('user'):
+        return redirect(url_for('home'))
+    
+    # In both modes, redirect to the product page (accessible in both ONLINE and SELF-HOSTED)
+    return redirect(url_for('public.product'))
 
 @app.route('/home')
 @login_required
@@ -186,9 +206,7 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return db.session.query(User).get(int(user_id))
 
-@app.route('/about')
-def about():
-    return render_template('about.html')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4321, debug=True)

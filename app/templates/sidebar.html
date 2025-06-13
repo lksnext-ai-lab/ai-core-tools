@@ -105,6 +105,11 @@
                         <div class="collapse" id="adminSubmenu">
                             <ul class="nav flex-column ms-3">
                                 <li class="nav-item">
+                                    <a class="nav-link" href="{{ url_for('admin_users.list_users') }}">
+                                        <i class="bi bi-people fa-fw me-2"></i>Users
+                                    </a>
+                                </li>
+                                <li class="nav-item">
                                     <a class="nav-link" href="#">
                                         <i class="bi bi-clipboard2-data fa-fw me-2"></i>Stats
                                     </a>
@@ -115,11 +120,7 @@
                     {% endif %}
 
                     <li class="nav-item">
-                        <a class="nav-link" href="/openapi/swagger" target="_blank"><i
-                            class="bi bi-braces fa-fw me-2"></i>Swagger <i class="bi bi-box-arrow-up-right"></i></a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('about') }}"><i
+                        <a class="nav-link" href="{{ url_for('public.about') }}"><i
                             class="bi bi-info-circle fa-fw me-2"></i>About</a>
                     </li>
                 </ul>

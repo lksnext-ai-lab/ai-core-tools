@@ -22,27 +22,210 @@
             </div>
             <!-- Toggler for sidebar END -->
 
-            <!-- Top bar left -->
-            <div class="navbar-expand-lg ms-auto ms-xl-0">
-                <!-- Toggler for menubar START -->
+            <!-- Top bar center - Main Navigation Menu -->
+            <div class="navbar-expand-lg ms-auto ms-xl-0 flex-grow-1">
+                <!-- Toggler for main menu START -->
                 <button class="navbar-toggler ms-auto p-0" type="button" data-bs-toggle="collapse"
                     data-bs-target="#navbarTopContent" aria-controls="navbarTopContent" aria-expanded="false"
                     aria-label="Toggle navigation">
-                    <i class="bi bi-search"></i>
+                    <i class="bi bi-list"></i>
                 </button>
-                <!-- Toggler for menubar END -->
+                <!-- Toggler for main menu END -->
 
-                <!-- Topbar menu START -->
+                <!-- Main Navigation Menu START -->
                 <div class="collapse navbar-collapse w-100 z-index-1" id="navbarTopContent">
-                    <!-- Top search START -->
-                    <div class="nav my-3 my-xl-0 flex-nowrap align-items-center">
-                        <p class="titulo-app">Mattin AI by LKS Next</p>
+                    <div class="d-flex justify-content-between align-items-center w-100">
+                        <!-- Left side - Brand/Title -->
+                        <div class="nav my-3 my-xl-0 flex-nowrap align-items-center">
+                            <p class="titulo-app mb-0">Mattin AI</p>
+                        </div>
+
+                        <!-- Center - Main Navigation -->
+                        {% if session and session['user'] %}
+                        <!-- Logged-in user navigation -->
+                        <ul class="navbar-nav mx-auto d-none d-lg-flex">
+                            <li class="nav-item">
+                                <a class="nav-link px-3 {% if request.endpoint == 'my_apps' %}active{% endif %}" href="{{ url_for('my_apps') }}">
+                                    <i class="bi bi-window-stack me-1"></i>My Apps
+                                </a>
+                            </li>
+                            {% if session and session['app_name'] %}
+                            <li class="nav-item">
+                                <a class="nav-link px-3 {% if request.endpoint == 'app_index' %}active{% endif %}" href="{{ url_for('app_index', app_id=session['app_id']) }}" title="Go to {{session['app_name']}} dashboard">
+                                    <i class="bi bi-app-indicator me-1"></i>
+                                    <strong>{{session['app_name']}}</strong>
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle px-3" href="#" id="resourcesDropdown" role="button" 
+                                   data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-book me-1"></i>Resources
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="resourcesDropdown">
+                                    <li><a class="dropdown-item" href="/openapi/swagger" target="_blank">
+                                        <i class="bi bi-braces me-2"></i>API Documentation <i class="bi bi-box-arrow-up-right"></i></a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.about') }}">
+                                        <i class="bi bi-info-circle me-2"></i>About</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.documentation') }}">
+                                        <i class="bi bi-file-text me-2"></i>Documentation</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.support') }}">
+                                        <i class="bi bi-headset me-2"></i>Support</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                        {% elif aict_mode == 'ONLINE' %}
+                        <!-- Public/marketing navigation (only in online mode) -->
+                        <ul class="navbar-nav mx-auto d-none d-lg-flex">
+                            <li class="nav-item">
+                                <a class="nav-link px-3" href="{{ url_for('public.product') }}">
+                                    <i class="bi bi-box-seam me-1"></i>Product
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link px-3" href="{{ url_for('public.features') }}">
+                                    <i class="bi bi-stars me-1"></i>Features
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link px-3" href="{{ url_for('public.pricing') }}">
+                                    <i class="bi bi-currency-dollar me-1"></i>Pricing
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link px-3" href="{{ url_for('public.solutions') }}">
+                                    <i class="bi bi-puzzle me-1"></i>Solutions
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle px-3" href="#" id="resourcesDropdown" role="button" 
+                                   data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-book me-1"></i>Resources
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="resourcesDropdown">
+                                    <li><a class="dropdown-item" href="/openapi/swagger" target="_blank">
+                                        <i class="bi bi-braces me-2"></i>API Documentation <i class="bi bi-box-arrow-up-right"></i></a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.about') }}">
+                                        <i class="bi bi-info-circle me-2"></i>About</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.documentation') }}">
+                                        <i class="bi bi-file-text me-2"></i>Documentation</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.support') }}">
+                                        <i class="bi bi-headset me-2"></i>Support</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                        {% endif %}
+
+                        <!-- Right side - Auth buttons -->
+                        {% if not session or not session['user'] %}
+                        <div class="d-flex align-items-center">
+                            <a class="nav-link me-3" href="{{ url_for('login') }}">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>Login
+                            </a>
+                            {% if aict_mode == 'ONLINE' %}
+                            <a class="btn btn-primary btn-sm" href="#signup">
+                                <i class="bi bi-person-plus me-1"></i>Sign Up
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
-                    <!-- Top search END -->
+
+                    <!-- Mobile menu items (visible when collapsed) -->
+                    <div class="d-lg-none mt-3">
+                        {% if session and session['user'] %}
+                        <!-- Logged-in user mobile navigation -->
+                        <ul class="navbar-nav">
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('my_apps') }}">
+                                    <i class="bi bi-window-stack me-2"></i>My Apps
+                                </a>
+                            </li>
+                            {% if session and session['app_name'] %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('app_index', app_id=session['app_id']) }}" title="Go to {{session['app_name']}} dashboard">
+                                    <i class="bi bi-app-indicator me-2"></i>
+                                    <strong>{{session['app_name']}}</strong>
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="resourcesDropdownMobile" role="button" 
+                                   data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-book me-2"></i>Resources
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="resourcesDropdownMobile">
+                                    <li><a class="dropdown-item" href="/openapi/swagger" target="_blank">
+                                        <i class="bi bi-braces me-2"></i>API Documentation <i class="bi bi-box-arrow-up-right"></i></a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.about') }}">
+                                        <i class="bi bi-info-circle me-2"></i>About</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.documentation') }}">
+                                        <i class="bi bi-file-text me-2"></i>Documentation</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.support') }}">
+                                        <i class="bi bi-headset me-2"></i>Support</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                        {% elif aict_mode == 'ONLINE' %}
+                        <!-- Public/marketing mobile navigation (only in online mode) -->
+                        <ul class="navbar-nav">
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('public.product') }}">
+                                    <i class="bi bi-box-seam me-2"></i>Product
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('public.features') }}">
+                                    <i class="bi bi-stars me-2"></i>Features
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('public.pricing') }}">
+                                    <i class="bi bi-currency-dollar me-2"></i>Pricing
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('public.solutions') }}">
+                                    <i class="bi bi-puzzle me-2"></i>Solutions
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="resourcesDropdownMobile" role="button" 
+                                   data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-book me-2"></i>Resources
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="resourcesDropdownMobile">
+                                    <li><a class="dropdown-item" href="/openapi/swagger" target="_blank">
+                                        <i class="bi bi-braces me-2"></i>API Documentation <i class="bi bi-box-arrow-up-right"></i></a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.about') }}">
+                                        <i class="bi bi-info-circle me-2"></i>About</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.documentation') }}">
+                                        <i class="bi bi-file-text me-2"></i>Documentation</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('public.support') }}">
+                                        <i class="bi bi-headset me-2"></i>Support</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item mt-2">
+                                <a class="nav-link" href="{{ url_for('login') }}">
+                                    <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="btn btn-primary btn-sm w-100" href="#signup">
+                                    <i class="bi bi-person-plus me-1"></i>Sign Up
+                                </a>
+                            </li>
+                        </ul>
+                        {% endif %}
+                    </div>
                 </div>
-                <!-- Topbar menu END -->
+                <!-- Main Navigation Menu END -->
             </div>
-            <!-- Top bar left END -->
+            <!-- Top bar center END -->
 
             {% if session and session['user'] %}
             <!-- Top bar right START -->
@@ -148,12 +331,6 @@
                     </ul>
                 </li>
                 <!-- Profile dropdown END -->
-            </ul>
-            {% else %}
-            <ul class="nav flex-row align-items-center list-unstyled ms-xl-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('login') }}">Login</a>
-                </li>
             </ul>
             {% endif %}
             <!-- Top bar right END -->
