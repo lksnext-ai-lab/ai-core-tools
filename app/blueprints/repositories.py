@@ -88,15 +88,10 @@ def repository_settings(app_id: int, repository_id: int):
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/delete', methods=['GET'])
 def repository_delete(app_id: int, repository_id: int):
-    '''repo = db.session.query(Repository).filter(Repository.repository_id == repository_id).first()
-    db.session.query(Resource).filter(Resource.repository_id == repository_id).delete()
-    db.session.query(Repository).filter(Repository.repository_id == repository_id).delete()
-    db.session.query(Silo).filter(Silo.silo_id == repo.silo_id).delete()
-    #TODO: empty silo
-    db.session.commit()'''
     repo = RepositoryService.get_repository(repository_id)
-    RepositoryService.delete_repository(repo)
-    return repositories(app_id)
+    if repo:
+        RepositoryService.delete_repository(repo)
+    return redirect(url_for('repositories.repositories', app_id=app_id))
 
     
 '''

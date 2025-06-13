@@ -138,7 +138,7 @@ class SiloService:
         """
         silo = db.session.query(Silo).filter(Silo.silo_id == silo_id).first()
         if silo:
-            SiloService.delete_collection(silo)
+            SiloService.delete_collection(silo.silo_id)
             
             silo.embedding_service_id = None
             db.session.add(silo)

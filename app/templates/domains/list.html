@@ -34,7 +34,7 @@
                   <li><a href="{{ url_for('domains.domain', domain_id=domain.domain_id) }}" class="dropdown-item">Edit</a></li>
                   <li><a href="{{ url_for('domains.domain_delete', domain_id=domain.domain_id) }}" class="dropdown-item">Delete</a></li>
                   <li><a href="{{ url_for('domains.view_domain_urls', domain_id=domain.domain_id) }}" class="dropdown-item">Urls</a></li>
-                  <li><a href="/domain/{{ domain.domain_id }}/re-index" class="dropdown-item">Reindex</a></li>
+                  <li><a href="{{ url_for('domains.reindex_domain', domain_id=domain.domain_id) }}" class="dropdown-item">Reindex</a></li>
                   <li><a href="/domain/{{ domain.domain_id }}/resume" class="dropdown-item">Resume</a></li>
                 </ul>
               </div>

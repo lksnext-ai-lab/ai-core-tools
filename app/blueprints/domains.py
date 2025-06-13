@@ -82,6 +82,41 @@ def create_domain():
 
 @domains_blueprint.route('/<int:domain_id>/url/<int:url_id>/delete', methods=['GET'])
 def delete_url(domain_id, url_id):
-    UrlService.delete_url(url_id, domain_id)
+    domain = DomainService.get_domain(domain_id)
+    url = db.session.query(Url).filter(Url.url_id == url_id).first()
+    if url and domain:
+        # Delete embedding first
+        full_url = domain.base_url + url.url
+        SiloService.delete_url(domain.silo_id, full_url)
+        # Then delete URL from database
+        UrlService.delete_url(url_id, domain_id)
     return redirect(url_for('domains.view_domain_urls', domain_id=domain_id))
 
+@domains_blueprint.route('/<int:domain_id>/url/<int:url_id>/reindex', methods=['GET'])
+def reindex_url(domain_id, url_id):
+    domain = DomainService.get_domain(domain_id)
+    url = db.session.query(Url).filter(Url.url_id == url_id).first()
+    if url and domain:
+        # 1. Delete existing embedding
+        full_url = domain.base_url + url.url
+        SiloService.delete_url(domain.silo_id, full_url)
+        
+        # 2. Get fresh content
+        content = scrapTools.get_text_from_url(full_url)
+        
+        # 3. Index new content
+        SiloService.index_single_content(domain.silo_id, content, {"url": full_url})
+        
+    return redirect(url_for('domains.view_domain_urls', domain_id=domain_id))
+
+@domains_blueprint.route('/<int:domain_id>/re-index', methods=['GET'])
+def reindex_domain(domain_id):
+    domain = DomainService.get_domain(domain_id)
+    if domain:
+        # Reindex all URLs for the domain
+        for url in domain.urls:
+            full_url = domain.base_url + url.url
+            SiloService.delete_url(domain.silo_id, full_url)
+            content = scrapTools.get_text_from_url(full_url)
+            SiloService.index_single_content(domain.silo_id, content, {"url": full_url})
+    return redirect(url_for('domains.view_domain_urls', domain_id=domain_id))

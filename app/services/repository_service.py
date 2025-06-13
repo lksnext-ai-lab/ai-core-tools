@@ -3,11 +3,12 @@ from model.resource import Resource
 from model.output_parser import OutputParser
 from extensions import db
 from typing import Optional, List
+import os
+import shutil
+from dotenv import load_dotenv
 from services.silo_service import SiloService
 from model.silo import SiloType
 from services.output_parser_service import OutputParserService
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
@@ -56,20 +57,44 @@ class RepositoryService:
     
     @staticmethod
     def delete_repository(repository: Repository):
+        if not repository:
+            return
+            
+        # Get silo and parser info before deletion
         silo = repository.silo
-        # Obtener el ID del parser antes de eliminar el silo
         parser_id = silo.metadata_definition_id if silo else None
         
-        # Delete all resources first (this will also delete their files and vector embeddings)
+        # Delete all resources first
+        resources = db.session.query(Resource).filter(Resource.repository_id == repository.repository_id).all()
+        for resource in resources:
+            # Delete the physical file if exists
+            file_path = os.path.join(REPO_BASE_FOLDER, str(repository.repository_id), resource.uri)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass  # Ignore errors if file cannot be deleted
+        
+        # Delete all resource records
         db.session.query(Resource).filter(Resource.repository_id == repository.repository_id).delete()
         
-        # Luego eliminar el repositorio
+        # Delete repository folder if exists
+        repo_folder = os.path.join(REPO_BASE_FOLDER, str(repository.repository_id))
+        if os.path.exists(repo_folder):
+            try:
+                shutil.rmtree(repo_folder)
+            except OSError:
+                pass  # Ignore errors if folder cannot be deleted
+            
+        # Delete vector collection and silo
+        if silo:
+            SiloService.delete_collection(silo)
+            db.session.delete(silo)
+            
+        # Delete repository
         db.session.delete(repository)
-        # Eliminar la colección de vectores antes de eliminar el silo
-        SiloService.delete_collection(silo)
         
-        db.session.delete(silo)
-        # Eliminar el output parser si existe
+        # Delete output parser if exists
         if parser_id:
             db.session.query(OutputParser).filter_by(parser_id=parser_id).delete()
         

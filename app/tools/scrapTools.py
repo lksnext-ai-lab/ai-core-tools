@@ -20,7 +20,7 @@ def get_text_from_url( url, tag="body", id=None, class_name=None):
         print(f"Getting text from {url} with tag {tag} and attrs {attr_dict}")
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, verify=False)
             soup = BeautifulSoup(response.content, "html.parser")
             main_content = soup.find(tag, attrs=attr_dict)
             if main_content == None:
