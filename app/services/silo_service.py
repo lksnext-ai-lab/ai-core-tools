@@ -36,12 +36,13 @@ class SiloService:
         return db.session.query(Silo).filter(Silo.silo_id == silo_id).first()
     
     @staticmethod
-    def get_silo_retriever(silo_id: int) -> Optional[VectorStoreRetriever]:
+    def get_silo_retriever(silo_id: int, search_params=None) -> Optional[VectorStoreRetriever]:
         """
         Get retriever for a silo with its corresponding embedding service
         
         Args:
             silo_id: ID of the silo
+            search_params: Optional search parameters for filtering
             
         Returns:
             VectorStoreRetriever if silo exists and has embedding service, None otherwise
@@ -65,7 +66,7 @@ class SiloService:
         try:
             pg_vector_tools = PGVectorTools(db)
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service)
+            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, search_params)
         except Exception as e:
             logger.error(f"Failed to create retriever for silo {silo_id}: {str(e)}", exc_info=True)
             raise

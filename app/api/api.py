@@ -75,7 +75,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
         tracer = LangChainTracer(client=client, project_name=agent.app.name)
     
     # Process agent request
-    result = current_app.ensure_sync(process_agent_request)(agent, question, tracer)
+    result = current_app.ensure_sync(process_agent_request)(agent, question, tracer, body.search_params)
     
     # Handle response format
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], int):
@@ -91,7 +91,7 @@ def call_agent(path: AgentPath, body: ChatRequest):
     return result
 
 
-async def _get_or_create_agent(agent):
+async def _get_or_create_agent(agent, search_params=None):
     """Helper function to get cached agent or create new one."""
     agent_x = None
     if agent.has_memory:
@@ -99,7 +99,7 @@ async def _get_or_create_agent(agent):
     
     if agent_x is None:
         logger.info("Creating new agent instance")
-        agent_x = await create_agent(agent)
+        agent_x = await create_agent(agent, search_params)
         if agent.has_memory:
             AgentCacheService.cache_agent(agent.agent_id, agent_x)
             logger.info("Agent cached successfully")
@@ -135,7 +135,7 @@ def _parse_agent_response(response_text, agent):
             return response_text
     return response_text
 
-async def process_agent_request(agent, question, tracer):
+async def process_agent_request(agent, question, tracer, search_params):
     """
     Processes the agent request asynchronously with improved structure.
     """
@@ -143,7 +143,7 @@ async def process_agent_request(agent, question, tracer):
         logger.info(f"Processing agent request for agent {agent.agent_id}: {question[:50]}...")
         
         # Get or create agent instance
-        agent_x = await _get_or_create_agent(agent)
+        agent_x = await _get_or_create_agent(agent, search_params)
         
         # Prepare configuration
         config = _prepare_agent_config(agent, tracer)

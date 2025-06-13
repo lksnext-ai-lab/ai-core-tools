@@ -60,7 +60,7 @@ class MCPClientManager:
             await self._client.__aexit__(None, None, None)
             self._client = None
 
-async def create_agent(agent: Agent):
+async def create_agent(agent: Agent, search_params=None):
     llm = get_llm(agent)
     if llm is None:
         raise ValueError("No LLM found for agent")
@@ -109,7 +109,7 @@ async def create_agent(agent: Agent):
         tools.append(IACTTool(sub_agent))
 
     if agent.silo_id is not None:
-        retriever_tool = get_retriever_tool(agent.silo)
+        retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
 
@@ -193,9 +193,9 @@ class IACTTool(BaseTool):
         messages = [HumanMessage(content=formatted_prompt)]
         return self.react_agent.invoke({"messages": messages})
 
-def get_retriever_tool(silo: Silo):
+def get_retriever_tool(silo: Silo, search_params=None):
     if silo.silo_id is not None:
-        retriever = SiloService.get_silo_retriever(silo.silo_id)
+        retriever = SiloService.get_silo_retriever(silo.silo_id, search_params)
         name = "silo_retriever"
         description = "Use this tool to search for documents in the pgvector collection."
         if silo.repository is not None:
