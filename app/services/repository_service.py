@@ -88,7 +88,7 @@ class RepositoryService:
             
         # Delete vector collection and silo
         if silo:
-            SiloService.delete_collection(silo)
+            SiloService.delete_collection(silo.silo_id)
             db.session.delete(silo)
             
         # Delete repository
