@@ -164,7 +164,8 @@
         {% for field in agent.silo.metadata_definition.fields %}
         var value = $('#filter_{{ field.name }}').val();
         if (value) {
-            filter['{{ field.name }}'] = {"$eq": value};
+            //filter['{{ field.name }}'] = {"$eq": value};
+            filter['{{ field.name }}'] = value;
         }
         {% endfor %}
         if (Object.keys(filter).length > 0) {

@@ -193,8 +193,58 @@ class IACTTool(BaseTool):
         messages = [HumanMessage(content=formatted_prompt)]
         return self.react_agent.invoke({"messages": messages})
 
+def convert_search_params_to_types(search_params: dict, metadata_definition) -> dict:
+    """
+    Convert search parameters to their proper types based on metadata definition.
+    The search_params dictionary should have a 'filter' key containing the metadata filters.
+    
+    Args:
+        search_params: Dictionary containing search parameters with a 'filter' key
+        metadata_definition: OutputParser instance containing field definitions
+        
+    Returns:
+        Dictionary with converted parameter values
+    """
+    if not search_params or not metadata_definition:
+        return search_params
+        
+    # Create a copy of search_params to avoid modifying the original
+    converted_params = search_params.copy()
+    
+    # Only process the 'filter' key if it exists
+    if 'filter' in search_params and search_params['filter']:
+        field_definitions = {f['name']: f for f in metadata_definition.fields}
+        converted_filter = {}
+        
+        for key, value in search_params['filter'].items():
+            if key in field_definitions:
+                field_type = field_definitions[key]['type']
+                try:
+                    if field_type == 'int':
+                        converted_filter[key] = int(value)
+                    elif field_type == 'float':
+                        converted_filter[key] = float(value)
+                    elif field_type == 'bool':
+                        converted_filter[key] = bool(value)
+                    else:
+                        converted_filter[key] = value
+                except (ValueError, TypeError):
+                    # If conversion fails, keep original value
+                    converted_filter[key] = value
+            else:
+                converted_filter[key] = value
+                
+        converted_params['filter'] = converted_filter
+            
+    return converted_params
+
 def get_retriever_tool(silo: Silo, search_params=None):
+    
     if silo.silo_id is not None:
+        # Convert search parameters to proper types based on metadata definition
+        if search_params:
+            search_params = convert_search_params_to_types(search_params, silo.metadata_definition)
+
         retriever = SiloService.get_silo_retriever(silo.silo_id, search_params)
         name = "silo_retriever"
         description = "Use this tool to search for documents in the pgvector collection."

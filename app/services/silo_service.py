@@ -304,15 +304,19 @@ class SiloService:
     @staticmethod
     def index_resource(resource: Resource):
         collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
-        loader = PyPDFLoader(os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri), extract_images=False)
+        path = os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
+        loader = PyPDFLoader(path, extract_images=False)
         pages = loader.load()
         text_splitter = CharacterTextSplitter(chunk_size=10, chunk_overlap=0)
         docs = text_splitter.split_documents(pages)
 
+        #TODO: add metadata to the document according to the silo metadata definition
         for doc in docs:
             doc.metadata["repository_id"] = resource.repository_id
             doc.metadata["resource_id"] = resource.resource_id
             doc.metadata["silo_id"] = resource.repository.silo_id
+            doc.metadata["name"] = resource.uri
+            doc.metadata["ref"] = path
 
         pg_vector_tools = PGVectorTools(db)
         embedding_service = resource.repository.silo.embedding_service
