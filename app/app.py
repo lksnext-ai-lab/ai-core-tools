@@ -19,6 +19,7 @@ from utils.logger import get_logger
 from utils.config import Config, get_app_config
 from utils.error_handlers import handle_web_errors, safe_execute
 from utils.database import check_db_connection
+from utils.version import VERSION, VERSION_INFO
 
 from model.user import User
 from model.mcp_config import MCPConfig
@@ -60,7 +61,7 @@ except Exception as e:
     logger.error(f"Configuration validation failed: {str(e)}")
     raise
 
-info = Info(title="Mattin AI", version="1.0.0")
+info = Info(title="Mattin AI", version=VERSION)
 app = OpenAPI(__name__, info=info, security_schemes={"api_key": {"type": "apiKey", "in": "header", "name": "X-API-KEY"}})
 
 # Use configuration from our config utility
@@ -146,10 +147,20 @@ with app.app_context():
     else:
         logger.info("Pricing plans initialization skipped (self-hosted mode)")
 
+@app.after_request
+def add_version_header(response):
+    """Add version information to response headers."""
+    response.headers['X-Application-Version'] = VERSION
+    return response
+
 @app.context_processor
 def inject_aict_mode():
-    """Make AICT_MODE available in all templates"""
-    return dict(aict_mode=AICT_MODE)
+    """Make AICT_MODE and version information available in all templates"""
+    return dict(
+        aict_mode=AICT_MODE,
+        app_version=VERSION,
+        app_name=VERSION_INFO['name']
+    )
 
 @app.before_request
 def before_request():

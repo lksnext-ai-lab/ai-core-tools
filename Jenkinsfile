@@ -11,6 +11,7 @@ pipeline {
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
+        IMAGE_POETRY = "registry.lksnext.com/devsecops/poetry:latest"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
@@ -23,6 +24,58 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+        
+        stage('Version Management') {
+            steps {
+                script {
+                    // Get current version from pyproject.toml
+                    def currentVersion = sh(
+                        script: "docker run --rm -v \$(pwd):/app -w /app ${IMAGE_POETRY} poetry version -s",
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Get commit message
+                    def commitMsg = sh(
+                        script: "git log -1 --pretty=%B",
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Determine version bump type based on commit message
+                    def newVersion
+                    if (commitMsg.contains("[major]")) {
+                        newVersion = incrementVersion(currentVersion, "major")
+                    } else if (commitMsg.contains("[minor]")) {
+                        newVersion = incrementVersion(currentVersion, "minor")
+                    } else if (commitMsg.contains("[patch]")) {
+                        newVersion = incrementVersion(currentVersion, "patch")
+                    } else {
+                        newVersion = currentVersion
+                    }
+                    
+                    // Update version if needed
+                    if (newVersion != currentVersion) {
+                        sh "docker run --rm -v \$(pwd):/app -w /app ${IMAGE_POETRY} poetry version ${newVersion}"
+                        
+                        // Create git tag
+                        sh """
+                            git config --global user.email "jenkins@lksnext.com"
+                            git config --global user.name "Jenkins"
+                            git add pyproject.toml
+                            git commit -m "Bump version to ${newVersion}"
+                            git tag -a "v${newVersion}" -m "Release version ${newVersion}"
+                            git push origin HEAD:${env.BRANCH_NAME}
+                            git push origin "v${newVersion}"
+                        """
+                        
+                        // Set IMAGE_TAG to new version
+                        env.IMAGE_TAG = newVersion
+                    } else {
+                        // Use current version for IMAGE_TAG
+                        env.IMAGE_TAG = currentVersion
+                    }
+                }
             }
         }
         
@@ -117,4 +170,17 @@ pipeline {
             deleteDir()
         }
     }
+}
+
+// Helper function to increment version
+def incrementVersion(String version, String type) {
+    def parts = version.split("\\.")
+    if (type == "major") {
+        return "${parts[0].toInteger() + 1}.0.0"
+    } else if (type == "minor") {
+        return "${parts[0]}.${parts[1].toInteger() + 1}.0"
+    } else if (type == "patch") {
+        return "${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
+    }
+    return version
 }
