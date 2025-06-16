@@ -30,6 +30,9 @@ pipeline {
         stage('Version Management') {
             steps {
                 script {
+                    // Install toml package
+                    sh 'pip3 install toml'
+                    
                     // Get current version from pyproject.toml using Python
                     def currentVersion = sh(
                         script: 'python3 -c "import toml; f = open(\'pyproject.toml\'); data = toml.load(f); print(data[\'project\'][\'version\'])"',
