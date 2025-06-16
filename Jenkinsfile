@@ -27,12 +27,13 @@ pipeline {
             }
         }
         
+        /* Commenting out version management for now
         stage('Version Management') {
             steps {
                 script {
-                    // Get current version from pyproject.toml using basic Python
+                    // Get current version using Poetry
                     def currentVersion = sh(
-                        script: 'python3 -c \'with open("pyproject.toml", "r") as f: print([line.split("=")[1].strip().strip("\\"") for line in f if "version = " in line][0])\'',
+                        script: 'poetry version -s',
                         returnStdout: true
                     ).trim()
                     
@@ -56,10 +57,8 @@ pipeline {
                     
                     // Update version if needed
                     if (newVersion != currentVersion) {
-                        // Update version in pyproject.toml using basic Python
-                        sh """
-                            python3 -c 'with open("pyproject.toml", "r") as f: lines = f.readlines(); with open("pyproject.toml", "w") as f: [f.write("version = \\"${newVersion}\\"\\n") if "version = " in line else f.write(line) for line in lines]'
-                        """
+                        // Update version using Poetry
+                        sh "poetry version ${newVersion}"
                         
                         // Create git tag
                         sh """
@@ -81,6 +80,7 @@ pipeline {
                 }
             }
         }
+        */
         
         stage('Sonar') {
             steps {
