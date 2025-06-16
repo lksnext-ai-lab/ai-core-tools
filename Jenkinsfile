@@ -58,17 +58,8 @@ pipeline {
                     if (newVersion != currentVersion) {
                         // Update version in pyproject.toml using basic Python
                         sh """
-                            python3 -c '
-                            with open("pyproject.toml", "r") as f:
-                                lines = f.readlines()
-                            with open("pyproject.toml", "w") as f:
-                                for line in lines:
-                                    if "version = " in line:
-                                        f.write("version = \\"${newVersion}\\"\\n")
-                                    else:
-                                        f.write(line)
-                            '
-                            """
+                            python3 -c 'with open("pyproject.toml", "r") as f: lines = f.readlines(); with open("pyproject.toml", "w") as f: [f.write("version = \\"${newVersion}\\"\\n") if "version = " in line else f.write(line) for line in lines]'
+                        """
                         
                         // Create git tag
                         sh """
