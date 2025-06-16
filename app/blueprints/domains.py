@@ -147,7 +147,7 @@ def add_url(domain_id):
         SiloService.index_single_content(domain.silo_id, content, {"url": full_url})
         logger.info(f"Successfully scraped and indexed URL: {full_url}")
     except Exception as e:
-        logger.warning(f"Failed to scrape/index URL {full_url}: {e}")
+        logger.warning(f"Failed to scrape/index URL: {e}")
         # Don't fail the whole operation if scraping fails
     
     flash('URL added successfully', 'success')
