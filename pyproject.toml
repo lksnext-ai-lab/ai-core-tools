@@ -1,5 +1,5 @@
 [project]
-name = "ia-core-tools"
+name = "ai-core-tools"
 version = "0.1.0"
 description = "Mattin AI by LKS Next is a tool to aid and complement other software projects with AI capabilities."
 authors = [
@@ -32,6 +32,7 @@ dependencies = [
     "beautifulsoup4 (>=4.13.3,<5.0.0)",
     "langchain-ollama (>=0.2.3,<0.3.0)",
     "langchain-mcp-adapters (>=0.0.8,<0.0.9)",
+    "toml (>=0.10.2,<0.11.0)",
 ]
 
 
