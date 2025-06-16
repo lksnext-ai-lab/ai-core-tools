@@ -57,6 +57,11 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: IMAGES_PATH
+            - name: AICT_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: AICT_MODE
             - name: GOOGLE_DISCOVERY_URL
               valueFrom:
                 configMapKeyRef:
