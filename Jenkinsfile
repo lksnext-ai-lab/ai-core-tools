@@ -30,8 +30,8 @@ pipeline {
         stage('Version Management') {
             steps {
                 script {
-                    // Install toml package
-                    sh 'pip3 install toml'
+                    // Install toml package using Python's pip
+                    sh 'python3 -m pip install toml'
                     
                     // Get current version from pyproject.toml using Python
                     def currentVersion = sh(
