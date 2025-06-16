@@ -32,14 +32,7 @@ pipeline {
                 script {
                     // Get current version from pyproject.toml using Python
                     def currentVersion = sh(
-                        script: '''
-                            python3 -c "
-                            import toml
-                            with open('pyproject.toml') as f:
-                                data = toml.load(f)
-                                print(data['project']['version'])
-                            "
-                            ''',
+                        script: 'python3 -c "import toml; f = open(\'pyproject.toml\'); data = toml.load(f); print(data[\'project\'][\'version\'])"',
                         returnStdout: true
                     ).trim()
                     
@@ -65,15 +58,8 @@ pipeline {
                     if (newVersion != currentVersion) {
                         // Update version in pyproject.toml using Python
                         sh """
-                            python3 -c "
-                            import toml
-                            with open('pyproject.toml', 'r') as f:
-                                data = toml.load(f)
-                            data['project']['version'] = '${newVersion}'
-                            with open('pyproject.toml', 'w') as f:
-                                toml.dump(data, f)
-                            "
-                            """
+                            python3 -c "import toml; f = open('pyproject.toml', 'r'); data = toml.load(f); data['project']['version'] = '${newVersion}'; f.close(); f = open('pyproject.toml', 'w'); toml.dump(data, f); f.close()"
+                        """
                         
                         // Create git tag
                         sh """
