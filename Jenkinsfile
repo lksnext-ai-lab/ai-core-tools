@@ -32,15 +32,7 @@ pipeline {
                 script {
                     // Get current version from pyproject.toml using basic Python
                     def currentVersion = sh(
-                        script: '''
-                            python3 -c "
-                            with open('pyproject.toml', 'r') as f:
-                                for line in f:
-                                    if 'version = ' in line:
-                                        print(line.split('=')[1].strip().strip('\"'))
-                                        break
-                            "
-                            ''',
+                        script: 'python3 -c \'with open("pyproject.toml", "r") as f: print([line.split("=")[1].strip().strip("\\"") for line in f if "version = " in line][0])\'',
                         returnStdout: true
                     ).trim()
                     
@@ -66,16 +58,16 @@ pipeline {
                     if (newVersion != currentVersion) {
                         // Update version in pyproject.toml using basic Python
                         sh """
-                            python3 -c "
-                            with open('pyproject.toml', 'r') as f:
+                            python3 -c '
+                            with open("pyproject.toml", "r") as f:
                                 lines = f.readlines()
-                            with open('pyproject.toml', 'w') as f:
+                            with open("pyproject.toml", "w") as f:
                                 for line in lines:
-                                    if 'version = ' in line:
-                                        f.write('version = \"${newVersion}\"\\n')
+                                    if "version = " in line:
+                                        f.write("version = \\"${newVersion}\\"\\n")
                                     else:
                                         f.write(line)
-                            "
+                            '
                             """
                         
                         // Create git tag
