@@ -30,9 +30,16 @@ pipeline {
         stage('Version Management') {
             steps {
                 script {
-                    // Get current version from pyproject.toml
+                    // Get current version from pyproject.toml using Python
                     def currentVersion = sh(
-                        script: "docker run --rm -v \"\$(pwd):/app\" -w /app ${IMAGE_POETRY} poetry version -s",
+                        script: '''
+                            python3 -c "
+                            import toml
+                            with open('pyproject.toml') as f:
+                                data = toml.load(f)
+                                print(data['project']['version'])
+                            "
+                            ''',
                         returnStdout: true
                     ).trim()
                     
@@ -56,7 +63,17 @@ pipeline {
                     
                     // Update version if needed
                     if (newVersion != currentVersion) {
-                        sh "docker run --rm -v \"\$(pwd):/app\" -w /app ${IMAGE_POETRY} poetry version ${newVersion}"
+                        // Update version in pyproject.toml using Python
+                        sh """
+                            python3 -c "
+                            import toml
+                            with open('pyproject.toml', 'r') as f:
+                                data = toml.load(f)
+                            data['project']['version'] = '${newVersion}'
+                            with open('pyproject.toml', 'w') as f:
+                                toml.dump(data, f)
+                            "
+                            """
                         
                         // Create git tag
                         sh """
