@@ -30,12 +30,17 @@ pipeline {
         stage('Version Management') {
             steps {
                 script {
-                    // Install toml package using Python's pip
-                    sh 'python3 -m pip install toml'
-                    
-                    // Get current version from pyproject.toml using Python
+                    // Get current version from pyproject.toml using basic Python
                     def currentVersion = sh(
-                        script: 'python3 -c "import toml; f = open(\'pyproject.toml\'); data = toml.load(f); print(data[\'project\'][\'version\'])"',
+                        script: '''
+                            python3 -c "
+                            with open('pyproject.toml', 'r') as f:
+                                for line in f:
+                                    if 'version = ' in line:
+                                        print(line.split('=')[1].strip().strip('\"'))
+                                        break
+                            "
+                            ''',
                         returnStdout: true
                     ).trim()
                     
@@ -59,10 +64,19 @@ pipeline {
                     
                     // Update version if needed
                     if (newVersion != currentVersion) {
-                        // Update version in pyproject.toml using Python
+                        // Update version in pyproject.toml using basic Python
                         sh """
-                            python3 -c "import toml; f = open('pyproject.toml', 'r'); data = toml.load(f); data['project']['version'] = '${newVersion}'; f.close(); f = open('pyproject.toml', 'w'); toml.dump(data, f); f.close()"
-                        """
+                            python3 -c "
+                            with open('pyproject.toml', 'r') as f:
+                                lines = f.readlines()
+                            with open('pyproject.toml', 'w') as f:
+                                for line in lines:
+                                    if 'version = ' in line:
+                                        f.write('version = \"${newVersion}\"\\n')
+                                    else:
+                                        f.write(line)
+                            "
+                            """
                         
                         // Create git tag
                         sh """
