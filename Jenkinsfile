@@ -32,7 +32,7 @@ pipeline {
                 script {
                     // Get current version from pyproject.toml
                     def currentVersion = sh(
-                        script: "docker run --rm -v \$(pwd):/app -w /app ${IMAGE_POETRY} poetry version -s",
+                        script: "docker run --rm -v \"\$(pwd):/app\" -w /app ${IMAGE_POETRY} poetry version -s",
                         returnStdout: true
                     ).trim()
                     
@@ -56,7 +56,7 @@ pipeline {
                     
                     // Update version if needed
                     if (newVersion != currentVersion) {
-                        sh "docker run --rm -v \$(pwd):/app -w /app ${IMAGE_POETRY} poetry version ${newVersion}"
+                        sh "docker run --rm -v \"\$(pwd):/app\" -w /app ${IMAGE_POETRY} poetry version ${newVersion}"
                         
                         // Create git tag
                         sh """
