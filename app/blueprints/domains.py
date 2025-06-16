@@ -13,7 +13,7 @@ from utils.error_handlers import handle_web_errors, AppError
 logger = get_logger(__name__)
 
 domains_blueprint = Blueprint('domains', __name__, url_prefix='/domains')
-LIST_TEMPLATE = 'domains.domains'
+LIST_TEMPLATE = 'domains/domains.html'
 
 
 @domains_blueprint.route('/', methods=['GET'])
@@ -25,7 +25,7 @@ def domains():
     logger.info(f"Listing domains for app {app_id}")
     
     domains = DomainService.get_domains_by_app_id(app_id)
-    return render_template('domains/list.html', domains=domains)
+    return render_template(LIST_TEMPLATE, domains=domains)
 
 
 @domains_blueprint.route('/<int:domain_id>', methods=['GET', 'POST'])
