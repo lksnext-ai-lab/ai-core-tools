@@ -87,6 +87,9 @@
             <!-- Card header -->
             <div class="card-header border-bottom">
                 <h5 class="card-header-title">Test the agent...</h5>
+                <button id="reset-btn" class="btn btn-sm btn-outline-danger float-end">
+                    <i class="fas fa-trash"></i> Reset Conversation
+                </button>
             </div>
 
             <!-- Card body START -->
@@ -147,6 +150,53 @@
 
 <script>
     var cont = 0;
+    
+    // Add reset functionality
+    $('#reset-btn').click(function() {
+        // Disable button while processing
+        $('#reset-btn').prop('disabled', true);
+        
+        fetch('/api/app/{{app_id}}/reset/{{agent.agent_id}}', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to reset conversation');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Remove all conversation divs except the initial one
+            $('[id^="referenece-"]').remove();
+            $('[id^="loading-"]').remove();
+            $('[id^="error-"]').remove();
+            cont = 0;
+            
+            // Show success message
+            var successDiv = $('#referenece').clone();
+            successDiv.attr('id', 'success-' + cont);
+            $('#ref-name', successDiv).text('System');
+            $('#ref-text', successDiv).html('<div class="text-success">Conversation reset successfully</div>');
+            $('#referenece').parent().append(successDiv);
+            
+            // Remove success message after 3 seconds
+            setTimeout(() => {
+                $('#success-' + cont).remove();
+            }, 3000);
+        })
+        .catch(error => {
+            console.error('Error resetting conversation:', error);
+            alert('Failed to reset conversation. Please try again.');
+        })
+        .finally(() => {
+            $('#reset-btn').prop('disabled', false);
+        });
+    });
+
     $('#send-btn').click(function () {
         // Deshabilitar el botón mientras se procesa
         $('#send-btn').prop('disabled', true);

@@ -285,3 +285,25 @@ def process_ocr(path: AgentPath):
         # Clean up files on error
         safe_execute(os.remove, temp_path, log_errors=False)
         raise
+
+@api.post('/reset/<int:agent_id>', 
+    summary="Reset conversation", 
+    tags=[api_tag],
+    responses={"200": {"description": "Conversation reset successfully"}}
+)
+@require_auth
+@handle_api_errors(include_traceback=False)
+def reset_conversation(path: AgentPath):
+    """
+    Resets the conversation state for the current session and clears agent cache.
+    """
+    # Clear the message list from session
+    if MSG_LIST in session:
+        session[MSG_LIST] = []
+        session.modified = True
+    
+    # Clear the agent from cache
+    AgentCacheService.invalidate_agent(path.agent_id)
+    
+    logger.info(f"Reset conversation and cleared cache for agent {path.agent_id}")
+    return {"status": "success", "message": "Conversation reset successfully"}
