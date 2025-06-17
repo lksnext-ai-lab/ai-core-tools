@@ -61,8 +61,8 @@ pipeline {
                     sh """
                         docker run --rm \
                         -v "\$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER='${username}' \
-                        -e GITLAB_CREDENTIAL_PASSWORD='${password}' \
+                        -e GITLAB_CREDENTIAL_USER='A.Galdos' \
+                        -e GITLAB_CREDENTIAL_PASSWORD='LKSnext.2025' \
                         $IMAGE_VERSION_BUMP
                     """
                 }
