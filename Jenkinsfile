@@ -31,13 +31,13 @@ pipeline {
         stage('Version Bump') {
             steps {
                 script {
-                    sh """
+                    sh '''
                         docker run --rm \
                         -v "$(pwd)":/app \
                         -e GITLAB_CREDENTIAL_USER=GIT_CREDENTIAL_USR \
                         -e GITLAB_CREDENTIAL_PASSWORD=GIT_CREDENTIAL_PSW \
                         $IMAGE_VERSION_BUMP
-                    """
+                    '''
                 }
             }
         }
