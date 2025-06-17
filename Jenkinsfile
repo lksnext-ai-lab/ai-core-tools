@@ -41,15 +41,25 @@ pipeline {
         stage('Version Bump') {
             steps {
                 script {
-                    sh "echo 'Git credentials: $GIT_CREDENTIAL'"
-                    sh "echo 'Git credentials user: $GIT_CREDENTIAL_USR'"
-                    sh "echo 'Git credentials password: $GIT_CREDENTIAL_PSW'"
+                    echo "Debugging credentials..."
+                    echo "GIT_CREDENTIAL exists: ${GIT_CREDENTIAL != null}"
+                    echo "GIT_CREDENTIAL length: ${GIT_CREDENTIAL.length()}"
+                    echo "GIT_CREDENTIAL type: ${GIT_CREDENTIAL.getClass().getName()}"
+                    
+                    // Split credentials and check parts
+                    def credParts = GIT_CREDENTIAL.split(':')
+                    echo "Number of credential parts: ${credParts.length}"
+                    if (credParts.length >= 2) {
+                        echo "Username part exists: ${credParts[0] != null}"
+                        echo "Password part exists: ${credParts[1] != null}"
+                    }
+                    
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER=GIT_CREDENTIAL_USR \
-                        -e GITLAB_CREDENTIAL_PASSWORD=GIT_CREDENTIAL_PSW \
-                        $IMAGE_VERSION_BUMP || exit 0
+                        -e GITLAB_CREDENTIAL_USER=${GIT_CREDENTIAL.split(':')[0]} \
+                        -e GITLAB_CREDENTIAL_PASSWORD=${GIT_CREDENTIAL.split(':')[1]} \
+                        $IMAGE_VERSION_BUMP
                     '''
                 }
             }
