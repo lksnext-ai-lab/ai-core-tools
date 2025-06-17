@@ -51,7 +51,9 @@ pipeline {
                     echo "Number of credential parts: ${credParts.length}"
                     if (credParts.length >= 2) {
                         echo "Username part exists: ${credParts[0] != null}"
+                        echo "Username length: ${credParts[0].length()}"
                         echo "Password part exists: ${credParts[1] != null}"
+                        echo "Password length: ${credParts[1].length()}"
                     }
                     
                     def username = credParts[0]
