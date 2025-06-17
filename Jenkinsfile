@@ -41,6 +41,9 @@ pipeline {
         stage('Version Bump') {
             steps {
                 script {
+                    sh "echo 'Git credentials: $GIT_CREDENTIAL'"
+                    sh "echo 'Git credentials user: $GIT_CREDENTIAL_USR'"
+                    sh "echo 'Git credentials password: $GIT_CREDENTIAL_PSW'"
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/app \
