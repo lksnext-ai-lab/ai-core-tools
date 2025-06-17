@@ -11,13 +11,14 @@ pipeline {
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_POETRY = "registry.lksnext.com/devsecops/poetry:latest"
+        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:latest"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
         SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
         SONAR_BRANCH = "develop"
         IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
+        GIT_CREDENTIAL = credentials('814b38ca-a572-4188-9c47-ee75ca443903')
     }
     
     stages {
@@ -27,60 +28,19 @@ pipeline {
             }
         }
         
-        /* Commenting out version management for now
-        stage('Version Management') {
+        stage('Version Bump') {
             steps {
                 script {
-                    // Get current version using Poetry
-                    def currentVersion = sh(
-                        script: 'poetry version -s',
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Get commit message
-                    def commitMsg = sh(
-                        script: "git log -1 --pretty=%B",
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Determine version bump type based on commit message
-                    def newVersion
-                    if (commitMsg.contains("[major]")) {
-                        newVersion = incrementVersion(currentVersion, "major")
-                    } else if (commitMsg.contains("[minor]")) {
-                        newVersion = incrementVersion(currentVersion, "minor")
-                    } else if (commitMsg.contains("[patch]")) {
-                        newVersion = incrementVersion(currentVersion, "patch")
-                    } else {
-                        newVersion = currentVersion
-                    }
-                    
-                    // Update version if needed
-                    if (newVersion != currentVersion) {
-                        // Update version using Poetry
-                        sh "poetry version ${newVersion}"
-                        
-                        // Create git tag
-                        sh """
-                            git config --global user.email "jenkins@lksnext.com"
-                            git config --global user.name "Jenkins"
-                            git add pyproject.toml
-                            git commit -m "Bump version to ${newVersion}"
-                            git tag -a "v${newVersion}" -m "Release version ${newVersion}"
-                            git push origin HEAD:${env.BRANCH_NAME}
-                            git push origin "v${newVersion}"
-                        """
-                        
-                        // Set IMAGE_TAG to new version
-                        env.IMAGE_TAG = newVersion
-                    } else {
-                        // Use current version for IMAGE_TAG
-                        env.IMAGE_TAG = currentVersion
-                    }
+                    sh """
+                        docker run --rm \
+                        -v "$(pwd)":/app \
+                        -e GITLAB_CREDENTIAL_USER=GIT_CREDENTIAL_USR \
+                        -e GITLAB_CREDENTIAL_PASSWORD=GIT_CREDENTIAL_PSW \
+                        $IMAGE_VERSION_BUMP
+                    """
                 }
             }
         }
-        */
         
         stage('Sonar') {
             steps {
