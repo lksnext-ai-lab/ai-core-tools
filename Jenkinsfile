@@ -12,6 +12,7 @@ pipeline {
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
         IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:latest"
+        //INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
@@ -25,6 +26,15 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+        
+        stage('Docker login') {
+            steps {
+                script {
+                    sh('docker login $INTERNAL_LKS_DOCKER_REGISTRY_URL -u $REGISTRY_USER -p $REGISTRY_PASSWORD')
+                    sh "echo 'Docker login successful'"
+                }
             }
         }
         
@@ -67,15 +77,6 @@ pipeline {
             }
         }
 
-        stage('Docker login') {
-            steps {
-                script {
-                    sh('docker login $INTERNAL_LKS_DOCKER_REGISTRY_URL -u $REGISTRY_USER -p $REGISTRY_PASSWORD')
-                    sh "echo 'Docker login successful'"
-                }
-            }
-        }        
-        
         stage('Push Docker Image') {
             steps {
                 script {
