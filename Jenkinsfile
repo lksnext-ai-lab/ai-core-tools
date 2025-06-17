@@ -54,13 +54,19 @@ pipeline {
                         echo "Password part exists: ${credParts[1] != null}"
                     }
                     
-                    sh '''
+                    def username = credParts[0]
+                    def password = credParts[1]
+                    
+                    echo "Username: ${username}"
+                    echo "Password: ${password}"
+                    
+                    sh """
                         docker run --rm \
-                        -v "$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER=${GIT_CREDENTIAL.split(':')[0]} \
-                        -e GITLAB_CREDENTIAL_PASSWORD=${GIT_CREDENTIAL.split(':')[1]} \
+                        -v "\$(pwd)":/app \
+                        -e GITLAB_CREDENTIAL_USER='${username}' \
+                        -e GITLAB_CREDENTIAL_PASSWORD='${password}' \
                         $IMAGE_VERSION_BUMP
-                    '''
+                    """
                 }
             }
         }
