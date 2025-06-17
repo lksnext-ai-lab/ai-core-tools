@@ -11,7 +11,7 @@ pipeline {
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.3"
+        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.4"
         //INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
 
         //Sonar Related
@@ -61,8 +61,8 @@ pipeline {
                     sh """
                         docker run --rm \
                         -v "\$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER='A.Galdos' \
-                        -e GITLAB_CREDENTIAL_PASSWORD='LKSnext.2025' \
+                        -e GITLAB_CREDENTIAL_USER='${username}' \
+                        -e GITLAB_CREDENTIAL_PASSWORD='${password}' \
                         $IMAGE_VERSION_BUMP
                     """
                 }
