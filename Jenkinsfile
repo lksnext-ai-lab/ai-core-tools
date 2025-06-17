@@ -57,8 +57,6 @@ pipeline {
                     def username = credParts[0]
                     def password = credParts[1]
                     
-                    echo "Username: ${username}"
-                    echo "Password: ${password}"
                     
                     sh """
                         docker run --rm \
