@@ -41,13 +41,29 @@ pipeline {
         stage('Version Bump') {
             steps {
                 script {
-                    sh '''
-                        docker run --rm \
-                        -v "$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER=GIT_CREDENTIAL_USR \
-                        -e GITLAB_CREDENTIAL_PASSWORD=GIT_CREDENTIAL_PSW \
-                        $IMAGE_VERSION_BUMP
-                    '''
+                    echo "Starting version bump process..."
+                    def result = sh(
+                        script: '''
+                            docker run --rm \
+                            -v "$(pwd)":/app \
+                            -e GITLAB_CREDENTIAL_USER=GIT_CREDENTIAL_USR \
+                            -e GITLAB_CREDENTIAL_PASSWORD=GIT_CREDENTIAL_PSW \
+                            $IMAGE_VERSION_BUMP
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "Version bump output:"
+                    echo "----------------------------------------"
+                    echo result
+                    echo "----------------------------------------"
+                    
+                    if (result.contains("Error") || result.contains("error")) {
+                        echo "Version bump failed with errors in output"
+                        error "Version bump failed"
+                    } else {
+                        echo "Version bump completed successfully"
+                    }
                 }
             }
         }
