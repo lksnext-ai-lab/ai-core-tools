@@ -59,7 +59,6 @@ pipeline {
                     def username = credParts[0]
                     def password = credParts[1]
                     
-                    
                     sh """
                         docker run --rm \
                         -v "\$(pwd)":/app \
