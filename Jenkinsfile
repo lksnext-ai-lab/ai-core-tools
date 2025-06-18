@@ -74,6 +74,7 @@ pipeline {
                         -v "\$(pwd)":/app \
                         -e GITLAB_CREDENTIAL_USER='${username}' \
                         -e GITLAB_CREDENTIAL_PASSWORD='${password}' \
+                        -e TEST=testAAAA \
                         $IMAGE_VERSION_BUMP
                     """
                 }
