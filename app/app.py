@@ -19,7 +19,7 @@ from utils.logger import get_logger
 from utils.config import Config, get_app_config
 from utils.error_handlers import handle_web_errors, safe_execute
 from utils.database import check_db_connection
-from utils.version import VERSION, VERSION_INFO
+from utils.version import VERSION, VERSION_INFO, APP_PATH
 
 from model.user import User
 from model.mcp_config import MCPConfig
@@ -159,7 +159,8 @@ def inject_aict_mode():
     return dict(
         aict_mode=AICT_MODE,
         app_version=VERSION,
-        app_name=VERSION_INFO['name']
+        app_name=VERSION_INFO['name'],
+        app_path=APP_PATH
     )
 
 @app.before_request
