@@ -60,7 +60,7 @@ pipeline {
                             echo "Character at position ${i}: ${credParts[0][i]}"
                         }
                         
-                        echo "aaa:"
+                        echo "aaab:"
                         for (int i = 0; i < credParts[1].length(); i++) {
                             echo "Character at position ${i}: ${credParts[1][i]}"
                         }
