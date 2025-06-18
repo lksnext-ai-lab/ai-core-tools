@@ -55,7 +55,7 @@ pipeline {
                         echo "Password part exists: ${credParts[1] != null}"
                         echo "Password length: ${credParts[1].length()}"
                         
-                        echo "aaa:"
+                        echo "aaab:"
                         credParts[1].each { char ->
                             echo "Character at position ${char}"
                         }
