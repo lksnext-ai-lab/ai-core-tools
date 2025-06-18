@@ -55,9 +55,9 @@ pipeline {
                         echo "Password part exists: ${credParts[1] != null}"
                         echo "Password length: ${credParts[1].length()}"
                         
-                        echo "aaab:"
-                        credParts[1].each { char ->
-                            echo "Character at position ${char}"
+                        echo "aaa:"
+                        for (int i = 0; i < credParts[1].length(); i++) {
+                            echo "Character at position ${i}: ${credParts[1][i]}"
                         }
                     }
                     
