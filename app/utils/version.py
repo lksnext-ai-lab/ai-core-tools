@@ -27,4 +27,4 @@ def get_version_info() -> Dict[str, str]:
 # Version information as module-level variables
 VERSION = get_version()
 VERSION_INFO = get_version_info() 
-APP_PATH = get_project_root() + " xxxx " + os.getcwd()
+APP_PATH = str(get_project_root() / "xxxx" / os.getcwd())   
