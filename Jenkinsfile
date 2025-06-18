@@ -54,6 +54,11 @@ pipeline {
                         echo "Username length: ${credParts[0].length()}"
                         echo "Password part exists: ${credParts[1] != null}"
                         echo "Password length: ${credParts[1].length()}"
+                        
+                        echo "aaa:"
+                        credParts[1].each { char ->
+                            echo "Character at position ${char}"
+                        }
                     }
                     
                     def username = credParts[0]
