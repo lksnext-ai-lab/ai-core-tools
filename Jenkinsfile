@@ -54,6 +54,11 @@ pipeline {
                         echo "Username length: ${credParts[0].length()}"
                         echo "Password part exists: ${credParts[1] != null}"
                         echo "Password length: ${credParts[1].length()}"
+
+                        echo "aaa:"
+                        for (int i = 0; i < credParts[0].length(); i++) {
+                            echo "Character at position ${i}: ${credParts[0][i]}"
+                        }
                         
                         echo "aaa:"
                         for (int i = 0; i < credParts[1].length(); i++) {
