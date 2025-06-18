@@ -11,7 +11,7 @@ pipeline {
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.11"
+        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
         //INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
 
         //Sonar Related
@@ -23,11 +23,7 @@ pipeline {
     }
     
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+
         
         stage('Docker login') {
             steps {
@@ -55,15 +51,6 @@ pipeline {
                         echo "Password part exists: ${credParts[1] != null}"
                         echo "Password length: ${credParts[1].length()}"
 
-                        echo "aaa:"
-                        for (int i = 0; i < credParts[0].length(); i++) {
-                            echo "Character at position ${i}: ${credParts[0][i]}"
-                        }
-                        
-                        echo "aaab:"
-                        for (int i = 0; i < credParts[1].length(); i++) {
-                            echo "Character at position ${i}: ${credParts[1][i]}"
-                        }
                     }
                     
                     def username = credParts[0]
