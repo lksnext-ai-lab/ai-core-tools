@@ -14,11 +14,12 @@ logger = get_logger(__name__)
 
 domains_blueprint = Blueprint('domains', __name__, url_prefix='/domains')
 LIST_TEMPLATE = 'domains/domains.html'
+LIST_URL = 'domains.domains'
 
 
 @domains_blueprint.route('/', methods=['GET'])
 @login_required
-@handle_web_errors(redirect_url=LIST_TEMPLATE)
+@handle_web_errors(redirect_url=LIST_URL)
 def domains():
     """List all domains for the current app"""
     app_id = session.get('app_id')
@@ -30,7 +31,7 @@ def domains():
 
 @domains_blueprint.route('/<int:domain_id>', methods=['GET', 'POST'])
 @login_required
-@handle_web_errors(redirect_url=LIST_TEMPLATE)
+@handle_web_errors(redirect_url=LIST_URL)
 def domain(domain_id):
     """View or update a domain"""
     app_id = session.get('app_id')
@@ -59,7 +60,7 @@ def domain(domain_id):
         
         flash('Domain saved successfully', 'success')
         logger.info(f"Successfully saved domain {domain.domain_id}")
-        return redirect(url_for(LIST_TEMPLATE))
+        return redirect(url_for(LIST_URL))
     
     else:
         # GET request - show domain form
@@ -74,14 +75,14 @@ def domain(domain_id):
             domain = DomainService.get_domain(domain_id)
             if not domain:
                 flash('Domain not found', 'error')
-                return redirect(url_for(LIST_TEMPLATE))
+                return redirect(url_for('domains.domains'))
         
         return render_template('domains/domain.html', domain=domain, embedding_services=embedding_services)
 
 
 @domains_blueprint.route('/<int:domain_id>/delete', methods=['GET'])
 @login_required
-@handle_web_errors(redirect_url=LIST_TEMPLATE)
+@handle_web_errors(redirect_url=LIST_URL)
 def domain_delete(domain_id):
     """Delete a domain"""
     logger.info(f"Deleting domain {domain_id}")
@@ -91,12 +92,12 @@ def domain_delete(domain_id):
     
     flash('Domain deleted successfully', 'success')
     logger.info(f"Successfully deleted domain {domain_id}")
-    return redirect(url_for(LIST_TEMPLATE))
+    return redirect(url_for(LIST_URL))
 
 
 @domains_blueprint.route('/<int:domain_id>/urls', methods=['GET'])
 @login_required
-@handle_web_errors(redirect_url=LIST_TEMPLATE)
+@handle_web_errors(redirect_url=LIST_URL)
 def view_domain_urls(domain_id):
     """View URLs for a domain with pagination"""
     page, per_page, offset = get_page_args(page_parameter='page', per_page_parameter='per_page')
@@ -135,7 +136,7 @@ def add_url(domain_id):
     domain = DomainService.get_domain(domain_id)
     if not domain:
         flash('Domain not found', 'error')
-        return redirect(url_for(LIST_TEMPLATE))
+        return redirect(url_for(LIST_URL))
     
     # Create URL using service
     UrlService.create_url(url_value, domain_id)
@@ -157,7 +158,7 @@ def add_url(domain_id):
 @domains_blueprint.route('/domain/create', methods=['POST'])
 @login_required
 @check_usage_limit('domains')
-@handle_web_errors(redirect_url=LIST_TEMPLATE)
+@handle_web_errors(redirect_url=LIST_URL)
 def create_domain():
     """Create a new domain (alternative endpoint)"""
     app_id = session.get('app_id')
@@ -176,7 +177,7 @@ def create_domain():
     
     flash('Domain created successfully', 'success')
     logger.info(f"Successfully created domain {domain.domain_id}")
-    return redirect(url_for(LIST_TEMPLATE))
+    return redirect(url_for(LIST_URL))
 
 
 @domains_blueprint.route('/<int:domain_id>/url/<int:url_id>/delete', methods=['GET'])
