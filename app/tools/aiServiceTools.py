@@ -12,6 +12,7 @@ from langchain.chains.conversational_retrieval.base import ConversationalRetriev
 from langchain.memory import ConversationBufferMemory
 from langchain_mistralai import ChatMistralAI
 from mistralai import Mistral
+from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
 
 from model.ai_service import ProviderEnum
 from model.agent import Agent
@@ -196,6 +197,14 @@ def get_llm(agent, is_vision=False):
         )
         logger.info(f"Service: {service}")
         return service
+    if ai_service.provider == ProviderEnum.Azure.value:
+        return AzureAIChatCompletionsModel(
+            model_name=ai_service.name,
+            temperature=0,
+            credential=ai_service.api_key,
+            endpoint=ai_service.endpoint,
+            api_version=ai_service.api_version
+        )
         
     raise ValueError(f"Proveedor de modelo no soportado: {ai_service.provider}")
 

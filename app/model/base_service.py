@@ -11,3 +11,4 @@ class BaseService(Base):
     endpoint = Column(String(255), nullable=True)
     api_key = Column(String(255), nullable=True)
     description = Column(String(1000), nullable=True)
+    api_version = Column(String(50), nullable=True)

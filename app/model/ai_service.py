@@ -5,8 +5,9 @@ from model.base_service import BaseService
 
 class ProviderEnum(enum.Enum):
     OpenAI = "OpenAI"
-    Anthropic = "Anthropic"
+    Anthropic = "Anthropic" 
     MistralAI = "MistralAI"
+    Azure = "Azure"
     Custom = "Custom"
 
 class AIService(BaseService):

@@ -8,6 +8,7 @@ class EmbeddingProvider(enum.Enum):
     MistralAI = "MistralAI"
     Ollama = "Ollama"
     Custom = "Custom"
+    Azure = "Azure"
 
 class EmbeddingService(BaseService):
     __tablename__ = 'embedding_service'

@@ -39,14 +39,17 @@
                               rows="3">{{ service.description if service else '' }}</textarea>
                 </div>
                 
-                 
-
-                
-                
                 <div class="col-md-12 mb-4">
                     <label class="form-label">Endpoint</label>
                     <input type="text" class="form-control" id="endpoint" name="endpoint" 
                            value="{{ service.endpoint if service else '' }}">
+                </div>
+                
+                <div class="col-md-12 mb-4" id="api_version_div" style="display: none;">
+                    <label class="form-label">API Version</label>
+                    <input type="text" class="form-control" id="api_version" name="api_version" 
+                           value="{{ service.api_version if service else '' }}"
+                           placeholder="e.g. 2024-02-15-preview">
                 </div>
                 
                 <div class="col-md-12 mb-4">
@@ -66,5 +69,19 @@
         </div>
     </form>
 </div>
+
+<script>
+document.getElementById('provider').addEventListener('change', function() {
+    var apiVersionDiv = document.getElementById('api_version_div');
+    apiVersionDiv.style.display = this.value === 'Azure' ? 'block' : 'none';
+});
+
+// Show API version field on page load if Azure is selected
+window.addEventListener('load', function() {
+    var provider = document.getElementById('provider').value;
+    var apiVersionDiv = document.getElementById('api_version_div');
+    apiVersionDiv.style.display = provider === 'Azure' ? 'block' : 'none';
+});
+</script>
 
 {% endblock %}
