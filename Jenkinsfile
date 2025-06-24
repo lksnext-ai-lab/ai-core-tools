@@ -11,76 +11,62 @@ pipeline {
         CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_POETRY = "registry.lksnext.com/devsecops/poetry:latest"
+        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
+        //INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
         SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
         SONAR_BRANCH = "develop"
         IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
+        GIT_CREDENTIAL = credentials('814b38ca-a572-4188-9c47-ee75ca443903')
     }
     
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+
         
-        /* Commenting out version management for now
-        stage('Version Management') {
+        stage('Docker login') {
             steps {
                 script {
-                    // Get current version using Poetry
-                    def currentVersion = sh(
-                        script: 'poetry version -s',
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Get commit message
-                    def commitMsg = sh(
-                        script: "git log -1 --pretty=%B",
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Determine version bump type based on commit message
-                    def newVersion
-                    if (commitMsg.contains("[major]")) {
-                        newVersion = incrementVersion(currentVersion, "major")
-                    } else if (commitMsg.contains("[minor]")) {
-                        newVersion = incrementVersion(currentVersion, "minor")
-                    } else if (commitMsg.contains("[patch]")) {
-                        newVersion = incrementVersion(currentVersion, "patch")
-                    } else {
-                        newVersion = currentVersion
-                    }
-                    
-                    // Update version if needed
-                    if (newVersion != currentVersion) {
-                        // Update version using Poetry
-                        sh "poetry version ${newVersion}"
-                        
-                        // Create git tag
-                        sh """
-                            git config --global user.email "jenkins@lksnext.com"
-                            git config --global user.name "Jenkins"
-                            git add pyproject.toml
-                            git commit -m "Bump version to ${newVersion}"
-                            git tag -a "v${newVersion}" -m "Release version ${newVersion}"
-                            git push origin HEAD:${env.BRANCH_NAME}
-                            git push origin "v${newVersion}"
-                        """
-                        
-                        // Set IMAGE_TAG to new version
-                        env.IMAGE_TAG = newVersion
-                    } else {
-                        // Use current version for IMAGE_TAG
-                        env.IMAGE_TAG = currentVersion
-                    }
+                    sh('docker login $INTERNAL_LKS_DOCKER_REGISTRY_URL -u $REGISTRY_USER -p $REGISTRY_PASSWORD')
+                    sh "echo 'Docker login successful'"
                 }
             }
         }
-        */
+        
+        stage('Version Bump') {
+            steps {
+                script {
+                    echo "Debugging credentials..."
+                    echo "GIT_CREDENTIAL exists: ${GIT_CREDENTIAL != null}"
+                    echo "GIT_CREDENTIAL length: ${GIT_CREDENTIAL.length()}"
+                    echo "GIT_CREDENTIAL type: ${GIT_CREDENTIAL.getClass().getName()}"
+                    
+                    // Split credentials and check parts
+                    def credParts = GIT_CREDENTIAL.split(':')
+                    echo "Number of credential parts: ${credParts.length}"
+                    if (credParts.length >= 2) {
+                        echo "Username part exists: ${credParts[0] != null}"
+                        echo "Username length: ${credParts[0].length()}"
+                        echo "Password part exists: ${credParts[1] != null}"
+                        echo "Password length: ${credParts[1].length()}"
+
+                    }
+                    
+                    def username = credParts[0]
+                    def password = credParts[1]
+                    
+                    sh """
+                        docker run --rm \
+                        -v "\$(pwd)":/app \
+                        -e GITLAB_CREDENTIAL_USER=${username} \
+                        -e GITLAB_CREDENTIAL_PASSWORD=${password} \
+                        -e TEST=testAAAABC \
+                        $IMAGE_VERSION_BUMP
+                    """
+                }
+            }
+        }
         
         stage('Sonar') {
             steps {
@@ -107,15 +93,6 @@ pipeline {
             }
         }
 
-        stage('Docker login') {
-            steps {
-                script {
-                    sh('docker login $INTERNAL_LKS_DOCKER_REGISTRY_URL -u $REGISTRY_USER -p $REGISTRY_PASSWORD')
-                    sh "echo 'Docker login successful'"
-                }
-            }
-        }        
-        
         stage('Push Docker Image') {
             steps {
                 script {

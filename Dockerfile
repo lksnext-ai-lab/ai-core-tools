@@ -18,6 +18,8 @@ COPY ./app /app
 COPY ./alembic /alembic
 COPY alembic.ini /alembic.ini
 
+COPY ./pyproject.toml /pyproject.toml
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \

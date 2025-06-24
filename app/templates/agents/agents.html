@@ -1,15 +1,9 @@
 {% extends "base.html" %}
 
-{% block content %}
+{% set title = "Agents" %}
+{% set add_url = url_for('agents.app_agent_get', app_id=session['app_id'], agent_id=0) %}
 
-<div class="row">
-    <div class="d-sm-flex justify-content-between align-items-center mb-4">
-        <h1 class="h4 mb-2 mb-sm-0">Agents</h1>
-        <a href="{{ url_for('agents.app_agent_get', app_id=session['app_id'], agent_id=0) }}" class="btn btn-primary">
-            <i class="bi bi-plus"></i> New Agent
-        </a>
-    </div>
-</div>
+{% block content %}
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4">
     {% for agent in agents %}
