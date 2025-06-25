@@ -2,9 +2,9 @@
 
 {% block content %}
 
-
 <div class="row">
-    <div class="col-10">
+    <!-- Left Column: Chat Interface -->
+    <div class="col-8">
 
         <div class="card shadow mb-4">
             <!-- Card header -->
@@ -82,7 +82,6 @@
             </div>
         </div>
 
-
         <div class="card shadow">
             <!-- Card header -->
             <div class="card-header border-bottom">
@@ -113,6 +112,7 @@
                     </div>
                 </div>
                 <div class="collapse show" id="collapseComment">
+                    
                     <div class="d-flex mt-3">
                         <textarea id="question" class="form-control mb-0" placeholder="Add a comment..." rows="2"
                             spellcheck="false"></textarea>
@@ -143,170 +143,82 @@
             <!-- Card body END -->
         </div>
 
+    </div>
 
+    <!-- Right Column: File Management -->
+    <div class="col-4">
+        <div class="card shadow">
+            <div class="card-header border-bottom">
+                <h6 class="mb-0">
+                    <i class="fas fa-paperclip"></i> File Attachments
+                </h6>
+            </div>
+            <div class="card-body">
+                
+                <!-- File Upload Section -->
+                <div class="mb-3">
+                    <div class="card border-dashed">
+                        <div class="card-body text-center p-3">
+                            <div class="file-upload-area" id="fileUploadArea">
+                                <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                <h6 class="mb-1">Drag & Drop files</h6>
+                                <p class="text-muted mb-2 small">or click to browse</p>
+                                <input type="file" id="fileInput" multiple class="d-none" accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx">
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('fileInput').click()">
+                                    <i class="fas fa-folder-open"></i> Choose Files
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attached Files List -->
+                <div id="attachedFilesSection" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Attached Files</h6>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="clearAllFiles">
+                            <i class="fas fa-trash"></i> Clear All
+                        </button>
+                    </div>
+                    <div id="attachedFilesList" class="list-group list-group-flush">
+                        <!-- Files will be added here dynamically -->
+                    </div>
+                </div>
+
+                <!-- File Info -->
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Supported formats: PDF, TXT, MD, PNG, JPG, DOC, DOCX
+                    </small>
+                </div>
+
+            </div>
+        </div>
     </div>
 
 </div>
 
 <script>
-    var cont = 0;
+    // Configuration variables for the playground
+    var appId = '{{app_id}}';
+    var agentId = '{{agent.agent_id}}';
+    var agentName = '{{agent.name}}';
     
-    // Add reset functionality
-    $('#reset-btn').click(function() {
-        // Disable button while processing
-        $('#reset-btn').prop('disabled', true);
-        
-        fetch('/api/app/{{app_id}}/reset/{{agent.agent_id}}', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to reset conversation');
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Remove all conversation divs except the initial one
-            $('[id^="referenece-"]').remove();
-            $('[id^="loading-"]').remove();
-            $('[id^="error-"]').remove();
-            cont = 0;
-            
-            // Show success message
-            var successDiv = $('#referenece').clone();
-            successDiv.attr('id', 'success-' + cont);
-            $('#ref-name', successDiv).text('System');
-            $('#ref-text', successDiv).html('<div class="text-success">Conversation reset successfully</div>');
-            $('#referenece').parent().append(successDiv);
-            
-            // Remove success message after 3 seconds
-            setTimeout(() => {
-                $('#success-' + cont).remove();
-            }, 3000);
-        })
-        .catch(error => {
-            console.error('Error resetting conversation:', error);
-            alert('Failed to reset conversation. Please try again.');
-        })
-        .finally(() => {
-            $('#reset-btn').prop('disabled', false);
-        });
-    });
-
-    $('#send-btn').click(function () {
-        // Deshabilitar el botón mientras se procesa
-        $('#send-btn').prop('disabled', true);
-        
-        var question = $('#question').val();
-        console.log('Sending question:', question);
-        
-        // Limpiar el input inmediatamente después de obtener su valor
-        $('#question').val('');
-
-        // Collect filter values if they exist
-        var search_params = null;
-        {% if agent.silo and agent.silo.metadata_definition %}
-        var filter = {};
+    // Filter fields configuration (if available)
+    {% if agent.silo and agent.silo.metadata_definition %}
+    var filterFields = [
         {% for field in agent.silo.metadata_definition.fields %}
-        var value = $('#filter_{{ field.name }}').val();
-        if (value) {
-            //filter['{{ field.name }}'] = {"$eq": value};
-            filter['{{ field.name }}'] = value;
-        }
+        {
+            name: '{{ field.name }}',
+            type: '{{ field.type }}',
+            description: '{{ field.description }}'
+        }{% if not loop.last %},{% endif %}
         {% endfor %}
-        if (Object.keys(filter).length > 0) {
-            search_params = { filter: filter };
-        }
-        {% endif %}
-        
-        // Crear y mostrar el div de la pregunta
-        var qDiv = $('#referenece').clone();
-        qDiv.attr('id', 'referenece-' + cont);
-        cont++;
-        $('#ref-name', qDiv).text('You said...');
-        $('#ref-text', qDiv).text(question);
-        $('#referenece').parent().append(qDiv);
-
-        // Crear y mostrar un div de "loading"
-        var loadingDiv = $('#referenece').clone();
-        loadingDiv.attr('id', 'loading-' + cont);
-        $('#ref-name', loadingDiv).text('{{agent.name}}');
-        $('#ref-text', loadingDiv).html('<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Thinking...</div>');
-        $('#referenece').parent().append(loadingDiv);
-
-        $("html, body").animate({
-            scrollTop: $(document).height() - $(window).height()
-        }, 'slow');
-
-        // Hacer la petición con timeout
-        const timeoutDuration = 600000; // 10 minutos
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
-
-        fetch('/api/app/{{app_id}}/call/{{agent.agent_id}}', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                question: question,
-                search_params: search_params
-            }),
-            signal: controller.signal
-        })
-        .then(async response => {
-            clearTimeout(timeoutId);
-            if (!response.ok) {
-                // Intentar obtener el mensaje de error del servidor
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Error del servidor: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Eliminar el div de loading
-            loadingDiv.remove();
-            
-            // Crear el div de respuesta
-            var respDiv = $('#referenece').clone();
-            respDiv.attr('id', 'referenece-' + cont);
-            cont++;
-            $('#ref-text', respDiv).text(JSON.stringify(data["generated_text"], null, 2));
-            $('#referenece').parent().append(respDiv);
-
-            $("html, body").animate({
-                scrollTop: $(document).height() - $(window).height()
-            }, 'slow');
-        })
-        .catch(error => {
-            // Eliminar el div de loading
-            loadingDiv.remove();
-            
-            // Mostrar error en un nuevo div con más detalles
-            var errorDiv = $('#referenece').clone();
-            errorDiv.attr('id', 'error-' + cont);
-            $('#ref-name', errorDiv).text('Error');
-            $('#ref-text', errorDiv).html(`
-                <div class="text-danger">
-                    <p><strong>Error:</strong> ${error.message}</p>
-                    <p><small>Si el problema persiste, por favor contacte al administrador.</small></p>
-                </div>
-            `);
-            $('#referenece').parent().append(errorDiv);
-            
-            console.error('Error detallado:', error);
-        })
-        .finally(() => {
-            // Solo habilitar el botón ya que el input se limpió antes
-            $('#send-btn').prop('disabled', false);
-        });
-    });
-
+    ];
+    {% else %}
+    var filterFields = [];
+    {% endif %}
 </script>
 
 <div class="modal fade" id="systemPromptModal" tabindex="-1">
