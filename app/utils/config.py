@@ -27,9 +27,9 @@ class Config:
         'LOG_LEVEL': 'INFO',
         'LOG_DIR': 'logs',
         'AICT_MODE': 'ONLINE',
-        'DOWNLOADS_PATH': '/app/temp/downloads/',
-        'IMAGES_PATH': '/app/temp/images/',
-        'REPO_BASE_FOLDER': '/app/repos',
+        'DOWNLOADS_PATH': 'data/temp/downloads/',
+        'IMAGES_PATH': 'data/temp/images/',
+        'REPO_BASE_FOLDER': 'data/repositories',
         'PERMANENT_SESSION_LIFETIME_MINUTES': '30'
     }
     
