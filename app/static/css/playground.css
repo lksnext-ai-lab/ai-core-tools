@@ -1,0 +1,76 @@
+/* Playground-specific styles */
+
+/* File upload area styling */
+.border-dashed {
+    border: 2px dashed #dee2e6 !important;
+    transition: all 0.3s ease;
+}
+
+.border-dashed:hover {
+    border-color: #0d6efd !important;
+    background-color: #f8f9fa;
+}
+
+.file-upload-area {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.file-upload-area:hover {
+    transform: translateY(-2px);
+}
+
+/* File list styling */
+.list-group-item {
+    border-left: none;
+    border-right: none;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+/* Right column sticky positioning */
+.col-4 .card {
+    position: sticky;
+    top: 20px;
+}
+
+.col-4 .list-group-item {
+    font-size: 0.875rem;
+}
+
+/* File upload area visual feedback */
+.file-upload-area.border-primary {
+    border-color: #0d6efd !important;
+    background-color: #f8f9fa;
+}
+
+/* File item status indicators */
+.file-item-uploading .status-text {
+    color: #6c757d;
+}
+
+.file-item-success .status-text {
+    color: #198754;
+}
+
+.file-item-error .status-text {
+    color: #dc3545;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+    .col-4 .card {
+        position: static;
+        margin-top: 1rem;
+    }
+    
+    .file-upload-area:hover {
+        transform: none;
+    }
+} 
