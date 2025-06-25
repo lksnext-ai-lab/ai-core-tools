@@ -3,7 +3,7 @@ from flask_openapi3 import Tag
 from api.api_auth import require_auth
 from utils.pricing_decorators import check_api_usage_limit
 from utils.error_handlers import handle_api_errors
-from api.pydantic.agent_pydantic import AgentPath
+from api.pydantic.agent_pydantic import AgentPath, DetachFilePath
 from api.files.service import FileService
 
 # Import the api blueprint from the main api module
@@ -35,11 +35,11 @@ def attach_file(path: AgentPath):
 )
 @require_auth
 @handle_api_errors(include_traceback=False)
-def detach_file(path: AgentPath, file_reference: str):
+def detach_file(path: DetachFilePath):
     """
     Remove an attached file from the session.
     """
-    return FileService.detach_file(path.agent_id, file_reference)
+    return FileService.detach_file(path.agent_id, path.file_reference)
 
 
 @api.get('/attached-files/<int:agent_id>', 

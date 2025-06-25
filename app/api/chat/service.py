@@ -110,11 +110,37 @@ class ChatService:
             # Clear the message list from session
             SessionUtils.clear_messages()
             
+            # Clear all attached files for this agent
+            try:
+                attached_files = SessionUtils.get_attached_files()
+                agent_files = {
+                    ref: info for ref, info in attached_files.items() 
+                    if info.get('agent_id') == agent_id
+                }
+                
+                # Remove files from disk and session
+                for file_ref, file_info in agent_files.items():
+                    # Remove from disk
+                    if os.path.exists(file_info['path']):
+                        try:
+                            os.remove(file_info['path'])
+                            logger.info(f"Removed file from disk during reset: {file_info['path']}")
+                        except Exception as e:
+                            logger.warning(f"Failed to remove file from disk during reset {file_info['path']}: {e}")
+                    
+                    # Remove from session
+                    SessionUtils.remove_attached_file(file_ref)
+                
+                logger.info(f"Cleared {len(agent_files)} attached files for agent {agent_id}")
+                
+            except Exception as e:
+                logger.warning(f"Error clearing attached files during reset: {e}")
+            
             # Clear the agent from cache
             from services.agent_cache_service import AgentCacheService
             AgentCacheService.invalidate_agent(agent_id)
             
-            logger.info(f"Reset conversation and cleared cache for agent {agent_id}")
+            logger.info(f"Reset conversation, cleared cache and files for agent {agent_id}")
             return {"status": "success", "message": "Conversation reset successfully"}
             
         except Exception as e:

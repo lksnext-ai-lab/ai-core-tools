@@ -5,6 +5,10 @@ from typing import Optional
 class AgentPath(AppPath):
     agent_id: int
 
+class DetachFilePath(AppPath):
+    agent_id: int
+    file_reference: str
+
 class ChatRequest(BaseModel):
     question: str = Field(
         description="The question or query to send to the agent",

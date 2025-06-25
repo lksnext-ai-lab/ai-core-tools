@@ -2,9 +2,9 @@
 
 {% block content %}
 
-
 <div class="row">
-    <div class="col-10">
+    <!-- Left Column: Chat Interface -->
+    <div class="col-8">
 
         <div class="card shadow mb-4">
             <!-- Card header -->
@@ -82,7 +82,6 @@
             </div>
         </div>
 
-
         <div class="card shadow">
             <!-- Card header -->
             <div class="card-header border-bottom">
@@ -113,6 +112,7 @@
                     </div>
                 </div>
                 <div class="collapse show" id="collapseComment">
+                    
                     <div class="d-flex mt-3">
                         <textarea id="question" class="form-control mb-0" placeholder="Add a comment..." rows="2"
                             spellcheck="false"></textarea>
@@ -143,13 +143,266 @@
             <!-- Card body END -->
         </div>
 
+    </div>
 
+    <!-- Right Column: File Management -->
+    <div class="col-4">
+        <div class="card shadow">
+            <div class="card-header border-bottom">
+                <h6 class="mb-0">
+                    <i class="fas fa-paperclip"></i> File Attachments
+                </h6>
+            </div>
+            <div class="card-body">
+                
+                <!-- File Upload Section -->
+                <div class="mb-3">
+                    <div class="card border-dashed">
+                        <div class="card-body text-center p-3">
+                            <div class="file-upload-area" id="fileUploadArea">
+                                <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                <h6 class="mb-1">Drag & Drop files</h6>
+                                <p class="text-muted mb-2 small">or click to browse</p>
+                                <input type="file" id="fileInput" multiple class="d-none" accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx">
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('fileInput').click()">
+                                    <i class="fas fa-folder-open"></i> Choose Files
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attached Files List -->
+                <div id="attachedFilesSection" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Attached Files</h6>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="clearAllFiles">
+                            <i class="fas fa-trash"></i> Clear All
+                        </button>
+                    </div>
+                    <div id="attachedFilesList" class="list-group list-group-flush">
+                        <!-- Files will be added here dynamically -->
+                    </div>
+                </div>
+
+                <!-- File Info -->
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Supported formats: PDF, TXT, MD, PNG, JPG, DOC, DOCX
+                    </small>
+                </div>
+
+            </div>
+        </div>
     </div>
 
 </div>
 
 <script>
     var cont = 0;
+    var attachedFiles = new Map(); // Store file references: {fileReference: {filename, contentType, uploadedAt}}
+    
+    // File Upload Functionality
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const attachedFilesSection = document.getElementById('attachedFilesSection');
+    const attachedFilesList = document.getElementById('attachedFilesList');
+    
+    // Drag and drop functionality
+    fileUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        fileUploadArea.classList.add('border-primary');
+        fileUploadArea.style.backgroundColor = '#f8f9fa';
+    });
+    
+    fileUploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        fileUploadArea.classList.remove('border-primary');
+        fileUploadArea.style.backgroundColor = '';
+    });
+    
+    fileUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileUploadArea.classList.remove('border-primary');
+        fileUploadArea.style.backgroundColor = '';
+        
+        const files = Array.from(e.dataTransfer.files);
+        handleFiles(files);
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        handleFiles(files);
+    });
+    
+    function handleFiles(files) {
+        files.forEach(file => {
+            uploadFile(file);
+        });
+    }
+    
+    function uploadFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Show loading state
+        const fileItem = createFileItem(file, 'uploading');
+        attachedFilesList.appendChild(fileItem);
+        updateAttachedFilesVisibility();
+        
+        fetch('/api/app/{{app_id}}/attach-file/{{agent.agent_id}}', {
+            method: 'POST',
+            credentials: 'include',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Update file item with success state
+            updateFileItem(fileItem, file.name, data.file_reference, 'success');
+            attachedFiles.set(data.file_reference, {
+                filename: file.name,
+                contentType: data.content_type,
+                uploadedAt: new Date().toISOString()
+            });
+        })
+        .catch(error => {
+            console.error('Upload error:', error);
+            updateFileItem(fileItem, file.name, null, 'error', error.message);
+        });
+    }
+    
+    function createFileItem(file, status) {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'list-group-item d-flex align-items-center p-2';
+        fileItem.innerHTML = `
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-file me-2"></i>
+                    <span class="filename small">${file.name}</span>
+                </div>
+                <div class="status-text text-muted small"></div>
+            </div>
+            <div class="file-actions">
+                <button type="button" class="btn btn-sm btn-outline-danger remove-file" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        return fileItem;
+    }
+    
+    function updateFileItem(fileItem, filename, fileReference, status, errorMessage = '') {
+        const statusText = fileItem.querySelector('.status-text');
+        const removeBtn = fileItem.querySelector('.remove-file');
+        
+        switch(status) {
+            case 'uploading':
+                statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                break;
+            case 'success':
+                statusText.innerHTML = '<i class="fas fa-check text-success"></i> Ready';
+                removeBtn.style.display = 'block';
+                removeBtn.onclick = () => removeFile(fileReference, fileItem);
+                fileItem.dataset.fileReference = fileReference;
+                break;
+            case 'error':
+                statusText.innerHTML = `<i class="fas fa-exclamation-triangle text-danger"></i> ${errorMessage}`;
+                removeBtn.style.display = 'block';
+                removeBtn.onclick = () => fileItem.remove();
+                break;
+        }
+    }
+    
+    function removeFile(fileReference, fileItem) {
+        fetch(`/api/app/{{app_id}}/detach-file/{{agent.agent_id}}/${fileReference}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        })
+        .then(response => {
+            if (response.ok) {
+                attachedFiles.delete(fileReference);
+                fileItem.remove();
+                updateAttachedFilesVisibility();
+            } else {
+                throw new Error('Failed to remove file');
+            }
+        })
+        .catch(error => {
+            console.error('Remove file error:', error);
+            alert('Failed to remove file. Please try again.');
+        });
+    }
+    
+    function updateAttachedFilesVisibility() {
+        if (attachedFilesList.children.length > 0) {
+            attachedFilesSection.style.display = 'block';
+        } else {
+            attachedFilesSection.style.display = 'none';
+        }
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // Clear all files
+    document.getElementById('clearAllFiles').addEventListener('click', () => {
+        if (confirm('Are you sure you want to remove all attached files?')) {
+            const promises = Array.from(attachedFiles.keys()).map(fileReference => 
+                fetch(`/api/app/{{app_id}}/detach-file/{{agent.agent_id}}/${fileReference}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                })
+            );
+            
+            Promise.all(promises)
+                .then(() => {
+                    attachedFiles.clear();
+                    attachedFilesList.innerHTML = '';
+                    updateAttachedFilesVisibility();
+                })
+                .catch(error => {
+                    console.error('Clear files error:', error);
+                    alert('Failed to clear some files. Please try again.');
+                });
+        }
+    });
+    
+    // Load existing attached files on page load
+    function loadAttachedFiles() {
+        fetch('/api/app/{{app_id}}/attached-files/{{agent.agent_id}}', {
+            method: 'GET',
+            credentials: 'include'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.files && Object.keys(data.files).length > 0) {
+                Object.entries(data.files).forEach(([fileReference, fileInfo]) => {
+                    attachedFiles.set(fileReference, fileInfo);
+                    const fileItem = createFileItem({name: fileInfo.filename, size: 0}, 'success');
+                    updateFileItem(fileItem, fileInfo.filename, fileReference, 'success');
+                    attachedFilesList.appendChild(fileItem);
+                });
+                updateAttachedFilesVisibility();
+            }
+        })
+        .catch(error => {
+            console.error('Load attached files error:', error);
+        });
+    }
+    
+    // Load files on page load
+    loadAttachedFiles();
     
     // Add reset functionality
     $('#reset-btn').click(function() {
@@ -175,6 +428,11 @@
             $('[id^="loading-"]').remove();
             $('[id^="error-"]').remove();
             cont = 0;
+            
+            // Clear attached files
+            attachedFiles.clear();
+            attachedFilesList.innerHTML = '';
+            updateAttachedFilesVisibility();
             
             // Show success message
             var successDiv = $('#referenece').clone();
@@ -214,7 +472,6 @@
         {% for field in agent.silo.metadata_definition.fields %}
         var value = $('#filter_{{ field.name }}').val();
         if (value) {
-            //filter['{{ field.name }}'] = {"$eq": value};
             filter['{{ field.name }}'] = value;
         }
         {% endfor %}
@@ -223,12 +480,22 @@
         }
         {% endif %}
         
+        // Collect file references
+        var file_references = Array.from(attachedFiles.keys());
+        
         // Crear y mostrar el div de la pregunta
         var qDiv = $('#referenece').clone();
         qDiv.attr('id', 'referenece-' + cont);
         cont++;
         $('#ref-name', qDiv).text('You said...');
-        $('#ref-text', qDiv).text(question);
+        
+        // Add file attachment indicators to the message
+        var messageText = question;
+        if (file_references.length > 0) {
+            messageText += '<br><small class="text-muted"><i class="fas fa-paperclip"></i> ' + 
+                          file_references.length + ' file(s) attached</small>';
+        }
+        $('#ref-text', qDiv).html(messageText);
         $('#referenece').parent().append(qDiv);
 
         // Crear y mostrar un div de "loading"
@@ -255,7 +522,8 @@
             },
             body: JSON.stringify({ 
                 question: question,
-                search_params: search_params
+                search_params: search_params,
+                file_references: file_references
             }),
             signal: controller.signal
         })
@@ -276,7 +544,15 @@
             var respDiv = $('#referenece').clone();
             respDiv.attr('id', 'referenece-' + cont);
             cont++;
-            $('#ref-text', respDiv).text(JSON.stringify(data["generated_text"], null, 2));
+            
+            // Add attachment processing info if files were processed
+            var responseText = data["generated_text"];
+            if (data.metadata && data.metadata.attachments_processed) {
+                responseText += '<br><small class="text-muted"><i class="fas fa-check"></i> ' + 
+                               data.metadata.attachment_count + ' file(s) processed</small>';
+            }
+            
+            $('#ref-text', respDiv).html(responseText);
             $('#referenece').parent().append(respDiv);
 
             $("html, body").animate({
@@ -308,6 +584,50 @@
     });
 
 </script>
+
+<style>
+.border-dashed {
+    border: 2px dashed #dee2e6 !important;
+    transition: all 0.3s ease;
+}
+
+.border-dashed:hover {
+    border-color: #0d6efd !important;
+    background-color: #f8f9fa;
+}
+
+.file-upload-area {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.file-upload-area:hover {
+    transform: translateY(-2px);
+}
+
+.list-group-item {
+    border-left: none;
+    border-right: none;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+/* Right column styling */
+.col-4 .card {
+    position: sticky;
+    top: 20px;
+}
+
+.col-4 .list-group-item {
+    font-size: 0.875rem;
+}
+</style>
 
 <div class="modal fade" id="systemPromptModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
