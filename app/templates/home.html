@@ -297,9 +297,9 @@
                            onclick="return confirm('Are you sure you want to delete this app? This action cannot be undone.')">
                             <i class="bi bi-trash"></i> Delete
                         </a>
-                        <a href="{{ url_for('collaboration.collaboration', app_id=app.app_id) }}" 
+                        <a href="{{ url_for('app_settings.app_settings', app_id=app.app_id) }}" 
                            class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-people"></i> Collaboration
+                            <i class="bi bi-gear"></i> Settings
                         </a>
                     {% else %}
                         <button class="btn btn-sm btn-outline-secondary" 

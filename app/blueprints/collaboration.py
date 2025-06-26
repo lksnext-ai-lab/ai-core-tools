@@ -17,6 +17,11 @@ def collaboration(app_id):
         flash('App not found', 'error')
         return redirect(url_for('home'))
     
+    # Set session variables for the template (needed by app_settings_base.html)
+    from flask import session
+    session['app_id'] = app_id
+    session['app_name'] = app.name
+    
     # Check if user has permission to manage collaborations
     try:
         user_id = int(current_user.user_id) if current_user.user_id else None
