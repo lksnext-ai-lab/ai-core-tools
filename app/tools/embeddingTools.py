@@ -44,11 +44,8 @@ def get_embeddings_model(embedding_service):
     
     elif embedding_service.provider == EmbeddingProvider.Custom.value:
         client = InferenceClient(
-            model=embedding_service.name if embedding_service.name else None,
-            base_url=embedding_service.endpoint,
-            headers={
-                "Authorization": f"Bearer {embedding_service.api_key}"
-            },
+            model=embedding_service.endpoint,
+            api_key=embedding_service.api_key
         )
         return HuggingFaceEmbeddingsAdapter(client)
     elif embedding_service.provider == EmbeddingProvider.Ollama.value:
