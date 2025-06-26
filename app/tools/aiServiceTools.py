@@ -175,7 +175,7 @@ def get_llm(agent, is_vision=False):
     if ai_service is None:
         return None
     if ai_service.provider == ProviderEnum.OpenAI.value:
-        return ChatOpenAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
+        return ChatOpenAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key, base_url=ai_service.endpoint if ai_service.endpoint else None)
     if ai_service.provider == ProviderEnum.Anthropic.value:
         return ChatAnthropic(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
     if ai_service.provider == ProviderEnum.MistralAI.value:
