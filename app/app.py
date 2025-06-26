@@ -1,4 +1,4 @@
-from flask import Flask, render_template, session, request, redirect, url_for
+from flask import Flask, render_template, session, request, redirect, url_for, flash
 from flask_restful import Api, Resource
 from flask_session import Session
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
@@ -38,6 +38,7 @@ from blueprints.app_settings import app_settings_blueprint
 from blueprints.admin.users import admin_users_blueprint
 from blueprints.admin.stats import admin_stats_blueprint
 from blueprints.public import public_blueprint
+from blueprints.collaboration import collaboration_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -90,6 +91,7 @@ app.register_blueprint(app_settings_blueprint)
 app.register_blueprint(admin_users_blueprint)
 app.register_blueprint(admin_stats_blueprint)
 app.register_blueprint(public_blueprint)
+app.register_blueprint(collaboration_blueprint)
 
 # Only register subscription blueprint in SaaS mode
 if AICT_MODE == 'ONLINE':
@@ -161,6 +163,24 @@ def inject_aict_mode():
         app_version=VERSION,
         app_name=VERSION_INFO['name']
     )
+
+@app.context_processor
+def inject_notifications():
+    """Make notification data available in all templates"""
+    if session.get('user'):
+        try:
+            from services.app_collaboration_service import AppCollaborationService
+            pending_invitations = AppCollaborationService.get_pending_invitations(
+                user_id=int(session.get('user_id'))
+            )
+            return dict(
+                pending_invitations=pending_invitations,
+                pending_invitations_count=len(pending_invitations)
+            )
+        except Exception as e:
+            logger.error(f"Error loading notifications: {str(e)}")
+            return dict(pending_invitations=[], pending_invitations_count=0)
+    return dict(pending_invitations=[], pending_invitations_count=0)
 
 @app.before_request
 def before_request():
@@ -235,7 +255,7 @@ def app_index(app_id: int):
 @login_required
 def create_app():
     name = request.form['name']
-    new_app = AppService.create_or_update_app({'name': name, 'user_id': current_user.get_id()})
+    new_app = AppService.create_or_update_app({'name': name, 'owner_id': current_user.get_id()})
     return app_index(new_app.app_id)
 
 #@app.route('/leave')
@@ -249,7 +269,9 @@ def my_apps():
 @app.route('/delete-app/<int:app_id>', methods=['GET'])
 @login_required
 def delete_app(app_id: int):
-    AppService.delete_app(app_id)
+    success = AppService.delete_app(app_id, current_user.get_id())
+    if not success:
+        flash('You do not have permission to delete this app', 'error')
     return redirect(url_for('home'))
 
 

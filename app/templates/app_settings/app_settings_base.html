@@ -55,6 +55,12 @@
                     </a>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <a class="nav-link {% if request.endpoint and 'collaboration.collaboration' in request.endpoint %}active{% endif %}" 
+                       href="{{ url_for('collaboration.collaboration', app_id=session['app_id']) }}">
+                        <i class="bi bi-people me-2"></i>Collaboration
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
                     <a class="nav-link {% if request.endpoint and 'app_settings.app_settings' in request.endpoint %}active{% endif %}" 
                        href="{{ url_for('app_settings.app_settings', app_id=session['app_id']) }}">
                         <i class="bi bi-gear me-2"></i>General Settings

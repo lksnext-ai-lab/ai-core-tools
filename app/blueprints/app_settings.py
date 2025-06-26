@@ -14,6 +14,11 @@ def app_settings(app_id):
         flash('App not found', 'error')
         return redirect(url_for('my_apps'))
     
+    # Set session variables for the template (needed by app_settings_base.html)
+    from flask import session
+    session['app_id'] = app_id
+    session['app_name'] = app.name
+    
     if request.method == 'POST':
         try:
             app_data = {

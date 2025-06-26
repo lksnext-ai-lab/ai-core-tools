@@ -13,12 +13,19 @@ class User(UserMixin, Base):
     create_date = Column(DateTime, default=datetime.now)
     
     # Relationships
-    apps = relationship('App', back_populates='user', lazy=True)
+    owned_apps = relationship('App', foreign_keys='App.owner_id', back_populates='owner', lazy=True)
+    app_collaborations = relationship('AppCollaborator', foreign_keys='AppCollaborator.user_id', back_populates='user', lazy=True)
     api_keys = relationship('APIKey', back_populates='user', lazy=True)
     subscriptions = relationship('Subscription', back_populates='user', lazy=True)
 
     def get_id(self):
         return self.user_id
+    
+    @property
+    def apps(self):
+        """Get all apps user has access to (owned + collaborated)"""
+        from services.user_service import UserService
+        return UserService.get_user_accessible_apps(self.user_id)
     
     @property
     def subscription(self):
