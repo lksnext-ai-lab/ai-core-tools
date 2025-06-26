@@ -351,11 +351,13 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add attachment processing info if files were processed
             var responseText = data["generated_text"];
             if (data.metadata && data.metadata.attachments_processed) {
-                responseText += '<br><small class="text-muted"><i class="fas fa-check"></i> ' + 
+                responseText += '\n\n<small class="text-muted"><i class="fas fa-check"></i> ' + 
                                data.metadata.attachment_count + ' file(s) processed</small>';
             }
             
-            $('#ref-text', respDiv).html(responseText);
+            // Render markdown to HTML
+            var htmlContent = marked.parse(responseText);
+            $('#ref-text', respDiv).html(htmlContent);
             $('#referenece').parent().append(respDiv);
 
             $("html, body").animate({

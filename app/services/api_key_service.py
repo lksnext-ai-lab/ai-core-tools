@@ -192,7 +192,7 @@ class APIKeyService:
         if not app:
             raise NotFoundError(f"App with ID {app_id} not found", "app")
         
-        if app.user_id != user_id:
+        if app.owner_id != user_id:
             raise AuthorizationError(f"User {user_id} does not have access to app {app_id}")
         
         return app
