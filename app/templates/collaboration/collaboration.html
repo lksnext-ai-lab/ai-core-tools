@@ -1,0 +1,266 @@
+{% extends "app_settings/app_settings_base.html" %}
+
+{% block app_settings_content %}
+<div class="row g-4">
+    <!-- Invite Collaborators -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-person-plus me-2"></i>Invite Collaborators
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="inviteForm">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-control" id="inviteEmail" name="email" 
+                                   placeholder="Enter email address" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Role</label>
+                            <select class="form-select" id="inviteRole" name="role">
+                                <option value="editor">Editor</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-send"></i> Invite
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Collaborators -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-people me-2"></i>Current Collaborators
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="collaboratorsList">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load collaborators on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadCollaborators();
+});
+
+// Handle invite form submission
+document.getElementById('inviteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const email = document.getElementById('inviteEmail').value;
+    const role = document.getElementById('inviteRole').value;
+    
+    inviteCollaborator(email, role);
+});
+
+function inviteCollaborator(email, role) {
+    fetch(`/apps/{{ app.app_id }}/collaborators`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            email: email,
+            role: role
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Invitation sent successfully!', 'success');
+            document.getElementById('inviteForm').reset();
+            loadCollaborators(); // Refresh the list
+        } else {
+            showToast(data.error || 'Failed to send invitation', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while sending the invitation', 'error');
+    });
+}
+
+function loadCollaborators() {
+    fetch(`/apps/{{ app.app_id }}/collaborators`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayCollaborators(data.collaborators);
+        } else {
+            showToast('Failed to load collaborators', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while loading collaborators', 'error');
+    });
+}
+
+function displayCollaborators(collaborators) {
+    const container = document.getElementById('collaboratorsList');
+    
+    if (collaborators.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-people" style="font-size: 3rem;"></i>
+                <p class="mt-3">No collaborators yet</p>
+                <p class="small">Invite team members to collaborate on this app</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="table-responsive"><table class="table table-hover">';
+    html += `
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Invited By</th>
+                <th>Invited Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    collaborators.forEach(collab => {
+        const statusBadge = getStatusBadge(collab.status);
+        const roleBadge = getRoleBadge(collab.role);
+        
+        html += `
+            <tr>
+                <td>
+                    <div class="d-flex align-items-center">
+                        <div class="avatar avatar-sm me-3">
+                            <div class="avatar-img rounded-circle bg-primary text-white d-flex align-items-center justify-content-center">
+                                ${collab.user_name ? collab.user_name.charAt(0).toUpperCase() : collab.user_email.charAt(0).toUpperCase()}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="fw-bold">${collab.user_name || 'N/A'}</div>
+                            <div class="small text-muted">${collab.user_email}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>${roleBadge}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div class="small">
+                        <div>${collab.inviter_email}</div>
+                        <div class="text-muted">${collab.invited_at ? new Date(collab.invited_at).toLocaleDateString() : 'N/A'}</div>
+                    </div>
+                </td>
+                <td>${collab.invited_at ? new Date(collab.invited_at).toLocaleDateString() : 'N/A'}</td>
+                <td>
+                    ${collab.status === 'accepted' ? `
+                        <button class="btn btn-sm btn-outline-danger" onclick="revokeCollaboration(${collab.user_id})">
+                            <i class="bi bi-person-x"></i> Remove
+                        </button>
+                    ` : collab.status === 'pending' ? `
+                        <button class="btn btn-sm btn-outline-warning" onclick="resendInvitation(${collab.id})">
+                            <i class="bi bi-arrow-clockwise"></i> Resend
+                        </button>
+                    ` : ''}
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'pending': '<span class="badge bg-warning">Pending</span>',
+        'accepted': '<span class="badge bg-success">Accepted</span>',
+        'declined': '<span class="badge bg-danger">Declined</span>'
+    };
+    return badges[status] || '<span class="badge bg-secondary">Unknown</span>';
+}
+
+function getRoleBadge(role) {
+    const badges = {
+        'owner': '<span class="badge bg-primary">Owner</span>',
+        'editor': '<span class="badge bg-info">Editor</span>'
+    };
+    return badges[role] || '<span class="badge bg-secondary">Unknown</span>';
+}
+
+function revokeCollaboration(userId) {
+    if (!confirm('Are you sure you want to remove this collaborator? They will lose access to this app.')) {
+        return;
+    }
+    
+    fetch(`/apps/{{ app.app_id }}/collaborators/${userId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Collaborator removed successfully', 'success');
+            loadCollaborators(); // Refresh the list
+        } else {
+            showToast(data.error || 'Failed to remove collaborator', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while removing the collaborator', 'error');
+    });
+}
+
+function resendInvitation(collaborationId) {
+    if (!confirm('Resend invitation to this user?')) {
+        return;
+    }
+    
+    // For now, we'll just show a message since resending isn't implemented yet
+    showToast('Resend functionality coming soon', 'info');
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+</script>
+{% endblock %} 

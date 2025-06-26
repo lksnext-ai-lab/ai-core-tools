@@ -248,6 +248,7 @@
     <thead>
         <tr>
             <th scope="col">Name</th>
+            <th scope="col">Role</th>
             <th scope="col">Agents</th>
             <th scope="col">Repos</th>
             <th scope="col">Domains</th>
@@ -257,9 +258,24 @@
     </thead>
     <tbody>
         {% for app in apps %}
+        {% set user_role = app.get_user_role(session['user_id']|int) if app.get_user_role and session['user_id'] else 'owner' %}
         <tr>
             <td>
                 <a href="{{ url_for('app_index', app_id=app.app_id ) }}">{{app.name}}</a>
+                {% if user_role == 'owner' or (user_role is defined and user_role.value == 'owner') %}
+                    <span class="badge bg-primary ms-2">Owner</span>
+                {% elif user_role == 'editor' or (user_role is defined and user_role.value == 'editor') %}
+                    <span class="badge bg-info ms-2">Collaborator</span>
+                {% endif %}
+            </td>
+            <td>
+                <span class="text-capitalize">
+                    {% if user_role is defined and user_role.value is defined %}
+                        {{ user_role.value }}
+                    {% else %}
+                        {{ user_role }}
+                    {% endif %}
+                </span>
             </td>
             <td>
                 {{app.agents|length}}
@@ -274,7 +290,24 @@
                 {{app.silos|length}}
             </td>
             <td>
-                <a href="{{ url_for('delete_app', app_id=app.app_id) }}" class="btn btn-danger">Delete</a>
+                <div class="btn-group" role="group">
+                    {% if user_role == 'owner' or (user_role is defined and user_role.value == 'owner') %}
+                        <a href="{{ url_for('delete_app', app_id=app.app_id) }}" 
+                           class="btn btn-sm btn-danger"
+                           onclick="return confirm('Are you sure you want to delete this app? This action cannot be undone.')">
+                            <i class="bi bi-trash"></i> Delete
+                        </a>
+                        <a href="{{ url_for('collaboration.collaboration', app_id=app.app_id) }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-people"></i> Collaboration
+                        </a>
+                    {% else %}
+                        <button class="btn btn-sm btn-outline-secondary" 
+                                onclick="leaveApp({{ app.app_id }})">
+                            <i class="bi bi-box-arrow-right"></i> Leave
+                        </button>
+                    {% endif %}
+                </div>
             </td>
         </tr>
         {% endfor %}
@@ -309,5 +342,54 @@
         </div>
     </div>
 </div>
+
+<script>
+function leaveApp(appId) {
+    if (!confirm('Are you sure you want to leave this app? You will lose access to all its resources.')) {
+        return;
+    }
+    
+    fetch(`/apps/${appId}/leave`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            showToast('Successfully left the app', 'success');
+            // Reload page to update the list
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to leave the app', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while leaving the app', 'error');
+    });
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+</script>
 
 {% endblock %}

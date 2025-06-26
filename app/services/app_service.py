@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from model.app import App
 from extensions import db
 from datetime import datetime
@@ -12,13 +12,23 @@ from services.embedding_service_service import EmbeddingServiceService
 from services.ai_service_service import AIServiceService
 from services.api_key_service import APIKeyService
 from services.mcp_config_service import MCPConfigService
+from services.app_collaboration_service import AppCollaborationService
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 class AppService:
 
     @staticmethod
     def get_apps(user_id: int) -> list[App]:
-        """Get all apps for a specific user ordered by creation date"""
+        """Get all apps for a specific user (owned + collaborated) ordered by creation date"""
+        return AppCollaborationService.get_user_accessible_apps(user_id)
+
+    @staticmethod
+    def get_owned_apps(user_id: int) -> list[App]:
+        """Get apps owned by a specific user ordered by creation date"""
         return db.session.query(App)\
-            .filter(App.user_id == user_id)\
+            .filter(App.owner_id == user_id)\
             .order_by(App.create_date.desc())\
             .all()
 
@@ -55,14 +65,19 @@ class AppService:
         """
         if 'name' in data:
             app.name = data['name']
-        if 'user_id' in data:
-            app.user_id = data['user_id']
+        if 'owner_id' in data:
+            app.owner_id = data['owner_id']
         if 'langsmith_api_key' in data:
             app.langsmith_api_key = data['langsmith_api_key']
         
     @staticmethod
-    def delete_app(app_id: int):
-        """Delete an app and all its related data"""
+    def delete_app(app_id: int, user_id: int) -> bool:
+        """Delete an app and all its related data (owner only)"""
+        # Check if user can manage the app
+        if not AppCollaborationService.can_user_manage_app(user_id, app_id):
+            logger.warning(f"User {user_id} attempted to delete app {app_id} without permission")
+            return False
+        
         app = db.session.query(App).filter(App.app_id == app_id).first()
         if app:
             # Delete all repositories (this will also delete their resources)
@@ -97,6 +112,17 @@ class AppService:
             # Delete all MCP configs
             MCPConfigService.delete_by_app_id(app.app_id)
             
+            # Delete all collaborations
+            from model.app_collaborator import AppCollaborator
+            collaborations = db.session.query(AppCollaborator).filter(AppCollaborator.app_id == app_id).all()
+            for collab in collaborations:
+                db.session.delete(collab)
+            
             # Finally delete the app itself
             db.session.delete(app)
             db.session.commit()
+            
+            logger.info(f"App {app_id} deleted by user {user_id}")
+            return True
+        
+        return False

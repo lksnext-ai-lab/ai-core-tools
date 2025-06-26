@@ -1,6 +1,7 @@
 from model.api_key import APIKey
 from model.mcp_config import MCPConfig
 from model.app import App
+from model.app_collaborator import AppCollaborator
 from model.agent import Agent
 from model.ai_service import AIService
 from model.repository import Repository

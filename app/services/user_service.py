@@ -11,6 +11,7 @@ from utils.error_handlers import (
     validate_required_fields
 )
 from utils.database import safe_db_execute
+from services.app_collaboration_service import AppCollaborationService
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,7 @@ class UserService:
         
         def query_operation():
             users_query = db.session.query(User).options(
-                joinedload(User.apps),
+                joinedload(User.owned_apps),
                 joinedload(User.api_keys)
             )
             total = users_query.count()
@@ -70,7 +71,7 @@ class UserService:
         
         def query_operation():
             return db.session.query(User).options(
-                joinedload(User.apps),
+                joinedload(User.owned_apps),
                 joinedload(User.api_keys)
             ).filter(User.user_id == user_id).first()
         
@@ -126,6 +127,20 @@ class UserService:
         if user:
             logger.debug(f"Retrieved user by email: {email}")
         return user
+    
+    @staticmethod
+    @handle_database_errors("get_user_accessible_apps")
+    def get_user_accessible_apps(user_id: int) -> List[App]:
+        """
+        Get all apps a user has access to (owned + collaborated)
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            List of App instances
+        """
+        return AppCollaborationService.get_user_accessible_apps(user_id)
     
     @staticmethod
     @handle_database_errors("create_user")
@@ -232,8 +247,8 @@ class UserService:
         
         def delete_operation():
             # Count apps before deletion for logging
-            apps_count = len(user.apps)
-            app_ids = [app.app_id for app in user.apps] if apps_count > 0 else []
+            apps_count = len(user.owned_apps)
+            app_ids = [app.app_id for app in user.owned_apps] if apps_count > 0 else []
             
             # Delete all user's apps using AppService (this will cascade to all related entities)
             if apps_count > 0:
@@ -242,7 +257,7 @@ class UserService:
                 
                 # Delete each app using AppService which handles proper cascading
                 # This will also delete all associated API keys, agents, repositories, etc.
-                for app in user.apps[:]:  # Use slice copy to avoid modification during iteration
+                for app in user.owned_apps[:]:  # Use slice copy to avoid modification during iteration
                     AppService.delete_app(app.app_id)
                 
                 logger.info(f"Deleted {apps_count} apps (IDs: {app_ids}) for user {user_email}")
@@ -293,7 +308,7 @@ class UserService:
                     User.email.ilike(search_filter)
                 )
             ).options(
-                joinedload(User.apps),
+                joinedload(User.owned_apps),
                 joinedload(User.api_keys)
             )
             
@@ -414,7 +429,7 @@ class UserService:
             return 0
         
         def count_operation():
-            return db.session.query(App).filter(App.user_id == user_id).count()
+            return db.session.query(App).filter(App.owner_id == user_id).count()
         
         count = safe_db_execute(count_operation, "get_user_app_count")
         logger.debug(f"User {user_id} has {count} apps")
@@ -572,7 +587,7 @@ class UserService:
                 return False
             
             current_agent_count = 0
-            for app in user.apps:
+            for app in user.owned_apps:
                 if hasattr(app, 'agents'):
                     current_agent_count += len(app.agents)
             
@@ -615,7 +630,7 @@ class UserService:
                 return False
             
             current_domain_count = 0
-            for app in user.apps:
+            for app in user.owned_apps:
                 if hasattr(app, 'domains'):
                     current_domain_count += len(app.domains)
             
