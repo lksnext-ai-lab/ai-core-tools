@@ -16,7 +16,6 @@ dependencies = [
     "python-dotenv (>=1.0.1,<2.0.0)",
     "psycopg (>=3.2.4,<4.0.0)",
     "langchain-openai (>=0.3.2,<0.4.0)",
-    "langgraph (>=0.2.67,<0.3.0)",
     "langchain (>=0.3.16,<0.4.0)",
     "pdf2image (>=1.17.0,<2.0.0)",
     "pypdf (>=5.2.0,<6.0.0)",
@@ -33,6 +32,7 @@ dependencies = [
     "langchain-ollama (>=0.2.3,<0.3.0)",
     "langchain-mcp-adapters (>=0.0.8,<0.0.9)",
     "toml (>=0.10.2,<0.11.0)",
+    "langgraph (>=0.4.10,<0.5.0)",
 ]
 
 
