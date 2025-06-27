@@ -19,7 +19,7 @@ from utils.error_handlers import (
     validate_required_fields, safe_execute
 )
 
-REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
+REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
 
 logger = get_logger(__name__)

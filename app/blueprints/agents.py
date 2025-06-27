@@ -1,4 +1,5 @@
 from flask import render_template, Blueprint, request
+from flask_login import login_required
 from model.silo import Silo
 from model.agent import Agent
 from model.app import App
@@ -11,6 +12,7 @@ from extensions import db
 from services.agent_service import AgentService
 from services.agent_cache_service import AgentCacheService
 from utils.pricing_decorators import check_usage_limit, require_feature
+from utils.decorators import validate_app_access
 import logging
 
 agents_blueprint = Blueprint('agents', __name__)
@@ -20,13 +22,16 @@ logger = logging.getLogger(__name__)
 Agents
 '''
 @agents_blueprint.route('/app/<int:app_id>/agents', methods=['GET'])
-def app_agents(app_id: int):
-    app = db.session.query(App).filter(App.app_id == app_id).first()
+@login_required
+@validate_app_access
+def app_agents(app_id: int, app=None):
     agents = AgentService().get_agents(app_id)
     return render_template('agents/agents.html', app_id=app_id, app=app, agents=agents)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>', methods=['GET'])
-def app_agent_get(app_id: int, agent_id: int):
+@login_required
+@validate_app_access
+def app_agent_get(app_id: int, agent_id: int, app=None):
     agent_service = AgentService()
     
     #TODO: avoid using db session from blueprints. Move to services
@@ -48,8 +53,10 @@ def app_agent_get(app_id: int, agent_id: int):
                          output_parsers=output_parsers, tools=tools, silos=silos, mcp_configs=mcp_configs)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>', methods=['POST'])
+@login_required
+@validate_app_access
 @check_usage_limit('agents')  # Check agent creation limits
-def app_agent_post(app_id: int, agent_id: int):
+def app_agent_post(app_id: int, agent_id: int, app=None):
     agent_service = AgentService()
     agent_data = {
         'agent_id': agent_id,
@@ -70,7 +77,9 @@ def app_agent_post(app_id: int, agent_id: int):
     return app_agents(app_id)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/delete', methods=['POST'])
-def app_agent_delete(app_id: int, agent_id: int):
+@login_required
+@validate_app_access
+def app_agent_delete(app_id: int, agent_id: int, app=None):
     agent_service = AgentService()
     # Invalidate agent cache when deleted
     AgentCacheService.invalidate_agent(agent_id)
@@ -78,18 +87,24 @@ def app_agent_delete(app_id: int, agent_id: int):
     return app_agents(app_id)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/play', methods=['GET'])
-def app_agent_playground(app_id: int, agent_id: int):
+@login_required
+@validate_app_access
+def app_agent_playground(app_id: int, agent_id: int, app=None):
     agent = db.session.query(Agent).filter(Agent.agent_id == int(agent_id)).first()
     return render_template('agents/playground.html', app_id=app_id, agent=agent)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/analytics', methods=['GET'])
+@login_required
+@validate_app_access
 @require_feature('advanced_analytics')
-def app_agent_analytics(app_id: int, agent_id: int):
+def app_agent_analytics(app_id: int, agent_id: int, app=None):
     """Advanced analytics - premium feature"""
     agent = db.session.query(Agent).filter(Agent.agent_id == int(agent_id)).first()
     return render_template('agents/analytics.html', app_id=app_id, agent=agent)
 
 @agents_blueprint.route('/app/<int:app_id>/agent/<int:agent_id>/ocr_play', methods=['GET'])
-def app_ocr_playground(app_id: int, agent_id: int):
+@login_required
+@validate_app_access
+def app_ocr_playground(app_id: int, agent_id: int, app=None):
     agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == int(agent_id)).first()
     return render_template('agents/ocr_playground.html', app_id=app_id, agent=agent)

@@ -1,4 +1,5 @@
-from flask import render_template, Blueprint, request, redirect, url_for
+from flask import render_template, Blueprint, request, redirect, url_for, send_file
+from flask_login import login_required
 from model.repository import Repository
 from model.resource import Resource
 from model.silo import Silo
@@ -13,22 +14,27 @@ from services.repository_service import RepositoryService
 from services.output_parser_service import OutputParserService
 from services.embedding_service_service import EmbeddingServiceService
 from model.embedding_service import EmbeddingService
+from utils.decorators import validate_app_access
 #TODO: should be accesed from silo service
 
 load_dotenv()
 pgVectorTools = PGVectorTools(db)
 
-REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
+REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 
 repositories_blueprint = Blueprint('repositories', __name__)
 
 @repositories_blueprint.route('/app/<int:app_id>/repositories', methods=['GET'])
-def repositories(app_id: int):
+@login_required
+@validate_app_access
+def repositories(app_id: int, app=None):
     repos = RepositoryService.get_repositories_by_app_id(app_id)
     return render_template('repositories/repositories.html', repos=repos)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>', methods=['GET', 'POST'])
-def repository(app_id: int, repository_id: int):
+@login_required
+@validate_app_access
+def repository(app_id: int, repository_id: int, app=None):
     if request.method == 'POST':
         if repository_id == 0:
             # Crear nuevo repositorio
@@ -66,7 +72,9 @@ def repository(app_id: int, repository_id: int):
                          embedding_services=embedding_services)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/settings', methods=['GET', 'POST'])
-def repository_settings(app_id: int, repository_id: int):
+@login_required
+@validate_app_access
+def repository_settings(app_id: int, repository_id: int, app=None):
     repo = RepositoryService.get_repository(repository_id)
     
     if request.method == 'POST':
@@ -87,7 +95,9 @@ def repository_settings(app_id: int, repository_id: int):
                          embedding_services=embedding_services)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/delete', methods=['GET'])
-def repository_delete(app_id: int, repository_id: int):
+@login_required
+@validate_app_access
+def repository_delete(app_id: int, repository_id: int, app=None):
     repo = RepositoryService.get_repository(repository_id)
     if repo:
         RepositoryService.delete_repository(repo)
@@ -98,7 +108,9 @@ def repository_delete(app_id: int, repository_id: int):
 Resources
 '''
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource/<int:resource_id>/delete', methods=['GET'])
-def resource_delete(app_id: int, repository_id: int, resource_id: int):
+@login_required
+@validate_app_access
+def resource_delete(app_id: int, repository_id: int, resource_id: int, app=None):
     resource = db.session.query(Resource).filter(Resource.resource_id == resource_id).first()
     SiloService.delete_resource(resource)
     db.session.query(Resource).filter(Resource.resource_id == resource_id).delete()
@@ -106,7 +118,9 @@ def resource_delete(app_id: int, repository_id: int, resource_id: int):
     return repository(app_id, repository_id)
 
 @repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource', methods=['POST'])
-def resource_create(app_id: int, repository_id: int):
+@login_required
+@validate_app_access
+def resource_create(app_id: int, repository_id: int, app=None):
     if request.method == 'POST':
         if 'file' not in request.files:
             return redirect(request.url)
@@ -128,3 +142,17 @@ def resource_create(app_id: int, repository_id: int):
             SiloService.index_resource(resource)
         
         return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
+
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource/<int:resource_id>/download', methods=['GET'])
+@login_required
+@validate_app_access
+def resource_download(app_id: int, repository_id: int, resource_id: int, app=None):
+    resource = db.session.query(Resource).filter(Resource.resource_id == resource_id).first()
+    if not resource:
+        return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
+    
+    file_path = os.path.join(REPO_BASE_FOLDER, str(repository_id), resource.uri)
+    if not os.path.exists(file_path):
+        return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
+    
+    return send_file(file_path, as_attachment=True, download_name=resource.uri)

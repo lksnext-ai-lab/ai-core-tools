@@ -3,7 +3,7 @@ from model.resource import Resource
 from typing import List
 import os
 from services.silo_service import SiloService
-REPO_BASE_FOLDER = os.getenv('REPO_BASE_FOLDER')
+REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
 class ResourceService:
 
     @staticmethod

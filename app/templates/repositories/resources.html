@@ -25,7 +25,7 @@
                 {% for resource in repo.resources %}
                 <tr>
                     <td>
-                        <a href="#">{{resource.name}}</a>
+                        <a href="{{url_for('repositories.resource_download', app_id=session['app_id'], repository_id=repo.repository_id, resource_id=resource.resource_id)}}">{{resource.name}}</a>
                     </td>
                     <td>
                         {{resource.uri}}
