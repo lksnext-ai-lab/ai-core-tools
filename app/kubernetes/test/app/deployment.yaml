@@ -119,11 +119,6 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: REPO_BASE_FOLDER
-            - name: APP_ROOT
-              valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
-                  key: APP_ROOT
             - name: DOWNLOADS_PATH
               valueFrom:
                 configMapKeyRef:
