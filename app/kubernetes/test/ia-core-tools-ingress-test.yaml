@@ -9,6 +9,7 @@ metadata:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/secure-backends: "true"
     nginx.ingress.kubernetes.io/configuration-snippet: |
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
       more_set_headers "server: hide";
       more_set_headers "Content-Type: text/html; charset=UTF-8";
       more_set_headers "X-Content-Type-Options: nosniff";
