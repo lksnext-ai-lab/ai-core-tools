@@ -11,4 +11,5 @@ data:
   LANGCHAIN_PROJECT: "ia-core-tools"
   LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com" 
   REPO_BASE_FOLDER: "/app/repositories/"
+  APP_ROOT: "/app"
   AICT_MODE: "SELF-HOSTED"

@@ -10,6 +10,7 @@ ENV DATABASE_USER=""
 ENV DATABASE_PASSWORD=""
 ENV DATABASE_HOST=""
 ENV PYTHONPATH=/:/app:$PYTHONPATH
+ENV APP_ROOT="/app"
 
 # Copy the current directory contents into the container at /app
 COPY ./app /app

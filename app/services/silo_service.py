@@ -316,7 +316,8 @@ class SiloService:
             doc.metadata["resource_id"] = resource.resource_id
             doc.metadata["silo_id"] = resource.repository.silo_id
             doc.metadata["name"] = resource.uri
-            doc.metadata["ref"] = path
+            # Store relative path instead of absolute path for portability
+            doc.metadata["ref"] = os.path.join(str(resource.repository_id), resource.uri)
 
         pg_vector_tools = PGVectorTools(db)
         embedding_service = resource.repository.silo.embedding_service
