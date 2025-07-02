@@ -20,7 +20,7 @@ from utils.error_handlers import (
     validate_required_fields, safe_execute
 )
 
-REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
+REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
 
 logger = get_logger(__name__)
@@ -330,7 +330,8 @@ class SiloService:
             doc.metadata["resource_id"] = resource.resource_id
             doc.metadata["silo_id"] = resource.repository.silo_id
             doc.metadata["name"] = resource.uri
-            doc.metadata["ref"] = path
+            # Store relative path instead of absolute path for portability
+            doc.metadata["ref"] = os.path.join(str(resource.repository_id), resource.uri)
             doc.metadata["file_type"] = file_extension
 
         pg_vector_tools = PGVectorTools(db)

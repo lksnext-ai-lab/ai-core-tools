@@ -11,7 +11,7 @@ import os
 import json
 import requests
 import uuid
-from datetime import timedelta, datetime
+from datetime import timedelta
 from dotenv import load_dotenv
 
 # Import our utility modules
@@ -187,6 +187,27 @@ def before_request():
     if 'session_id' not in session:
         # Generate a new session ID
         session['session_id'] = str(uuid.uuid4())
+    
+    # Validate app_id in session if it exists
+    # Skip validation for certain routes to avoid infinite redirects
+    excluded_routes = ['home', 'index', 'login', 'auth_callback', 'logout', 'static']
+    if (session.get('app_id') is not None and 
+        request.endpoint not in excluded_routes and 
+        not request.endpoint.startswith('static')):
+        try:
+            app = AppService.get_app(session['app_id'])
+            if app is None:
+                # App no longer exists, clear session app data
+                session.pop('app_id', None)
+                session.pop('app_name', None)
+                flash('The app you were working with no longer exists.', 'warning')
+                return redirect(url_for('home'))
+        except Exception as e:
+            logger.error(f"Error validating app_id in session: {str(e)}")
+            # Clear session app data on error
+            session.pop('app_id', None)
+            session.pop('app_name', None)
+            return redirect(url_for('home'))
 
 @app.route('/')
 def index():

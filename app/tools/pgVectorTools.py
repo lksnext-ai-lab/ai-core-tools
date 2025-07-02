@@ -18,7 +18,7 @@ from langchain.schema import Document
 from typing import List
 from extensions import async_engine
 
-REPO_BASE_FOLDER = os.getenv("REPO_BASE_FOLDER")
+REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 #TODO: pgVector should not know abot silos
 COLLECTION_PREFIX = 'silo_'
 
