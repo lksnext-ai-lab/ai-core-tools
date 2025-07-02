@@ -1,6 +1,6 @@
 from extensions import db
 from model.resource import Resource
-from typing import List
+from typing import List, Tuple, Optional
 import os
 from services.silo_service import SiloService
 from werkzeug.datastructures import FileStorage
@@ -17,81 +17,6 @@ class ResourceService:
     @staticmethod
     def get_resources_by_repo_id(repository_id: int) -> List[Resource]:
         return db.session.query(Resource).filter(Resource.repository_id == repository_id).all() 
-    
-    @staticmethod
-    def create_resource_from_file(file: FileStorage, name: str, repository_id: int) -> Resource:
-        """
-        Create a resource from an uploaded file
-        
-        Args:
-            file: The uploaded file
-            name: The name for the resource
-            repository_id: The ID of the repository
-            
-        Returns:
-            The created Resource instance
-            
-        Raises:
-            ValueError: If file is invalid or missing
-        """
-        if not file or file.filename == '':
-            raise ValueError("No file provided or filename is empty")
-        
-        # Create repository directory if it doesn't exist
-        repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
-        os.makedirs(repository_path, exist_ok=True)
-        
-        # Create the resource object
-        resource = Resource(name=name, uri=file.filename, repository_id=repository_id)
-        
-        # Save file to disk
-        file_path = os.path.join(repository_path, file.filename)
-        file.save(file_path)
-        
-        # Save to database
-        db.session.add(resource)
-        db.session.commit()
-        db.session.refresh(resource)
-        
-        # Index in silo
-        try:
-            SiloService.index_resource(resource)
-            logger.info(f"Resource {resource.resource_id} indexed successfully in silo")
-        except Exception as e:
-            logger.error(f"Failed to index resource {resource.resource_id} in silo: {str(e)}")
-            # Note: We don't rollback here as the file and database record are already created
-            # The indexing can be retried later
-        
-        return resource
-    
-    @staticmethod
-    def create_resource(file, name: str, resource: Resource) -> Resource:
-        """
-        Legacy method - kept for backward compatibility
-        """
-        # Validate file extension
-        file_extension = os.path.splitext(file.filename)[1].lower()
-        if file_extension not in ResourceService.SUPPORTED_EXTENSIONS:
-            supported = ', '.join(ResourceService.SUPPORTED_EXTENSIONS)
-            raise ValueError(f"Unsupported file type: {file_extension}. Supported types: {supported}")
-        
-        # Save file
-        file_path = os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), file.filename)
-        file.save(file_path)
-        
-        db.session.add(resource)
-        db.session.commit()
-        db.session.refresh(resource)
-        
-        # Index the resource
-        try:
-            SiloService.index_resource(resource)
-            logger.info(f"Successfully indexed resource {resource.resource_id} with type {file_extension}")
-        except Exception as e:
-            logger.error(f"Failed to index resource {resource.resource_id}: {str(e)}")
-            # Consider whether to rollback the resource creation or continue
-            
-        return resource
     
     @staticmethod
     def delete_resource(resource_id: int) -> bool:
@@ -146,7 +71,7 @@ class ResourceService:
         return db.session.query(Resource).filter(Resource.resource_id == resource_id).first()
     
     @staticmethod
-    def get_resource_file_path(resource_id: int) -> str:
+    def get_resource_file_path(resource_id: int) -> Optional[str]:
         """
         Get the file path for a resource
         
@@ -161,3 +86,128 @@ class ResourceService:
             return None
         
         return os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
+    
+    @staticmethod
+    def create_multiple_resources(files: List[FileStorage], repository_id: int, custom_names: dict = None) -> Tuple[List[Resource], List[dict]]:
+        """
+        Create multiple resources from uploaded files
+        
+        Args:
+            files: List of uploaded files
+            repository_id: The ID of the repository
+            custom_names: Dictionary mapping file indices to custom names (without extensions)
+            
+        Returns:
+            Tuple containing a list of created Resource instances and a list of failed files
+            
+        Raises:
+            ValueError: If any file is invalid or missing
+        """
+        if not files:
+            raise ValueError("No files provided")
+        
+        if custom_names is None:
+            custom_names = {}
+        
+        repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
+        os.makedirs(repository_path, exist_ok=True)
+
+        created_resources = []
+        failed_files = []
+
+        for index, file in enumerate(files):
+            custom_name = custom_names.get(index)
+            result = ResourceService._process_single_file(file, repository_id, repository_path, custom_name)
+            if isinstance(result, Resource):
+                created_resources.append(result)
+                logger.info(f"Resource {result.name} prepared for indexing")
+            else:
+                failed_files.append(result)
+
+        if created_resources:
+            try:
+                db.session.commit()
+                logger.info(f"Successfully saved {len(created_resources)} resources to database")
+                ResourceService._index_resources(created_resources)
+            except Exception as e:
+                logger.error(f"Error committing resources to database: {str(e)}")
+                db.session.rollback()
+                ResourceService._cleanup_files(created_resources, repository_path)
+                raise
+
+        if failed_files:
+            logger.warning(f"Failed to process {len(failed_files)} files: {failed_files}")
+
+        return created_resources, failed_files
+
+    @staticmethod
+    def _process_single_file(file: FileStorage, repository_id: int, repository_path: str, custom_name: str = None):
+        """
+        Process a single file upload
+        
+        Args:
+            file: The uploaded file
+            repository_id: The ID of the repository
+            repository_path: The path to save the file
+            custom_name: Custom name for the resource (without extension)
+            
+        Returns:
+            Resource instance if successful, error dict if failed
+        """
+        if not file or file.filename == '':
+            return {'filename': 'Unknown', 'error': 'Empty filename'}
+            
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        if file_extension not in ResourceService.SUPPORTED_EXTENSIONS:
+            supported = ', '.join(ResourceService.SUPPORTED_EXTENSIONS)
+            return {
+                'filename': file.filename,
+                'error': f"Unsupported file type: {file_extension}. Supported: {supported}"
+            }
+        
+        # Use custom name if provided, otherwise use original filename without extension
+        if custom_name and custom_name.strip():
+            name = custom_name.strip()
+            # Ensure the saved filename includes the custom name with original extension
+            save_filename = f"{name}{file_extension}"
+        else:
+            name = os.path.splitext(file.filename)[0]
+            save_filename = file.filename
+        
+        try:
+            resource = Resource(name=name, uri=save_filename, repository_id=repository_id)
+            file_path = os.path.join(repository_path, save_filename)
+            
+            # Save the file with the new name
+            file.save(file_path)
+            
+            db.session.add(resource)
+            db.session.flush()
+            return resource
+            
+        except Exception as e:
+            logger.error(f"Error processing file {file.filename}: {str(e)}")
+            return {'filename': file.filename, 'error': str(e)}
+
+    @staticmethod
+    def _index_resources(resources: List[Resource]):
+        indexed_count = 0
+        for resource in resources:
+            try:
+                SiloService.index_resource(resource)
+                indexed_count += 1
+            except Exception as e:
+                logger.error(f"Failed to index resource {resource.resource_id}: {str(e)}")
+        logger.info(f"Successfully indexed {indexed_count}/{len(resources)} resources")
+
+    @staticmethod
+    def _cleanup_files(resources: List[Resource], repository_path: str):
+        for resource in resources:
+            file_path = os.path.join(repository_path, resource.uri)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+
+    # ...existing code...

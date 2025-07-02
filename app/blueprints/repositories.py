@@ -148,30 +148,58 @@ def resource_delete(app_id: int, repository_id: int, resource_id: int, app=None)
         flash('Failed to delete resource. Resource may not exist or could not be removed.', 'error')
     return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
 
-@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource', methods=['POST'])
+@repositories_blueprint.route('/app/<int:app_id>/repository/<int:repository_id>/resource/multiple', methods=['POST'])
 @login_required
 @validate_app_access
-def resource_create(app_id: int, repository_id: int, app=None):
+def resource_create_multiple(app_id: int, repository_id: int, app=None):
+    """Create resources from uploaded files (handles both single and multiple files)"""
     if request.method == 'POST':
-        # Validate form data
-        file, errors = _validate_resource_form(request)
+        # Check if files were uploaded
+        if 'files' not in request.files:
+            flash('No files selected. Please choose files to upload.', 'error')
+            return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
         
-        # If validation errors exist, show them and redirect back
-        if errors:
-            for error in errors:
-                flash(error, 'error')
-            return redirect(request.url)
+        files = request.files.getlist('files')
+        
+        if not files or all(f.filename == '' for f in files):
+            flash('No files selected. Please choose files to upload.', 'error')
+            return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
+        
+        # Extract custom names from form data
+        custom_names = {}
+        for key, value in request.form.items():
+            if key.startswith('custom_names[') and key.endswith(']'):
+                # Extract index from custom_names[0], custom_names[1], etc.
+                index_str = key[len('custom_names['):-1]
+                try:
+                    index = int(index_str)
+                    if value.strip():  # Only use non-empty custom names
+                        custom_names[index] = value.strip()
+                except ValueError:
+                    continue  # Skip invalid indices
         
         try:
-            # Create resource using service
-            name = request.form.get('name', '').strip()
-            ResourceService.create_resource_from_file(file, name, repository_id)
-            flash(f'Resource "{name}" created and indexed successfully', 'success')
+            # Create resources using unified service method with custom names
+            created_resources, failed_files = ResourceService.create_multiple_resources(
+                files, repository_id, custom_names
+            )
             
-        except ValueError as e:
-            flash(f'Validation error: {str(e)}', 'error')
+            # Show success/error messages
+            if created_resources:
+                if len(created_resources) == 1:
+                    flash(f'Successfully uploaded and indexed "{created_resources[0].name}"', 'success')
+                else:
+                    flash(f'Successfully uploaded and indexed {len(created_resources)} files', 'success')
+            
+            if failed_files:
+                for failed in failed_files:
+                    flash(f'Failed to upload {failed["filename"]}: {failed["error"]}', 'error')
+            
+            if not created_resources and not failed_files:
+                flash('No valid files were processed', 'warning')
+                
         except Exception as e:
-            flash(f'Error creating resource: {str(e)}', 'error')
+            flash(f'Error processing files: {str(e)}', 'error')
         
         return redirect(url_for('repositories.repository', app_id=app_id, repository_id=repository_id))
 
