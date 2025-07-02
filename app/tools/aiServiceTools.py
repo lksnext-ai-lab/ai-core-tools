@@ -183,7 +183,7 @@ def get_llm(agent, is_vision=False):
             mistral_client = Mistral(api_key=ai_service.api_key)
             return MistralWrapper(client=mistral_client, model_name=ai_service.name)
         return ChatMistralAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider.value == ProviderEnum.Custom.value:
+    if ai_service.provider == ProviderEnum.Custom.value:
         service = ChatOllama(
             model=ai_service.name, 
             temperature=0,
@@ -199,7 +199,7 @@ def get_llm(agent, is_vision=False):
         return service
     if ai_service.provider == ProviderEnum.Azure.value:
         return AzureAIChatCompletionsModel(
-            model_name=ai_service.name,
+            model=ai_service.name,
             temperature=0,
             credential=ai_service.api_key,
             endpoint=ai_service.endpoint,
