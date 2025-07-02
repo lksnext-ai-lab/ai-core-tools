@@ -91,15 +91,21 @@ async def create_agent(agent: Agent, search_params=None):
         
         messages = []
         
-        messages.extend([
-            SystemMessage(content=agent.system_prompt),
-            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
-        ])
-
+        # Add system messages only if this is the first message in the conversation
         history = state.get("messages", [])
+        if not history:
+            messages.extend([
+                SystemMessage(content=agent.system_prompt),
+                SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
+            ])
+        
+        # Add conversation history
         messages.extend(history)
-        # Add the new human message
-        messages.append(HumanMessage(content=formatted_human_prompt))
+        
+        # Only add human message if the last message wasn't a tool message
+        from langchain_core.messages import ToolMessage
+        if not history or not any(isinstance(msg, ToolMessage) for msg in history[-1:]):
+            messages.append(HumanMessage(content=formatted_human_prompt))
         
         return messages
 
