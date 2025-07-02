@@ -6,6 +6,7 @@ from sqlalchemy import text
 from langchain_core.documents import Document
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.document_loaders.pdf import PyPDFLoader
+from langchain_community.document_loaders import Docx2txtLoader, TextLoader
 import time
 from model.resource import Resource
 from tools.pgVectorTools import PGVectorTools
@@ -305,9 +306,22 @@ class SiloService:
     def index_resource(resource: Resource):
         collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
         path = os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
-        loader = PyPDFLoader(path, extract_images=False)
+        
+        # Determine file type and use appropriate loader
+        file_extension = os.path.splitext(resource.uri)[1].lower()
+        
+        if file_extension == '.pdf':
+            loader = PyPDFLoader(path, extract_images=False)
+        elif file_extension == '.docx':
+            loader = Docx2txtLoader(path)
+        elif file_extension == '.txt':
+            loader = TextLoader(path, encoding='utf-8')
+        else:
+            logger.error(f"Unsupported file type: {file_extension}")
+            raise ValueError(f"Unsupported file type: {file_extension}")
+        
         pages = loader.load()
-        text_splitter = CharacterTextSplitter(chunk_size=10, chunk_overlap=0)
+        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         docs = text_splitter.split_documents(pages)
 
         #TODO: add metadata to the document according to the silo metadata definition
@@ -317,6 +331,7 @@ class SiloService:
             doc.metadata["silo_id"] = resource.repository.silo_id
             doc.metadata["name"] = resource.uri
             doc.metadata["ref"] = path
+            doc.metadata["file_type"] = file_extension
 
         pg_vector_tools = PGVectorTools(db)
         embedding_service = resource.repository.silo.embedding_service

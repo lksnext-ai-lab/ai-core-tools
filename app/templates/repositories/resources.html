@@ -55,7 +55,9 @@
             </div>
             <div class="mb-3">
                 <label for="file" class="form-label">File</label>
-                <input type="file" class="form-control" id="file" name="file" required>
+                <input type="file" class="form-control" id="file" name="file" 
+                       accept=".pdf,.docx,.txt" required>
+                <div class="form-text">Supported formats: PDF, DOCX (Word), TXT</div>
             </div>
             <button type="submit" class="btn btn-primary">Create</button>
         </form>
