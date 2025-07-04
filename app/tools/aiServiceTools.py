@@ -199,7 +199,7 @@ def get_llm(agent, is_vision=False):
         return service
     if ai_service.provider == ProviderEnum.Azure.value:
         return AzureAIChatCompletionsModel(
-            model_name=ai_service.name,
+            model=ai_service.name,
             temperature=0,
             credential=ai_service.api_key,
             endpoint=ai_service.endpoint,

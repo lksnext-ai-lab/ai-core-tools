@@ -44,9 +44,13 @@ class ChatService:
                     message_content += attachment_content
                     logger.info(f"Processed referenced file: {file_info['filename']}")
             
+            # Format the message according to the agent's prompt template
+            from langchain_core.messages import HumanMessage
+            formatted_message = agent.prompt_template.format(question=message_content)
+            
             # Invoke agent
             result = await agent_x.ainvoke(
-                {"messages": [{"role": "user", "content": message_content}]}, 
+                {"messages": [HumanMessage(content=formatted_message)]}, 
                 config
             )
             logger.info("Agent response received")
