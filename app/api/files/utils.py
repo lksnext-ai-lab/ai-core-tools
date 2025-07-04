@@ -5,7 +5,7 @@ import pathlib
 from typing import Optional
 from utils.logger import get_logger
 from utils.error_handlers import ValidationError
-from agents.ocrAgent import process_pdf
+from tools.PDFTools import extract_text_from_pdf
 
 logger = get_logger(__name__)
 
@@ -95,7 +95,7 @@ class FileUtils:
             
             # Handle PDF files
             if file_ext == '.pdf':
-                return FileUtils._process_pdf_attachment(attachment_path, agent)
+                return FileUtils._process_pdf_attachment(attachment_path)
             
             # Handle image files
             elif file_ext in ['.png', '.jpg', '.jpeg']:
@@ -118,21 +118,20 @@ class FileUtils:
             return f"\n\n[Error processing attachment: {str(e)}]"
 
     @staticmethod
-    def _process_pdf_attachment(pdf_path: str, agent) -> str:
-        """Process PDF attachment using OCR if available."""
+    def _process_pdf_attachment(pdf_path: str) -> str:
+        """Process PDF attachment by extracting text."""
         try:
-            # Check if agent has OCR capabilities
-            if hasattr(agent, 'has_ocr') and agent.has_ocr:
-                # Use existing OCR functionality
-                images_dir = os.getenv('IMAGES_PATH', 'data/temp/images/')
-                images_path = os.path.join(images_dir, f"{uuid.uuid4()}")
-                
-                result = process_pdf(agent.agent_id, pdf_path, images_path)
-                if result and 'text' in result:
-                    return f"\n\n[PDF Content: {result['text'][:1000]}...]"  # Limit text length
+            # Extract text from PDF
+            text = extract_text_from_pdf(pdf_path)
             
-            # Fallback: just mention the PDF
-            return f"\n\n[PDF file attached: {os.path.basename(pdf_path)}]"
+            if text and len(text.strip()) > 0:
+                # Limit text length to avoid overwhelming the agent
+                max_length = 2000
+                if len(text) > max_length:
+                    text = text[:max_length] + "..."
+                return f"\n\n[PDF Content: {text}]"
+            else:
+                return f"\n\n[PDF file attached: {os.path.basename(pdf_path)} - No text content found]"
             
         except Exception as e:
             logger.error(f"Error processing PDF {pdf_path}: {str(e)}")

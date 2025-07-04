@@ -128,20 +128,11 @@ def check_pdf_contains_plain_text(state: State):
     logging.info("Verificando si el PDF contiene texto plano...")
     try:
         logging.info("Iniciando verificación de texto en PDF...")
-        pdf_text = cargar_pdf(state["pdf_path"])
+        from tools.PDFTools import check_pdf_has_text
         
-        if not pdf_text or len(pdf_text.strip()) < 50:
-            state["has_plain_text"] = False
-            logging.info(f"Resultado de verificación: contiene texto plano = {state['has_plain_text']}")
-            return {
-                "has_plain_text": False,
-                "messages": [AIMessage(content="El PDF no contiene texto plano.")]
-            }
-            
-        caracteres_validos = sum(1 for c in pdf_text if c.isprintable() and not c.isspace())
-        ratio_caracteres = caracteres_validos / len(pdf_text)
+        has_text = check_pdf_has_text(state["pdf_path"])
+        state["has_plain_text"] = has_text
         
-        state["has_plain_text"] = ratio_caracteres > 0.3
         logging.info(f"Resultado de verificación: contiene texto plano = {state['has_plain_text']}")
         return {
             "has_plain_text": state["has_plain_text"],
@@ -178,7 +169,8 @@ def extract_text_from_pdf(state: State):
     """Extrae el texto plano del PDF si es posible"""
     logging.info("Iniciando extracción de texto del PDF...")
     try:
-        pdf_text = cargar_pdf(state["pdf_path"])
+        from tools.PDFTools import extract_text_from_pdf as extract_pdf_text
+        pdf_text = extract_pdf_text(state["pdf_path"])
         logging.info(f"Texto extraído exitosamente. Longitud: {len(pdf_text)} caracteres")
         return {
             "pdf_text": pdf_text,

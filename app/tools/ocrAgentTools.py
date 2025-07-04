@@ -7,13 +7,12 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
-from pdf2image import convert_from_path
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
-from pypdf import PdfReader
 from mistralai import Mistral
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
+from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images as pdf_to_images, check_pdf_has_text
 load_dotenv()
 
 INFORMATION_EXTRACTION_SYSTEM_PROMPT = "Extract all information from this image and return it ONLY as a JSON object."
@@ -22,39 +21,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 def cargar_pdf(ruta_archivo):
-    lector = PdfReader(ruta_archivo)
-    texto = ""
-    for pagina in lector.pages:
-        texto += pagina.extract_text()
-    return texto
+    """Wrapper function for backward compatibility."""
+    return extract_text_from_pdf(ruta_archivo)
 
 def convert_pdf_to_images(pdf_path: str, output_folder: str) -> list[str]:
-    """Convierte un PDF a imágenes y las guarda en la carpeta especificada"""
-    try:
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
-            logging.info("Carpeta creada")
-        
-        logging.info("Convirtiendo PDF")
-        images = convert_from_path(
-            pdf_path,
-            dpi=200,
-            output_folder=output_folder,
-            fmt='jpeg',
-            paths_only=True  
-        )
-        
-        if not images:
-            logging.error("No se generaron imágenes del PDF")
-            return []
-        
-        logging.info(f"Imágenes generadas: {len(images)}")
-        
-        return images
-        
-    except Exception as e:
-        logging.error(f"Error en la conversión del PDF a imágenes: {str(e)}")
-        return []
+    """Wrapper function for backward compatibility."""
+    return pdf_to_images(pdf_path, output_folder)
 
 def convert_image_to_base64(image_path: str) -> str:
     """Convierte una imagen a formato base64"""
