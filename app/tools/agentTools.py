@@ -92,11 +92,10 @@ async def create_agent(agent: Agent, search_params=None):
         
         # Add system messages only if this is the first message in the conversation
         history = state.get("messages", [])
-        if  len(history) == 1:
-            messages.extend([
-                SystemMessage(content=agent.system_prompt),
-                SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
-            ])
+        messages.extend([
+            SystemMessage(content=agent.system_prompt),
+            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
+        ])
         
         # Add conversation history
         messages.extend(history)
