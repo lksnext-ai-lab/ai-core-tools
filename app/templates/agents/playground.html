@@ -14,126 +14,140 @@
             <!-- Card body -->
             <div class="card-body">
                 <div class="row">
-                    <!-- Information item -->
-                    <div class="col-12">
-                        <ul class="list-group list-group-borderless">
-                            <li class="list-group-item">
-                                <span>System prompt: </span>
-                                <div class="d-flex align-items-center">
-                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
-                                        {{agent.system_prompt}}</p>
-                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
-                                        data-bs-target="#systemPromptModal">
-                                        <i class="fas fa-expand"></i>
-                                    </button>
-                                </div>
-                            </li>
-                        </ul>
+                    <!-- System Prompt -->
+                    <div class="col-6 mb-3">
+                        <h6 class="text-primary mb-2"><i class="fas fa-terminal"></i> System Prompt</h6>
+                        <div class="d-flex align-items-center">
+                            <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                                {{agent.system_prompt}}</p>
+                            <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
+                                data-bs-target="#systemPromptModal">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="col-12">
-                        <ul class="list-group list-group-borderless">
-                            <li class="list-group-item">
-                                <span>Prompt template: </span>
-                                <div class="d-flex align-items-center">
-                                    <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
-                                        {{agent.prompt_template}}</p>
-                                    <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
-                                        data-bs-target="#promptTemplateModal">
-                                        <i class="fas fa-expand"></i>
-                                    </button>
-                                </div>
-                            </li>
-                        </ul>
+
+                    <!-- Prompt Template -->
+                    <div class="col-6 mb-3">
+                        <h6 class="text-primary mb-2"><i class="fas fa-file-code"></i> Prompt Template</h6>
+                        <div class="d-flex align-items-center">
+                            <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                                {{agent.prompt_template}}</p>
+                            <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
+                                data-bs-target="#promptTemplateModal">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="col-12">
-                        <ul class="list-group list-group-borderless">
-                            <li class="list-group-item">
-                                <span>Formato de salida: </span>
-                                {% if agent.output_parser %}
-                                <div class="mt-2">
-                                    <p class="mb-2"><strong>Nombre de la clase:</strong> {{agent.output_parser.name}}
-                                    </p>
-                                    <table class="table table-sm table-bordered">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>Nombre del campo</th>
-                                                <th>Tipo</th>
-                                                <th>Descripción</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for field in agent.output_parser.fields %}
-                                            <tr>
-                                                <td>{{field.name}}</td>
-                                                <td><code>{{field.type}}</code></td>
-                                                <td>{{field.description}}</td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {% else %}
-                                <p class="h6 fw-normal mb-0">None</p>
-                                {% endif %}
-                            </li>
-                        </ul>
+
+                    <!-- Output Parser -->
+                    {% if agent.output_parser %}
+                    <div class="col-12 mb-3">
+                        <h6 class="text-primary mb-2"><i class="fas fa-cogs"></i> Output Parser</h6>
+                        <div class="mt-2">
+                            <p class="mb-2"><strong>Name:</strong> {{agent.output_parser.name}}</p>
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Field Name</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for field in agent.output_parser.fields %}
+                                    <tr>
+                                        <td>{{field.name}}</td>
+                                        <td><code>{{field.type}}</code></td>
+                                        <td>{{field.description}}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
         <div class="card shadow">
             <!-- Card header -->
-            <div class="card-header border-bottom">
-                <h5 class="card-header-title">Test the agent...</h5>
-                <button id="reset-btn" class="btn btn-sm btn-outline-danger float-end">
-                    <i class="fas fa-trash"></i> Reset Conversation
-                </button>
+            <div class="card-header border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="card-header-title mb-0">
+                    <i class="fas fa-comments"></i> Test the agent...
+                </h5>
+                <div>
+                    <button id="reset-btn" class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-trash"></i> Reset Conversation
+                    </button>
+                </div>
             </div>
 
             <!-- Card body START -->
             <div class="card-body">
                 <div>
-                    <div class="bg-light border border-secondary border-opacity-25 p-3 rounded  mt-4" id="referenece">
+                    <div class="bg-light border border-secondary border-opacity-25 p-3 rounded mt-3" id="reference">
                         <!-- Avatar -->
-                        <div class="d-sm-flex align-items-center">
+                        <div class="d-flex align-items-center">
                             <div class="avatar avatar-xs flex-shrink-0">
                                 <img class="avatar-img rounded-circle" src="/static/img/mattin-small.png" alt="avatar">
                             </div>
                             <!-- Info -->
-                            <h6 class="mb-0 ms-2" id="ref-name">{{agent.name}}</h6>
-                        </div>
-                        <!-- Info -->
-                        <div class="hstack gap-4 gap-md-5 flex-wrap mt-2">
-                            <div>
-                                <p class="mb-0" id="ref-text">Hello, I am {{agent.name}} agent... May I help you?</p>
+                            <div class="ms-2">
+                                <h6 class="mb-0" id="ref-name">{{agent.name}}</h6>
+                                <small class="text-muted">Agent</small>
                             </div>
+                        </div>
+                        <!-- Message -->
+                        <div class="mt-2">
+                            <p class="mb-0" id="ref-text">Hello, I am {{agent.name}} agent... May I help you?</p>
                         </div>
                     </div>
                 </div>
                 <div class="collapse show" id="collapseComment">
                     
                     <div class="d-flex mt-3">
-                        <textarea id="question" class="form-control mb-0" placeholder="Add a comment..." rows="2"
+                        <textarea id="question" class="form-control mb-0" placeholder="Type your message here..." rows="2"
                             spellcheck="false"></textarea>
-                        <button id="send-btn" class="btn btn-sm btn-primary ms-2 px-4 mb-0 flex-shrink-0"><i
-                                class="fas fa-paper-plane fs-5"></i></button>
+                        <button id="send-btn" class="btn btn-primary ms-2 px-4 mb-0 flex-shrink-0">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
                     </div>
                     {% if agent.silo and agent.silo.metadata_definition %}
                     <div class="mt-3">
-                        <h6>Filter by metadata:</h6>
-                        <div class="row">
-                            {% for field in agent.silo.metadata_definition.fields %}
-                            <div class="col-md-4 mb-2">
-                                <label for="filter_{{ field.name }}" class="form-label">
-                                    <span class="fw-bold">{{ field.name }}</span>
-                                    <small class="text-muted d-block">{{ field.description }}</small>
-                                </label>
-                                <input type="text" class="form-control form-control-sm" 
-                                    id="filter_{{ field.name }}" 
-                                    data-field-type="{{ field.type }}">
+                        <div class="card border-info">
+                            <div class="card-header bg-info bg-opacity-10 border-info" 
+                                 data-bs-toggle="collapse" 
+                                 data-bs-target="#metadataFilterCollapse" 
+                                 aria-expanded="false" 
+                                 aria-controls="metadataFilterCollapse"
+                                 style="cursor: pointer;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0 text-info">
+                                        <i class="fas fa-filter"></i> Filter by metadata
+                                    </h6>
+                                    <i class="fas fa-chevron-down text-info"></i>
+                                </div>
                             </div>
-                            {% endfor %}
+                            <div class="collapse" id="metadataFilterCollapse">
+                                <div class="card-body">
+                                    <div class="row">
+                                        {% for field in agent.silo.metadata_definition.fields %}
+                                        <div class="col-md-4 mb-2">
+                                            <label for="filter_{{ field.name }}" class="form-label">
+                                                <span class="fw-bold">{{ field.name }}</span>
+                                                <small class="text-muted d-block">{{ field.description }}</small>
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm" 
+                                                id="filter_{{ field.name }}" 
+                                                data-field-type="{{ field.type }}"
+                                                placeholder="Enter {{ field.name }}">
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     {% endif %}
@@ -145,8 +159,112 @@
 
     </div>
 
-    <!-- Right Column: File Management -->
+    <!-- Right Column: Agent Info & File Management -->
     <div class="col-4">
+        <!-- Agent Information Card -->
+        <div class="card shadow mb-4">
+            <div class="card-header border-bottom">
+                <h6 class="mb-0">
+                    <i class="fas fa-info-circle"></i> Agent Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <!-- Agent Basic Information -->
+                <div class="mb-3">
+                    <div class="row">
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Type:</strong></p>
+                            <span class="badge bg-secondary">{{agent.type}}</span>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Status:</strong></p>
+                            <span class="badge bg-{{'success' if agent.status == 'active' else 'warning'}}">{{agent.status}}</span>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Requests:</strong></p>
+                            <span class="badge bg-info">{{agent.request_count}}</span>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Memory:</strong></p>
+                            <span class="badge bg-{{'success' if agent.has_memory else 'secondary'}}">{{'Yes' if agent.has_memory else 'No'}}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Service Information -->
+                {% if agent.ai_service %}
+                <div class="mb-3">
+                    <h6 class="text-primary mb-2"><i class="fas fa-robot"></i> AI Service</h6>
+                    <div class="row">
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Provider:</strong></p>
+                            <span class="badge bg-info">{{agent.ai_service.provider}}</span>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Name:</strong></p>
+                            <span class="text-truncate d-block small">{{agent.ai_service.name}}</span>
+                        </div>
+                    </div>
+                    {% if agent.ai_service.api_version %}
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <p class="mb-1"><strong>API Version:</strong></p>
+                            <span class="badge bg-secondary">{{agent.ai_service.api_version}}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Silo Information -->
+                {% if agent.silo %}
+                <div class="mb-3">
+                    <h6 class="text-primary mb-2"><i class="fas fa-database"></i> Connected Silo</h6>
+                    <div class="row">
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Name:</strong></p>
+                            <span class="text-truncate d-block small">{{agent.silo.name}}</span>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-1"><strong>Type:</strong></p>
+                            <span class="badge bg-warning">{{agent.silo.silo_type}}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Tools and MCPs -->
+                {% if agent.tool_associations or agent.mcp_associations %}
+                <div class="mb-3">
+                    <h6 class="text-primary mb-2"><i class="fas fa-tools"></i> Tools & MCPs</h6>
+                    {% if agent.tool_associations %}
+                    <div class="mb-2">
+                        <p class="mb-1"><strong>Tools ({{agent.tool_associations|length}}):</strong></p>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for tool_assoc in agent.tool_associations %}
+                            <span class="badge bg-success small">{{tool_assoc.tool.name}}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if agent.mcp_associations %}
+                    <div class="mb-2">
+                        <p class="mb-1"><strong>MCPs ({{agent.mcp_associations|length}}):</strong></p>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for mcp_assoc in agent.mcp_associations %}
+                            <span class="badge bg-info small">{{mcp_assoc.mcp.name}}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- File Attachments Card -->
         <div class="card shadow">
             <div class="card-header border-bottom">
                 <h6 class="mb-0">
@@ -199,6 +317,16 @@
 
 </div>
 
+<!-- Hidden input for filter fields data -->
+{% if agent.silo and agent.silo.metadata_definition %}
+<input type="hidden" id="filterFieldsData" value='[
+    {% for field in agent.silo.metadata_definition.fields %}
+    {"name": "{{ field.name }}", "type": "{{ field.type }}", "description": "{{ field.description }}"}
+    {%- if not loop.last %},{% endif -%}
+    {% endfor %}
+]'>
+{% endif %}
+
 <script>
     // Configuration variables for the playground
     var appId = '{{app_id}}';
@@ -206,19 +334,33 @@
     var agentName = '{{agent.name}}';
     
     // Filter fields configuration (if available)
-    {% if agent.silo and agent.silo.metadata_definition %}
-    var filterFields = [
-        {% for field in agent.silo.metadata_definition.fields %}
-        {
-            name: '{{ field.name }}',
-            type: '{{ field.type }}',
-            description: '{{ field.description }}'
-        }{% if not loop.last %},{% endif %}
-        {% endfor %}
-    ];
-    {% else %}
     var filterFields = [];
-    {% endif %}
+    var filterFieldsInput = document.getElementById('filterFieldsData');
+    if (filterFieldsInput) {
+        try {
+            filterFields = JSON.parse(filterFieldsInput.value);
+        } catch (e) {
+            console.warn('Failed to parse filter fields data:', e);
+        }
+    }
+
+    // Handle metadata filter collapse animation
+    document.addEventListener('DOMContentLoaded', function() {
+        const metadataFilterCollapse = document.getElementById('metadataFilterCollapse');
+        const chevronIcon = document.querySelector('[data-bs-target="#metadataFilterCollapse"] .fas.fa-chevron-down');
+        
+        if (metadataFilterCollapse && chevronIcon) {
+            metadataFilterCollapse.addEventListener('show.bs.collapse', function() {
+                chevronIcon.style.transform = 'rotate(180deg)';
+                chevronIcon.style.transition = 'transform 0.3s ease';
+            });
+            
+            metadataFilterCollapse.addEventListener('hide.bs.collapse', function() {
+                chevronIcon.style.transform = 'rotate(0deg)';
+                chevronIcon.style.transition = 'transform 0.3s ease';
+            });
+        }
+    });
 </script>
 
 <div class="modal fade" id="systemPromptModal" tabindex="-1">
