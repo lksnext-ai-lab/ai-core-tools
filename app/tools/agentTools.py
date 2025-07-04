@@ -5,8 +5,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from model.agent import Agent
 from model.silo import Silo
-from langchain_core.prompts import ChatPromptTemplate
-
+from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
 import os
 from tools.outputParserTools import get_parser_model_by_id
@@ -256,5 +255,6 @@ def get_retriever_tool(silo: Silo, search_params=None):
         else:
             description = f"Use this tool to search for documents in a repository about {silo.description}"
         
-        return  create_retriever_tool(retriever, name=name, description=description)
+        prompt = PromptTemplate.from_template("This is the content of the chunk {page_content} that has been taken from document {name} from page {page}.")
+        return  create_retriever_tool(retriever=retriever, name=name, description=description, document_prompt=prompt)
     return None
