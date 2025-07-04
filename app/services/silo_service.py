@@ -333,7 +333,9 @@ class SiloService:
             # Store relative path instead of absolute path for portability
             doc.metadata["ref"] = os.path.join(str(resource.repository_id), resource.uri)
             doc.metadata["file_type"] = file_extension
-            doc.metadata["page"] = doc.metadata["page"] + 1 
+            # Only add page number if it exists (PDFs have page metadata, DOCX/TXT don't)
+            if "page" in doc.metadata:
+                doc.metadata["page"] = doc.metadata["page"] + 1
 
         pg_vector_tools = PGVectorTools(db)
         embedding_service = resource.repository.silo.embedding_service
