@@ -261,6 +261,9 @@ def get_retriever_tool(silo: Silo, search_params=None):
         else:
             description = f"Use this tool to search for documents in a repository about {silo.description}"
         
-        prompt = PromptTemplate.from_template("This is the content of the chunk {page_content} that has been taken from document {name} from page {page}.")
+        prompt = PromptTemplate.from_template("""Name of the document: {name}\n
+        Page number: {page}\n
+        Page content: {page_content}
+        """)
         return  create_retriever_tool(retriever=retriever, name=name, description=description, document_prompt=prompt)
     return None
