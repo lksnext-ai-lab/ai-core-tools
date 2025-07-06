@@ -14,8 +14,10 @@ class AgentUtils:
     async def get_or_create_agent(agent, search_params=None):
         """Helper function to get cached agent or create new one."""
         agent_x = None
-        if agent.has_memory:
-            agent_x = AgentCacheService.get_cached_agent(agent.agent_id)
+        
+        '''if agent.has_memory:
+           agent_x = AgentCacheService.get_cached_agent(agent.agent_id)
+        '''
         
         if agent_x is None:
             logger.info("Creating new agent instance")

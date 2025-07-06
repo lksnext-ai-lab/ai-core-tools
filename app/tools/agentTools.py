@@ -153,7 +153,7 @@ async def create_agent(agent: Agent, search_params=None):
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
-    
+
     return agent_chain
 
 

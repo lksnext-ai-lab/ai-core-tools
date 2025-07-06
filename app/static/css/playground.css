@@ -34,12 +34,7 @@
     border-bottom: none;
 }
 
-/* Right column sticky positioning */
-.col-4 .card {
-    position: sticky;
-    top: 20px;
-}
-
+/* Right column styling - removed sticky positioning */
 .col-4 .list-group-item {
     font-size: 0.875rem;
 }
@@ -65,11 +60,6 @@
 
 /* Responsive adjustments for mobile */
 @media (max-width: 768px) {
-    .col-4 .card {
-        position: static;
-        margin-top: 1rem;
-    }
-    
     .file-upload-area:hover {
         transform: none;
     }

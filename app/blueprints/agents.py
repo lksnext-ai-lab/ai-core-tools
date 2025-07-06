@@ -1,4 +1,4 @@
-from flask import render_template, Blueprint, request
+from flask import render_template, Blueprint, request, jsonify
 from flask_login import login_required
 from model.silo import Silo
 from model.agent import Agent
@@ -108,3 +108,52 @@ def app_agent_analytics(app_id: int, agent_id: int, app=None):
 def app_ocr_playground(app_id: int, agent_id: int, app=None):
     agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == int(agent_id)).first()
     return render_template('agents/ocr_playground.html', app_id=app_id, agent=agent)
+
+@agents_blueprint.route('/agents/<int:agent_id>/update-prompt', methods=['POST'])
+@login_required
+def update_agent_prompt(agent_id: int):
+    """Update agent system prompt or prompt template via API"""
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        prompt_type = data.get('type')
+        new_prompt = data.get('prompt')
+        
+        if not prompt_type or not new_prompt:
+            return jsonify({'success': False, 'error': 'Missing type or prompt data'}), 400
+        
+        if prompt_type not in ['system', 'template']:
+            return jsonify({'success': False, 'error': 'Invalid prompt type'}), 400
+        
+        # Get agent
+        agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
+        if not agent:
+            return jsonify({'success': False, 'error': 'Agent not found'}), 404
+        
+        # Update the appropriate prompt
+        if prompt_type == 'system':
+            agent.system_prompt = new_prompt
+        elif prompt_type == 'template':
+            agent.prompt_template = new_prompt
+        
+        # Save changes
+        db.session.commit()
+        
+        # Invalidate agent cache
+        AgentCacheService.invalidate_agent(agent_id)
+        
+        logger.info(f"Updated {prompt_type} prompt for agent {agent_id}")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'{prompt_type.capitalize()} prompt updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating prompt for agent {agent_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+

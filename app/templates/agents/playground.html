@@ -18,12 +18,16 @@
                     <div class="col-6 mb-3">
                         <h6 class="text-primary mb-2"><i class="fas fa-terminal"></i> System Prompt</h6>
                         <div class="d-flex align-items-center">
-                            <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                            <p class="h6 fw-normal mb-0 text-truncate" id="systemPromptPreview" style="max-width: 400px;">
                                 {{agent.system_prompt}}</p>
-                            <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
-                                data-bs-target="#systemPromptModal">
-                                <i class="fas fa-expand"></i>
-                            </button>
+                            <div class="ms-2">
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#systemPromptModal">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="resetSystemPrompt()">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -31,12 +35,16 @@
                     <div class="col-6 mb-3">
                         <h6 class="text-primary mb-2"><i class="fas fa-file-code"></i> Prompt Template</h6>
                         <div class="d-flex align-items-center">
-                            <p class="h6 fw-normal mb-0 text-truncate" style="max-width: 500px;">
+                            <p class="h6 fw-normal mb-0 text-truncate" id="promptTemplatePreview" style="max-width: 400px;">
                                 {{agent.prompt_template}}</p>
-                            <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal"
-                                data-bs-target="#promptTemplateModal">
-                                <i class="fas fa-expand"></i>
-                            </button>
+                            <div class="ms-2">
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#promptTemplateModal">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="resetPromptTemplate()">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -86,8 +94,9 @@
 
             <!-- Card body START -->
             <div class="card-body">
-                <div>
-                    <div class="bg-light border border-secondary border-opacity-25 p-3 rounded mt-3" id="reference">
+                <!-- Conversation History -->
+                <div class="mb-3">
+                    <div class="bg-light border border-secondary border-opacity-25 p-3 rounded" id="referenece">
                         <!-- Avatar -->
                         <div class="d-flex align-items-center">
                             <div class="avatar avatar-xs flex-shrink-0">
@@ -344,6 +353,10 @@
         }
     }
 
+    // Store original prompts for reset functionality
+    var originalSystemPrompt = '{{agent.system_prompt}}';
+    var originalPromptTemplate = '{{agent.prompt_template}}';
+
     // Handle metadata filter collapse animation
     document.addEventListener('DOMContentLoaded', function() {
         const metadataFilterCollapse = document.getElementById('metadataFilterCollapse');
@@ -360,18 +373,196 @@
                 chevronIcon.style.transition = 'transform 0.3s ease';
             });
         }
+
+        // Handle prompt editing
+        setupPromptEditing();
     });
+
+    // Setup prompt editing functionality
+    function setupPromptEditing() {
+        // System Prompt Save
+        document.getElementById('saveSystemPrompt').addEventListener('click', function() {
+            saveSystemPrompt();
+        });
+
+        // Prompt Template Save
+        document.getElementById('savePromptTemplate').addEventListener('click', function() {
+            savePromptTemplate();
+        });
+    }
+
+    // Save System Prompt
+    function saveSystemPrompt() {
+        const newPrompt = document.getElementById('systemPromptEditor').value;
+        const saveBtn = document.getElementById('saveSystemPrompt');
+        const originalText = saveBtn.innerHTML;
+        
+        // Show loading state
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        saveBtn.disabled = true;
+        
+        fetch(`/agents/${agentId}/update-prompt`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({
+                type: 'system',
+                prompt: newPrompt
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the displayed prompt
+                document.getElementById('systemPromptPreview').textContent = newPrompt;
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('systemPromptModal')).hide();
+                // Show success message
+                showToast('System prompt updated successfully!', 'success');
+            } else {
+                showToast(data.error || 'Failed to update system prompt', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('An error occurred while saving the prompt', 'error');
+        })
+        .finally(() => {
+            // Reset button state
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        });
+    }
+
+    // Save Prompt Template
+    function savePromptTemplate() {
+        const newTemplate = document.getElementById('promptTemplateEditor').value;
+        const saveBtn = document.getElementById('savePromptTemplate');
+        const originalText = saveBtn.innerHTML;
+        
+        // Show loading state
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        saveBtn.disabled = true;
+        
+        fetch(`/agents/${agentId}/update-prompt`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({
+                type: 'template',
+                prompt: newTemplate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the displayed prompt
+                document.getElementById('promptTemplatePreview').textContent = newTemplate;
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('promptTemplateModal')).hide();
+                // Show success message
+                showToast('Prompt template updated successfully!', 'success');
+            } else {
+                showToast(data.error || 'Failed to update prompt template', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('An error occurred while saving the template', 'error');
+        })
+        .finally(() => {
+            // Reset button state
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        });
+    }
+
+    // Reset System Prompt
+    function resetSystemPrompt() {
+        if (confirm('Are you sure you want to reset the system prompt to its original value?')) {
+            document.getElementById('systemPromptPreview').textContent = originalSystemPrompt;
+            showToast('System prompt reset to original value', 'info');
+        }
+    }
+
+    // Reset Prompt Template
+    function resetPromptTemplate() {
+        if (confirm('Are you sure you want to reset the prompt template to its original value?')) {
+            document.getElementById('promptTemplatePreview').textContent = originalPromptTemplate;
+            showToast('Prompt template reset to original value', 'info');
+        }
+    }
+
+    // Toast notification function
+    function showToast(message, type = 'info') {
+        // Create toast element
+        const toastHtml = `
+            <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        // Add to page
+        const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        
+        // Show toast
+        const toastElement = toastContainer.lastElementChild;
+        const toast = new bootstrap.Toast(toastElement);
+        toast.show();
+        
+        // Remove after hidden
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
+
+    // Create toast container if it doesn't exist
+    function createToastContainer() {
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '9999';
+        document.body.appendChild(container);
+        return container;
+    }
+
+
 </script>
 
 <div class="modal fade" id="systemPromptModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">System Prompt</h5>
+                <h5 class="modal-title">Edit System Prompt</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <pre class="bg-light p-3 rounded"><code>{{agent.system_prompt}}</code></pre>
+                <div class="mb-3">
+                    <label for="systemPromptEditor" class="form-label">System Prompt</label>
+                    <textarea id="systemPromptEditor" class="form-control" rows="12" placeholder="Enter the system prompt...">{{agent.system_prompt}}</textarea>
+                    <div class="form-text">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i> 
+                            This prompt defines the agent's behavior and capabilities.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSystemPrompt">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
             </div>
         </div>
     </div>
@@ -381,11 +572,26 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Prompt Template</h5>
+                <h5 class="modal-title">Edit Prompt Template</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <pre class="bg-light p-3 rounded"><code>{{agent.prompt_template}}</code></pre>
+                <div class="mb-3">
+                    <label for="promptTemplateEditor" class="form-label">Prompt Template</label>
+                    <textarea id="promptTemplateEditor" class="form-control" rows="12" placeholder="Enter the prompt template...">{{agent.prompt_template}}</textarea>
+                    <div class="form-text">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i> 
+                            This template defines how user input is formatted before sending to the AI.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="savePromptTemplate">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
             </div>
         </div>
     </div>
