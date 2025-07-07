@@ -62,26 +62,16 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: AICT_MODE
+            - name: AICT_OMNIADMINS
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: AICT_OMNIADMINS
             - name: GOOGLE_DISCOVERY_URL
               valueFrom:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: GOOGLE_DISCOVERY_URL
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: ia-core-tools-api-secret-test
-                  key: OPENAI_API_KEY
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: ia-core-tools-api-secret-test
-                  key: ANTHROPIC_API_KEY
-            - name: MISTRAL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: ia-core-tools-api-secret-test
-                  key: MISTRAL_API_KEY
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:

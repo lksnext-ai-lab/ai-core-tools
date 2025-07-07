@@ -17,8 +17,6 @@ load_dotenv()
 
 INFORMATION_EXTRACTION_SYSTEM_PROMPT = "Extract all information from this image and return it ONLY as a JSON object."
 IMAGES_PATH = os.getenv("IMAGES_PATH")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
 
 def cargar_pdf(ruta_archivo):
     """Wrapper function for backward compatibility."""
