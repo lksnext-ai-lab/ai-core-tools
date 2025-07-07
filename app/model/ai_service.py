@@ -8,8 +8,7 @@ class ProviderEnum(enum.Enum):
     Anthropic = "Anthropic" 
     MistralAI = "MistralAI"
     Azure = "Azure"
-    Ollama = "Ollama"
-    HuggingFace = "HuggingFace"
+    Custom = "Custom"
 
 class AIService(BaseService):
     __tablename__ = 'AIService'
