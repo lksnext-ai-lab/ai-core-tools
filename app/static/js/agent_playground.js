@@ -10,6 +10,171 @@ const fileInput = document.getElementById('fileInput');
 const attachedFilesSection = document.getElementById('attachedFilesSection');
 const attachedFilesList = document.getElementById('attachedFilesList');
 
+// === Playground Config from data-* attributes ===
+const conversationContainer = document.querySelector('.conversation-container');
+const appId = conversationContainer.dataset.appId;
+const agentId = conversationContainer.dataset.agentId;
+const agentName = conversationContainer.dataset.agentName;
+
+// === Metadata Filter Collapse Animation ===
+document.addEventListener('DOMContentLoaded', function() {
+    const metadataFilterCollapse = document.getElementById('metadataFilterCollapse');
+    const chevronIcon = document.querySelector('[data-bs-target="#metadataFilterCollapse"] .fas.fa-chevron-down');
+    if (metadataFilterCollapse && chevronIcon) {
+        metadataFilterCollapse.addEventListener('show.bs.collapse', function() {
+            chevronIcon.style.transform = 'rotate(180deg)';
+            chevronIcon.style.transition = 'transform 0.3s ease';
+        });
+        metadataFilterCollapse.addEventListener('hide.bs.collapse', function() {
+            chevronIcon.style.transform = 'rotate(0deg)';
+            chevronIcon.style.transition = 'transform 0.3s ease';
+        });
+    }
+});
+
+// === Prompt Editing Logic ===
+window.saveSystemPrompt = function() {
+    const newPrompt = document.getElementById('systemPromptEditor').value;
+    const saveBtn = event.target;
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+    fetch(`/agents/${agentId}/update-prompt`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({ type: 'system', prompt: newPrompt })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('systemPromptPreview').textContent = newPrompt;
+            bootstrap.Modal.getInstance(document.getElementById('systemPromptModal')).hide();
+            showToast('System prompt updated successfully!', 'success');
+            resetConversation();
+        } else {
+            showToast(data.error || 'Failed to update system prompt', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while saving the prompt', 'error');
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+window.savePromptTemplate = function() {
+    const newTemplate = document.getElementById('promptTemplateEditor').value;
+    const saveBtn = event.target;
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+    fetch(`/agents/${agentId}/update-prompt`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({ type: 'template', prompt: newTemplate })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('promptTemplatePreview').textContent = newTemplate;
+            bootstrap.Modal.getInstance(document.getElementById('promptTemplateModal')).hide();
+            showToast('Prompt template updated successfully!', 'success');
+            resetConversation();
+        } else {
+            showToast(data.error || 'Failed to update prompt template', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while saving the template', 'error');
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+// === Toast Notification Logic ===
+function showToast(message, type = 'info') {
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
+}
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
+}
+
+// === Reset Conversation Logic ===
+function resetConversation() {
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) resetBtn.disabled = true;
+    fetch('/api/app/' + appId + '/reset/' + agentId, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('Failed to reset conversation');
+        return response.json();
+    })
+    .then(data => {
+        // Remove all conversation messages
+        document.querySelectorAll('.conversation-message').forEach(el => el.remove());
+        // Clear attached files if the function exists
+        if (typeof attachedFiles !== 'undefined') {
+            attachedFiles.clear();
+            const attachedFilesList = document.getElementById('attachedFilesList');
+            if (attachedFilesList) attachedFilesList.innerHTML = '';
+            if (typeof updateAttachedFilesVisibility === 'function') updateAttachedFilesVisibility();
+        }
+        // Show success message
+        const successDiv = createMessageElement('agent', 'System', '<div class="text-success">Conversation reset due to prompt changes</div>');
+        successDiv.attr('id', 'success-reset');
+        document.querySelector('.conversation-container').appendChild(successDiv[0]);
+        var container = document.querySelector('.conversation-container');
+        if (container) container.scrollTop = container.scrollHeight;
+        setTimeout(() => {
+            if (successDiv[0].parentNode) successDiv[0].parentNode.removeChild(successDiv[0]);
+        }, 3000);
+    })
+    .catch(error => {
+        console.error('Error resetting conversation:', error);
+        showToast('Failed to reset conversation. Please try again.', 'error');
+    })
+    .finally(() => {
+        if (resetBtn) resetBtn.disabled = false;
+    });
+}
+
 // Drag and drop functionality
 fileUploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();

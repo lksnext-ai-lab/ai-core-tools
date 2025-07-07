@@ -65,7 +65,11 @@
     }
 }
 
-/* Chat/Conversation Styles */
+/* Chat/Conversation Styles
+   These styles are for the dynamic chat interface in the playground. 
+   All message bubbles, avatars, and conversation container styles are here. 
+   (No longer using #referenece, #ref-name, #ref-text, or .user-message classes.)
+*/
 .conversation-container {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
 }
@@ -147,22 +151,6 @@
 
 .message-content p:last-child {
     margin-bottom: 0;
-}
-
-/* User message styling */
-.user-message {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.user-message .message-avatar {
-    order: 2;
-    margin-left: 0.75rem;
-    margin-right: 0;
-}
-
-.user-message .message-bubble {
-    order: 1;
 }
 
 /* Input area styling */
