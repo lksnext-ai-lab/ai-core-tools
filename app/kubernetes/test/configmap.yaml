@@ -12,3 +12,4 @@ data:
   LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com" 
   REPO_BASE_FOLDER: "/app/repositories/"
   AICT_MODE: "SELF-HOSTED"
+  AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com"
