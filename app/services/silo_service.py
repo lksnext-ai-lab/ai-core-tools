@@ -37,7 +37,7 @@ class SiloService:
         return db.session.query(Silo).filter(Silo.silo_id == silo_id).first()
     
     @staticmethod
-    def get_silo_retriever(silo_id: int, search_params=None) -> Optional[VectorStoreRetriever]:
+    def get_silo_retriever(silo_id: int, search_params=None, **kwargs) -> Optional[VectorStoreRetriever]:
         """
         Get retriever for a silo with its corresponding embedding service
         
@@ -67,7 +67,9 @@ class SiloService:
         try:
             pg_vector_tools = PGVectorTools(db)
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, search_params)
+            #TODO: make k configurable for a silo, or maybe configurable in the relationship of the silo with the agent
+            keywords = {'search_kwargs': {'k': 30}}
+            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, search_params, **keywords)
         except Exception as e:
             logger.error(f"Failed to create retriever for silo {silo_id}: {str(e)}", exc_info=True)
             raise

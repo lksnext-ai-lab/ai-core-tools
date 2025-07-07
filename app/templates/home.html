@@ -262,10 +262,8 @@
         <tr>
             <td>
                 <a href="{{ url_for('app_index', app_id=app.app_id ) }}">{{app.name}}</a>
-                {% if user_role == 'owner' or (user_role is defined and user_role.value == 'owner') %}
-                    <span class="badge bg-primary ms-2">Owner</span>
-                {% elif user_role == 'editor' or (user_role is defined and user_role.value == 'editor') %}
-                    <span class="badge bg-info ms-2">Collaborator</span>
+                {% if user_role != 'owner' and (user_role is not defined or user_role.value != 'owner') %}
+                    <span class="badge bg-secondary ms-2">{{ app.owner.name if app.owner else 'Unknown' }}</span>
                 {% endif %}
             </td>
             <td>

@@ -548,8 +548,29 @@ document.addEventListener('DOMContentLoaded', function() {
                                data.metadata.attachment_count + ' file(s) processed</small>';
             }
             
-            // Render markdown to HTML
-            var htmlContent = marked.parse(responseText);
+            // If it's an object, convert to JSON string, otherwise try markdown
+            var htmlContent;
+            var textToProcess;
+            
+            if (responseText && typeof responseText === 'object') {
+                textToProcess = JSON.stringify(responseText, null, 2);
+            } else {
+                textToProcess = String(responseText || '');
+            }
+            
+            try {
+                htmlContent = marked.parse(textToProcess);
+            } catch (error) {
+                console.warn('Markdown parsing failed, using plain text:', error);
+                // Escape HTML to prevent XSS and preserve formatting
+                htmlContent = textToProcess
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/\n/g, '<br>');
+            }
             var respDiv = createMessageElement('agent', agentName, htmlContent);
             respDiv.attr('id', 'referenece-' + cont);
             cont++;

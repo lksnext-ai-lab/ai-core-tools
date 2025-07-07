@@ -159,7 +159,7 @@ class PGVectorTools:
             )
         return results
     
-    def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None):
+    def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None, **kwargs):
         """Returns a retriever object for the pgvector collection."""
         vector_store = PGVector(
             embeddings=get_embeddings_model(embedding_service),
@@ -167,9 +167,10 @@ class PGVectorTools:
             connection=self._async_engine,
             use_jsonb=True,
             async_mode=True
+
         )
         if search_params is not None:
-            return vector_store.as_retriever(search_kwargs=search_params)
-        return vector_store.as_retriever()
+            return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
+        return vector_store.as_retriever(**kwargs)
 
 
