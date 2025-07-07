@@ -2,13 +2,14 @@ import os
 from flask import current_app, request
 from extensions import db
 from model.agent import Agent
-from api.shared.agent_utils import AgentUtils
+from tools.agentTools import create_agent, prepare_agent_config, parse_agent_response, setup_tracer
 from api.shared.session_utils import SessionUtils
 from api.files.utils import FileUtils
 from api.files.service import FileService
 from tools.agentTools import MCPClientManager
 from utils.logger import get_logger
 from utils.error_handlers import safe_execute
+from services.agent_cache_service import CheckpointerCacheService
 
 logger = get_logger(__name__)
 
@@ -22,11 +23,11 @@ class ChatService:
         try:
             logger.info(f"Processing agent request with attachments for agent {agent.agent_id}: {question[:50]}...")
             
-            # Get or create agent instance
-            agent_x = await AgentUtils.get_or_create_agent(agent, search_params)
+            # Create agent instance
+            agent_x = await create_agent(agent, search_params)
             
             # Prepare configuration
-            config = AgentUtils.prepare_agent_config(agent, tracer)
+            config = prepare_agent_config(agent, tracer)
             
             # Prepare message content
             message_content = question
@@ -64,7 +65,7 @@ class ChatService:
             response_text = final_message.content if final_message else str(result)
             
             # Parse response
-            parsed_response = AgentUtils.parse_agent_response(response_text, agent)
+            parsed_response = parse_agent_response(response_text, agent)
             
             # Clean up base64 attachment file if it was created
             if attachment_path and os.path.exists(attachment_path):
@@ -141,8 +142,7 @@ class ChatService:
                 logger.warning(f"Error clearing attached files during reset: {e}")
             
             # Clear the agent from cache
-            from services.agent_cache_service import AgentCacheService
-            AgentCacheService.invalidate_agent(agent_id)
+            CheckpointerCacheService.invalidate_checkpointer(agent_id)
             
             logger.info(f"Reset conversation, cleared cache and files for agent {agent_id}")
             return {"status": "success", "message": "Conversation reset successfully"}

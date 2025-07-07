@@ -160,3 +160,5 @@ class AgentService:
         # Delete all tool associations where this agent is used as a tool
         db.session.query(AgentTool).filter(AgentTool.tool_id == tool_id).delete()
         db.session.commit()
+
+

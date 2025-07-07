@@ -10,6 +10,171 @@ const fileInput = document.getElementById('fileInput');
 const attachedFilesSection = document.getElementById('attachedFilesSection');
 const attachedFilesList = document.getElementById('attachedFilesList');
 
+// === Playground Config from data-* attributes ===
+const conversationContainer = document.querySelector('.conversation-container');
+const appId = conversationContainer.dataset.appId;
+const agentId = conversationContainer.dataset.agentId;
+const agentName = conversationContainer.dataset.agentName;
+
+// === Metadata Filter Collapse Animation ===
+document.addEventListener('DOMContentLoaded', function() {
+    const metadataFilterCollapse = document.getElementById('metadataFilterCollapse');
+    const chevronIcon = document.querySelector('[data-bs-target="#metadataFilterCollapse"] .fas.fa-chevron-down');
+    if (metadataFilterCollapse && chevronIcon) {
+        metadataFilterCollapse.addEventListener('show.bs.collapse', function() {
+            chevronIcon.style.transform = 'rotate(180deg)';
+            chevronIcon.style.transition = 'transform 0.3s ease';
+        });
+        metadataFilterCollapse.addEventListener('hide.bs.collapse', function() {
+            chevronIcon.style.transform = 'rotate(0deg)';
+            chevronIcon.style.transition = 'transform 0.3s ease';
+        });
+    }
+});
+
+// === Prompt Editing Logic ===
+window.saveSystemPrompt = function() {
+    const newPrompt = document.getElementById('systemPromptEditor').value;
+    const saveBtn = event.target;
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+    fetch(`/agents/${agentId}/update-prompt`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({ type: 'system', prompt: newPrompt })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('systemPromptPreview').textContent = newPrompt;
+            bootstrap.Modal.getInstance(document.getElementById('systemPromptModal')).hide();
+            showToast('System prompt updated successfully!', 'success');
+            resetConversation();
+        } else {
+            showToast(data.error || 'Failed to update system prompt', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while saving the prompt', 'error');
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+window.savePromptTemplate = function() {
+    const newTemplate = document.getElementById('promptTemplateEditor').value;
+    const saveBtn = event.target;
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+    fetch(`/agents/${agentId}/update-prompt`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({ type: 'template', prompt: newTemplate })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('promptTemplatePreview').textContent = newTemplate;
+            bootstrap.Modal.getInstance(document.getElementById('promptTemplateModal')).hide();
+            showToast('Prompt template updated successfully!', 'success');
+            resetConversation();
+        } else {
+            showToast(data.error || 'Failed to update prompt template', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while saving the template', 'error');
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+// === Toast Notification Logic ===
+function showToast(message, type = 'info') {
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
+}
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
+}
+
+// === Reset Conversation Logic ===
+function resetConversation() {
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) resetBtn.disabled = true;
+    fetch('/api/app/' + appId + '/reset/' + agentId, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('Failed to reset conversation');
+        return response.json();
+    })
+    .then(data => {
+        // Remove all conversation messages
+        document.querySelectorAll('.conversation-message').forEach(el => el.remove());
+        // Clear attached files if the function exists
+        if (typeof attachedFiles !== 'undefined') {
+            attachedFiles.clear();
+            const attachedFilesList = document.getElementById('attachedFilesList');
+            if (attachedFilesList) attachedFilesList.innerHTML = '';
+            if (typeof updateAttachedFilesVisibility === 'function') updateAttachedFilesVisibility();
+        }
+        // Show success message
+        const successDiv = createMessageElement('agent', 'System', '<div class="text-success">Conversation reset due to prompt changes</div>');
+        successDiv.attr('id', 'success-reset');
+        document.querySelector('.conversation-container').appendChild(successDiv[0]);
+        var container = document.querySelector('.conversation-container');
+        if (container) container.scrollTop = container.scrollHeight;
+        setTimeout(() => {
+            if (successDiv[0].parentNode) successDiv[0].parentNode.removeChild(successDiv[0]);
+        }, 3000);
+    })
+    .catch(error => {
+        console.error('Error resetting conversation:', error);
+        showToast('Failed to reset conversation. Please try again.', 'error');
+    })
+    .finally(() => {
+        if (resetBtn) resetBtn.disabled = false;
+    });
+}
+
 // Drag and drop functionality
 fileUploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -202,6 +367,45 @@ function loadAttachedFiles() {
     });
 }
 
+// Function to create message elements with new styling
+function createMessageElement(type, sender, content, fileCount = 0) {
+    var messageClass = type + '-message';
+    var bubbleClass = type + '-bubble';
+    var avatarSrc = type === 'user' ? '/static/img/user-avatar.png' : '/static/img/mattin-small.png';
+    
+    // Default avatar if user avatar doesn't exist
+    if (type === 'user') {
+        avatarSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiMyOGE3NDUiLz4KPHN2ZyB4PSIxMCIgeT0iMTAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+CjxwYXRoIGQ9Ik0xMiAxMmMyLjIxIDAgNC0xLjc5IDQtNHMtMS43OS00LTQtNC00IDEuNzktNCA0IDEuNzkgNCA0IDR6bTAgMmMtMi42NyAwLTggMS4zNC04IDR2MmgxNnYtMmMwLTIuNjYtNS4zMy00LTgtNHoiLz4KPC9zdmc+Cjwvc3ZnPgo=';
+    }
+    
+    var fileAttachment = '';
+    if (fileCount > 0) {
+        fileAttachment = '<div class="file-attachment"><i class="fas fa-paperclip"></i> ' + fileCount + ' file(s) attached</div>';
+    }
+    
+    var messageHtml = `
+        <div class="conversation-message ${messageClass}">
+            <div class="d-flex align-items-start">
+                <div class="message-avatar me-3">
+                    <img class="rounded-circle" src="${avatarSrc}" alt="avatar" style="width: 40px; height: 40px; object-fit: cover;">
+                </div>
+                <div class="message-bubble ${bubbleClass}">
+                    <div class="message-header">
+                        <span class="message-sender">${sender}</span>
+                        <small class="message-time">${new Date().toLocaleTimeString()}</small>
+                    </div>
+                    <div class="message-content">
+                        ${content}
+                        ${fileAttachment}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return $(messageHtml);
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     // Load files on page load
@@ -238,11 +442,11 @@ document.addEventListener('DOMContentLoaded', function() {
             updateAttachedFilesVisibility();
             
             // Show success message
-            var successDiv = $('#referenece').clone();
+            var successDiv = createMessageElement('agent', 'System', '<div class="text-success">Conversation reset successfully</div>');
             successDiv.attr('id', 'success-' + cont);
-            $('#ref-name', successDiv).text('System');
-            $('#ref-text', successDiv).html('<div class="text-success">Conversation reset successfully</div>');
-            $('#referenece').parent().append(successDiv);
+            $('.conversation-container').append(successDiv);
+            var container = document.querySelector('.conversation-container');
+            if (container) container.scrollTop = container.scrollHeight;
             
             // Remove success message after 3 seconds
             setTimeout(() => {
@@ -258,7 +462,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    $('#send-btn').click(function () {
+    // Function to send message
+    function sendMessage() {
         // Deshabilitar el botón mientras se procesa
         $('#send-btn').prop('disabled', true);
         
@@ -286,27 +491,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Collect file references
         var file_references = Array.from(attachedFiles.keys());
         
-        // Crear y mostrar el div de la pregunta
-        var qDiv = $('#referenece').clone();
+        // Create user message
+        var qDiv = createMessageElement('user', 'You', question, file_references.length);
         qDiv.attr('id', 'referenece-' + cont);
         cont++;
-        $('#ref-name', qDiv).text('You said...');
-        
-        // Add file attachment indicators to the message
-        var messageText = question;
-        if (file_references.length > 0) {
-            messageText += '<br><small class="text-muted"><i class="fas fa-paperclip"></i> ' + 
-                          file_references.length + ' file(s) attached</small>';
-        }
-        $('#ref-text', qDiv).html(messageText);
-        $('#referenece').parent().append(qDiv);
+        $('.conversation-container').append(qDiv);
+        var container = document.querySelector('.conversation-container');
+        if (container) container.scrollTop = container.scrollHeight;
 
-        // Crear y mostrar un div de "loading"
-        var loadingDiv = $('#referenece').clone();
+        // Create loading message
+        var loadingDiv = createMessageElement('loading', agentName, '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Thinking...</div>');
         loadingDiv.attr('id', 'loading-' + cont);
-        $('#ref-name', loadingDiv).text(agentName);
-        $('#ref-text', loadingDiv).html('<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Thinking...</div>');
-        $('#referenece').parent().append(loadingDiv);
+        $('.conversation-container').append(loadingDiv);
+        var container = document.querySelector('.conversation-container');
+        if (container) container.scrollTop = container.scrollHeight;
 
         $("html, body").animate({
             scrollTop: $(document).height() - $(window).height()
@@ -340,15 +538,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            // Eliminar el div de loading
+            // Remove loading message
             loadingDiv.remove();
             
-            // Crear el div de respuesta
-            var respDiv = $('#referenece').clone();
-            respDiv.attr('id', 'referenece-' + cont);
-            cont++;
-            
-            // Add attachment processing info if files were processed
+            // Create response message
             var responseText = data["generated_text"];
             if (data.metadata && data.metadata.attachments_processed) {
                 responseText += '\n\n<small class="text-muted"><i class="fas fa-check"></i> ' + 
@@ -357,28 +550,28 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Render markdown to HTML
             var htmlContent = marked.parse(responseText);
-            $('#ref-text', respDiv).html(htmlContent);
-            $('#referenece').parent().append(respDiv);
-
-            $("html, body").animate({
-                scrollTop: $(document).height() - $(window).height()
-            }, 'slow');
+            var respDiv = createMessageElement('agent', agentName, htmlContent);
+            respDiv.attr('id', 'referenece-' + cont);
+            cont++;
+            $('.conversation-container').append(respDiv);
+            var container = document.querySelector('.conversation-container');
+            if (container) container.scrollTop = container.scrollHeight;
         })
         .catch(error => {
-            // Eliminar el div de loading
+            // Remove loading message
             loadingDiv.remove();
             
-            // Mostrar error en un nuevo div con más detalles
-            var errorDiv = $('#referenece').clone();
-            errorDiv.attr('id', 'error-' + cont);
-            $('#ref-name', errorDiv).text('Error');
-            $('#ref-text', errorDiv).html(`
+            // Show error message
+            var errorDiv = createMessageElement('error', 'Error', `
                 <div class="text-danger">
                     <p><strong>Error:</strong> ${error.message}</p>
                     <p><small>Si el problema persiste, por favor contacte al administrador.</small></p>
                 </div>
             `);
-            $('#referenece').parent().append(errorDiv);
+            errorDiv.attr('id', 'error-' + cont);
+            $('.conversation-container').append(errorDiv);
+            var container = document.querySelector('.conversation-container');
+            if (container) container.scrollTop = container.scrollHeight;
             
             console.error('Error detallado:', error);
         })
@@ -386,5 +579,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // Solo habilitar el botón ya que el input se limpió antes
             $('#send-btn').prop('disabled', false);
         });
+    }
+
+    // Add click handler for send button
+    $('#send-btn').click(sendMessage);
+
+    // Add keyboard event handler for textarea
+    $('#question').keydown(function(e) {
+        if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
+            e.preventDefault(); // Prevent default Enter behavior
+            sendMessage();
+        }
+        // Ctrl+Enter or Shift+Enter will add new line (default behavior)
     });
 }); 

@@ -18,9 +18,14 @@ from model.ai_service import ProviderEnum
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
+from services.agent_cache_service import CheckpointerCacheService
+from langchain.callbacks.tracers import LangChainTracer
+from langsmith import Client
+import json
+from utils.logger import get_logger
 import logging
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MCPClientManager:
     _instance = None
@@ -60,6 +65,7 @@ class MCPClientManager:
             self._client = None
 
 async def create_agent(agent: Agent, search_params=None):
+    """Create a new agent instance with cached checkpointer if memory is enabled."""
     llm = get_llm(agent)
     if llm is None:
         raise ValueError("No LLM found for agent")
@@ -77,11 +83,19 @@ async def create_agent(agent: Agent, search_params=None):
             logger.error(f"Error getting Pydantic model: {str(e)}")
             pydantic_model = None
 
-    # Initialize checkpointer if memory is enabled
+    # Handle checkpointer management for memory-enabled agents
     checkpointer = None
     if agent.has_memory:
-        logger.info("Agent has memory enabled, initializing checkpointer...")
-        checkpointer = InMemorySaver()
+        # Try to get cached checkpointer for this agent and session
+        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id)
+        
+        if checkpointer is None:
+            # Create new checkpointer and cache it
+            checkpointer = InMemorySaver()
+            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer)
+            logger.info("Created and cached new checkpointer for agent")
+        else:
+            logger.info("Using cached checkpointer for agent")
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
         # Get the initial question from config
@@ -153,8 +167,47 @@ async def create_agent(agent: Agent, search_params=None):
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
-    
+
     return agent_chain
+
+
+def prepare_agent_config(agent, tracer):
+    """Helper function to prepare agent configuration."""
+    config = {
+        "configurable": {
+            "thread_id": f"thread_{agent.agent_id}"
+        },
+        "recursion_limit": 200,
+    }
+    if tracer is not None:
+        config["callbacks"] = [tracer]
+    return config
+
+
+def parse_agent_response(response_text, agent):
+    """Helper function to parse agent response."""
+    if agent.output_parser_id is not None:
+        content = response_text.strip()
+        if content.startswith('```json'):
+            content = content[7:]
+        if content.endswith('```'):
+            content = content[:-3]
+        content = content.strip()
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing JSON response: {e}")
+            return response_text
+    return response_text
+
+
+def setup_tracer(agent):
+    """Setup tracer if configured."""
+    tracer = None
+    if agent.app.langsmith_api_key:
+        client = Client(api_key=agent.app.langsmith_api_key)
+        tracer = LangChainTracer(client=client, project_name=agent.app.name)
+    return tracer
 
 
 class IACTTool(BaseTool):

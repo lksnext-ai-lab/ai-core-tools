@@ -1,4 +1,4 @@
-from flask import render_template, Blueprint, request
+from flask import render_template, Blueprint, request, jsonify
 from flask_login import login_required
 from model.silo import Silo
 from model.agent import Agent
@@ -10,7 +10,7 @@ from model.silo import Silo
 from model.mcp_config import MCPConfig
 from extensions import db
 from services.agent_service import AgentService
-from services.agent_cache_service import AgentCacheService
+from services.agent_cache_service import CheckpointerCacheService
 from utils.pricing_decorators import check_usage_limit, require_feature
 from utils.decorators import validate_app_access
 import logging
@@ -68,7 +68,7 @@ def app_agent_post(app_id: int, agent_id: int, app=None):
     agent = agent_service.create_or_update_agent(agent_data, agent_type)
     
     # Invalidate agent cache when updated
-    AgentCacheService.invalidate_agent(agent_id)
+    CheckpointerCacheService.invalidate_checkpointer(agent_id)
 
     # Update tools and MCPs
     agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
@@ -82,7 +82,7 @@ def app_agent_post(app_id: int, agent_id: int, app=None):
 def app_agent_delete(app_id: int, agent_id: int, app=None):
     agent_service = AgentService()
     # Invalidate agent cache when deleted
-    AgentCacheService.invalidate_agent(agent_id)
+    CheckpointerCacheService.invalidate_checkpointer(agent_id)
     agent_service.delete_agent(agent_id)
     return app_agents(app_id)
 
@@ -108,3 +108,52 @@ def app_agent_analytics(app_id: int, agent_id: int, app=None):
 def app_ocr_playground(app_id: int, agent_id: int, app=None):
     agent = db.session.query(OCRAgent).filter(OCRAgent.agent_id == int(agent_id)).first()
     return render_template('agents/ocr_playground.html', app_id=app_id, agent=agent)
+
+@agents_blueprint.route('/agents/<int:agent_id>/update-prompt', methods=['POST'])
+@login_required
+def update_agent_prompt(agent_id: int):
+    """Update agent system prompt or prompt template via API"""
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        prompt_type = data.get('type')
+        new_prompt = data.get('prompt')
+        
+        if not prompt_type or not new_prompt:
+            return jsonify({'success': False, 'error': 'Missing type or prompt data'}), 400
+        
+        if prompt_type not in ['system', 'template']:
+            return jsonify({'success': False, 'error': 'Invalid prompt type'}), 400
+        
+        # Get agent
+        agent = db.session.query(Agent).filter(Agent.agent_id == agent_id).first()
+        if not agent:
+            return jsonify({'success': False, 'error': 'Agent not found'}), 404
+        
+        # Update the appropriate prompt
+        if prompt_type == 'system':
+            agent.system_prompt = new_prompt
+        elif prompt_type == 'template':
+            agent.prompt_template = new_prompt
+        
+        # Save changes
+        db.session.commit()
+        
+        # Invalidate agent cache
+        CheckpointerCacheService.invalidate_checkpointer(agent_id)
+        
+        logger.info(f"Updated {prompt_type} prompt for agent {agent_id}")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'{prompt_type.capitalize()} prompt updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating prompt for agent {agent_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+

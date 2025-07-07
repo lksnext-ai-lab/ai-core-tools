@@ -45,7 +45,7 @@ from api.silo_api import silo_api
 from api.repository_api import repo_api
 from api.resource_api import resource_api
 from authlib.integrations.flask_client import OAuth
-from services.agent_cache_service import AgentCacheService
+from services.agent_cache_service import CheckpointerCacheService
 
 
 load_dotenv()
@@ -340,7 +340,7 @@ def auth_callback():
 @app.route('/logout')
 def logout():
     '''Logout user'''
-    AgentCacheService.invalidate_all()  # Clear agent cache on logout
+    CheckpointerCacheService.invalidate_all()  # Clear checkpointer cache on logout
     session.clear()
     return redirect(url_for('index'))
 
