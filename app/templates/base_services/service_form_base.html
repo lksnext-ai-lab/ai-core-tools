@@ -52,6 +52,13 @@
                            placeholder="e.g. 2024-02-15-preview">
                 </div>
                 
+                <div class="col-md-12 mb-4" id="vast_token_div" style="display: none;">
+                    <label class="form-label">Vast.ai Token</label>
+                    <input type="password" class="form-control" id="vast_token" name="vast_token" 
+                           value="{{ service.vast_token if service else '' }}"
+                           placeholder="Token for Vast.ai authentication">
+                </div>
+                
                 <div class="col-md-12 mb-4">
                     <label class="form-label">API Key</label>
                     <input type="password" class="form-control" id="api_key" name="api_key" 
@@ -73,14 +80,20 @@
 <script>
 document.getElementById('provider').addEventListener('change', function() {
     var apiVersionDiv = document.getElementById('api_version_div');
+    var vastTokenDiv = document.getElementById('vast_token_div');
+    
     apiVersionDiv.style.display = this.value === 'Azure' ? 'block' : 'none';
+    vastTokenDiv.style.display = this.value === 'HuggingFace' ? 'block' : 'none';
 });
 
-// Show API version field on page load if Azure is selected
+// Show fields on page load based on selected provider
 window.addEventListener('load', function() {
     var provider = document.getElementById('provider').value;
     var apiVersionDiv = document.getElementById('api_version_div');
+    var vastTokenDiv = document.getElementById('vast_token_div');
+    
     apiVersionDiv.style.display = provider === 'Azure' ? 'block' : 'none';
+    vastTokenDiv.style.display = provider === 'HuggingFace' ? 'block' : 'none';
 });
 </script>
 

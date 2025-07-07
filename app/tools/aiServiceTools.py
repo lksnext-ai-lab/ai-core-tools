@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_core.retrievers import BaseRetriever
 from langchain.prompts.prompt import PromptTemplate
@@ -183,7 +184,7 @@ def get_llm(agent, is_vision=False):
             mistral_client = Mistral(api_key=ai_service.api_key)
             return MistralWrapper(client=mistral_client, model_name=ai_service.name)
         return ChatMistralAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key)
-    if ai_service.provider == ProviderEnum.Custom.value:
+    if ai_service.provider == ProviderEnum.Ollama.value:
         service = ChatOllama(
             model=ai_service.name, 
             temperature=0,
@@ -205,6 +206,38 @@ def get_llm(agent, is_vision=False):
             endpoint=ai_service.endpoint,
             api_version=ai_service.api_version
         )
+    if ai_service.provider == ProviderEnum.HuggingFace.value:
+        # Importar InferenceClient de huggingface_hub
+        from huggingface_hub import InferenceClient
+        
+        # Crear headers de autenticación para TGI en Vast.ai si hay token
+        headers = None
+        if ai_service.vast_token:
+            headers = {
+                "Authorization": f"Bearer {ai_service.vast_token}"
+            }
+        
+        # Crear InferenceClient personalizado con autenticación de Vast.ai
+        custom_client = InferenceClient(
+            model=ai_service.endpoint,  # URL del endpoint de Vast.ai
+            token=ai_service.api_key,   # Token de HuggingFace Hub
+            headers=headers,            # Headers de autenticación de Vast.ai
+            timeout=120
+        )
+        
+        llm_endpoint = HuggingFaceEndpoint(
+            endpoint_url=ai_service.endpoint,
+            temperature=0,
+            client=custom_client
+        )
+        
+        chat_llm = ChatHuggingFace(
+            llm=llm_endpoint,
+            verbose=True
+        )
+        
+        logger.info(f"HuggingFace service configured for model: {ai_service.name} with Vast.ai authentication")
+        return chat_llm
         
     raise ValueError(f"Proveedor de modelo no soportado: {ai_service.provider}")
 
