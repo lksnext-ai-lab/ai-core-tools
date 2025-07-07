@@ -202,6 +202,45 @@ function loadAttachedFiles() {
     });
 }
 
+// Function to create message elements with new styling
+function createMessageElement(type, sender, content, fileCount = 0) {
+    var messageClass = type + '-message';
+    var bubbleClass = type + '-bubble';
+    var avatarSrc = type === 'user' ? '/static/img/user-avatar.png' : '/static/img/mattin-small.png';
+    
+    // Default avatar if user avatar doesn't exist
+    if (type === 'user') {
+        avatarSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiMyOGE3NDUiLz4KPHN2ZyB4PSIxMCIgeT0iMTAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+CjxwYXRoIGQ9Ik0xMiAxMmMyLjIxIDAgNC0xLjc5IDQtNHMtMS43OS00LTQtNC00IDEuNzktNCA0IDEuNzkgNCA0IDR6bTAgMmMtMi42NyAwLTggMS4zNC04IDR2MmgxNnYtMmMwLTIuNjYtNS4zMy00LTgtNHoiLz4KPC9zdmc+Cjwvc3ZnPgo=';
+    }
+    
+    var fileAttachment = '';
+    if (fileCount > 0) {
+        fileAttachment = '<div class="file-attachment"><i class="fas fa-paperclip"></i> ' + fileCount + ' file(s) attached</div>';
+    }
+    
+    var messageHtml = `
+        <div class="conversation-message ${messageClass}">
+            <div class="d-flex align-items-start">
+                <div class="message-avatar me-3">
+                    <img class="rounded-circle" src="${avatarSrc}" alt="avatar" style="width: 40px; height: 40px; object-fit: cover;">
+                </div>
+                <div class="message-bubble ${bubbleClass}">
+                    <div class="message-header">
+                        <span class="message-sender">${sender}</span>
+                        <small class="message-time">${new Date().toLocaleTimeString()}</small>
+                    </div>
+                    <div class="message-content">
+                        ${content}
+                        ${fileAttachment}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return $(messageHtml);
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     // Load files on page load
@@ -238,11 +277,11 @@ document.addEventListener('DOMContentLoaded', function() {
             updateAttachedFilesVisibility();
             
             // Show success message
-            var successDiv = $('#referenece').clone();
+            var successDiv = createMessageElement('agent', 'System', '<div class="text-success">Conversation reset successfully</div>');
             successDiv.attr('id', 'success-' + cont);
-            $('#ref-name', successDiv).text('System');
-            $('#ref-text', successDiv).html('<div class="text-success">Conversation reset successfully</div>');
-            $('#referenece').parent().append(successDiv);
+            $('.conversation-container').append(successDiv);
+            var container = document.querySelector('.conversation-container');
+            if (container) container.scrollTop = container.scrollHeight;
             
             // Remove success message after 3 seconds
             setTimeout(() => {
@@ -287,27 +326,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Collect file references
         var file_references = Array.from(attachedFiles.keys());
         
-        // Crear y mostrar el div de la pregunta
-        var qDiv = $('#referenece').clone();
+        // Create user message
+        var qDiv = createMessageElement('user', 'You', question, file_references.length);
         qDiv.attr('id', 'referenece-' + cont);
         cont++;
-        $('#ref-name', qDiv).text('You said...');
-        
-        // Add file attachment indicators to the message
-        var messageText = question;
-        if (file_references.length > 0) {
-            messageText += '<br><small class="text-muted"><i class="fas fa-paperclip"></i> ' + 
-                          file_references.length + ' file(s) attached</small>';
-        }
-        $('#ref-text', qDiv).html(messageText);
-        $('#referenece').parent().append(qDiv);
+        $('.conversation-container').append(qDiv);
+        var container = document.querySelector('.conversation-container');
+        if (container) container.scrollTop = container.scrollHeight;
 
-        // Crear y mostrar un div de "loading"
-        var loadingDiv = $('#referenece').clone();
+        // Create loading message
+        var loadingDiv = createMessageElement('loading', agentName, '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Thinking...</div>');
         loadingDiv.attr('id', 'loading-' + cont);
-        $('#ref-name', loadingDiv).text(agentName);
-        $('#ref-text', loadingDiv).html('<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Thinking...</div>');
-        $('#referenece').parent().append(loadingDiv);
+        $('.conversation-container').append(loadingDiv);
+        var container = document.querySelector('.conversation-container');
+        if (container) container.scrollTop = container.scrollHeight;
 
         $("html, body").animate({
             scrollTop: $(document).height() - $(window).height()
@@ -341,15 +373,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            // Eliminar el div de loading
+            // Remove loading message
             loadingDiv.remove();
             
-            // Crear el div de respuesta
-            var respDiv = $('#referenece').clone();
-            respDiv.attr('id', 'referenece-' + cont);
-            cont++;
-            
-            // Add attachment processing info if files were processed
+            // Create response message
             var responseText = data["generated_text"];
             if (data.metadata && data.metadata.attachments_processed) {
                 responseText += '\n\n<small class="text-muted"><i class="fas fa-check"></i> ' + 
@@ -358,28 +385,28 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Render markdown to HTML
             var htmlContent = marked.parse(responseText);
-            $('#ref-text', respDiv).html(htmlContent);
-            $('#referenece').parent().append(respDiv);
-
-            $("html, body").animate({
-                scrollTop: $(document).height() - $(window).height()
-            }, 'slow');
+            var respDiv = createMessageElement('agent', agentName, htmlContent);
+            respDiv.attr('id', 'referenece-' + cont);
+            cont++;
+            $('.conversation-container').append(respDiv);
+            var container = document.querySelector('.conversation-container');
+            if (container) container.scrollTop = container.scrollHeight;
         })
         .catch(error => {
-            // Eliminar el div de loading
+            // Remove loading message
             loadingDiv.remove();
             
-            // Mostrar error en un nuevo div con más detalles
-            var errorDiv = $('#referenece').clone();
-            errorDiv.attr('id', 'error-' + cont);
-            $('#ref-name', errorDiv).text('Error');
-            $('#ref-text', errorDiv).html(`
+            // Show error message
+            var errorDiv = createMessageElement('error', 'Error', `
                 <div class="text-danger">
                     <p><strong>Error:</strong> ${error.message}</p>
                     <p><small>Si el problema persiste, por favor contacte al administrador.</small></p>
                 </div>
             `);
-            $('#referenece').parent().append(errorDiv);
+            errorDiv.attr('id', 'error-' + cont);
+            $('.conversation-container').append(errorDiv);
+            var container = document.querySelector('.conversation-container');
+            if (container) container.scrollTop = container.scrollHeight;
             
             console.error('Error detallado:', error);
         })
