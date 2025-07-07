@@ -4,7 +4,7 @@ from api.pydantic.agent_pydantic import AgentPath, ChatRequest
 from api.chat.service import ChatService
 from api.files.utils import FileUtils
 from api.files.service import FileService
-from api.shared.agent_utils import AgentUtils
+from tools.agentTools import setup_tracer
 from api.shared.session_utils import SessionUtils
 from utils.logger import get_logger
 from utils.error_handlers import ValidationError, NotFoundError
@@ -58,7 +58,7 @@ class ChatRequestHandler:
             ChatService.update_request_count(agent)
             
             # Setup tracer if configured
-            tracer = AgentUtils.setup_tracer(agent)
+            tracer = setup_tracer(agent)
             
             # Process agent request with attachment
             result = current_app.ensure_sync(ChatService.process_agent_request_with_attachments)(
@@ -112,7 +112,7 @@ class ChatRequestHandler:
         ChatService.update_request_count(agent)
         
         # Setup tracer if configured
-        tracer = AgentUtils.setup_tracer(agent)
+        tracer = setup_tracer(agent)
         
         # Process agent request with attachments
         result = current_app.ensure_sync(ChatService.process_agent_request_with_attachments)(
