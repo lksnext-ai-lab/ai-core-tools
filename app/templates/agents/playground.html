@@ -20,14 +20,9 @@
                         <div class="d-flex align-items-center">
                             <p class="h6 fw-normal mb-0 text-truncate" id="systemPromptPreview" style="max-width: 400px;">
                                 {{agent.system_prompt}}</p>
-                            <div class="ms-2">
-                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#systemPromptModal">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="resetSystemPrompt()">
-                                    <i class="fas fa-undo"></i>
-                                </button>
-                            </div>
+                            <button class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#systemPromptModal">
+                                <i class="fas fa-edit"></i>
+                            </button>
                         </div>
                     </div>
 
@@ -37,14 +32,9 @@
                         <div class="d-flex align-items-center">
                             <p class="h6 fw-normal mb-0 text-truncate" id="promptTemplatePreview" style="max-width: 400px;">
                                 {{agent.prompt_template}}</p>
-                            <div class="ms-2">
-                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#promptTemplateModal">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="resetPromptTemplate()">
-                                    <i class="fas fa-undo"></i>
-                                </button>
-                            </div>
+                            <button class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#promptTemplateModal">
+                                <i class="fas fa-edit"></i>
+                            </button>
                         </div>
                     </div>
 
@@ -117,7 +107,7 @@
                 <div class="collapse show" id="collapseComment">
                     
                     <div class="d-flex mt-3">
-                        <textarea id="question" class="form-control mb-0" placeholder="Type your message here..." rows="2"
+                        <textarea id="question" class="form-control mb-0" placeholder="Type your message here... (Enter to send, Ctrl+Enter for new line)" rows="2"
                             spellcheck="false"></textarea>
                         <button id="send-btn" class="btn btn-primary ms-2 px-4 mb-0 flex-shrink-0">
                             <i class="fas fa-paper-plane"></i>
@@ -353,9 +343,7 @@
         }
     }
 
-    // Store original prompts for reset functionality
-    var originalSystemPrompt = '{{agent.system_prompt}}';
-    var originalPromptTemplate = '{{agent.prompt_template}}';
+
 
     // Handle metadata filter collapse animation
     document.addEventListener('DOMContentLoaded', function() {
@@ -374,27 +362,15 @@
             });
         }
 
-        // Handle prompt editing
-        setupPromptEditing();
+
     });
 
-    // Setup prompt editing functionality
-    function setupPromptEditing() {
-        // System Prompt Save
-        document.getElementById('saveSystemPrompt').addEventListener('click', function() {
-            saveSystemPrompt();
-        });
 
-        // Prompt Template Save
-        document.getElementById('savePromptTemplate').addEventListener('click', function() {
-            savePromptTemplate();
-        });
-    }
 
     // Save System Prompt
     function saveSystemPrompt() {
         const newPrompt = document.getElementById('systemPromptEditor').value;
-        const saveBtn = document.getElementById('saveSystemPrompt');
+        const saveBtn = event.target;
         const originalText = saveBtn.innerHTML;
         
         // Show loading state
@@ -421,6 +397,9 @@
                 bootstrap.Modal.getInstance(document.getElementById('systemPromptModal')).hide();
                 // Show success message
                 showToast('System prompt updated successfully!', 'success');
+                
+                // Reset conversation since agent behavior has changed
+                resetConversation();
             } else {
                 showToast(data.error || 'Failed to update system prompt', 'error');
             }
@@ -439,7 +418,7 @@
     // Save Prompt Template
     function savePromptTemplate() {
         const newTemplate = document.getElementById('promptTemplateEditor').value;
-        const saveBtn = document.getElementById('savePromptTemplate');
+        const saveBtn = event.target;
         const originalText = saveBtn.innerHTML;
         
         // Show loading state
@@ -466,6 +445,9 @@
                 bootstrap.Modal.getInstance(document.getElementById('promptTemplateModal')).hide();
                 // Show success message
                 showToast('Prompt template updated successfully!', 'success');
+                
+                // Reset conversation since agent behavior has changed
+                resetConversation();
             } else {
                 showToast(data.error || 'Failed to update prompt template', 'error');
             }
@@ -481,20 +463,74 @@
         });
     }
 
-    // Reset System Prompt
-    function resetSystemPrompt() {
-        if (confirm('Are you sure you want to reset the system prompt to its original value?')) {
-            document.getElementById('systemPromptPreview').textContent = originalSystemPrompt;
-            showToast('System prompt reset to original value', 'info');
+    // Reset conversation function
+    function resetConversation() {
+        // Disable reset button while processing
+        const resetBtn = document.getElementById('reset-btn');
+        if (resetBtn) {
+            resetBtn.disabled = true;
         }
-    }
-
-    // Reset Prompt Template
-    function resetPromptTemplate() {
-        if (confirm('Are you sure you want to reset the prompt template to its original value?')) {
-            document.getElementById('promptTemplatePreview').textContent = originalPromptTemplate;
-            showToast('Prompt template reset to original value', 'info');
-        }
+        
+        fetch('/api/app/' + appId + '/reset/' + agentId, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to reset conversation');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Remove all conversation divs except the initial one
+            document.querySelectorAll('[id^="referenece-"]').forEach(el => el.remove());
+            document.querySelectorAll('[id^="loading-"]').forEach(el => el.remove());
+            document.querySelectorAll('[id^="error-"]').forEach(el => el.remove());
+            
+            // Clear attached files if the function exists
+            if (typeof attachedFiles !== 'undefined') {
+                attachedFiles.clear();
+                const attachedFilesList = document.getElementById('attachedFilesList');
+                if (attachedFilesList) {
+                    attachedFilesList.innerHTML = '';
+                }
+                if (typeof updateAttachedFilesVisibility === 'function') {
+                    updateAttachedFilesVisibility();
+                }
+            }
+            
+            // Show success message
+            const referenceDiv = document.getElementById('referenece');
+            if (referenceDiv) {
+                const successDiv = referenceDiv.cloneNode(true);
+                successDiv.id = 'success-reset';
+                const nameElement = successDiv.querySelector('#ref-name');
+                const textElement = successDiv.querySelector('#ref-text');
+                if (nameElement) nameElement.textContent = 'System';
+                if (textElement) textElement.innerHTML = '<div class="text-success">Conversation reset due to prompt changes</div>';
+                referenceDiv.parentNode.appendChild(successDiv);
+                
+                // Remove success message after 3 seconds
+                setTimeout(() => {
+                    if (successDiv.parentNode) {
+                        successDiv.parentNode.removeChild(successDiv);
+                    }
+                }, 3000);
+            }
+        })
+        .catch(error => {
+            console.error('Error resetting conversation:', error);
+            showToast('Failed to reset conversation. Please try again.', 'error');
+        })
+        .finally(() => {
+            // Re-enable reset button
+            if (resetBtn) {
+                resetBtn.disabled = false;
+            }
+        });
     }
 
     // Toast notification function
@@ -560,7 +596,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveSystemPrompt">
+                <button type="button" class="btn btn-primary" onclick="saveSystemPrompt()">
                     <i class="fas fa-save"></i> Save Changes
                 </button>
             </div>
@@ -589,7 +625,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="savePromptTemplate">
+                <button type="button" class="btn btn-primary" onclick="savePromptTemplate()">
                     <i class="fas fa-save"></i> Save Changes
                 </button>
             </div>

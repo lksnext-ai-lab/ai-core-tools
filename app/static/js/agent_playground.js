@@ -258,7 +258,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    $('#send-btn').click(function () {
+    // Function to send message
+    function sendMessage() {
         // Deshabilitar el botón mientras se procesa
         $('#send-btn').prop('disabled', true);
         
@@ -386,5 +387,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // Solo habilitar el botón ya que el input se limpió antes
             $('#send-btn').prop('disabled', false);
         });
+    }
+
+    // Add click handler for send button
+    $('#send-btn').click(sendMessage);
+
+    // Add keyboard event handler for textarea
+    $('#question').keydown(function(e) {
+        if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
+            e.preventDefault(); // Prevent default Enter behavior
+            sendMessage();
+        }
+        // Ctrl+Enter or Shift+Enter will add new line (default behavior)
     });
 }); 

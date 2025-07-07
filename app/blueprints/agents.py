@@ -10,7 +10,7 @@ from model.silo import Silo
 from model.mcp_config import MCPConfig
 from extensions import db
 from services.agent_service import AgentService
-from services.agent_cache_service import AgentCacheService
+from services.agent_cache_service import CheckpointerCacheService
 from utils.pricing_decorators import check_usage_limit, require_feature
 from utils.decorators import validate_app_access
 import logging
@@ -68,7 +68,7 @@ def app_agent_post(app_id: int, agent_id: int, app=None):
     agent = agent_service.create_or_update_agent(agent_data, agent_type)
     
     # Invalidate agent cache when updated
-    AgentCacheService.invalidate_agent(agent_id)
+    CheckpointerCacheService.invalidate_checkpointer(agent_id)
 
     # Update tools and MCPs
     agent_service.update_agent_tools(agent, request.form.getlist('tool_id'), request.form)
@@ -82,7 +82,7 @@ def app_agent_post(app_id: int, agent_id: int, app=None):
 def app_agent_delete(app_id: int, agent_id: int, app=None):
     agent_service = AgentService()
     # Invalidate agent cache when deleted
-    AgentCacheService.invalidate_agent(agent_id)
+    CheckpointerCacheService.invalidate_checkpointer(agent_id)
     agent_service.delete_agent(agent_id)
     return app_agents(app_id)
 
@@ -143,7 +143,7 @@ def update_agent_prompt(agent_id: int):
         db.session.commit()
         
         # Invalidate agent cache
-        AgentCacheService.invalidate_agent(agent_id)
+        CheckpointerCacheService.invalidate_checkpointer(agent_id)
         
         logger.info(f"Updated {prompt_type} prompt for agent {agent_id}")
         
