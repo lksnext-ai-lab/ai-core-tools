@@ -1,7 +1,7 @@
 // API Service - Think of this like your backend services!
 class ApiService {
   private baseURL = 'http://localhost:8002';
-  private token = 'temp-token-123'; // TODO: Replace with real auth
+  private token = 'temp-token-456'; // TODO: Replace with real auth (trying user_id 1)
 
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseURL}${endpoint}`;
@@ -32,16 +32,16 @@ class ApiService {
     return this.request(`/internal/apps/${appId}`);
   }
 
-  async createApp(data: any) {
-    return this.request('/internal/apps/0', {
+  async createApp(data: { name: string }) {
+    return this.request('/internal/apps/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateApp(appId: number, data: any) {
+  async updateApp(appId: number, data: { name: string }) {
     return this.request(`/internal/apps/${appId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }

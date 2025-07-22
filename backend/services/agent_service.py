@@ -12,6 +12,21 @@ class AgentService:
         finally:
             session.close()
 
+    def get_tool_agents(self, app_id: int, exclude_agent_id: int = None) -> list[Agent]:
+        """Get agents that are marked as tools"""
+        session = SessionLocal()
+        try:
+            query = session.query(Agent).filter(
+                Agent.app_id == app_id,
+                Agent.is_tool == True
+            )
+            if exclude_agent_id:
+                query = query.filter(Agent.agent_id != exclude_agent_id)
+            
+            return query.all()
+        finally:
+            session.close()
+
     @staticmethod
     def get_agent(agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
         session = SessionLocal()

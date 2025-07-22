@@ -10,10 +10,22 @@ security = HTTPBearer(auto_error=False)
 # Placeholder user database (will be replaced with actual Google OAuth + DB lookup)
 TEMP_USERS = {
     "temp-token-123": {
-        "user_id": 1,
+        "user_id": 2,  # Try user_id 2
         "email": "admin@example.com",
         "name": "Admin User",
         "google_id": "temp-google-id"
+    },
+    "temp-token-456": {
+        "user_id": 1,  # Fallback user_id 1
+        "email": "user1@example.com", 
+        "name": "User 1",
+        "google_id": "temp-google-id-1"
+    },
+    "temp-token-789": {
+        "user_id": 3,  # Try user_id 3
+        "email": "user3@example.com",
+        "name": "User 3", 
+        "google_id": "temp-google-id-3"
     }
 }
 

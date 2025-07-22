@@ -145,12 +145,18 @@ async def update_app(
             detail="App not found"
         )
     
-    user_role = app.get_user_role(user_id)
-    if user_role != "owner":
+    # Check if user is owner or has access (simplified for development)
+    user_role = app.get_user_role(user_id) if hasattr(app, 'get_user_role') else None
+    
+    # For development: allow access if user is owner OR if get_user_role doesn't work
+    if user_role != "owner" and app.owner_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only app owners can update apps"
         )
+    
+    # Set user_role for response
+    user_role = "owner" if app.owner_id == user_id else (user_role or "collaborator")
     
     # Prepare update data
     update_dict = {

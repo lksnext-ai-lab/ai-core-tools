@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
+import Modal from '../components/ui/Modal';
+import AppForm from '../components/forms/AppForm';
 
 // Define the App type (like your Pydantic models!)
 interface App {
@@ -15,6 +18,10 @@ function AppsPage() {
   const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
   const [loading, setLoading] = useState(true);          // Like self.loading = True
   const [error, setError] = useState<string | null>(null); // Like self.error = None
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingApp, setEditingApp] = useState<App | null>(null);
 
   // useEffect = runs code when component loads (like __init__ method)
   useEffect(() => {
@@ -48,6 +55,48 @@ function AppsPage() {
     }
   }
 
+  // Handle create/edit app
+  async function handleSaveApp(data: { name: string }) {
+    try {
+      if (editingApp) {
+        // Update existing app
+        const updatedApp = await apiService.updateApp(editingApp.app_id, data);
+        setApps(apps.map(app => 
+          app.app_id === editingApp.app_id ? updatedApp : app
+        ));
+      } else {
+        // Create new app
+        const newApp = await apiService.createApp(data);
+        setApps([...apps, newApp]);
+      }
+      
+      // Close modal and reset state
+      setIsModalOpen(false);
+      setEditingApp(null);
+    } catch (err) {
+      // Error handling is done in the form component
+      throw err;
+    }
+  }
+
+  // Open create modal
+  function handleCreateApp() {
+    setEditingApp(null);
+    setIsModalOpen(true);
+  }
+
+  // Open edit modal
+  function handleEditApp(app: App) {
+    setEditingApp(app);
+    setIsModalOpen(true);
+  }
+
+  // Close modal
+  function handleCloseModal() {
+    setIsModalOpen(false);
+    setEditingApp(null);
+  }
+
   // Render loading state
   if (loading) {
     return (
@@ -74,11 +123,14 @@ function AppsPage() {
 
   // Main render - JSX looks like HTML but it's JavaScript!
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Apps</h1>
-        <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
+        <button 
+          onClick={handleCreateApp}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+        >
           Create App
         </button>
       </div>
@@ -90,7 +142,10 @@ function AppsPage() {
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-xl font-semibold text-gray-900">{app.name}</h3>
               <div className="flex space-x-2">
-                <button className="text-blue-600 hover:text-blue-800">
+                <button 
+                  onClick={() => handleEditApp(app)}
+                  className="text-blue-600 hover:text-blue-800"
+                >
                   Edit
                 </button>
                 <button 
@@ -108,9 +163,12 @@ function AppsPage() {
             </div>
             
             <div className="mt-4">
-              <button className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded">
+              <Link 
+                to={`/apps/${app.app_id}`}
+                className="block w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded text-center"
+              >
                 Manage App
-              </button>
+              </Link>
             </div>
           </div>
         ))}
@@ -120,11 +178,27 @@ function AppsPage() {
       {apps.length === 0 && (
         <div className="text-center py-12">
           <div className="text-gray-500 text-lg mb-4">No apps found</div>
-          <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg">
+          <button 
+            onClick={handleCreateApp}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg"
+          >
             Create Your First App
           </button>
         </div>
       )}
+
+      {/* Create/Edit Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        title={editingApp ? 'Edit App' : 'Create New App'}
+      >
+        <AppForm
+          app={editingApp}
+          onSubmit={handleSaveApp}
+          onCancel={handleCloseModal}
+        />
+      </Modal>
     </div>
   );
 }
