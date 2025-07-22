@@ -280,6 +280,71 @@ class CreateUpdateEmbeddingServiceSchema(BaseModel):
     base_url: Optional[str] = ""
 
 
+# ==================== OUTPUT PARSER SCHEMAS ====================
+
+class OutputParserListItemSchema(BaseModel):
+    """Schema for output parser list items"""
+    parser_id: int
+    name: str
+    type: str
+    created_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OutputParserDetailSchema(BaseModel):
+    """Schema for detailed output parser information"""
+    parser_id: int
+    name: str
+    type: str
+    instructions: str
+    created_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CreateUpdateOutputParserSchema(BaseModel):
+    """Schema for creating or updating an output parser"""
+    name: str
+    type: str = "json"
+    instructions: str = ""
+
+
+# ==================== MCP CONFIG SCHEMAS ====================
+
+class MCPConfigListItemSchema(BaseModel):
+    """Schema for MCP config list items"""
+    config_id: int
+    name: str
+    transport_type: Optional[str]
+    created_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MCPConfigDetailSchema(BaseModel):
+    """Schema for detailed MCP config information"""
+    config_id: int
+    name: str
+    transport_type: Optional[str]
+    command: str
+    args: str
+    env: str
+    created_at: Optional[datetime]
+    available_transport_types: List[Dict[str, Any]]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CreateUpdateMCPConfigSchema(BaseModel):
+    """Schema for creating or updating an MCP config"""
+    name: str
+    transport_type: str
+    command: str = ""
+    args: str = ""
+    env: str = ""
+
+
 # ==================== COMMON RESPONSE SCHEMAS ====================
 
 class MessageResponseSchema(BaseModel):
