@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from models.agent import Agent
+from .agent import Agent
 
 class OCRAgent(Agent):
     __tablename__ = 'OCRAgent'
