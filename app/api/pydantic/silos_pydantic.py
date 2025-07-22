@@ -28,3 +28,6 @@ class CountResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+class FileDocumentIndex(BaseModel):
+    metadata: Optional[dict] = {}

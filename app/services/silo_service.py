@@ -305,39 +305,64 @@ class SiloService:
             raise
 
     @staticmethod
-    def index_resource(resource: Resource):
-        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
-        path = os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
-        
+    def extract_documents_from_file(file_path: str, file_extension: str, base_metadata: dict = None):
+        """
+        Extracts and splits documents from a file, attaching base metadata to each chunk.
+        Args:
+            file_path: Path to the file to extract from
+            file_extension: File extension (e.g., '.pdf', '.docx', '.txt')
+            base_metadata: Metadata dict to attach to each document
+        Returns:
+            List[Document]: List of Document objects
+        """
+        from langchain_core.documents import Document
+        from langchain_text_splitters import CharacterTextSplitter
+        from langchain_community.document_loaders.pdf import PyPDFLoader
+        from langchain_community.document_loaders import Docx2txtLoader, TextLoader
+
+        if base_metadata is None:
+            base_metadata = {}
+
         # Determine file type and use appropriate loader
-        file_extension = os.path.splitext(resource.uri)[1].lower()
-        
         if file_extension == '.pdf':
-            loader = PyPDFLoader(path, extract_images=False)
+            loader = PyPDFLoader(file_path, extract_images=False)
         elif file_extension == '.docx':
-            loader = Docx2txtLoader(path)
+            loader = Docx2txtLoader(file_path)
         elif file_extension == '.txt':
-            loader = TextLoader(path, encoding='utf-8')
+            loader = TextLoader(file_path, encoding='utf-8')
         else:
             logger.error(f"Unsupported file type: {file_extension}")
             raise ValueError(f"Unsupported file type: {file_extension}")
-        
+
         pages = loader.load()
         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         docs = text_splitter.split_documents(pages)
 
-        #TODO: add metadata to the document according to the silo metadata definition
         for doc in docs:
-            doc.metadata["repository_id"] = resource.repository_id
-            doc.metadata["resource_id"] = resource.resource_id
-            doc.metadata["silo_id"] = resource.repository.silo_id
-            doc.metadata["name"] = resource.uri
-            # Store relative path instead of absolute path for portability
-            doc.metadata["ref"] = os.path.join(str(resource.repository_id), resource.uri)
-            doc.metadata["file_type"] = file_extension
+            doc.metadata.update(base_metadata)
             # Only add page number if it exists (PDFs have page metadata, DOCX/TXT don't)
             if "page" in doc.metadata:
                 doc.metadata["page"] = doc.metadata["page"] + 1
+        return docs
+
+    @staticmethod
+    def index_resource(resource: Resource):
+        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
+        path = os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
+        file_extension = os.path.splitext(resource.uri)[1].lower()
+
+        # Prepare base metadata
+        base_metadata = {
+            "repository_id": resource.repository_id,
+            "resource_id": resource.resource_id,
+            "silo_id": resource.repository.silo_id,
+            "name": resource.uri,
+            # Store relative path instead of absolute path for portability
+            "ref": os.path.join(str(resource.repository_id), resource.uri),
+            "file_type": file_extension
+        }
+
+        docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 
         pg_vector_tools = PGVectorTools(db)
         embedding_service = resource.repository.silo.embedding_service
