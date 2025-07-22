@@ -61,6 +61,35 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`);
   }
 
+  // ==================== AI SERVICES API ====================
+  async getAIServices(appId: number) {
+    return this.request(`/internal/apps/${appId}/ai-services/`);
+  }
+
+  async getAIService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`);
+  }
+
+  async createAIService(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/ai-services/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAIService(appId: number, serviceId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAIService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // TODO: Add more endpoints as needed
 }
 

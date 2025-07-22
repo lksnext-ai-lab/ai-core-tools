@@ -120,7 +120,7 @@ function AppLayout({ children }: AppLayoutProps) {
                 <ul className="space-y-2">
                   <li>
                     <Link
-                      to={`/apps/${appId}/settings/ai-services`}
+                      to={`/apps/${appId}/settings`}
                       className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/settings`)}`}
                     >
                       <span className="mr-3">⚙️</span>

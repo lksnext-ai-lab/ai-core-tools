@@ -155,7 +155,7 @@ function AppDashboard() {
             New Silo
           </Link>
           <Link 
-            to={`/apps/${appId}/settings/ai-services`}
+            to={`/apps/${appId}/settings`}
             className="flex items-center justify-center px-4 py-3 border-2 border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
           >
             <span className="mr-2">⚙️</span>
