@@ -70,7 +70,8 @@ class SiloService:
         try:
             session = SessionLocal()
             try:
-                pg_vector_tools = PGVectorTools(session)
+                from db.base import db  # Import the database object
+                pg_vector_tools = PGVectorTools(db)
                 collection_name = COLLECTION_PREFIX + str(silo_id)
                 keywords = {'search_kwargs': {'k': 30}}
                 return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, search_params, **keywords)
@@ -147,11 +148,15 @@ class SiloService:
                 logger.info(f"Updating existing silo {silo_id}")
             else:
                 silo = Silo()
+                # Set default type to CUSTOM, but allow override from form data
                 silo.silo_type = SiloType.CUSTOM.value
                 logger.info("Creating new silo")
             
-            # Set silo type if provided
-            if silo_type:
+            # Set silo type from form data if provided
+            if silo_data.get('type') and silo_data['type'].strip():
+                silo.silo_type = silo_data['type'].strip()
+            # Set silo type if provided via parameter (for backward compatibility)
+            elif silo_type:
                 silo.silo_type = silo_type.value
                 if silo_type == SiloType.REPO:
                     silo.metadata_definition_id = 0
@@ -159,6 +164,12 @@ class SiloService:
             # Set embedding service if provided
             if silo_data.get('embedding_service_id'):
                 silo.embedding_service_id = silo_data['embedding_service_id']
+            
+            # Set metadata definition (output parser) if provided
+            if silo_data.get('output_parser_id'):
+                silo.metadata_definition_id = silo_data['output_parser_id']
+            elif silo_data.get('metadata_definition_id'):
+                silo.metadata_definition_id = silo_data['metadata_definition_id']
             
             # Update silo attributes
             SiloService._update_silo(silo, silo_data)
@@ -194,7 +205,8 @@ class SiloService:
         silo.status = data.get('status')
         silo.app_id = data['app_id']
         silo.fixed_metadata = bool(data.get('fixed_metadata', False))
-        silo.metadata_definition_id = data.get('metadata_definition_id') or None
+        # Don't override metadata_definition_id here as it's handled above
+        # silo.metadata_definition_id = data.get('metadata_definition_id') or None
     
     @staticmethod
     def get_silo_form_data(app_id: int, silo_id: int) -> dict:
@@ -325,7 +337,8 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             docs = SiloService._create_documents_for_indexing(silo_id, documents)
             pg_vector_tools.index_documents(
                 collection_name,
@@ -401,7 +414,8 @@ class SiloService:
 
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             embedding_service = resource.repository.silo.embedding_service
             pg_vector_tools.index_documents(collection_name, docs, embedding_service)
         finally:
@@ -422,7 +436,8 @@ class SiloService:
 
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
         finally:
             session.close()
@@ -442,7 +457,8 @@ class SiloService:
 
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=silo.embedding_service)
         finally:
             session.close()
@@ -466,7 +482,8 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(
                 collection_name, 
                 filter_metadata={"id": {"$eq": content_id}},
@@ -482,14 +499,16 @@ class SiloService:
         if not SiloService.check_silo_collection_exists(silo_id):
             return
             
-        silo = SiloService.get_silo(silo_id)
-        if not silo:
-            return
-            
-        collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            # Get silo within the session to ensure relationships are loaded
+            silo = session.query(Silo).filter(Silo.silo_id == silo_id).first()
+            if not silo:
+                return
+                
+            collection_name = COLLECTION_PREFIX + str(silo_id)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_collection(collection_name, silo.embedding_service)
         finally:
             session.close()
@@ -505,15 +524,17 @@ class SiloService:
             logger.warning(f"La colección para el silo {silo_id} no existe")
             return
 
-        silo = SiloService.get_silo(silo_id)
-        if not silo:
-            logger.error(f"Silo {silo_id} no encontrado")
-            return
-
-        collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            # Get silo within the session to ensure relationships are loaded
+            silo = session.query(Silo).filter(Silo.silo_id == silo_id).first()
+            if not silo:
+                logger.error(f"Silo {silo_id} no encontrado")
+                return
+
+            collection_name = COLLECTION_PREFIX + str(silo_id)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(
                 collection_name, 
                 ids=ids,
@@ -525,14 +546,16 @@ class SiloService:
 
     @staticmethod
     def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None) -> List[Document]:
-        silo = SiloService.get_silo(silo_id)
-        if not silo or not SiloService.check_silo_collection_exists(silo_id):
-            return []
-        
-        collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
-            pg_vector_tools = PGVectorTools(session)
+            # Get silo within the session to ensure relationships are loaded
+            silo = session.query(Silo).filter(Silo.silo_id == silo_id).first()
+            if not silo or not SiloService.check_silo_collection_exists(silo_id):
+                return []
+            
+            collection_name = COLLECTION_PREFIX + str(silo_id)
+            from db.base import db  # Import the database object
+            pg_vector_tools = PGVectorTools(db)
             return pg_vector_tools.search_similar_documents(
                 collection_name, 
                 query, 

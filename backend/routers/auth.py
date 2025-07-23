@@ -85,7 +85,9 @@ def verify_jwt_token(token: str) -> Optional[dict]:
         return payload
     except jwt.ExpiredSignatureError:
         return None
-    except jwt.JWTError:
+    except jwt.InvalidTokenError:
+        return None
+    except Exception:
         return None
 
 # ==================== AUTHENTICATION ENDPOINTS ====================

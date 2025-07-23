@@ -151,6 +151,15 @@ function AppLayout({ children }: AppLayoutProps) {
                       Agents
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to={`/apps/${appId}/silos`}
+                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/silos`)}`}
+                    >
+                      <span className="mr-3">🗄️</span>
+                      Silos
+                    </Link>
+                  </li>
                 </ul>
               </div>
 

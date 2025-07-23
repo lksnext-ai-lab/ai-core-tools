@@ -191,8 +191,14 @@ class SiloDetailSchema(BaseModel):
     type: Optional[str]
     created_at: Optional[datetime]
     docs_count: int
+    # Current values for editing
+    metadata_definition_id: Optional[int] = None
+    embedding_service_id: Optional[int] = None
+    # Form data
     output_parsers: List[Dict[str, Any]]
     embedding_services: List[Dict[str, Any]]
+    # Metadata definition fields for playground
+    metadata_fields: Optional[List[Dict[str, Any]]] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -209,6 +215,7 @@ class SiloSearchSchema(BaseModel):
     """Schema for searching within a silo"""
     query: str
     limit: Optional[int] = 10
+    filter_metadata: Optional[Dict[str, Any]] = None
 
 
 # ==================== AI SERVICE SCHEMAS ====================

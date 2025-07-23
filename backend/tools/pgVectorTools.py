@@ -23,9 +23,10 @@ REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
 
 class PGVectorTools:
-    def __init__(self, session):
-        """Initializes the PGVectorTools with a SQLAlchemy session."""
-        self.session = session
+    def __init__(self, db):
+        """Initializes the PGVectorTools with a SQLAlchemy engine."""
+        self.Session = db.session
+        self.db = db
         # TODO: Setup async engine properly for vector operations
         self._async_engine = None    
 

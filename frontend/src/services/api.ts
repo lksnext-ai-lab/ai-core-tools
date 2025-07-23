@@ -277,6 +277,46 @@ class ApiService {
     return this.request(`/internal/apps/0/collaboration/my-invitations`);
   }
 
+  // ==================== SILOS API ====================
+  async getSilos(appId: number) {
+    return this.request(`/internal/apps/${appId}/silos/`);
+  }
+
+  async getSilo(appId: number, siloId: number) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}`);
+  }
+
+  async createSilo(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/silos/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSilo(appId: number, siloId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSilo(appId: number, siloId: number) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
+      method: 'POST',
+      body: JSON.stringify({
+        query,
+        limit,
+        filter_metadata: filterMetadata
+      }),
+    });
+  }
+
   // TODO: Add more endpoints as needed
 }
 
