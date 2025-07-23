@@ -99,13 +99,37 @@ async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depen
             # Get available transport types
             transport_types = [{"value": t.value, "name": t.value} for t in TransportType]
             
+            # Handle command/url field mapping
+            command_value = ""
+            if config.transport_type.value == "stdio":
+                command_value = config.command or ""
+            elif config.transport_type.value == "sse":
+                command_value = config.url or ""
+            
+            # Convert JSON fields to strings for frontend
+            args_str = ""
+            if config.args:
+                if isinstance(config.args, str):
+                    args_str = config.args
+                else:
+                    import json
+                    args_str = json.dumps(config.args)
+            
+            env_str = ""
+            if config.env:
+                if isinstance(config.env, str):
+                    env_str = config.env
+                else:
+                    import json
+                    env_str = json.dumps(config.env)
+            
             return MCPConfigDetailSchema(
                 config_id=config.config_id,
                 name=config.name,
                 transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
-                command=getattr(config, 'command', ''),
-                args=getattr(config, 'args', ''),
-                env=getattr(config, 'env', ''),
+                command=command_value,
+                args=args_str,
+                env=env_str,
                 created_at=config.create_date,
                 available_transport_types=transport_types
             )
@@ -166,13 +190,39 @@ async def create_or_update_mcp_config(
             
             # Update config data
             config.name = config_data.name
-            config.transport_type = config_data.transport_type
-            if hasattr(config, 'command'):
+            # Convert string to enum
+            from models.mcp_config import TransportType
+            if config_data.transport_type == "stdio":
+                config.transport_type = TransportType.STDIO
+            elif config_data.transport_type == "sse":
+                config.transport_type = TransportType.SSE
+            config.server_name = config_data.name  # Use name as server_name for simplicity
+            
+            # Handle command/url field mapping
+            if config_data.transport_type == "stdio":
                 config.command = config_data.command
-            if hasattr(config, 'args'):
-                config.args = config_data.args
-            if hasattr(config, 'env'):
-                config.env = config_data.env
+                config.url = None
+            elif config_data.transport_type == "sse":
+                config.url = config_data.command
+                config.command = None
+            
+            # Convert string JSON to actual JSON for storage
+            import json
+            try:
+                if config_data.args.strip():
+                    config.args = json.loads(config_data.args)
+                else:
+                    config.args = []
+            except (json.JSONDecodeError, AttributeError):
+                config.args = []
+            
+            try:
+                if config_data.env.strip():
+                    config.env = json.loads(config_data.env)
+                else:
+                    config.env = {}
+            except (json.JSONDecodeError, AttributeError):
+                config.env = {}
             
             session.add(config)
             session.commit()

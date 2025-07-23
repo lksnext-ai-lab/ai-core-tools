@@ -119,6 +119,35 @@ class ApiService {
     });
   }
 
+  // ==================== MCP CONFIGS ====================
+  async getMCPConfigs(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/`);
+  }
+
+  async getMCPConfig(appId: number, configId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`);
+  }
+
+  async createMCPConfig(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMCPConfig(appId: number, configId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMCPConfig(appId: number, configId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // TODO: Add more endpoints as needed
 }
 
