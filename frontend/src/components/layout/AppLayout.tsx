@@ -89,9 +89,11 @@ function AppLayout({ children }: AppLayoutProps) {
         {/* Logo/Brand */}
         <div className="p-6 border-b border-gray-200">
           <Link to="/apps" className="flex items-center">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
-              <span className="text-white font-bold text-sm">M</span>
-            </div>
+            <img 
+              src="/mattin-small.png" 
+              alt="Mattin AI" 
+              className="w-8 h-8 mr-3"
+            />
             <span className="text-xl font-bold text-gray-900">Mattin AI</span>
           </Link>
         </div>
