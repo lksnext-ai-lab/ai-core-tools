@@ -14,6 +14,9 @@ import EmbeddingServicesPage from './pages/settings/EmbeddingServicesPage';
 import GeneralSettingsPage from './pages/settings/GeneralSettingsPage';
 import MCPConfigsPage from './pages/settings/MCPConfigsPage';
 import DataStructuresPage from './pages/settings/DataStructuresPage';
+// Admin pages
+import UsersPage from './pages/admin/UsersPage';
+import StatsPage from './pages/admin/StatsPage';
 // Auth pages
 import LoginPage from './pages/LoginPage';
 import AuthSuccessPage from './pages/AuthSuccessPage';
@@ -113,6 +116,23 @@ function AppContent() {
           <ProtectedRoute>
             <AppLayout>
               <DataStructuresPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Admin routes */}
+        <Route path="/admin/users" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <UsersPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/admin/stats" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <StatsPage />
             </AppLayout>
           </ProtectedRoute>
         } />

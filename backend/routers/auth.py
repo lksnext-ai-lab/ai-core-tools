@@ -14,6 +14,7 @@ from models.user import User
 from services.user_service import UserService
 from db.session import SessionLocal
 from utils.logger import get_logger
+from utils.config import is_omniadmin
 
 logger = get_logger(__name__)
 
@@ -46,6 +47,7 @@ class UserInfoResponse(BaseModel):
     email: str
     name: Optional[str]
     is_authenticated: bool
+    is_admin: bool
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -306,7 +308,8 @@ async def get_current_user_info(request: Request):
                 user_id=user.user_id,
                 email=user.email,
                 name=user.name,
-                is_authenticated=True
+                is_authenticated=True,
+                is_admin=is_omniadmin(user.email)
             )
             
         finally:

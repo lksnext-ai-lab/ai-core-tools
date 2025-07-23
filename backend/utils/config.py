@@ -30,7 +30,8 @@ class Config:
         'DOWNLOADS_PATH': 'data/temp/downloads/',
         'IMAGES_PATH': 'data/temp/images/',
         'REPO_BASE_FOLDER': 'data/repositories',
-        'PERMANENT_SESSION_LIFETIME_MINUTES': '30'
+        'PERMANENT_SESSION_LIFETIME_MINUTES': '30',
+        'AICT_OMNIADMINS': ''
     }
     
     @staticmethod
@@ -262,4 +263,20 @@ def get_aict_mode() -> str:
 
 def is_self_hosted() -> bool:
     """Check if we're running in self-hosted mode"""
-    return get_aict_mode() == 'SELF-HOSTED' 
+    return get_aict_mode() == 'SELF-HOSTED'
+
+
+def get_omniadmins() -> List[str]:
+    """Get list of omniadmin emails"""
+    omniadmins_str = Config.get_env_var('AICT_OMNIADMINS', Config.DEFAULTS['AICT_OMNIADMINS'])
+    if not omniadmins_str:
+        return []
+    return [email.strip() for email in omniadmins_str.split(',') if email.strip()]
+
+
+def is_omniadmin(email: str) -> bool:
+    """Check if email is in omniadmins list"""
+    if not email:
+        return False
+    omniadmins = get_omniadmins()
+    return email in omniadmins 

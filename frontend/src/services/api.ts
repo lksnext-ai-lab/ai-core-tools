@@ -7,7 +7,7 @@ class ApiService {
     return localStorage.getItem('auth_token');
   }
 
-  private async request(endpoint: string, options: RequestInit = {}) {
+  async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseURL}${endpoint}`;
     
     const defaultHeaders: Record<string, string> = {

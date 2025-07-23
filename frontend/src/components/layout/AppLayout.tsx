@@ -171,6 +171,35 @@ function AppLayout({ children }: AppLayoutProps) {
                   </li>
                 </ul>
               </div>
+
+              {/* Admin Section */}
+              {user?.is_admin && (
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Administrator
+                  </h4>
+                  <ul className="space-y-2">
+                    <li>
+                      <Link
+                        to="/admin/users"
+                        className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/users')}`}
+                      >
+                        <span className="mr-3">👥</span>
+                        Users
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        to="/admin/stats"
+                        className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/stats')}`}
+                      >
+                        <span className="mr-3">📊</span>
+                        Stats
+                      </Link>
+                    </li>
+                  </ul>
+                </div>
+              )}
             </div>
           ) : (
             // Global navigation (when not in an app)
@@ -184,6 +213,33 @@ function AppLayout({ children }: AppLayoutProps) {
                   My Apps
                 </Link>
               </li>
+              {user?.is_admin && (
+                <>
+                  <li>
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-6">
+                      Administrator
+                    </h4>
+                  </li>
+                  <li>
+                    <Link
+                      to="/admin/users"
+                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/users')}`}
+                    >
+                      <span className="mr-3">👥</span>
+                      Users
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/admin/stats"
+                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/stats')}`}
+                    >
+                      <span className="mr-3">📊</span>
+                      Stats
+                    </Link>
+                  </li>
+                </>
+              )}
               <li>
                 <Link
                   to="/about"

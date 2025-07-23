@@ -25,6 +25,7 @@ from models.url import Url
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
 from routers.auth import auth_router  # Add auth router
+from routers.internal.admin import router as admin_router
 # Removed problematic direct imports - these are now handled in internal_router
 
 app = FastAPI(
@@ -48,6 +49,7 @@ app.add_middleware(
 # Mount routers
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])  # Add auth router
 app.include_router(internal_router, prefix="/internal")
+app.include_router(admin_router, prefix="/internal")  # Admin routes are under /internal/admin
 app.include_router(public_v1_router, prefix="/api/v1")
 
 # ==================== CUSTOM OPENAPI DOCS ====================
