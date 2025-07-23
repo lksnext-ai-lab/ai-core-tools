@@ -1,17 +1,54 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState, useEffect } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
+import { apiService } from '../../services/api';
 
 interface SettingsLayoutProps {
   children: ReactNode;
 }
 
+interface App {
+  app_id: number;
+  name: string;
+  created_at: string;
+  owner_id: number;
+  owner_name?: string;
+  owner_email?: string;
+  role: string;
+  langsmith_configured: boolean;
+}
+
 function SettingsLayout({ children }: SettingsLayoutProps) {
   const { appId } = useParams();
   const location = useLocation();
+  const [currentApp, setCurrentApp] = useState<App | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const isActive = (path: string) => {
     return location.pathname.includes(path) ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
   };
+
+  // Fetch app data when component mounts
+  useEffect(() => {
+    if (appId) {
+      loadAppData();
+    }
+  }, [appId]);
+
+  async function loadAppData() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      const apps = await apiService.getApps();
+      const app = apps.find((a: App) => a.app_id === parseInt(appId));
+      setCurrentApp(app || null);
+    } catch (error) {
+      console.error('Failed to load app data:', error);
+      setCurrentApp(null);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -26,7 +63,11 @@ function SettingsLayout({ children }: SettingsLayoutProps) {
              <ol className="list-reset flex text-gray-500">
                <li><Link to="/apps" className="hover:text-blue-600">Apps</Link></li>
                <li><span className="mx-2">&gt;</span></li>
-               <li><Link to={`/apps/${appId}`} className="hover:text-blue-600">Dashboard</Link></li>
+               <li>
+                 <Link to={`/apps/${appId}`} className="hover:text-blue-600">
+                   {loading ? 'Loading...' : currentApp?.name || 'Dashboard'}
+                 </Link>
+               </li>
                <li><span className="mx-2">&gt;</span></li>
                <li className="text-gray-900">Settings</li>
              </ol>

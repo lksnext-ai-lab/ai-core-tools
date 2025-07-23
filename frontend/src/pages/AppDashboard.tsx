@@ -1,7 +1,45 @@
 import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { apiService } from '../services/api';
+
+interface App {
+  app_id: number;
+  name: string;
+  created_at: string;
+  owner_id: number;
+  owner_name?: string;
+  owner_email?: string;
+  role: string;
+  langsmith_configured: boolean;
+}
 
 function AppDashboard() {
   const { appId } = useParams();
+  const [currentApp, setCurrentApp] = useState<App | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch app data when component mounts
+  useEffect(() => {
+    if (appId) {
+      loadAppData();
+    }
+  }, [appId]);
+
+  async function loadAppData() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      const apps = await apiService.getApps();
+      const app = apps.find((a: App) => a.app_id === parseInt(appId));
+      setCurrentApp(app || null);
+    } catch (error) {
+      console.error('Failed to load app data:', error);
+      setCurrentApp(null);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Mock data - will be replaced with real API calls
   const appStats = {
@@ -12,14 +50,41 @@ function AppDashboard() {
     api_keys: 0
   };
 
-  const appName = "My App"; // Will come from API
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2">Loading app...</span>
+      </div>
+    );
+  }
+
+  if (!currentApp) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex">
+          <span className="text-red-400 text-xl mr-3">⚠️</span>
+          <div>
+            <h3 className="text-sm font-medium text-red-800">App Not Found</h3>
+            <p className="text-sm text-red-600 mt-1">The requested app could not be found.</p>
+            <Link 
+              to="/apps"
+              className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+            >
+              Back to Apps
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{appName}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{currentApp.name}</h1>
           <p className="text-gray-600">App Dashboard - Manage your AI components and data</p>
         </div>
         <Link 
@@ -115,7 +180,7 @@ function AppDashboard() {
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Domains</h3>
           <p className="text-gray-600 text-sm mb-4">Web scraping</p>
           <p className="text-gray-600 text-sm mb-4">
-            Configure and manage web domains for automated content extraction.
+            Configure web domains for data extraction and content monitoring.
           </p>
           <Link 
             to={`/apps/${appId}/domains`}
@@ -124,42 +189,50 @@ function AppDashboard() {
             Manage Domains →
           </Link>
         </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-md border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          <span className="mr-2">⚡</span>
-          Quick Actions
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* API Keys Card */}
+        <div className="bg-white rounded-lg shadow-md border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">🔑</span>
+            </div>
+            <span className="bg-red-100 text-red-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+              {appStats.api_keys}
+            </span>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">API Keys</h3>
+          <p className="text-gray-600 text-sm mb-4">Access control</p>
+          <p className="text-gray-600 text-sm mb-4">
+            Manage API keys for secure access to your application's resources.
+          </p>
           <Link 
-            to={`/apps/${appId}/agents/new`}
-            className="flex items-center justify-center px-4 py-3 border-2 border-blue-200 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            to={`/apps/${appId}/settings/api-keys`}
+            className="block w-full bg-red-600 hover:bg-red-700 text-white text-center py-2 px-4 rounded-lg"
           >
-            <span className="mr-2">➕</span>
-            New Agent
+            Manage API Keys →
           </Link>
-          <Link 
-            to={`/apps/${appId}/repositories/new`}
-            className="flex items-center justify-center px-4 py-3 border-2 border-green-200 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-          >
-            <span className="mr-2">➕</span>
-            New Repository
-          </Link>
-          <Link 
-            to={`/apps/${appId}/silos/new`}
-            className="flex items-center justify-center px-4 py-3 border-2 border-yellow-200 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
-          >
-            <span className="mr-2">➕</span>
-            New Silo
-          </Link>
+        </div>
+
+        {/* Settings Card */}
+        <div className="bg-white rounded-lg shadow-md border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">⚙️</span>
+            </div>
+            <span className="bg-gray-100 text-gray-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+              Settings
+            </span>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">App Settings</h3>
+          <p className="text-gray-600 text-sm mb-4">Configuration</p>
+          <p className="text-gray-600 text-sm mb-4">
+            Configure AI services, embedding models, and application preferences.
+          </p>
           <Link 
             to={`/apps/${appId}/settings`}
-            className="flex items-center justify-center px-4 py-3 border-2 border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+            className="block w-full bg-gray-600 hover:bg-gray-700 text-white text-center py-2 px-4 rounded-lg"
           >
-            <span className="mr-2">⚙️</span>
-            Settings
+            Open Settings →
           </Link>
         </div>
       </div>

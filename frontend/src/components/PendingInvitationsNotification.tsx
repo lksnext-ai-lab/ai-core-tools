@@ -18,9 +18,6 @@ function PendingInvitationsNotification() {
 
   useEffect(() => {
     loadPendingInvitations();
-    // Check for new invitations every 30 seconds
-    const interval = setInterval(loadPendingInvitations, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   async function loadPendingInvitations() {

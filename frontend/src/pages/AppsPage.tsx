@@ -24,12 +24,28 @@ function AppsPage() {
   const [loading, setLoading] = useState(true);          // Like self.loading = True
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
   const { user } = useUser();
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
     loadApps();
   }, []);
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (openActionMenu !== null && !target.closest('.action-dropdown')) {
+        setOpenActionMenu(null);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openActionMenu]);
 
   // Function to load apps from API
   async function loadApps() {
@@ -130,7 +146,7 @@ function AppsPage() {
         </button>
       </div>
 
-      {/* Apps Grid */}
+      {/* Apps Table */}
       {apps.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-6xl mb-4">🤖</div>
@@ -144,110 +160,175 @@ function AppsPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {apps.map((app) => (
-            <div key={app.app_id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="p-6">
-                {/* App Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <Link
-                      to={`/apps/${app.app_id}`}
-                      className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
-                    >
-                      {app.name}
-                    </Link>
-                    
-                    {/* Role and Owner Info */}
-                    <div className="mt-2 flex items-center space-x-2">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    App Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Owner
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    LangSmith
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {apps.map((app) => (
+                  <tr key={app.app_id} className="hover:bg-gray-50 transition-colors">
+                    {/* App Name */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Link
+                        to={`/apps/${app.app_id}`}
+                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                      >
+                        {app.name}
+                      </Link>
+                    </td>
+
+                    {/* Role */}
+                    <td className="px-6 py-4 whitespace-nowrap">
                       {app.role === 'owner' ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           <span className="mr-1">👑</span>
                           Owner
                         </span>
                       ) : (
-                        <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            Editor
-                          </span>
-                          <div className="flex items-center text-xs text-gray-600">
-                            <div className="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center mr-1">
-                              <span className="text-xs font-medium text-gray-600">
-                                {getUserInitials(app.owner_name, app.owner_email)}
-                              </span>
-                            </div>
-                            <span>
-                              Owner: {app.owner_name || app.owner_email}
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                          Editor
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Owner */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {app.role === 'owner' ? (
+                        <span className="text-sm text-gray-500">You</span>
+                      ) : (
+                        <div className="flex items-center">
+                          <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                            <span className="text-xs font-medium text-gray-600">
+                              {getUserInitials(app.owner_name, app.owner_email)}
                             </span>
                           </div>
+                          <span className="text-sm text-gray-900">
+                            {app.owner_name || app.owner_email}
+                          </span>
                         </div>
                       )}
-                    </div>
-                  </div>
+                    </td>
 
-                  {/* Actions */}
-                  <div className="flex items-center space-x-2">
-                    {app.role === 'editor' && (
-                      <button
-                        onClick={() => handleLeaveApp(app)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Leave this app"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
+                    {/* Status */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        app.langsmith_configured 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {app.langsmith_configured ? '✓ Configured' : 'Not configured'}
+                      </span>
+                    </td>
 
-                {/* App Stats */}
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div className="flex items-center justify-between">
-                    <span>LangSmith</span>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
-                      app.langsmith_configured 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {app.langsmith_configured ? '✓ Configured' : 'Not configured'}
-                    </span>
-                  </div>
-                  
-                  {app.created_at && (
-                    <div className="flex items-center justify-between">
-                      <span>Created</span>
-                      <span>{new Date(app.created_at).toLocaleDateString()}</span>
-                    </div>
-                  )}
-                </div>
+                    {/* Created Date */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {app.created_at ? new Date(app.created_at).toLocaleDateString() : '-'}
+                    </td>
 
-                {/* Quick Actions */}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <div className="flex space-x-2">
-                    <Link
-                      to={`/apps/${app.app_id}`}
-                      className="flex-1 text-center px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors"
-                    >
-                      Open
-                    </Link>
-                    <Link
-                      to={`/apps/${app.app_id}/agents`}
-                      className="flex-1 text-center px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
-                    >
-                      Agents
-                    </Link>
-                    <Link
-                      to={`/apps/${app.app_id}/settings`}
-                      className="flex-1 text-center px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
-                    >
-                      Settings
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+                    {/* Actions Dropdown */}
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="relative action-dropdown">
+                        <button
+                          onClick={() => setOpenActionMenu(openActionMenu === app.app_id ? null : app.app_id)}
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          aria-expanded={openActionMenu === app.app_id}
+                          aria-haspopup="true"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                          </svg>
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {openActionMenu === app.app_id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                            <div className="py-1" role="menu" aria-orientation="vertical">
+                              <Link
+                                to={`/apps/${app.app_id}`}
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                role="menuitem"
+                                onClick={() => setOpenActionMenu(null)}
+                              >
+                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z" />
+                                </svg>
+                                Open Dashboard
+                              </Link>
+
+                              <Link
+                                to={`/apps/${app.app_id}/agents`}
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                role="menuitem"
+                                onClick={() => setOpenActionMenu(null)}
+                              >
+                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Manage Agents
+                              </Link>
+
+                              <Link
+                                to={`/apps/${app.app_id}/settings`}
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                role="menuitem"
+                                onClick={() => setOpenActionMenu(null)}
+                              >
+                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                App Settings
+                              </Link>
+
+                              {app.role === 'editor' && (
+                                <div className="border-t border-gray-100">
+                                  <button
+                                    onClick={() => {
+                                      handleLeaveApp(app);
+                                      setOpenActionMenu(null);
+                                    }}
+                                    className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
+                                    role="menuitem"
+                                  >
+                                    <svg className="w-4 h-4 mr-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
+                                    Leave App
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -2,9 +2,21 @@ import { type ReactNode, useState, useRef, useEffect } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
+import { apiService } from '../../services/api';
 
 interface AppLayoutProps {
   children: ReactNode;
+}
+
+interface App {
+  app_id: number;
+  name: string;
+  created_at: string;
+  owner_id: number;
+  owner_name?: string;
+  owner_email?: string;
+  role: string;
+  langsmith_configured: boolean;
 }
 
 function AppLayout({ children }: AppLayoutProps) {
@@ -12,13 +24,34 @@ function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const { user, logout } = useUser();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [currentApp, setCurrentApp] = useState<App | null>(null);
+  const [loadingApp, setLoadingApp] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Mock app data for now - will be replaced with real API call
-  const currentApp = {
-    app_id: parseInt(appId || '0'),
-    name: 'My App'
-  };
+  // Fetch app data when appId changes
+  useEffect(() => {
+    if (appId) {
+      loadAppData();
+    } else {
+      setCurrentApp(null);
+    }
+  }, [appId]);
+
+  async function loadAppData() {
+    if (!appId) return;
+    
+    try {
+      setLoadingApp(true);
+      const apps = await apiService.getApps();
+      const app = apps.find((a: App) => a.app_id === parseInt(appId));
+      setCurrentApp(app || null);
+    } catch (error) {
+      console.error('Failed to load app data:', error);
+      setCurrentApp(null);
+    } finally {
+      setLoadingApp(false);
+    }
+  }
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path) ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50';
@@ -68,8 +101,12 @@ function AppLayout({ children }: AppLayoutProps) {
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-gray-900">{currentApp.name}</h3>
-                <p className="text-xs text-gray-600">App Dashboard</p>
+                <h3 className="text-sm font-medium text-gray-900">
+                  {loadingApp ? 'Loading...' : currentApp?.name || 'App'}
+                </h3>
+                <p className="text-xs text-gray-600">
+                  {location.pathname.includes('/settings') ? 'Settings' : 'Dashboard'}
+                </p>
               </div>
               <Link 
                 to="/apps" 
@@ -165,7 +202,7 @@ function AppLayout({ children }: AppLayoutProps) {
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              {/* Breadcrumbs can go here */}
+              {/* Left side empty for now */}
             </div>
             
             {/* Top Right Actions */}
