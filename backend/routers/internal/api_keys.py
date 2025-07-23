@@ -34,7 +34,7 @@ async def list_api_keys(app_id: int, current_user: dict = Depends(get_current_us
                 key_id=api_key.key_id,
                 name=api_key.name,
                 is_active=api_key.is_active,
-                created_at=api_key.create_date,
+                created_at=api_key.created_at,
                 last_used_at=getattr(api_key, 'last_used_at', None),
                 # Don't expose the actual key value for security
                 key_preview=f"{api_key.key[:8]}..." if api_key.key else "***"
@@ -95,7 +95,7 @@ async def get_api_key(app_id: int, key_id: int, current_user: dict = Depends(get
                 key_id=api_key.key_id,
                 name=api_key.name,
                 is_active=api_key.is_active,
-                created_at=api_key.create_date,
+                created_at=api_key.created_at,
                 last_used_at=getattr(api_key, 'last_used_at', None),
                 key_preview=f"{api_key.key[:8]}..." if api_key.key else "***"
             )
@@ -143,7 +143,7 @@ async def create_or_update_api_key(
                 key_id=api_key.key_id,
                 name=api_key.name,
                 is_active=api_key.is_active,
-                created_at=api_key.create_date,
+                created_at=api_key.created_at,
                 last_used_at=getattr(api_key, 'last_used_at', None),
                 key_preview=f"{api_key.key[:8]}...",
                 # Return the actual key only once upon creation
@@ -180,7 +180,7 @@ async def create_or_update_api_key(
                     key_id=api_key.key_id,
                     name=api_key.name,
                     is_active=api_key.is_active,
-                    created_at=api_key.create_date,
+                    created_at=api_key.created_at,
                     last_used_at=getattr(api_key, 'last_used_at', None),
                     key_preview=f"{api_key.key[:8]}...",
                     key_value=None,  # Don't return key on update

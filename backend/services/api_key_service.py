@@ -103,10 +103,22 @@ class APIKeyService:
                 is_active=True
             )
             session.add(api_key)
-            session.flush()  # Get the ID
             session.commit()
+            session.refresh(api_key)
+            
+            # Create a detached copy to return
+            detached_key = APIKey()
+            detached_key.key_id = api_key.key_id
+            detached_key.key = api_key.key
+            detached_key.name = api_key.name
+            detached_key.app_id = api_key.app_id
+            detached_key.user_id = api_key.user_id
+            detached_key.created_at = api_key.created_at
+            detached_key.last_used_at = api_key.last_used_at
+            detached_key.is_active = api_key.is_active
+            
             logger.info(f"Created API key '{name}' for app {app_id} by user {user_id}")
-            return api_key
+            return detached_key
         finally:
             session.close()
     

@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import SettingsLayout from '../../components/layout/SettingsLayout';
+import Modal from '../../components/ui/Modal';
+import APIKeyForm from '../../components/forms/APIKeyForm';
+import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
+import { apiService } from '../../services/api';
 
 interface APIKey {
   key_id: number;
   name: string;
-  key: string;
-  app_name: string;
+  key_preview: string;
   created_at: string;
   last_used_at: string | null;
   is_active: boolean;
@@ -16,55 +19,125 @@ function APIKeysPage() {
   const { appId } = useParams();
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingKey, setEditingKey] = useState<any>(null);
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [createdKey, setCreatedKey] = useState<any>(null);
 
-  // Mock data for now
+  // Load API keys from the API
   useEffect(() => {
-    const mockKeys: APIKey[] = [
-      {
-        key_id: 1,
-        name: 'Production API',
-        key: 'ak_1234567890abcdef1234567890abcdef',
-        app_name: 'My App',
-        created_at: '2024-01-15 10:30:00',
-        last_used_at: '2024-01-20 14:22:00',
-        is_active: true
-      },
-      {
-        key_id: 2,
-        name: 'Development Key',
-        key: 'ak_abcdef1234567890abcdef1234567890',
-        app_name: 'My App',
-        created_at: '2024-01-10 09:15:00',
-        last_used_at: null,
-        is_active: false
-      }
-    ];
+    loadAPIKeys();
+  }, [appId]);
 
-    setTimeout(() => {
-      setApiKeys(mockKeys);
+  async function loadAPIKeys() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getAPIKeys(parseInt(appId));
+      setApiKeys(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      console.error('Error loading API keys:', err);
+    } finally {
       setLoading(false);
-    }, 500);
-  }, []);
+    }
+  }
 
-  const toggleKeyStatus = (keyId: number) => {
-    setApiKeys(keys => 
-      keys.map(key => 
-        key.key_id === keyId 
-          ? { ...key, is_active: !key.is_active }
-          : key
-      )
-    );
-  };
-
-  const deleteKey = (keyId: number) => {
+  async function handleDelete(keyId: number) {
     if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
       return;
     }
-    setApiKeys(keys => keys.filter(key => key.key_id !== keyId));
-  };
+
+    if (!appId) return;
+
+    try {
+      await apiService.deleteAPIKey(parseInt(appId), keyId);
+      // Remove from local state
+      setApiKeys(apiKeys.filter(k => k.key_id !== keyId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete API key');
+      console.error('Error deleting API key:', err);
+    }
+  }
+
+  async function handleToggle(keyId: number) {
+    if (!appId) return;
+
+    try {
+      const response = await apiService.toggleAPIKey(parseInt(appId), keyId);
+      // Update local state
+      setApiKeys(apiKeys.map(key => 
+        key.key_id === keyId 
+          ? { ...key, is_active: response.is_active }
+          : key
+      ));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to toggle API key');
+      console.error('Error toggling API key:', err);
+    }
+  }
+
+  function handleCreateKey() {
+    setEditingKey(null);
+    setIsModalOpen(true);
+  }
+
+  async function handleEditKey(keyId: number) {
+    if (!appId) return;
+    
+    try {
+      const key = await apiService.getAPIKey(parseInt(appId), keyId);
+      setEditingKey(key);
+      setIsModalOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load API key details');
+      console.error('Error loading API key:', err);
+    }
+  }
+
+  async function handleSaveKey(data: any) {
+    if (!appId) return;
+
+    try {
+      if (editingKey && editingKey.key_id !== 0) {
+        // Update existing key
+        await apiService.updateAPIKey(parseInt(appId), editingKey.key_id, data);
+        await loadAPIKeys(); // Reload the list
+        setIsModalOpen(false);
+        setEditingKey(null);
+      } else {
+        // Create new key
+        const response = await apiService.createAPIKey(parseInt(appId), data);
+        
+        // Show the API key value in a special modal
+        setCreatedKey(response);
+        setShowKeyModal(true);
+        setIsModalOpen(false);
+        setEditingKey(null);
+        
+        // Reload the list to include the new key
+        await loadAPIKeys();
+      }
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : 'Failed to save API key');
+    }
+  }
+
+  function handleCloseModal() {
+    setIsModalOpen(false);
+    setEditingKey(null);
+  }
+
+  function handleCloseKeyModal() {
+    setShowKeyModal(false);
+    setCreatedKey(null);
+  }
 
   const maskApiKey = (key: string) => {
-    return key.slice(0, 8) + '...' + key.slice(-8);
+    return key || '***...***';
   };
 
   if (loading) {
@@ -73,6 +146,24 @@ function APIKeysPage() {
         <div className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading API keys...</p>
+        </div>
+      </SettingsLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <SettingsLayout>
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-600">Error: {error}</p>
+            <button 
+              onClick={() => loadAPIKeys()}
+              className="mt-2 text-red-800 hover:text-red-900 underline"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       </SettingsLayout>
     );
@@ -87,7 +178,10 @@ function APIKeysPage() {
             <h2 className="text-xl font-semibold text-gray-900">API Keys</h2>
             <p className="text-gray-600">Manage API keys for external application access</p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+          <button 
+            onClick={handleCreateKey}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+          >
             <span className="mr-2">+</span>
             Create New API Key
           </button>
@@ -123,15 +217,18 @@ function APIKeysPage() {
                 {apiKeys.map((apiKey) => (
                   <tr key={apiKey.key_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{apiKey.name}</div>
+                      <div className="flex items-center">
+                        <span className="text-blue-400 text-xl mr-3">🔑</span>
+                        <div className="text-sm font-medium text-gray-900">{apiKey.name}</div>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                        {maskApiKey(apiKey.key)}
+                        {maskApiKey(apiKey.key_preview)}
                       </code>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(apiKey.created_at).toLocaleDateString()}
+                      {apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {apiKey.last_used_at 
@@ -151,13 +248,19 @@ function APIKeysPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <button 
-                          onClick={() => toggleKeyStatus(apiKey.key_id)}
+                          onClick={() => handleEditKey(apiKey.key_id)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleToggle(apiKey.key_id)}
                           className="text-yellow-600 hover:text-yellow-900"
                         >
                           {apiKey.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button 
-                          onClick={() => deleteKey(apiKey.key_id)}
+                          onClick={() => handleDelete(apiKey.key_id)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Delete
@@ -176,7 +279,10 @@ function APIKeysPage() {
             <p className="text-gray-600 mb-6">
               Create your first API key to allow external applications to access your agents.
             </p>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">
+            <button 
+              onClick={handleCreateKey}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+            >
               Create First API Key
             </button>
           </div>
@@ -202,6 +308,26 @@ function APIKeysPage() {
             </div>
           </div>
         </div>
+
+        {/* Create/Edit Modal */}
+        <Modal
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          title={editingKey ? 'Edit API Key' : 'Create New API Key'}
+        >
+          <APIKeyForm
+            apiKey={editingKey}
+            onSubmit={handleSaveKey}
+            onCancel={handleCloseModal}
+          />
+        </Modal>
+
+        {/* API Key Display Modal */}
+        <APIKeyDisplayModal
+          isOpen={showKeyModal}
+          onClose={handleCloseKeyModal}
+          apiKey={createdKey}
+        />
       </div>
     </SettingsLayout>
   );

@@ -148,6 +148,41 @@ class ApiService {
     });
   }
 
+  // ==================== API KEYS ====================
+  async getAPIKeys(appId: number) {
+    return this.request(`/internal/apps/${appId}/api-keys/`);
+  }
+
+  async getAPIKey(appId: number, keyId: number) {
+    return this.request(`/internal/apps/${appId}/api-keys/${keyId}`);
+  }
+
+  async createAPIKey(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/api-keys/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAPIKey(appId: number, keyId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/api-keys/${keyId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAPIKey(appId: number, keyId: number) {
+    return this.request(`/internal/apps/${appId}/api-keys/${keyId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async toggleAPIKey(appId: number, keyId: number) {
+    return this.request(`/internal/apps/${appId}/api-keys/${keyId}/toggle`, {
+      method: 'POST',
+    });
+  }
+
   // TODO: Add more endpoints as needed
 }
 
