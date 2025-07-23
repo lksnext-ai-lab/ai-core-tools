@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useUser } from '../contexts/UserContext';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 
@@ -10,6 +11,10 @@ interface App {
   name: string;
   created_at: string;
   owner_id: number;
+  owner_name?: string;
+  owner_email?: string;
+  role: string; // "owner" or "editor"
+  langsmith_configured: boolean;
 }
 
 // React Component = Function that returns HTML-like JSX
@@ -17,24 +22,22 @@ function AppsPage() {
   // State = variables that trigger re-renders when they change
   const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
   const [loading, setLoading] = useState(true);          // Like self.loading = True
-  const [error, setError] = useState<string | null>(null); // Like self.error = None
-  
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingApp, setEditingApp] = useState<App | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const { user } = useUser();
 
-  // useEffect = runs code when component loads (like __init__ method)
+  // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
     loadApps();
-  }, []); // Empty array means "run once when component mounts"
+  }, []);
 
-  // Async function to load data (like your service methods)
+  // Function to load apps from API
   async function loadApps() {
     try {
       setLoading(true);
-      const data = await apiService.getApps();
-      setApps(data); // This triggers a re-render!
       setError(null);
+      const response = await apiService.getApps();
+      setApps(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load apps');
     } finally {
@@ -42,161 +45,221 @@ function AppsPage() {
     }
   }
 
-  // Handle delete (like your delete endpoint)
-  async function handleDelete(appId: number) {
-    if (!confirm('Are you sure you want to delete this app?')) return;
-    
+  // Function to create a new app
+  async function handleCreateApp(data: { name: string }) {
     try {
-      await apiService.deleteApp(appId);
-      // Remove from state (optimistic update)
-      setApps(apps.filter(app => app.app_id !== appId));
+      await apiService.createApp(data);
+      setShowCreateModal(false);
+      loadApps(); // Reload the list
     } catch (err) {
-      alert('Failed to delete app');
+      throw err; // Let the form handle the error
     }
   }
 
-  // Handle create/edit app
-  async function handleSaveApp(data: { name: string }) {
+  // Function to leave an app (for editors only)
+  async function handleLeaveApp(app: App) {
+    if (!window.confirm(`Are you sure you want to leave "${app.name}"?`)) {
+      return;
+    }
+
     try {
-      if (editingApp) {
-        // Update existing app
-        const updatedApp = await apiService.updateApp(editingApp.app_id, data);
-        setApps(apps.map(app => 
-          app.app_id === editingApp.app_id ? updatedApp : app
-        ));
-      } else {
-        // Create new app
-        const newApp = await apiService.createApp(data);
-        setApps([...apps, newApp]);
-      }
-      
-      // Close modal and reset state
-      setIsModalOpen(false);
-      setEditingApp(null);
+      await apiService.leaveApp(app.app_id);
+      loadApps(); // Reload the list
     } catch (err) {
-      // Error handling is done in the form component
-      throw err;
+      alert(err instanceof Error ? err.message : 'Failed to leave app');
     }
   }
 
-  // Open create modal
-  function handleCreateApp() {
-    setEditingApp(null);
-    setIsModalOpen(true);
-  }
+  // Function to get user initials for avatar
+  const getUserInitials = (name?: string, email?: string) => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    if (email) {
+      return email[0].toUpperCase();
+    }
+    return 'U';
+  };
 
-  // Open edit modal
-  function handleEditApp(app: App) {
-    setEditingApp(app);
-    setIsModalOpen(true);
-  }
-
-  // Close modal
-  function handleCloseModal() {
-    setIsModalOpen(false);
-    setEditingApp(null);
-  }
-
-  // Render loading state
+  // Show loading spinner while fetching data
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading apps...</div>
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2">Loading apps...</span>
       </div>
     );
   }
 
-  // Render error state
+  // Show error message if something went wrong
   if (error) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        <strong>Error:</strong> {error}
-        <button 
-          onClick={loadApps}
-          className="ml-4 bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-        >
-          Retry
-        </button>
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex">
+          <span className="text-red-400 text-xl mr-3">⚠️</span>
+          <div>
+            <h3 className="text-sm font-medium text-red-800">Error Loading Apps</h3>
+            <p className="text-sm text-red-600 mt-1">{error}</p>
+            <button 
+              onClick={loadApps}
+              className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // Main render - JSX looks like HTML but it's JavaScript!
+  // Main render
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Apps</h1>
-        <button 
-          onClick={handleCreateApp}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">My Apps</h1>
+          <p className="text-gray-600">Manage your AI applications and workspaces</p>
+        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
         >
-          Create App
+          <span className="mr-2">+</span>
+          New App
         </button>
       </div>
 
       {/* Apps Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {apps.map(app => (
-          <div key={app.app_id} className="bg-white rounded-lg shadow-md p-6 border">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">{app.name}</h3>
-              <div className="flex space-x-2">
-                <button 
-                  onClick={() => handleEditApp(app)}
-                  className="text-blue-600 hover:text-blue-800"
-                >
-                  Edit
-                </button>
-                <button 
-                  onClick={() => handleDelete(app.app_id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  Delete
-                </button>
+      {apps.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">🤖</div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No apps yet</h3>
+          <p className="text-gray-600 mb-4">Create your first AI application to get started</p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+          >
+            Create App
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {apps.map((app) => (
+            <div key={app.app_id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="p-6">
+                {/* App Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <Link
+                      to={`/apps/${app.app_id}`}
+                      className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+                    >
+                      {app.name}
+                    </Link>
+                    
+                    {/* Role and Owner Info */}
+                    <div className="mt-2 flex items-center space-x-2">
+                      {app.role === 'owner' ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          <span className="mr-1">👑</span>
+                          Owner
+                        </span>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            Editor
+                          </span>
+                          <div className="flex items-center text-xs text-gray-600">
+                            <div className="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center mr-1">
+                              <span className="text-xs font-medium text-gray-600">
+                                {getUserInitials(app.owner_name, app.owner_email)}
+                              </span>
+                            </div>
+                            <span>
+                              Owner: {app.owner_name || app.owner_email}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center space-x-2">
+                    {app.role === 'editor' && (
+                      <button
+                        onClick={() => handleLeaveApp(app)}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Leave this app"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* App Stats */}
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex items-center justify-between">
+                    <span>LangSmith</span>
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                      app.langsmith_configured 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {app.langsmith_configured ? '✓ Configured' : 'Not configured'}
+                    </span>
+                  </div>
+                  
+                  {app.created_at && (
+                    <div className="flex items-center justify-between">
+                      <span>Created</span>
+                      <span>{new Date(app.created_at).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Actions */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex space-x-2">
+                    <Link
+                      to={`/apps/${app.app_id}`}
+                      className="flex-1 text-center px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors"
+                    >
+                      Open
+                    </Link>
+                    <Link
+                      to={`/apps/${app.app_id}/agents`}
+                      className="flex-1 text-center px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
+                    >
+                      Agents
+                    </Link>
+                    <Link
+                      to={`/apps/${app.app_id}/settings`}
+                      className="flex-1 text-center px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
+                    >
+                      Settings
+                    </Link>
+                  </div>
+                </div>
               </div>
             </div>
-            
-            <div className="text-sm text-gray-600">
-              <p>Created: {new Date(app.created_at).toLocaleDateString()}</p>
-              <p>ID: {app.app_id}</p>
-            </div>
-            
-            <div className="mt-4">
-              <Link 
-                to={`/apps/${app.app_id}`}
-                className="block w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded text-center"
-              >
-                Manage App
-              </Link>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {apps.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-gray-500 text-lg mb-4">No apps found</div>
-          <button 
-            onClick={handleCreateApp}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First App
-          </button>
+          ))}
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Create App Modal */}
       <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingApp ? 'Edit App' : 'Create New App'}
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create New App"
       >
         <AppForm
-          app={editingApp}
-          onSubmit={handleSaveApp}
-          onCancel={handleCloseModal}
+          onSubmit={handleCreateApp}
+          onCancel={() => setShowCreateModal(false)}
         />
       </Modal>
     </div>

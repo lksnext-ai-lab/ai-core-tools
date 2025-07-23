@@ -1,14 +1,28 @@
 // API Service - Think of this like your backend services!
 class ApiService {
   private baseURL = 'http://localhost:8000';
-  private token = 'temp-token-456'; // TODO: Replace with real auth (trying user_id 1)
+
+  private getAuthToken(): string | null {
+    // Get token from localStorage (same as auth service)
+    return localStorage.getItem('auth_token');
+  }
 
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseURL}${endpoint}`;
+    
+    const defaultHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Use token from auth service instead of hardcoded
+    const token = this.getAuthToken();
+    if (token) {
+      defaultHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
     const config: RequestInit = {
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.token}`,
+        ...defaultHeaders,
         ...options.headers,
       },
       ...options,
@@ -19,7 +33,7 @@ class ApiService {
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
-    
+
     return response.json();
   }
 
@@ -49,6 +63,23 @@ class ApiService {
   async deleteApp(appId: number) {
     return this.request(`/internal/apps/${appId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async leaveApp(appId: number) {
+    return this.request(`/internal/apps/${appId}/leave`, {
+      method: 'POST',
+    });
+  }
+
+  async getPendingInvitations() {
+    return this.request('/auth/pending-invitations');
+  }
+
+  async respondToInvitation(invitationId: number, action: 'accept' | 'decline') {
+    return this.request(`/auth/invitations/${invitationId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
     });
   }
 
@@ -239,15 +270,6 @@ class ApiService {
   async removeCollaborator(appId: number, userId: number) {
     return this.request(`/internal/apps/${appId}/collaboration/${userId}`, {
       method: 'DELETE',
-    });
-  }
-
-  async respondToInvitation(collaborationId: number, action: 'accept' | 'decline') {
-    return this.request(`/internal/apps/0/collaboration/invitations/${collaborationId}/respond`, {
-      method: 'POST',
-      body: JSON.stringify({
-        action
-      }),
     });
   }
 

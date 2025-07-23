@@ -11,6 +11,9 @@ class AppListItemSchema(BaseModel):
     role: str  # "owner", "admin", "member"
     created_at: Optional[datetime]
     langsmith_configured: bool
+    owner_id: int
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 

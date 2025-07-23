@@ -31,8 +31,8 @@ class AppCollaborationService:
             # Combine and remove duplicates
             all_apps = list({app.app_id: app for app in owned_apps + collaborated_apps}.values())
             
-            # Sort by creation date
-            return sorted(all_apps, key=lambda x: x.create_date, reverse=True)
+            # Sort by creation date, handling None values
+            return sorted(all_apps, key=lambda x: x.create_date or datetime.min, reverse=True)
             
         finally:
             session.close()
@@ -278,46 +278,40 @@ class AppCollaborationService:
             session.close()
     
     @staticmethod
-    def respond_to_invitation(collaboration_id: int, user_id: int, action: str) -> bool:
-        """Accept or decline a collaboration invitation"""
+    def respond_to_invitation(invitation_id: int, user_id: int, action: str) -> bool:
+        """Respond to a collaboration invitation"""
         session = SessionLocal()
         try:
-            # Find collaboration
             collaboration = session.query(AppCollaborator).filter(
-                AppCollaborator.id == collaboration_id,
-                AppCollaborator.user_id == user_id
+                AppCollaborator.id == invitation_id,
+                AppCollaborator.user_id == user_id,
+                AppCollaborator.status == CollaborationStatus.PENDING
             ).first()
             
             if not collaboration:
-                raise ValueError("Invitation not found")
+                return False
             
-            if collaboration.status != CollaborationStatus.PENDING:
-                raise ValueError("Invitation is no longer pending")
-            
-            # Update status
-            if action.lower() == "accept":
+            if action == 'accept':
                 collaboration.status = CollaborationStatus.ACCEPTED
                 collaboration.accepted_at = datetime.now()
-                logger.info(f"User {user_id} accepted invitation {collaboration_id}")
-            elif action.lower() == "decline":
+            elif action == 'decline':
                 collaboration.status = CollaborationStatus.DECLINED
-                logger.info(f"User {user_id} declined invitation {collaboration_id}")
             else:
-                raise ValueError("Action must be 'accept' or 'decline'")
+                return False
             
             session.commit()
             return True
             
         except Exception as e:
+            logger.error(f"Error responding to invitation: {str(e)}")
             session.rollback()
-            logger.error(f"Error responding to invitation {collaboration_id}: {str(e)}")
-            raise
+            return False
         finally:
             session.close()
-    
+
     @staticmethod
     def get_user_pending_invitations(user_id: int) -> List[AppCollaborator]:
-        """Get pending invitations for a user"""
+        """Get all pending invitations for a user"""
         session = SessionLocal()
         try:
             invitations = session.query(AppCollaborator).options(
@@ -328,15 +322,10 @@ class AppCollaborationService:
                 AppCollaborator.status == CollaborationStatus.PENDING
             ).all()
             
-            # Detach from session
-            for invitation in invitations:
-                session.expunge(invitation)
-                if invitation.app:
-                    session.expunge(invitation.app)
-                if invitation.inviter:
-                    session.expunge(invitation.inviter)
-            
             return invitations
             
+        except Exception as e:
+            logger.error(f"Error getting pending invitations for user {user_id}: {str(e)}")
+            return []
         finally:
             session.close() 

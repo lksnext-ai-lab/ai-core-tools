@@ -1,11 +1,51 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
 
 output_parsers_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== OUTPUT PARSER MANAGEMENT ====================
 
@@ -13,7 +53,7 @@ output_parsers_router = APIRouter()
                            summary="List output parsers",
                            tags=["Output Parsers"],
                            response_model=List[OutputParserListItemSchema])
-async def list_output_parsers(app_id: int, current_user: dict = Depends(get_current_user)):
+async def list_output_parsers(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     List all output parsers (data structures) for a specific app.
     """
@@ -56,7 +96,7 @@ async def list_output_parsers(app_id: int, current_user: dict = Depends(get_curr
                            summary="Get output parser details",
                            tags=["Output Parsers"],
                            response_model=OutputParserDetailSchema)
-async def get_output_parser(app_id: int, parser_id: int, current_user: dict = Depends(get_current_user)):
+async def get_output_parser(app_id: int, parser_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific output parser including its fields.
     """
@@ -107,7 +147,7 @@ async def get_output_parser(app_id: int, parser_id: int, current_user: dict = De
                     detail="Output parser not found"
                 )
             
-            # Convert fields from JSON to schema objects
+            # Convert JSON fields to schema format
             fields = []
             if parser.fields:
                 for field_data in parser.fields:
@@ -149,10 +189,10 @@ async def create_or_update_output_parser(
     app_id: int,
     parser_id: int,
     parser_data: CreateUpdateOutputParserSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
-    Create a new output parser or update an existing one with its fields.
+    Create a new output parser or update an existing one.
     """
     user_id = current_user["user_id"]
     
@@ -162,30 +202,6 @@ async def create_or_update_output_parser(
         from db.session import SessionLocal
         from models.output_parser import OutputParser
         from datetime import datetime
-        
-        # Validate field names (no duplicates, valid pattern)
-        field_names = [field.name for field in parser_data.fields]
-        if len(field_names) != len(set(field_names)):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Duplicate field names are not allowed"
-            )
-        
-        # Validate field name pattern
-        import re
-        name_pattern = re.compile(r'^[a-zA-Z0-9_]+$')
-        if not name_pattern.match(parser_data.name):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Parser name can only contain letters, numbers, and underscores"
-            )
-        
-        for field in parser_data.fields:
-            if field.name and not name_pattern.match(field.name):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Field name '{field.name}' can only contain letters, numbers, and underscores"
-                )
         
         session = SessionLocal()
         try:
@@ -213,23 +229,23 @@ async def create_or_update_output_parser(
             
             # Convert fields to JSON format
             fields_json = []
-            for field in parser_data.fields:
-                if not field.name:  # Skip empty field names
+            for field_data in parser_data.fields:
+                if not field_data.name:  # Skip empty field names
                     continue
                     
                 field_dict = {
-                    'name': field.name,
-                    'type': field.type,
-                    'description': field.description
+                    'name': field_data.name,
+                    'type': field_data.type,
+                    'description': field_data.description
                 }
                 
-                if field.type == 'parser' and field.parser_id:
-                    field_dict['parser_id'] = field.parser_id
-                elif field.type == 'list':
-                    if field.list_item_type:
-                        field_dict['list_item_type'] = field.list_item_type
-                    if field.list_item_type == 'parser' and field.list_item_parser_id:
-                        field_dict['list_item_parser_id'] = field.list_item_parser_id
+                if field_data.type == 'parser' and field_data.parser_id:
+                    field_dict['parser_id'] = field_data.parser_id
+                elif field_data.type == 'list':
+                    if field_data.list_item_type:
+                        field_dict['list_item_type'] = field_data.list_item_type
+                    if field_data.list_item_type == 'parser' and field_data.list_item_parser_id:
+                        field_dict['list_item_parser_id'] = field_data.list_item_parser_id
                 
                 fields_json.append(field_dict)
             
@@ -257,9 +273,9 @@ async def create_or_update_output_parser(
 @output_parsers_router.delete("/{parser_id}",
                               summary="Delete output parser",
                               tags=["Output Parsers"])
-async def delete_output_parser(app_id: int, parser_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_output_parser(app_id: int, parser_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
-    Delete an output parser (data structure).
+    Delete an output parser.
     """
     user_id = current_user["user_id"]
     

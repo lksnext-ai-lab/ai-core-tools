@@ -3,9 +3,53 @@ from typing import List, Optional
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
+from fastapi import Request
 
 collaboration_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        from utils.logger import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Error in authentication: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== COLLABORATION MANAGEMENT ====================
 
@@ -13,7 +57,7 @@ collaboration_router = APIRouter()
                            summary="List app collaborators",
                            tags=["Collaboration"],
                            response_model=List[CollaboratorListItemSchema])
-async def list_collaborators(app_id: int, current_user: dict = Depends(get_current_user)):
+async def list_collaborators(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     List all collaborators for a specific app.
     """
@@ -64,7 +108,7 @@ async def list_collaborators(app_id: int, current_user: dict = Depends(get_curre
 async def invite_collaborator(
     app_id: int,
     invitation_data: InviteCollaboratorSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Invite a user to collaborate on an app.
@@ -139,7 +183,7 @@ async def update_collaborator_role(
     app_id: int,
     user_id: int,
     role_data: UpdateCollaboratorRoleSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Update a collaborator's role.
@@ -176,7 +220,7 @@ async def update_collaborator_role(
 async def remove_collaborator(
     app_id: int,
     user_id: int,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Remove a collaborator from an app.
@@ -214,7 +258,7 @@ async def remove_collaborator(
 async def respond_to_invitation(
     collaboration_id: int,
     response_data: CollaborationResponseSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Accept or decline a collaboration invitation.
@@ -249,7 +293,7 @@ async def respond_to_invitation(
                          summary="Get my pending invitations",
                          tags=["Collaboration"],
                          response_model=List[CollaboratorListItemSchema])
-async def get_my_invitations(current_user: dict = Depends(get_current_user)):
+async def get_my_invitations(current_user: dict = Depends(get_current_user_oauth)):
     """
     Get all pending collaboration invitations for the current user.
     """

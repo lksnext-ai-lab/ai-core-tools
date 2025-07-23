@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional
 
 # Import models for enum access
@@ -6,9 +6,49 @@ from models.embedding_service import EmbeddingProvider
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
 
 embedding_services_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== EMBEDDING SERVICE MANAGEMENT ====================
 
@@ -16,7 +56,7 @@ embedding_services_router = APIRouter()
                                summary="List embedding services",
                                tags=["Embedding Services"],
                                response_model=List[EmbeddingServiceListItemSchema])
-async def list_embedding_services(app_id: int, current_user: dict = Depends(get_current_user)):
+async def list_embedding_services(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     List all embedding services for a specific app.
     """
@@ -58,7 +98,7 @@ async def list_embedding_services(app_id: int, current_user: dict = Depends(get_
                                summary="Get embedding service details",
                                tags=["Embedding Services"],
                                response_model=EmbeddingServiceDetailSchema)
-async def get_embedding_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user)):
+async def get_embedding_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific embedding service.
     """
@@ -109,7 +149,7 @@ async def get_embedding_service(app_id: int, service_id: int, current_user: dict
                 provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
                 model_name=service.description or "",
                 api_key=service.api_key,
-                base_url=service.endpoint or "",
+                base_url=service.endpoint or "",  # Use endpoint as base_url
                 created_at=service.create_date,
                 available_providers=providers
             )
@@ -134,7 +174,7 @@ async def create_or_update_embedding_service(
     app_id: int,
     service_id: int,
     service_data: CreateUpdateEmbeddingServiceSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Create a new embedding service or update an existing one.
@@ -197,7 +237,7 @@ async def create_or_update_embedding_service(
 @embedding_services_router.delete("/{service_id}",
                                   summary="Delete embedding service",
                                   tags=["Embedding Services"])
-async def delete_embedding_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_embedding_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Delete an embedding service.
     """

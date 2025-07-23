@@ -3,12 +3,60 @@ from typing import List
 
 # Import services
 from services.app_service import AppService
+from services.app_collaboration_service import AppCollaborationService
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
+from fastapi import Request
+
+# Import logger
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 apps_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in authentication: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== APP MANAGEMENT ====================
 
@@ -16,39 +64,48 @@ apps_router = APIRouter()
                 summary="List user's apps",
                 tags=["Apps"],
                 response_model=List[AppListItemSchema])
-async def list_apps(current_user: dict = Depends(get_current_user)):
+async def list_apps(current_user: dict = Depends(get_current_user_oauth)):
     """
     List all apps that the current user owns or collaborates on.
     """
     user_id = current_user["user_id"]
     
-    # Get user's own apps
-    owned_apps = AppService.get_apps_by_user(user_id)
+    # Use the collaboration service method that already handles duplicates properly
+    accessible_apps = AppCollaborationService.get_user_accessible_apps(user_id)
     
-    # Get apps where user is a collaborator
-    collaborated_apps = AppService.get_collaborated_apps(user_id)
-    
-    # Combine and format response
+    # Format response
     apps = []
     
-    for app in owned_apps:
-        apps.append(AppListItemSchema(
-            app_id=app.app_id,
-            name=app.name,
-            role="owner",
-            created_at=app.create_date,
-            langsmith_configured=bool(app.langsmith_api_key)
-        ))
+    # Import User model to get owner info
+    from models.user import User
+    from db.session import SessionLocal
     
-    for collaboration in collaborated_apps:
-        app = collaboration.app
-        apps.append(AppListItemSchema(
-            app_id=app.app_id,
-            name=app.name,
-            role=collaboration.role.value,
-            created_at=app.create_date,
-            langsmith_configured=bool(app.langsmith_api_key)
-        ))
+    session = SessionLocal()
+    try:
+        for app in accessible_apps:
+            # Get owner info
+            owner = session.query(User).filter(User.user_id == app.owner_id).first()
+            
+            # Determine user's role in this app
+            if app.owner_id == user_id:
+                role = "owner"
+            else:
+                # Get user's role as collaborator
+                role = AppCollaborationService.get_user_app_role(user_id, app.app_id) or "editor"
+            
+            apps.append(AppListItemSchema(
+                app_id=app.app_id,
+                name=app.name,
+                role=role,
+                created_at=app.create_date,
+                langsmith_configured=bool(app.langsmith_api_key),
+                owner_id=app.owner_id,
+                owner_name=owner.name if owner else None,
+                owner_email=owner.email if owner else None
+            ))
+    
+    finally:
+        session.close()
     
     return apps
 
@@ -57,7 +114,7 @@ async def list_apps(current_user: dict = Depends(get_current_user)):
                 summary="Get app details",
                 tags=["Apps"], 
                 response_model=AppDetailSchema)
-async def get_app(app_id: int, current_user: dict = Depends(get_current_user)):
+async def get_app(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific app.
     """
@@ -96,7 +153,7 @@ async def get_app(app_id: int, current_user: dict = Depends(get_current_user)):
                  status_code=status.HTTP_201_CREATED)
 async def create_app(
     app_data: CreateAppSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Create a new app for the current user.
@@ -130,7 +187,7 @@ async def create_app(
 async def update_app(
     app_id: int,
     app_data: UpdateAppSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Update an existing app. Only owners can update apps.
@@ -181,7 +238,7 @@ async def update_app(
 @apps_router.delete("/{app_id}",
                    summary="Delete app",
                    tags=["Apps"])
-async def delete_app(app_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_app(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Delete an app. Only owners can delete apps.
     """
@@ -210,4 +267,67 @@ async def delete_app(app_id: int, current_user: dict = Depends(get_current_user)
             detail="Failed to delete app"
         )
     
-    return {"message": "App deleted successfully"} 
+    return {"message": "App deleted successfully"}
+
+@apps_router.post("/{app_id}/leave",
+                 summary="Leave app collaboration",
+                 tags=["Apps"])
+async def leave_app(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
+    """
+    Leave an app collaboration (for editors only).
+    """
+    user_id = current_user["user_id"]
+    
+    # Check if user is a collaborator (not owner)
+    user_role = AppCollaborationService.get_user_app_role(user_id, app_id)
+    
+    if not user_role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="App not found or access denied"
+        )
+    
+    if user_role == "owner":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="App owners cannot leave their own apps"
+        )
+    
+    # Remove collaboration
+    try:
+        # For self-leave, we need a special method or modify the existing one
+        # Since the user is leaving themselves, we'll handle it directly
+        from db.session import SessionLocal
+        from models.app_collaborator import AppCollaborator
+        
+        session = SessionLocal()
+        try:
+            # Find and delete the collaboration
+            collaboration = session.query(AppCollaborator).filter(
+                AppCollaborator.app_id == app_id,
+                AppCollaborator.user_id == user_id
+            ).first()
+            
+            if not collaboration:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Collaboration not found"
+                )
+            
+            session.delete(collaboration)
+            session.commit()
+            
+            logger.info(f"User {user_id} left app {app_id}")
+            return {"message": "Successfully left the app"}
+            
+        finally:
+            session.close()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error leaving app {app_id} for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to leave app"
+        ) 

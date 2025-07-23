@@ -7,7 +7,6 @@ interface CollaborationFormProps {
 
 function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('editor');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,11 +27,11 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     try {
       setIsSubmitting(true);
       setError(null);
-      await onSubmit(email.trim(), role);
+      // Always invite as editor (as per requirements)
+      await onSubmit(email.trim(), 'editor');
       
       // Reset form on success
       setEmail('');
-      setRole('editor');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send invitation');
     } finally {
@@ -48,9 +47,9 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="space-y-4">
         {/* Email Input */}
-        <div className="md:col-span-2">
+        <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
             Email Address *
           </label>
@@ -66,33 +65,16 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
           />
         </div>
 
-        {/* Role Selector */}
-        <div>
-          <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
-            Role *
-          </label>
-          <select
-            id="role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            disabled={isSubmitting}
-          >
-            <option value="editor">Editor</option>
-            <option value="owner">Owner</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Role Descriptions */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">Role Permissions</h4>
-        <div className="space-y-2 text-sm text-gray-600">
-          <div>
-            <strong className="text-indigo-600">Editor:</strong> Can view and edit app content, agents, and settings. Cannot invite other users or transfer ownership.
-          </div>
-          <div>
-            <strong className="text-indigo-600">Owner:</strong> Full access including inviting users, managing permissions, and transferring ownership. Can delete the app.
+        {/* Role Info (Read-only) */}
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h4 className="text-sm font-medium text-gray-900 mb-2">
+            Invitation Role: <span className="text-indigo-600">Editor</span>
+          </h4>
+          <div className="text-sm text-gray-600">
+            <p>
+              <strong>Editors</strong> can view and edit app content, agents, and settings. 
+              They cannot invite other users or manage collaborations.
+            </p>
           </div>
         </div>
       </div>

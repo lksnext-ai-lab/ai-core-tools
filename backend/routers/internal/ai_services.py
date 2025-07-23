@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional
 
 # Import models for enum access
@@ -6,9 +6,49 @@ from models.ai_service import ProviderEnum
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
 
 ai_services_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== AI SERVICE MANAGEMENT ====================
 
@@ -16,7 +56,7 @@ ai_services_router = APIRouter()
                         summary="List AI services",
                         tags=["AI Services"],
                         response_model=List[AIServiceListItemSchema])
-async def list_ai_services(app_id: int, current_user: dict = Depends(get_current_user)):
+async def list_ai_services(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     List all AI services for a specific app.
     """
@@ -58,7 +98,7 @@ async def list_ai_services(app_id: int, current_user: dict = Depends(get_current
                         summary="Get AI service details",
                         tags=["AI Services"],
                         response_model=AIServiceDetailSchema)
-async def get_ai_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user)):
+async def get_ai_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific AI service.
     """
@@ -135,7 +175,7 @@ async def create_or_update_ai_service(
     app_id: int,
     service_id: int,
     service_data: CreateUpdateAIServiceSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Create a new AI service or update an existing one.
@@ -198,7 +238,7 @@ async def create_or_update_ai_service(
 @ai_services_router.delete("/{service_id}",
                            summary="Delete AI service",
                            tags=["AI Services"])
-async def delete_ai_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_ai_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Delete an AI service.
     """

@@ -1,5 +1,7 @@
 import { type ReactNode } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
+import { useUser } from '../../contexts/UserContext';
+import PendingInvitationsNotification from '../PendingInvitationsNotification';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -8,6 +10,7 @@ interface AppLayoutProps {
 function AppLayout({ children }: AppLayoutProps) {
   const { appId } = useParams();
   const location = useLocation();
+  const { user, logout } = useUser();
 
   // Mock app data for now - will be replaced with real API call
   const currentApp = {
@@ -17,6 +20,17 @@ function AppLayout({ children }: AppLayoutProps) {
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path) ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50';
+  };
+
+  // Get user initials for avatar
+  const getUserInitials = (name?: string, email?: string) => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    if (email) {
+      return email[0].toUpperCase();
+    }
+    return 'U';
   };
 
   return (
@@ -155,15 +169,37 @@ function AppLayout({ children }: AppLayoutProps) {
           )}
         </nav>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-200">
-          <div className="flex items-center">
-            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-              <span className="text-gray-600 text-sm font-medium">U</span>
+        {/* User info and notifications at bottom */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center flex-1">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                <span className="text-white text-sm font-medium">
+                  {getUserInitials(user?.name, user?.email)}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user?.name || 'User'}
+                </p>
+                <p className="text-xs text-gray-600 truncate">
+                  {user?.email}
+                </p>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">User</p>
-              <p className="text-xs text-gray-600">user@example.com</p>
+            <div className="flex items-center space-x-2">
+              {/* Pending Invitations */}
+              <PendingInvitationsNotification />
+              
+              <button
+                onClick={logout}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                title="Logout"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -177,8 +213,8 @@ function AppLayout({ children }: AppLayoutProps) {
             <div>
               {/* Breadcrumbs can go here */}
             </div>
-            <div className="flex items-center space-x-4">
-              {/* User menu, notifications, etc. can go here */}
+            <div>
+              {/* Top-right space available for other features */}
             </div>
           </div>
         </header>

@@ -1,11 +1,51 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
 
 mcp_configs_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== MCP CONFIG MANAGEMENT ====================
 
@@ -13,7 +53,7 @@ mcp_configs_router = APIRouter()
                         summary="List MCP configs",
                         tags=["MCP Configs"],
                         response_model=List[MCPConfigListItemSchema])
-async def list_mcp_configs(app_id: int, current_user: dict = Depends(get_current_user)):
+async def list_mcp_configs(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     List all MCP configs for a specific app.
     """
@@ -54,7 +94,7 @@ async def list_mcp_configs(app_id: int, current_user: dict = Depends(get_current
                         summary="Get MCP config details",
                         tags=["MCP Configs"],
                         response_model=MCPConfigDetailSchema)
-async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depends(get_current_user)):
+async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific MCP config.
     """
@@ -99,37 +139,13 @@ async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depen
             # Get available transport types
             transport_types = [{"value": t.value, "name": t.value} for t in TransportType]
             
-            # Handle command/url field mapping
-            command_value = ""
-            if config.transport_type.value == "stdio":
-                command_value = config.command or ""
-            elif config.transport_type.value == "sse":
-                command_value = config.url or ""
-            
-            # Convert JSON fields to strings for frontend
-            args_str = ""
-            if config.args:
-                if isinstance(config.args, str):
-                    args_str = config.args
-                else:
-                    import json
-                    args_str = json.dumps(config.args)
-            
-            env_str = ""
-            if config.env:
-                if isinstance(config.env, str):
-                    env_str = config.env
-                else:
-                    import json
-                    env_str = json.dumps(config.env)
-            
             return MCPConfigDetailSchema(
                 config_id=config.config_id,
                 name=config.name,
                 transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
-                command=command_value,
-                args=args_str,
-                env=env_str,
+                command=config.command or "",
+                args=config.args or "",
+                env=config.env or "",
                 created_at=config.create_date,
                 available_transport_types=transport_types
             )
@@ -154,7 +170,7 @@ async def create_or_update_mcp_config(
     app_id: int,
     config_id: int,
     config_data: CreateUpdateMCPConfigSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Create a new MCP config or update an existing one.
@@ -190,39 +206,10 @@ async def create_or_update_mcp_config(
             
             # Update config data
             config.name = config_data.name
-            # Convert string to enum
-            from models.mcp_config import TransportType
-            if config_data.transport_type == "stdio":
-                config.transport_type = TransportType.STDIO
-            elif config_data.transport_type == "sse":
-                config.transport_type = TransportType.SSE
-            config.server_name = config_data.name  # Use name as server_name for simplicity
-            
-            # Handle command/url field mapping
-            if config_data.transport_type == "stdio":
-                config.command = config_data.command
-                config.url = None
-            elif config_data.transport_type == "sse":
-                config.url = config_data.command
-                config.command = None
-            
-            # Convert string JSON to actual JSON for storage
-            import json
-            try:
-                if config_data.args.strip():
-                    config.args = json.loads(config_data.args)
-                else:
-                    config.args = []
-            except (json.JSONDecodeError, AttributeError):
-                config.args = []
-            
-            try:
-                if config_data.env.strip():
-                    config.env = json.loads(config_data.env)
-                else:
-                    config.env = {}
-            except (json.JSONDecodeError, AttributeError):
-                config.env = {}
+            config.transport_type = config_data.transport_type
+            config.command = config_data.command
+            config.args = config_data.args
+            config.env = config_data.env
             
             session.add(config)
             session.commit()
@@ -246,7 +233,7 @@ async def create_or_update_mcp_config(
 @mcp_configs_router.delete("/{config_id}",
                            summary="Delete MCP config",
                            tags=["MCP Configs"])
-async def delete_mcp_config(app_id: int, config_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_mcp_config(app_id: int, config_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Delete an MCP config.
     """

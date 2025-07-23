@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import SettingsLayout from '../../components/layout/SettingsLayout';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
+import { useUser } from '../../contexts/UserContext';
 
 interface Collaborator {
   id: number;
@@ -19,13 +20,16 @@ interface Collaborator {
 
 function CollaborationPage() {
   const { appId } = useParams();
+  const { user } = useUser();
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
   // Load collaborators from the API
   useEffect(() => {
     loadCollaborators();
+    checkUserRole();
   }, [appId]);
 
   async function loadCollaborators() {
@@ -41,6 +45,23 @@ function CollaborationPage() {
       console.error('Error loading collaborators:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function checkUserRole() {
+    if (!appId) return;
+    
+    try {
+      // Get app details to check if current user is owner
+      const app = await apiService.getApp(parseInt(appId));
+      if (app.owner_id === user?.user_id) {
+        setCurrentUserRole('owner');
+      } else {
+        setCurrentUserRole('editor');
+      }
+    } catch (err) {
+      console.error('Error checking user role:', err);
+      setCurrentUserRole('editor'); // Default to editor if we can't determine
     }
   }
 
@@ -110,6 +131,8 @@ function CollaborationPage() {
     }
   };
 
+  const isOwner = currentUserRole === 'owner';
+
   if (loading) {
     return (
       <SettingsLayout>
@@ -148,21 +171,41 @@ function CollaborationPage() {
           <p className="text-gray-600">Manage who can access and edit this app</p>
         </div>
 
-        {/* Invite New Collaborator */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <span className="text-indigo-400 text-xl mr-2">👥</span>
-              Invite Collaborator
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              Invite users to collaborate on this app. They'll receive an email invitation.
-            </p>
+        {/* Invite New Collaborator - Only show to owners */}
+        {isOwner ? (
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                <span className="text-indigo-400 text-xl mr-2">👥</span>
+                Invite Collaborator
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Invite users to collaborate on this app as editors. They'll receive an email invitation.
+              </p>
+            </div>
+            <div className="p-6">
+              <CollaborationForm onSubmit={handleInviteUser} />
+            </div>
           </div>
-          <div className="p-6">
-            <CollaborationForm onSubmit={handleInviteUser} />
+        ) : (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-yellow-400 text-xl">ℹ️</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Editor Access
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>
+                    You have editor access to this app. Only the app owner can invite new collaborators.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Current Collaborators */}
         <div className="bg-white shadow rounded-lg">
@@ -172,7 +215,7 @@ function CollaborationPage() {
               Current Collaborators ({collaborators.length})
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Manage existing collaborators and their permissions
+              {isOwner ? 'Manage existing collaborators and their permissions' : 'View current collaborators'}
             </p>
           </div>
           
@@ -193,9 +236,11 @@ function CollaborationPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Invited
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    {isOwner && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -240,26 +285,29 @@ function CollaborationPage() {
                           by {collaborator.inviter_email || 'Unknown'}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          {collaborator.status === 'accepted' && (
-                            <select
-                              value={collaborator.role}
-                              onChange={(e) => handleUpdateRole(collaborator.user_id, e.target.value)}
-                              className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                              <option value="editor">Editor</option>
-                              <option value="owner">Owner</option>
-                            </select>
-                          )}
-                          <button 
-                            onClick={() => handleRemoveCollaborator(collaborator.user_id)}
-                            className="text-red-600 hover:text-red-900 transition-colors"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </td>
+                      {isOwner && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            {collaborator.status === 'accepted' && collaborator.role !== 'owner' && (
+                              <select
+                                value={collaborator.role}
+                                onChange={(e) => handleUpdateRole(collaborator.user_id, e.target.value)}
+                                className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              >
+                                <option value="editor">Editor</option>
+                              </select>
+                            )}
+                            {collaborator.role !== 'owner' && (
+                              <button 
+                                onClick={() => handleRemoveCollaborator(collaborator.user_id)}
+                                className="text-red-600 hover:text-red-900 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -270,7 +318,10 @@ function CollaborationPage() {
               <div className="text-4xl mb-4">👥</div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">No Collaborators Yet</h3>
               <p className="text-gray-600">
-                This app doesn't have any collaborators. Invite users above to start sharing.
+                {isOwner 
+                  ? "This app doesn't have any collaborators. Invite users above to start sharing."
+                  : "This app doesn't have any other collaborators yet."
+                }
               </p>
             </div>
           )}
@@ -292,6 +343,7 @@ function CollaborationPage() {
                   <p>
                     Collaboration allows multiple users to work on the same app. Invited users will 
                     receive an email invitation and can access the app once they accept.
+                    {!isOwner && " You can leave this collaboration anytime from the apps list."}
                   </p>
                 </div>
               </div>
@@ -306,14 +358,15 @@ function CollaborationPage() {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-yellow-800">
-                  Security Notice
+                  Collaboration Rules
                 </h3>
                 <div className="mt-2 text-sm text-yellow-700">
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Only invite users you trust with access to your app and data</li>
-                    <li>Owners have full control and can invite/remove other users</li>
+                    <li>Only app owners can invite new collaborators</li>
+                    <li>All new collaborators are invited as editors</li>
                     <li>Editors can modify app content but cannot manage collaborators</li>
-                    <li>You can revoke access at any time by removing collaborators</li>
+                    <li>Owners have full control and can remove collaborators</li>
+                    {!isOwner && <li>You can leave this collaboration from the main apps list</li>}
                   </ul>
                 </div>
               </div>

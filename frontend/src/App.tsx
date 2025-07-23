@@ -1,138 +1,135 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { UserProvider } from './contexts/UserContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
+// Pages
 import AppsPage from './pages/AppsPage';
 import AppDashboard from './pages/AppDashboard';
 import AgentsPage from './pages/AgentsPage';
+// Settings pages
 import AIServicesPage from './pages/settings/AIServicesPage';
-import EmbeddingServicesPage from './pages/settings/EmbeddingServicesPage';
-import MCPConfigsPage from './pages/settings/MCPConfigsPage';
-import DataStructuresPage from './pages/settings/DataStructuresPage';
 import APIKeysPage from './pages/settings/APIKeysPage';
 import CollaborationPage from './pages/settings/CollaborationPage';
+import EmbeddingServicesPage from './pages/settings/EmbeddingServicesPage';
 import GeneralSettingsPage from './pages/settings/GeneralSettingsPage';
+import MCPConfigsPage from './pages/settings/MCPConfigsPage';
+import DataStructuresPage from './pages/settings/DataStructuresPage';
+// Auth pages
+import LoginPage from './pages/LoginPage';
+import AuthSuccessPage from './pages/AuthSuccessPage';
 
-function App() {
+function AppContent() {
   return (
     <Router>
       <Routes>
-        {/* Global Routes (no sidebar context) */}
-        <Route path="/" element={<Navigate to="/apps" replace />} />
-        
-        {/* Apps List (uses layout but no app context) */}
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/success" element={<AuthSuccessPage />} />
+
+        {/* Protected routes */}
         <Route path="/apps" element={
-          <AppLayout>
-            <AppsPage />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <AppsPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        {/* App-specific routes (with app context in sidebar) */}
+        {/* App-specific routes */}
         <Route path="/apps/:appId" element={
-          <AppLayout>
-            <AppDashboard />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <AppDashboard />
+            </AppLayout>
+          </ProtectedRoute>
         } />
-        
+
         <Route path="/apps/:appId/agents" element={
-          <AppLayout>
-            <AgentsPage />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <AgentsPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        {/* Placeholder routes for other features */}
-        <Route path="/apps/:appId/repositories" element={
-          <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📁</div>
-              <h2 className="text-xl font-semibold mb-2">Repositories</h2>
-              <p className="text-gray-600">Coming soon!</p>
-            </div>
-          </AppLayout>
+        {/* Settings routes */}
+        <Route path="/apps/:appId/settings" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <GeneralSettingsPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        <Route path="/apps/:appId/silos" element={
-          <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🗄️</div>
-              <h2 className="text-xl font-semibold mb-2">Silos</h2>
-              <p className="text-gray-600">Coming soon!</p>
-            </div>
-          </AppLayout>
-        } />
-
-        <Route path="/apps/:appId/domains" element={
-          <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🌐</div>
-              <h2 className="text-xl font-semibold mb-2">Domains</h2>
-              <p className="text-gray-600">Coming soon!</p>
-            </div>
-          </AppLayout>
-        } />
-
-        {/* Settings Routes */}
-        <Route path="/apps/:appId/settings/ai-services" element={
-          <AppLayout>
-            <AIServicesPage />
-          </AppLayout>
-        } />
-        
-        <Route path="/apps/:appId/settings/api-keys" element={
-          <AppLayout>
-            <APIKeysPage />
-          </AppLayout>
-        } />
-        
         <Route path="/apps/:appId/settings/general" element={
-          <AppLayout>
-            <GeneralSettingsPage />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <GeneralSettingsPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        <Route path="/apps/:appId/settings/embedding-services" element={
-          <AppLayout>
-            <EmbeddingServicesPage />
-          </AppLayout>
+        <Route path="/apps/:appId/settings/ai-services" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AIServicesPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        <Route path="/apps/:appId/settings/mcp-configs" element={
-          <AppLayout>
-            <MCPConfigsPage />
-          </AppLayout>
-        } />
-
-        {/* Placeholder Settings Routes */}
-
-        <Route path="/apps/:appId/settings/data-structures" element={
-          <AppLayout>
-            <DataStructuresPage />
-          </AppLayout>
+        <Route path="/apps/:appId/settings/api-keys" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <APIKeysPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
         <Route path="/apps/:appId/settings/collaboration" element={
-          <AppLayout>
-            <CollaborationPage />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <CollaborationPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        {/* Default settings redirect */}
-        <Route path="/apps/:appId/settings" element={<Navigate to="ai-services" replace />} />
-
-        {/* About page */}
-        <Route path="/about" element={
-          <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">ℹ️</div>
-              <h2 className="text-xl font-semibold mb-2">About Mattin AI</h2>
-              <p className="text-gray-600">Your AI platform dashboard</p>
-            </div>
-          </AppLayout>
+        <Route path="/apps/:appId/settings/embedding-services" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <EmbeddingServicesPage />
+            </AppLayout>
+          </ProtectedRoute>
         } />
 
-        {/* Catch all - redirect to apps */}
-        <Route path="*" element={<Navigate to="/apps" replace />} />
+        <Route path="/apps/:appId/settings/mcp-configs" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <MCPConfigsPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/settings/data-structures" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <DataStructuresPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to="/apps" replace />} />
       </Routes>
     </Router>
-  )
+  );
 }
 
-export default App
+function App() {
+  return (
+    <UserProvider>
+      <AppContent />
+    </UserProvider>
+  );
+}
+
+export default App;

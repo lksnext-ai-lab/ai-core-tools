@@ -35,12 +35,16 @@ class AppService:
 
     @staticmethod
     def get_collaborated_apps(user_id: int) -> List[AppCollaborator]:
-        """Get apps where user is a collaborator"""
+        """Get apps where user is an accepted collaborator"""
         session = SessionLocal()
         try:
             from sqlalchemy.orm import joinedload
+            from models.app_collaborator import CollaborationStatus
             return session.query(AppCollaborator)\
-                .filter(AppCollaborator.user_id == user_id)\
+                .filter(
+                    AppCollaborator.user_id == user_id,
+                    AppCollaborator.status == CollaborationStatus.ACCEPTED
+                )\
                 .options(joinedload(AppCollaborator.app))\
                 .all()
         finally:
