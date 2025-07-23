@@ -15,7 +15,7 @@ output_parsers_router = APIRouter()
                            response_model=List[OutputParserListItemSchema])
 async def list_output_parsers(app_id: int, current_user: dict = Depends(get_current_user)):
     """
-    List all output parsers for a specific app.
+    List all output parsers (data structures) for a specific app.
     """
     user_id = current_user["user_id"]
     
@@ -31,10 +31,12 @@ async def list_output_parsers(app_id: int, current_user: dict = Depends(get_curr
             
             result = []
             for parser in parsers:
+                field_count = len(parser.fields) if parser.fields else 0
                 result.append(OutputParserListItemSchema(
                     parser_id=parser.parser_id,
                     name=parser.name,
-                    type=getattr(parser, 'type', 'unknown'),
+                    description=parser.description,
+                    field_count=field_count,
                     created_at=parser.create_date
                 ))
             
@@ -56,7 +58,7 @@ async def list_output_parsers(app_id: int, current_user: dict = Depends(get_curr
                            response_model=OutputParserDetailSchema)
 async def get_output_parser(app_id: int, parser_id: int, current_user: dict = Depends(get_current_user)):
     """
-    Get detailed information about a specific output parser.
+    Get detailed information about a specific output parser including its fields.
     """
     user_id = current_user["user_id"]
     
@@ -68,14 +70,29 @@ async def get_output_parser(app_id: int, parser_id: int, current_user: dict = De
         
         session = SessionLocal()
         try:
+            # Get available parsers for references (excluding current parser to prevent self-reference)
+            available_parsers_query = session.query(OutputParser).filter(
+                OutputParser.app_id == app_id
+            )
+            if parser_id != 0:
+                available_parsers_query = available_parsers_query.filter(
+                    OutputParser.parser_id != parser_id
+                )
+            
+            available_parsers = [
+                {"value": p.parser_id, "name": p.name}
+                for p in available_parsers_query.all()
+            ]
+            
             if parser_id == 0:
                 # New output parser
                 return OutputParserDetailSchema(
                     parser_id=0,
                     name="",
-                    type="json",
-                    instructions="",
-                    created_at=None
+                    description="",
+                    fields=[],
+                    created_at=None,
+                    available_parsers=available_parsers
                 )
             
             # Existing output parser
@@ -90,12 +107,26 @@ async def get_output_parser(app_id: int, parser_id: int, current_user: dict = De
                     detail="Output parser not found"
                 )
             
+            # Convert fields from JSON to schema objects
+            fields = []
+            if parser.fields:
+                for field_data in parser.fields:
+                    fields.append(OutputParserFieldSchema(
+                        name=field_data.get('name', ''),
+                        type=field_data.get('type', 'str'),
+                        description=field_data.get('description', ''),
+                        parser_id=field_data.get('parser_id'),
+                        list_item_type=field_data.get('list_item_type'),
+                        list_item_parser_id=field_data.get('list_item_parser_id')
+                    ))
+            
             return OutputParserDetailSchema(
                 parser_id=parser.parser_id,
                 name=parser.name,
-                type=getattr(parser, 'type', 'unknown'),
-                instructions=getattr(parser, 'instructions', ''),
-                created_at=parser.create_date
+                description=parser.description,
+                fields=fields,
+                created_at=parser.create_date,
+                available_parsers=available_parsers
             )
             
         finally:
@@ -121,7 +152,7 @@ async def create_or_update_output_parser(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Create a new output parser or update an existing one.
+    Create a new output parser or update an existing one with its fields.
     """
     user_id = current_user["user_id"]
     
@@ -131,6 +162,30 @@ async def create_or_update_output_parser(
         from db.session import SessionLocal
         from models.output_parser import OutputParser
         from datetime import datetime
+        
+        # Validate field names (no duplicates, valid pattern)
+        field_names = [field.name for field in parser_data.fields]
+        if len(field_names) != len(set(field_names)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate field names are not allowed"
+            )
+        
+        # Validate field name pattern
+        import re
+        name_pattern = re.compile(r'^[a-zA-Z0-9_]+$')
+        if not name_pattern.match(parser_data.name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parser name can only contain letters, numbers, and underscores"
+            )
+        
+        for field in parser_data.fields:
+            if field.name and not name_pattern.match(field.name):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Field name '{field.name}' can only contain letters, numbers, and underscores"
+                )
         
         session = SessionLocal()
         try:
@@ -154,10 +209,31 @@ async def create_or_update_output_parser(
             
             # Update parser data
             parser.name = parser_data.name
-            if hasattr(parser, 'type'):
-                parser.type = parser_data.type
-            if hasattr(parser, 'instructions'):
-                parser.instructions = parser_data.instructions
+            parser.description = parser_data.description
+            
+            # Convert fields to JSON format
+            fields_json = []
+            for field in parser_data.fields:
+                if not field.name:  # Skip empty field names
+                    continue
+                    
+                field_dict = {
+                    'name': field.name,
+                    'type': field.type,
+                    'description': field.description
+                }
+                
+                if field.type == 'parser' and field.parser_id:
+                    field_dict['parser_id'] = field.parser_id
+                elif field.type == 'list':
+                    if field.list_item_type:
+                        field_dict['list_item_type'] = field.list_item_type
+                    if field.list_item_type == 'parser' and field.list_item_parser_id:
+                        field_dict['list_item_parser_id'] = field.list_item_parser_id
+                
+                fields_json.append(field_dict)
+            
+            parser.fields = fields_json
             
             session.add(parser)
             session.commit()
@@ -183,7 +259,7 @@ async def create_or_update_output_parser(
                               tags=["Output Parsers"])
 async def delete_output_parser(app_id: int, parser_id: int, current_user: dict = Depends(get_current_user)):
     """
-    Delete an output parser.
+    Delete an output parser (data structure).
     """
     user_id = current_user["user_id"]
     

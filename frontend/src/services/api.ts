@@ -183,6 +183,35 @@ class ApiService {
     });
   }
 
+  // ==================== OUTPUT PARSERS (DATA STRUCTURES) ====================
+  async getOutputParsers(appId: number) {
+    return this.request(`/internal/apps/${appId}/output-parsers/`);
+  }
+
+  async getOutputParser(appId: number, parserId: number) {
+    return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`);
+  }
+
+  async createOutputParser(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/output-parsers/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOutputParser(appId: number, parserId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteOutputParser(appId: number, parserId: number) {
+    return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // TODO: Add more endpoints as needed
 }
 

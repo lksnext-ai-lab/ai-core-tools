@@ -6,6 +6,7 @@ import AgentsPage from './pages/AgentsPage';
 import AIServicesPage from './pages/settings/AIServicesPage';
 import EmbeddingServicesPage from './pages/settings/EmbeddingServicesPage';
 import MCPConfigsPage from './pages/settings/MCPConfigsPage';
+import DataStructuresPage from './pages/settings/DataStructuresPage';
 import APIKeysPage from './pages/settings/APIKeysPage';
 import GeneralSettingsPage from './pages/settings/GeneralSettingsPage';
 
@@ -102,11 +103,7 @@ function App() {
 
         <Route path="/apps/:appId/settings/data-structures" element={
           <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📄</div>
-              <h2 className="text-xl font-semibold mb-2">Data Structures</h2>
-              <p className="text-gray-600">Coming soon!</p>
-            </div>
+            <DataStructuresPage />
           </AppLayout>
         } />
 
