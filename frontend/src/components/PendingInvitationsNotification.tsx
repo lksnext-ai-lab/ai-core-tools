@@ -82,8 +82,8 @@ function PendingInvitationsNotification() {
             onClick={() => setShowDetails(false)}
           />
           
-          {/* Notification Panel - positioned above the button */}
-          <div className="absolute bottom-full right-0 mb-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+          {/* Notification Panel - positioned below the button */}
+          <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
             <div className="p-3 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-900">
                 Pending Invitations ({invitations.length})
