@@ -4,6 +4,7 @@ import AppsPage from './pages/AppsPage';
 import AppDashboard from './pages/AppDashboard';
 import AgentsPage from './pages/AgentsPage';
 import AIServicesPage from './pages/settings/AIServicesPage';
+import EmbeddingServicesPage from './pages/settings/EmbeddingServicesPage';
 import APIKeysPage from './pages/settings/APIKeysPage';
 import GeneralSettingsPage from './pages/settings/GeneralSettingsPage';
 
@@ -84,16 +85,13 @@ function App() {
           </AppLayout>
         } />
 
-        {/* Placeholder Settings Routes */}
         <Route path="/apps/:appId/settings/embedding-services" element={
           <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🧠</div>
-              <h2 className="text-xl font-semibold mb-2">Embedding Services</h2>
-              <p className="text-gray-600">Coming soon!</p>
-            </div>
+            <EmbeddingServicesPage />
           </AppLayout>
         } />
+
+        {/* Placeholder Settings Routes */}
 
         <Route path="/apps/:appId/settings/mcp-configs" element={
           <AppLayout>

@@ -1,6 +1,6 @@
 // API Service - Think of this like your backend services!
 class ApiService {
-  private baseURL = 'http://localhost:8002';
+  private baseURL = 'http://localhost:8000';
   private token = 'temp-token-456'; // TODO: Replace with real auth (trying user_id 1)
 
   private async request(endpoint: string, options: RequestInit = {}) {
@@ -86,6 +86,35 @@ class ApiService {
 
   async deleteAIService(appId: number, serviceId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ==================== EMBEDDING SERVICES ====================
+  async getEmbeddingServices(appId: number) {
+    return this.request(`/internal/apps/${appId}/embedding-services/`);
+  }
+
+  async getEmbeddingService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`);
+  }
+
+  async createEmbeddingService(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/embedding-services/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateEmbeddingService(appId: number, serviceId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteEmbeddingService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
     });
   }
