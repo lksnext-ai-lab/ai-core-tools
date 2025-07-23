@@ -212,6 +212,49 @@ class ApiService {
     });
   }
 
+  // ==================== COLLABORATION ====================
+  async getCollaborators(appId: number) {
+    return this.request(`/internal/apps/${appId}/collaboration/`);
+  }
+
+  async inviteCollaborator(appId: number, email: string, role: string = 'editor') {
+    return this.request(`/internal/apps/${appId}/collaboration/invite`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        role
+      }),
+    });
+  }
+
+  async updateCollaboratorRole(appId: number, userId: number, role: string) {
+    return this.request(`/internal/apps/${appId}/collaboration/${userId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        role
+      }),
+    });
+  }
+
+  async removeCollaborator(appId: number, userId: number) {
+    return this.request(`/internal/apps/${appId}/collaboration/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async respondToInvitation(collaborationId: number, action: 'accept' | 'decline') {
+    return this.request(`/internal/apps/0/collaboration/invitations/${collaborationId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action
+      }),
+    });
+  }
+
+  async getMyInvitations() {
+    return this.request(`/internal/apps/0/collaboration/my-invitations`);
+  }
+
   // TODO: Add more endpoints as needed
 }
 

@@ -8,6 +8,7 @@ import EmbeddingServicesPage from './pages/settings/EmbeddingServicesPage';
 import MCPConfigsPage from './pages/settings/MCPConfigsPage';
 import DataStructuresPage from './pages/settings/DataStructuresPage';
 import APIKeysPage from './pages/settings/APIKeysPage';
+import CollaborationPage from './pages/settings/CollaborationPage';
 import GeneralSettingsPage from './pages/settings/GeneralSettingsPage';
 
 function App() {
@@ -109,11 +110,7 @@ function App() {
 
         <Route path="/apps/:appId/settings/collaboration" element={
           <AppLayout>
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">👥</div>
-              <h2 className="text-xl font-semibold mb-2">Collaboration</h2>
-              <p className="text-gray-600">Coming soon!</p>
-            </div>
+            <CollaborationPage />
           </AppLayout>
         } />
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -367,3 +367,83 @@ class MessageResponseSchema(BaseModel):
 class ErrorResponseSchema(BaseModel):
     """Standard error response"""
     detail: str 
+
+
+# ==================== COLLABORATION SCHEMAS ====================
+
+class CollaboratorListItemSchema(BaseModel):
+    """Schema for collaborator list items"""
+    id: int
+    user_id: int
+    user_email: str
+    user_name: Optional[str]
+    role: str  # 'owner' or 'editor'
+    status: str  # 'pending', 'accepted', 'declined'
+    invited_by: int
+    inviter_email: Optional[str]
+    invited_at: datetime
+    accepted_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CollaboratorDetailSchema(BaseModel):
+    """Schema for detailed collaborator information"""
+    id: int
+    app_id: int
+    user_id: int
+    user_email: str
+    user_name: Optional[str]
+    role: str
+    status: str
+    invited_by: int
+    inviter_email: Optional[str]
+    invited_at: datetime
+    accepted_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InviteCollaboratorSchema(BaseModel):
+    """Schema for inviting a collaborator"""
+    email: str
+    role: str = "editor"
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        import re
+        if not re.match(r'^[^@]+@[^@]+\.[^@]+$', v):
+            raise ValueError('Invalid email format')
+        return v.lower().strip()
+    
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v):
+        if v.lower() not in ['editor', 'owner']:
+            raise ValueError('Role must be "editor" or "owner"')
+        return v.lower()
+
+
+class UpdateCollaboratorRoleSchema(BaseModel):
+    """Schema for updating a collaborator's role"""
+    role: str
+    
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v):
+        if v.lower() not in ['editor', 'owner']:
+            raise ValueError('Role must be "editor" or "owner"')
+        return v.lower()
+
+
+class CollaborationResponseSchema(BaseModel):
+    """Schema for responding to collaboration invitations"""
+    action: str  # 'accept' or 'decline'
+    
+    @field_validator('action')
+    @classmethod
+    def validate_action(cls, v):
+        if v.lower() not in ['accept', 'decline']:
+            raise ValueError('Action must be "accept" or "decline"')
+        return v.lower() 

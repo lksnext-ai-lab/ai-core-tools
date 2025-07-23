@@ -24,6 +24,12 @@ from models.url import Url
 # Import routers
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
+from routers.internal.ai_services import ai_services_router
+from routers.internal.embedding_services import embedding_services_router
+from routers.internal.mcp_configs import mcp_configs_router
+from routers.internal.api_keys import api_keys_router
+from routers.internal.output_parsers import output_parsers_router
+from routers.internal.collaboration import collaboration_router
 
 app = FastAPI(
     title="IA Core Tools API",
