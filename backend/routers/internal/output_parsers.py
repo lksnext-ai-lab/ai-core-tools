@@ -3,49 +3,14 @@ from typing import List, Optional
 
 # Import schemas and auth
 from .schemas import *
-# Switch to Google OAuth auth instead of temp token auth
-from routers.auth import verify_jwt_token
+from .auth_utils import get_current_user_oauth
+
+# Import logger
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 output_parsers_router = APIRouter()
-
-# ==================== AUTHENTICATION ====================
-
-async def get_current_user_oauth(request: Request):
-    """
-    Get current authenticated user using Google OAuth JWT tokens.
-    Compatible with the frontend auth system.
-    """
-    try:
-        # Get token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required. Please provide Authorization header with Bearer token.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        token = auth_header.split(' ')[1]
-        
-        # Verify token using Google OAuth system
-        payload = verify_jwt_token(token)
-        if not payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        return payload
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 # ==================== OUTPUT PARSER MANAGEMENT ====================
 
