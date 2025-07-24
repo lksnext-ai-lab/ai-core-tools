@@ -31,14 +31,21 @@ class AgentService:
     def get_agent(agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
         session = SessionLocal()
         try:
-            if agent_type == 'ocr':
+            if agent_type == 'ocr' or agent_type == 'ocr_agent':
                 return session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
-            return session.query(Agent).filter(Agent.agent_id == agent_id).first()
+            elif agent_type == 'basic' or agent_type == 'agent':
+                return session.query(Agent).filter(Agent.agent_id == agent_id).first()
+            else:
+                # If no specific type or unknown type, check both tables
+                agent = session.query(Agent).filter(Agent.agent_id == agent_id).first()
+                if not agent:
+                    agent = session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+                return agent
         finally:
             session.close()
     
     @staticmethod
-    def create_or_update_agent(agent_data: dict, agent_type: str) -> Union[Agent, OCRAgent]:
+    def create_or_update_agent(agent_data: dict, agent_type: str) -> int:
         session = SessionLocal()
         try:
             agent_id = agent_data.get('agent_id')
@@ -54,7 +61,8 @@ class AgentService:
             session.add(agent)
             session.commit()
             
-            return agent
+            # Return the agent ID before closing the session
+            return agent.agent_id
         finally:
             session.close()
 
@@ -62,14 +70,19 @@ class AgentService:
     def _update_ocr_agent(agent: OCRAgent, data: dict):
         was_tool = agent.is_tool
         agent.name = data['name']
-        agent.description = data.get('description')
+        agent.description = data.get('description', '')  # Ensure it's not None
         agent.vision_service_id = data.get('vision_service_id')
         agent.vision_system_prompt = data.get('vision_system_prompt')
         agent.service_id = data.get('service_id')
         agent.text_system_prompt = data.get('text_system_prompt')
         agent.output_parser_id = data.get('output_parser_id') or None
         agent.app_id = data['app_id']
-        agent.is_tool = data.get('is_tool') == 'on'
+        # Handle is_tool field - can be boolean from API or 'on' from form
+        is_tool_value = data.get('is_tool')
+        if isinstance(is_tool_value, bool):
+            agent.is_tool = is_tool_value
+        else:
+            agent.is_tool = is_tool_value == 'on'
         
         # If agent was a tool but is no longer one, remove all references to it
         if was_tool and not agent.is_tool:
@@ -79,7 +92,7 @@ class AgentService:
     def _update_normal_agent(agent: Agent, data: dict):
         was_tool = agent.is_tool
         agent.name = data['name']
-        agent.description = data.get('description')
+        agent.description = data.get('description', '')  # Ensure it's not None
         agent.system_prompt = data.get('system_prompt')
         agent.prompt_template = data.get('prompt_template')
         agent.status = data.get('status')
@@ -88,19 +101,34 @@ class AgentService:
         agent.ollama_model_name = data.get('ollama_model_name')
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
-        agent.has_memory = data.get('has_memory') == 'on'
+        # Handle has_memory field - can be boolean from API or 'on' from form
+        has_memory_value = data.get('has_memory')
+        if isinstance(has_memory_value, bool):
+            agent.has_memory = has_memory_value
+        else:
+            agent.has_memory = has_memory_value == 'on'
         agent.output_parser_id = data.get('output_parser_id') or None
-        agent.is_tool = data.get('is_tool') == 'on'
+        # Handle is_tool field - can be boolean from API or 'on' from form
+        is_tool_value = data.get('is_tool')
+        if isinstance(is_tool_value, bool):
+            agent.is_tool = is_tool_value
+        else:
+            agent.is_tool = is_tool_value == 'on'
         
         # If agent was a tool but is no longer one, remove all references to it
         if was_tool and not agent.is_tool:
             AgentService._remove_tool_references(agent.agent_id)
 
     @staticmethod
-    def update_agent_tools(agent: Agent, tool_ids: list, form_data: dict = None):
+    def update_agent_tools(agent_id: int, tool_ids: list, form_data: dict = None):
         from models.agent import AgentTool
         session = SessionLocal()
         try:
+            # Get the agent with associations
+            agent = session.query(Agent).filter(Agent.agent_id == agent_id).first()
+            if not agent:
+                return
+            
             # Get existing tool associations
             existing_tools = {assoc.tool_id: assoc for assoc in agent.tool_associations}
             
@@ -137,10 +165,15 @@ class AgentService:
             session.close()
     
     @staticmethod
-    def update_agent_mcps(agent: Agent, mcp_ids: list, form_data: dict = None):
+    def update_agent_mcps(agent_id: int, mcp_ids: list, form_data: dict = None):
         from models.agent import AgentMCP
         session = SessionLocal()
         try:
+            # Get the agent with associations
+            agent = session.query(Agent).filter(Agent.agent_id == agent_id).first()
+            if not agent:
+                return
+            
             # Convert mcp_ids to list if it's not already
             if isinstance(mcp_ids, str):
                 mcp_ids = [mcp_ids]
@@ -182,13 +215,19 @@ class AgentService:
     def delete_agent(agent_id: int):
         session = SessionLocal()
         try:
+            # Check both Agent and OCRAgent tables
             agent = session.query(Agent).filter(Agent.agent_id == agent_id).first()
+            if not agent:
+                agent = session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+            
             if agent:
                 # First remove all references to this agent as a tool
                 AgentService._remove_tool_references(agent_id)
                 # Then delete the agent
                 session.delete(agent)
                 session.commit()
+                return True
+            return False
         finally:
             session.close()
 

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 
 interface MCPConfigFormData {
   name: string;
+  server_name: string;
+  description: string;
   transport_type: string;
   command: string;
   args: string;
@@ -11,6 +13,8 @@ interface MCPConfigFormData {
 interface MCPConfig {
   config_id: number;
   name: string;
+  server_name: string;
+  description: string;
   transport_type: string;
   command: string;
   args: string;
@@ -29,6 +33,8 @@ interface MCPConfigFormProps {
 function MCPConfigForm({ mcpConfig, onSubmit, onCancel, loading = false }: MCPConfigFormProps) {
   const [formData, setFormData] = useState<MCPConfigFormData>({
     name: '',
+    server_name: '',
+    description: '',
     transport_type: '',
     command: '',
     args: '',
@@ -69,6 +75,8 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel, loading = false }: MCPCo
     if (mcpConfig) {
       setFormData({
         name: mcpConfig.name || '',
+        server_name: mcpConfig.server_name || '',
+        description: mcpConfig.description || '',
         transport_type: mcpConfig.transport_type || '',
         command: mcpConfig.command || '',
         args: mcpConfig.args || '',
@@ -102,6 +110,10 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel, loading = false }: MCPCo
     // Basic validation
     if (!formData.name.trim()) {
       setError('Config name is required');
+      return;
+    }
+    if (!formData.server_name.trim()) {
+      setError('Server name is required');
       return;
     }
     if (!formData.transport_type) {
@@ -152,6 +164,42 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel, loading = false }: MCPCo
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           placeholder="e.g., Filesystem Server, GitHub MCP"
           required
+        />
+      </div>
+
+      {/* Server Name */}
+      <div>
+        <label htmlFor="server_name" className="block text-sm font-medium text-gray-700 mb-2">
+          Server Name *
+        </label>
+        <input
+          type="text"
+          id="server_name"
+          name="server_name"
+          value={formData.server_name}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          placeholder="e.g., filesystem, github, database"
+          required
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Unique identifier for this MCP server configuration
+        </p>
+      </div>
+
+      {/* Description */}
+      <div>
+        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+          Description
+        </label>
+        <textarea
+          id="description"
+          name="description"
+          value={formData.description}
+          onChange={handleChange}
+          rows={2}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          placeholder="Optional description of this MCP configuration"
         />
       </div>
 

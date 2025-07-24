@@ -6,6 +6,7 @@ import AppLayout from './components/layout/AppLayout';
 import AppsPage from './pages/AppsPage';
 import AppDashboard from './pages/AppDashboard';
 import AgentsPage from './pages/AgentsPage';
+import AgentFormPage from './pages/AgentFormPage';
 import SilosPage from './pages/SilosPage';
 import SiloFormPage from './pages/SiloFormPage';
 import SiloPlaygroundPage from './pages/SiloPlaygroundPage';
@@ -58,6 +59,14 @@ function AppContent() {
           <ProtectedRoute>
             <AppLayout>
               <AgentsPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/agents/:agentId" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AgentFormPage />
             </AppLayout>
           </ProtectedRoute>
         } />

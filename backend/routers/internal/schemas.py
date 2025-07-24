@@ -60,10 +60,17 @@ class AgentDetailSchema(BaseModel):
     """Schema for detailed agent information"""
     agent_id: int
     name: str
+    description: str
     system_prompt: str
     prompt_template: str
     type: str
     is_tool: bool
+    has_memory: bool
+    service_id: Optional[int] = None
+    silo_id: Optional[int] = None
+    output_parser_id: Optional[int] = None
+    tool_ids: List[int] = []
+    mcp_config_ids: List[int] = []
     created_at: Optional[datetime]
     request_count: int
     # Form data for editing
@@ -79,10 +86,15 @@ class AgentDetailSchema(BaseModel):
 class CreateUpdateAgentSchema(BaseModel):
     """Schema for creating or updating an agent"""
     name: str
+    description: Optional[str] = ""
     system_prompt: Optional[str] = ""
     prompt_template: Optional[str] = ""
     type: str = "agent"  # "agent", "ocr_agent"
     is_tool: bool = False
+    has_memory: bool = False
+    service_id: Optional[int] = None
+    silo_id: Optional[int] = None
+    output_parser_id: Optional[int] = None
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
 
@@ -363,6 +375,8 @@ class MCPConfigDetailSchema(BaseModel):
 class CreateUpdateMCPConfigSchema(BaseModel):
     """Schema for creating or updating an MCP config"""
     name: str
+    server_name: str
+    description: Optional[str] = ""
     transport_type: str
     command: str = ""
     args: str = ""

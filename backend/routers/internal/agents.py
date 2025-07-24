@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional, Dict, Any
 
 # Import services
@@ -6,9 +6,62 @@ from services.agent_service import AgentService
 
 # Import schemas and auth
 from .schemas import *
-from .auth import get_current_user
+# Switch to Google OAuth auth instead of temp token auth
+from routers.auth import verify_jwt_token
+
+# Import logger
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 agents_router = APIRouter()
+
+# ==================== AUTHENTICATION ====================
+
+async def get_current_user_oauth(request: Request):
+    """
+    Get current authenticated user using Google OAuth JWT tokens.
+    Compatible with the frontend auth system.
+    """
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        logger.info(f"Auth header received: {auth_header[:20] + '...' if auth_header and len(auth_header) > 20 else auth_header}")
+        
+        if not auth_header or not auth_header.startswith('Bearer '):
+            logger.error("No Authorization header or invalid format")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required. Please provide Authorization header with Bearer token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = auth_header.split(' ')[1]
+        logger.info(f"Token extracted: {token[:20] + '...' if len(token) > 20 else token}")
+        
+        # Verify token using Google OAuth system
+        payload = verify_jwt_token(token)
+        if not payload:
+            logger.error("Token verification failed - invalid or expired token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        logger.info(f"Token verified successfully for user: {payload.get('user_id')}")
+        return payload
+        
+    except HTTPException:
+        logger.error("HTTPException in authentication, re-raising")
+        raise
+    except Exception as e:
+        logger.error(f"Error in authentication: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # ==================== AGENT MANAGEMENT ====================
 
@@ -16,7 +69,7 @@ agents_router = APIRouter()
                   summary="List agents",
                   tags=["Agents"],
                   response_model=List[AgentListItemSchema])
-async def list_agents(app_id: int, current_user: dict = Depends(get_current_user)):
+async def list_agents(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     List all agents for a specific app.
     """
@@ -46,7 +99,7 @@ async def list_agents(app_id: int, current_user: dict = Depends(get_current_user
                   summary="Get agent details",
                   tags=["Agents"],
                   response_model=AgentDetailSchema)
-async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user)):
+async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific agent plus form data for editing.
     """
@@ -106,16 +159,38 @@ async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get
         mcp_query = session.query(MCPConfig).filter(MCPConfig.app_id == app_id).all()
         mcp_configs = [{"config_id": c.config_id, "name": c.name} for c in mcp_query]
         
+        # Get agent's current associations
+        agent_tool_ids = []
+        agent_mcp_ids = []
+        
+        if agent_id != 0:
+            # Get tool associations
+            from models.agent import AgentTool
+            tool_assocs = session.query(AgentTool).filter(AgentTool.agent_id == agent_id).all()
+            agent_tool_ids = [assoc.tool_id for assoc in tool_assocs]
+            
+            # Get MCP associations
+            from models.agent import AgentMCP
+            mcp_assocs = session.query(AgentMCP).filter(AgentMCP.agent_id == agent_id).all()
+            agent_mcp_ids = [assoc.config_id for assoc in mcp_assocs]
+        
     finally:
         session.close()
     
     return AgentDetailSchema(
         agent_id=agent.agent_id,
         name=agent.name or "",
+        description=getattr(agent, 'description', '') or "",
         system_prompt=getattr(agent, 'system_prompt', '') or "",
         prompt_template=getattr(agent, 'prompt_template', '') or "",
         type=agent.type or "agent",
         is_tool=agent.is_tool or False,
+        has_memory=getattr(agent, 'has_memory', False) or False,
+        service_id=getattr(agent, 'service_id', None),
+        silo_id=getattr(agent, 'silo_id', None),
+        output_parser_id=getattr(agent, 'output_parser_id', None),
+        tool_ids=agent_tool_ids,
+        mcp_config_ids=agent_mcp_ids,
         created_at=agent.create_date,
         request_count=getattr(agent, 'request_count', 0) or 0,
         # Form data
@@ -135,7 +210,7 @@ async def create_or_update_agent(
     app_id: int,
     agent_id: int,
     agent_data: CreateUpdateAgentSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Create a new agent or update an existing one.
@@ -151,29 +226,32 @@ async def create_or_update_agent(
         'agent_id': agent_id,
         'app_id': app_id,
         'name': agent_data.name,
+        'description': agent_data.description,
         'system_prompt': agent_data.system_prompt,
         'prompt_template': agent_data.prompt_template,
         'type': agent_data.type,
-        'is_tool': agent_data.is_tool
+        'is_tool': agent_data.is_tool,
+        'has_memory': agent_data.has_memory,
+        'service_id': agent_data.service_id,
+        'silo_id': agent_data.silo_id,
+        'output_parser_id': agent_data.output_parser_id
     }
     
     # Create or update agent
-    agent = agent_service.create_or_update_agent(agent_dict, agent_data.type)
+    created_agent_id = agent_service.create_or_update_agent(agent_dict, agent_data.type)
     
-    # Update tools and MCPs if provided
-    if agent_data.tool_ids:
-        agent_service.update_agent_tools(agent, agent_data.tool_ids, {})
-    if agent_data.mcp_config_ids:
-        agent_service.update_agent_mcps(agent, agent_data.mcp_config_ids, {})
+    # Update tools and MCPs (always call to handle empty arrays for unselecting)
+    agent_service.update_agent_tools(created_agent_id, agent_data.tool_ids, {})
+    agent_service.update_agent_mcps(created_agent_id, agent_data.mcp_config_ids, {})
     
     # Return updated agent (reuse the GET logic)
-    return await get_agent(app_id, agent.agent_id, current_user)
+    return await get_agent(app_id, created_agent_id, current_user)
 
 
 @agents_router.delete("/{agent_id}",
                      summary="Delete agent",
                      tags=["Agents"])
-async def delete_agent(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_agent(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Delete an agent.
     """
@@ -208,7 +286,7 @@ async def delete_agent(app_id: int, agent_id: int, current_user: dict = Depends(
 async def update_agent_prompt(
     agent_id: int,
     prompt_data: UpdatePromptSchema,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_oauth)
 ):
     """
     Update agent system prompt or prompt template.
@@ -248,7 +326,7 @@ async def update_agent_prompt(
 @agents_router.get("/{agent_id}/playground",
                   summary="Get agent playground",
                   tags=["Agents", "Playground"])
-async def agent_playground(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user)):
+async def agent_playground(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get agent playground interface data.
     """
@@ -276,7 +354,7 @@ async def agent_playground(app_id: int, agent_id: int, current_user: dict = Depe
 @agents_router.get("/{agent_id}/analytics",
                   summary="Get agent analytics",
                   tags=["Agents", "Analytics"])
-async def agent_analytics(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user)):
+async def agent_analytics(app_id: int, agent_id: int, current_user: dict = Depends(get_current_user_oauth)):
     """
     Get agent analytics data (premium feature).
     """

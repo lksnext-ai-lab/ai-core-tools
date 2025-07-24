@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional
+import json
 
 # Import schemas and auth
 from .schemas import *
@@ -144,8 +145,8 @@ async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depen
                 name=config.name,
                 transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
                 command=config.command or "",
-                args=config.args or "",
-                env=config.env or "",
+                args=json.dumps(config.args) if config.args else "",
+                env=json.dumps(config.env) if config.env else "",
                 created_at=config.create_date,
                 available_transport_types=transport_types
             )
@@ -181,7 +182,7 @@ async def create_or_update_mcp_config(
     
     try:
         from db.session import SessionLocal
-        from models.mcp_config import MCPConfig
+        from models.mcp_config import MCPConfig, TransportType
         from datetime import datetime
         
         session = SessionLocal()
@@ -206,10 +207,19 @@ async def create_or_update_mcp_config(
             
             # Update config data
             config.name = config_data.name
-            config.transport_type = config_data.transport_type
+            config.server_name = config_data.server_name
+            config.description = config_data.description
+            config.transport_type = TransportType(config_data.transport_type)
             config.command = config_data.command
-            config.args = config_data.args
-            config.env = config_data.env
+            # Parse JSON fields
+            try:
+                config.args = json.loads(config_data.args) if config_data.args else []
+            except json.JSONDecodeError:
+                config.args = []
+            try:
+                config.env = json.loads(config_data.env) if config_data.env else {}
+            except json.JSONDecodeError:
+                config.env = {}
             
             session.add(config)
             session.commit()

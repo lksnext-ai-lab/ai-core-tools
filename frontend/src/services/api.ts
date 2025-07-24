@@ -100,6 +100,26 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`);
   }
 
+  async createAgent(appId: number, agentId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAgent(appId: number, agentId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAgent(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);
