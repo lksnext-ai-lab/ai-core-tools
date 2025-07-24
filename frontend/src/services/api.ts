@@ -4,20 +4,28 @@ class ApiService {
 
   private getAuthToken(): string | null {
     // Get token from localStorage (same as auth service)
-    return localStorage.getItem('auth_token');
+    const token = localStorage.getItem('auth_token');
+    console.log('API: Auth token from localStorage:', token ? 'Token exists' : 'No token found');
+    return token;
   }
 
   async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseURL}${endpoint}`;
     
-    const defaultHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+    const defaultHeaders: Record<string, string> = {};
+
+    // Only set Content-Type if not FormData (browser will set it automatically for FormData)
+    if (!(options.body instanceof FormData)) {
+      defaultHeaders['Content-Type'] = 'application/json';
+    }
 
     // Use token from auth service instead of hardcoded
     const token = this.getAuthToken();
     if (token) {
       defaultHeaders['Authorization'] = `Bearer ${token}`;
+      console.log('API: Authorization header set');
+    } else {
+      console.log('API: No token found, request will be unauthorized');
     }
 
     const config: RequestInit = {
@@ -315,6 +323,102 @@ class ApiService {
         filter_metadata: filterMetadata
       }),
     });
+  }
+
+  // ==================== REPOSITORIES API ====================
+  async getRepositories(appId: number) {
+    console.log('API: Getting repositories for appId:', appId);
+    const result = await this.request(`/internal/apps/${appId}/repositories/`);
+    console.log('API: Repositories result:', result);
+    return result;
+  }
+
+  async getRepository(appId: number, repositoryId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`);
+  }
+
+  async createRepository(appId: number, data: { name: string; embedding_service_id?: number }) {
+    return this.request(`/internal/apps/${appId}/repositories/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number }) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRepository(appId: number, repositoryId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async uploadResources(appId: number, repositoryId: number, files: File[]) {
+    console.log('API: uploadResources called with:', { appId, repositoryId, filesCount: files.length });
+    
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+      console.log('API: Added file to FormData:', file.name);
+    });
+
+    // Get the auth token manually for this request
+    const token = this.getAuthToken();
+    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
+    
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      console.log('API: Authorization header set for upload');
+    } else {
+      console.log('API: WARNING - No token found for upload request');
+    }
+
+    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
+    
+    try {
+      const result = await this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources`, {
+        method: 'POST',
+        headers: headers, // Only set Authorization, let browser handle Content-Type for FormData
+        body: formData,
+      });
+      console.log('API: Upload successful:', result);
+      return result;
+    } catch (error) {
+      console.error('API: Upload failed:', error);
+      throw error;
+    }
+  }
+
+  async deleteResource(appId: number, repositoryId: number, resourceId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async downloadResource(appId: number, repositoryId: number, resourceId: number) {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}/download`, {
+      method: 'GET',
+      headers: headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.blob();
   }
 
   // TODO: Add more endpoints as needed

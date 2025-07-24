@@ -395,29 +395,44 @@ class SiloService:
 
     @staticmethod
     def index_resource(resource: Resource):
-        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
-        path = os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
-        file_extension = os.path.splitext(resource.uri)[1].lower()
-
-        # Prepare base metadata
-        base_metadata = {
-            "repository_id": resource.repository_id,
-            "resource_id": resource.resource_id,
-            "silo_id": resource.repository.silo_id,
-            "name": resource.uri,
-            # Store relative path instead of absolute path for portability
-            "ref": os.path.join(str(resource.repository_id), resource.uri),
-            "file_type": file_extension
-        }
-
-        docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
-
         session = SessionLocal()
         try:
+            # Load resource with relationships within the session to avoid detached instance issues
+            resource_with_relations = session.query(Resource).filter(Resource.resource_id == resource.resource_id).first()
+            if not resource_with_relations:
+                logger.error(f"Resource {resource.resource_id} not found for indexing")
+                return
+                
+            collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
+            path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
+
+            # Prepare base metadata
+            base_metadata = {
+                "repository_id": resource_with_relations.repository_id,
+                "resource_id": resource_with_relations.resource_id,
+                "silo_id": resource_with_relations.repository.silo_id,
+                "name": resource_with_relations.uri,
+                # Store relative path instead of absolute path for portability
+                "ref": os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri),
+                "file_type": file_extension
+            }
+
+            docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
+
             from db.base import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
-            embedding_service = resource.repository.silo.embedding_service
+            embedding_service = resource_with_relations.repository.silo.embedding_service
+            
+            if not embedding_service:
+                logger.warning(f"Silo {resource_with_relations.repository.silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
+                return
+                
             pg_vector_tools.index_documents(collection_name, docs, embedding_service)
+            logger.info(f"Successfully indexed resource {resource_with_relations.resource_id} in silo {resource_with_relations.repository.silo_id}")
+        except Exception as e:
+            logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}")
+            raise
         finally:
             session.close()
 
@@ -429,16 +444,25 @@ class SiloService:
         logger.info(f"Eliminando recurso {resource.resource_id} del silo {resource.repository.silo_id}")
         collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
         
-        silo = SiloService.get_silo(resource.repository.silo_id)
-        if not silo:
-            logger.error(f"Silo no encontrado para el recurso {resource.resource_id}")
-            return
-
         session = SessionLocal()
         try:
+            # Load silo within the session to avoid detached instance issues
+            silo = session.query(Silo).filter(Silo.silo_id == resource.repository.silo_id).first()
+            if not silo:
+                logger.error(f"Silo no encontrado para el recurso {resource.resource_id}")
+                return
+
+            # Check if silo has embedding service
+            if not silo.embedding_service:
+                logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
+                return
+
             from db.base import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
-            pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=resource.repository.silo.embedding_service)
+            pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
+        except Exception as e:
+            logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
+            # Don't raise the exception - allow the resource to be deleted from database and disk
         finally:
             session.close()
 

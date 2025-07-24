@@ -112,6 +112,7 @@ class RepositoryDetailSchema(BaseModel):
     created_at: Optional[datetime]
     resources: List[Dict[str, Any]]
     embedding_services: List[Dict[str, Any]]
+    embedding_service_id: Optional[int] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -119,6 +120,7 @@ class RepositoryDetailSchema(BaseModel):
 class CreateUpdateRepositorySchema(BaseModel):
     """Schema for creating or updating a repository"""
     name: str
+    embedding_service_id: Optional[int] = None
 
 
 # ==================== RESOURCE SCHEMAS ====================

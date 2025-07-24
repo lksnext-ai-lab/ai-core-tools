@@ -35,6 +35,11 @@ class RepositoryService:
     def create_repository(repository: Repository, embedding_service_id: Optional[int] = None) -> Repository:
         session = SessionLocal()
         try:
+            # First create the output parser for the repository
+            output_parser_service = OutputParserService()
+            parser_id = output_parser_service.create_default_filter_for_repo(repository)
+            
+            # Create the silo with the correct metadata_definition_id
             silo_service = SiloService()
             silo_data = {
                 'silo_id': 0,
@@ -43,16 +48,18 @@ class RepositoryService:
                 'status': 'active',
                 'app_id': repository.app_id,
                 'fixed_metadata': False,
+                'metadata_definition_id': parser_id,
                 'embedding_service_id': embedding_service_id
             }
             silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO)
+            
+            # Now create the repository with the silo_id
             repository.silo_id = silo.silo_id
-            output_parser_service = OutputParserService()
-            repo_filter = output_parser_service.create_default_filter_for_repo(repository)
-            silo.metadata_definition_id = repo_filter.parser_id
             session.add(repository)
             session.commit()
             session.refresh(repository)
+            
+            # Create repository folder
             repo_folder = os.path.join(REPO_BASE_FOLDER, str(repository.repository_id))
             os.makedirs(repo_folder, exist_ok=True)
             
@@ -104,18 +111,19 @@ class RepositoryService:
                 except OSError:
                     pass  # Ignore errors if folder cannot be deleted
                 
-            # Delete vector collection and silo
+            # Delete repository FIRST (before silo)
+            session.delete(repository)
+            session.commit()
+            
+            # Delete vector collection and silo SECOND (after repository is gone)
             if silo:
                 SiloService.delete_collection(silo.silo_id)
                 session.delete(silo)
-                
-            # Delete repository
-            session.delete(repository)
+                session.commit()
             
-            # Delete output parser if exists
+            # Delete output parser LAST (after silo is deleted)
             if parser_id:
                 session.query(OutputParser).filter_by(parser_id=parser_id).delete()
-            
-            session.commit()
+                session.commit()
         finally:
             session.close() 

@@ -91,17 +91,18 @@ class OutputParserService:
             
         return fields 
     
-    def create_default_filter_for_repo(self, repository: Repository) -> OutputParser:
+    def create_default_filter_for_repo(self, repository: Repository) -> int:
         session = SessionLocal()
         try:
             parser = OutputParser()
-            parser.name = f"DEFAULT-REPO-FILTER-{repository.silo_id}"
+            parser.name = f"DEFAULT-REPO-FILTER-{repository.name}"
             parser.description = f"Default filter for repository ({repository.name})"
             parser.app_id = repository.app_id
             parser.fields = [{"name": "name", "description": "Name of the file", "type": "str"}, {"name": "page", "description": "page of the document or chunk", "type": "int"}, {"name": "ref", "description": "reference of the file", "type": "str"}, {"name": "resource_id", "description": "resource id", "type": "int"}, {"name": "repository_id", "description": "repo id", "type": "int"}, {"name": "silo_id", "description": "silo id", "type": "int"}]
             session.add(parser)
             session.commit()
-            return parser
+            session.refresh(parser)
+            return parser.parser_id
         finally:
             session.close()
     

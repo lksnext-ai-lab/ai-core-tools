@@ -160,6 +160,15 @@ function AppLayout({ children }: AppLayoutProps) {
                       Silos
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to={`/apps/${appId}/repositories`}
+                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/repositories`)}`}
+                    >
+                      <span className="mr-3">📁</span>
+                      Repositories
+                    </Link>
+                  </li>
                 </ul>
               </div>
 

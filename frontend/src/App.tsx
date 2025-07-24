@@ -9,6 +9,10 @@ import AgentsPage from './pages/AgentsPage';
 import SilosPage from './pages/SilosPage';
 import SiloFormPage from './pages/SiloFormPage';
 import SiloPlaygroundPage from './pages/SiloPlaygroundPage';
+import RepositoriesPage from './pages/RepositoriesPage';
+import RepositoryFormPage from './pages/RepositoryFormPage';
+import RepositoryDetailPage from './pages/RepositoryDetailPage';
+import RepositoryPlaygroundPage from './pages/RepositoryPlaygroundPage';
 // Settings pages
 import AIServicesPage from './pages/settings/AIServicesPage';
 import APIKeysPage from './pages/settings/APIKeysPage';
@@ -86,6 +90,39 @@ function AppContent() {
           <ProtectedRoute>
             <AppLayout>
               <SiloPlaygroundPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Repository routes */}
+        <Route path="/apps/:appId/repositories" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <RepositoriesPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/repositories/:repositoryId" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <RepositoryFormPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/repositories/:repositoryId/detail" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <RepositoryDetailPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/repositories/:repositoryId/playground" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <RepositoryPlaygroundPage />
             </AppLayout>
           </ProtectedRoute>
         } />

@@ -191,16 +191,27 @@ class ResourceService:
             save_filename = file.filename
         
         try:
-            resource = Resource(name=name, uri=save_filename, repository_id=repository_id)
+            resource = Resource(
+                name=name, 
+                uri=save_filename, 
+                repository_id=repository_id,
+                type=file_extension  # Set the file type based on extension
+            )
             file_path = os.path.join(repository_path, save_filename)
             
             # Save the file with the new name
             if hasattr(file, 'save'):
                 file.save(file_path)
             else:
-                # For FastAPI UploadFile
+                # For FastAPI UploadFile - read content properly
+                if hasattr(file, 'file'):
+                    # Reset file position to beginning
+                    file.file.seek(0)
+                    content = file.file.read()
+                else:
+                    content = file.read()
+                
                 with open(file_path, 'wb') as f:
-                    content = file.file.read() if hasattr(file, 'file') else file.read()
                     f.write(content)
             
             session.add(resource)
