@@ -20,17 +20,20 @@ logger = get_logger(__name__)
 
 auth_router = APIRouter()
 
-# Google OAuth Configuration
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
-GOOGLE_DISCOVERY_URL = os.getenv('GOOGLE_DISCOVERY_URL', 'https://accounts.google.com/.well-known/openid-configuration')
-GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/auth/callback')
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+# Import authentication configuration
+from utils.auth_config import AuthConfig
+
+# Use configuration from AuthConfig
+GOOGLE_CLIENT_ID = AuthConfig.GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET = AuthConfig.GOOGLE_CLIENT_SECRET
+GOOGLE_DISCOVERY_URL = AuthConfig.GOOGLE_DISCOVERY_URL
+GOOGLE_REDIRECT_URI = AuthConfig.GOOGLE_REDIRECT_URI
+FRONTEND_URL = AuthConfig.FRONTEND_URL
 
 # JWT Configuration for session tokens
-JWT_SECRET = os.getenv('SECRET_KEY', 'your-secret-key-SXSCDSDASD')
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_HOURS = 24
+JWT_SECRET = AuthConfig.JWT_SECRET
+JWT_ALGORITHM = AuthConfig.JWT_ALGORITHM
+JWT_EXPIRATION_HOURS = AuthConfig.JWT_EXPIRATION_HOURS
 
 # Schemas
 class LoginURLResponse(BaseModel):
@@ -79,7 +82,14 @@ def create_jwt_token(user_data: dict, expires_delta: timedelta = None) -> str:
     return encoded_jwt
 
 def verify_jwt_token(token: str) -> Optional[dict]:
-    """Verify and decode JWT token"""
+    """Verify and decode JWT token or check development tokens"""
+    # First check if it's a development token
+    if AuthConfig.is_development_mode():
+        dev_user = AuthConfig.get_dev_user(token)
+        if dev_user:
+            return dev_user
+    
+    # Try to verify as JWT token
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
@@ -95,13 +105,29 @@ def verify_jwt_token(token: str) -> Optional[dict]:
 @auth_router.get("/login", response_model=LoginURLResponse)
 async def login():
     """
-    Generate Google OAuth login URL
+    Generate Google OAuth login URL or return development mode info
     """
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Google OAuth not configured"
-        )
+    if not AuthConfig.is_oauth_configured():
+        if AuthConfig.is_development_mode():
+            # In development mode, return info about available tokens
+            dev_tokens = list(AuthConfig.DEV_USERS.keys())
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Running in development mode - OAuth not configured",
+                    "development_mode": True,
+                    "available_tokens": dev_tokens,
+                    "instructions": "Use one of the development tokens in Authorization header"
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "message": "Google OAuth not configured",
+                    "instructions": "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables, or set DEVELOPMENT_MODE=true for testing"
+                }
+            )
     
     try:
         # Get Google OAuth configuration
@@ -271,6 +297,18 @@ async def logout():
     Logout user (client-side token removal)
     """
     return {"message": "Logged out successfully"}
+
+@auth_router.get("/config")
+async def get_auth_config():
+    """
+    Get authentication configuration status (for debugging)
+    """
+    return {
+        "auth_config": AuthConfig.get_config_summary(),
+        "oauth_configured": AuthConfig.is_oauth_configured(),
+        "development_mode": AuthConfig.is_development_mode(),
+        "available_dev_tokens": list(AuthConfig.DEV_USERS.keys()) if AuthConfig.is_development_mode() else []
+    }
 
 @auth_router.get("/me")
 async def get_current_user_info(request: Request):
