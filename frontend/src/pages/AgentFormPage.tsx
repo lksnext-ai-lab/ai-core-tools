@@ -19,6 +19,10 @@ interface Agent {
   mcp_config_ids?: number[];
   created_at: string;
   request_count: number;
+  // OCR-specific fields
+  vision_service_id?: number;
+  vision_system_prompt?: string;
+  text_system_prompt?: string;
   ai_services: Array<{ service_id: number; name: string }>;
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
@@ -39,6 +43,10 @@ interface AgentFormData {
   output_parser_id?: number;
   tool_ids: number[];
   mcp_config_ids: number[];
+  // OCR-specific fields
+  vision_service_id?: number;
+  vision_system_prompt?: string;
+  text_system_prompt?: string;
 }
 
 function AgentFormPage() {
@@ -93,7 +101,11 @@ function AgentFormPage() {
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
         tool_ids: response.tool_ids || [],
-        mcp_config_ids: response.mcp_config_ids || []
+        mcp_config_ids: response.mcp_config_ids || [],
+        // OCR-specific fields
+        vision_service_id: response.vision_service_id || undefined,
+        vision_system_prompt: response.vision_system_prompt || '',
+        text_system_prompt: response.text_system_prompt || ''
       });
       
       // Set output parser toggle based on whether agent has an output parser
@@ -153,8 +165,14 @@ function AgentFormPage() {
         output_parser_id: formData.output_parser_id,
         tool_ids: formData.tool_ids,
         mcp_config_ids: formData.mcp_config_ids,
+        // OCR-specific fields
+        vision_service_id: formData.vision_service_id,
+        vision_system_prompt: formData.vision_system_prompt,
+        text_system_prompt: formData.text_system_prompt,
         app_id: parseInt(appId!)
       };
+
+      console.log('Submitting OCR agent data:', submitData);
       
 
 
@@ -196,10 +214,10 @@ function AgentFormPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {isNewAgent ? 'Create Agent' : 'Edit Agent'}
+              {formData.type === 'ocr_agent' ? 'Agente OCR' : (isNewAgent ? 'Create Agent' : 'Edit Agent')}
             </h1>
             <p className="text-gray-600 mt-2">
-              {isNewAgent ? 'Configure a new AI agent with advanced capabilities' : `Modify agent: ${agent?.name}`}
+              {formData.type === 'ocr_agent' ? 'Configure OCR agent for document processing' : (isNewAgent ? 'Configure a new AI agent with advanced capabilities' : `Modify agent: ${agent?.name}`)}
             </p>
           </div>
           <button
@@ -238,7 +256,7 @@ function AgentFormPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Agent Name *
+                  Nombre *
                 </label>
                 <input
                   type="text"
@@ -247,7 +265,7 @@ function AgentFormPage() {
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   required
-                  placeholder="Enter agent name..."
+                  placeholder="Nombre..."
                 />
               </div>
 
@@ -268,7 +286,7 @@ function AgentFormPage() {
 
               <div className="md:col-span-2">
                 <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
+                  Descripción
                 </label>
                 <input
                   type="text"
@@ -276,93 +294,210 @@ function AgentFormPage() {
                   value={formData.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  placeholder="Describe what this agent does..."
+                  placeholder="Descripción..."
                 />
               </div>
             </div>
           </div>
 
-          {/* Agent Capabilities Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <div className="flex items-center mb-6">
-              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                <span className="text-green-600 text-lg">⚡</span>
+          {/* Agent Capabilities Card - Only for regular agents */}
+          {formData.type !== 'ocr_agent' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-green-600 text-lg">⚡</span>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">Agent Capabilities</h3>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900">Agent Capabilities</h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                <input
-                  type="checkbox"
-                  checked={formData.is_tool}
-                  onChange={(e) => handleInputChange('is_tool', e.target.checked)}
-                  className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <div className="ml-3">
-                  <label className="text-sm font-medium text-gray-900">Tool Agent</label>
-                  <p className="text-xs text-gray-500">Can be used by other agents</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_tool}
+                    onChange={(e) => handleInputChange('is_tool', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="ml-3">
+                    <label className="text-sm font-medium text-gray-900">Tool Agent</label>
+                    <p className="text-xs text-gray-500">Can be used by other agents</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={formData.has_memory}
+                    onChange={(e) => handleInputChange('has_memory', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="ml-3">
+                    <label className="text-sm font-medium text-gray-900">Conversational</label>
+                    <p className="text-xs text-gray-500">Maintains conversation memory</p>
+                  </div>
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                <input
-                  type="checkbox"
-                  checked={formData.has_memory}
-                  onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                  className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <div className="ml-3">
-                  <label className="text-sm font-medium text-gray-900">Conversational</label>
-                  <p className="text-xs text-gray-500">Maintains conversation memory</p>
+          {/* Prompts Card - Only for regular agents */}
+          {formData.type !== 'ocr_agent' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-purple-600 text-lg">💬</span>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">Prompts & Instructions</h3>
+              </div>
+              
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                    System Prompt
+                  </label>
+                  <textarea
+                    id="system_prompt"
+                    value={formData.system_prompt}
+                    onChange={(e) => handleInputChange('system_prompt', e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    placeholder="Define the agent's behavior and capabilities..."
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="prompt_template" className="block text-sm font-medium text-gray-700 mb-2">
+                    Prompt Template
+                  </label>
+                  <textarea
+                    id="prompt_template"
+                    value={formData.prompt_template}
+                    onChange={(e) => handleInputChange('prompt_template', e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    placeholder="Template for user interactions (must include {question})..."
+                  />
+                  <p className="text-xs text-gray-500 mt-2">💡 The template must include {'{question}'} to work properly</p>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Prompts Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <div className="flex items-center mb-6">
-              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                <span className="text-purple-600 text-lg">💬</span>
+          {/* OCR Agent Configuration Card */}
+          {formData.type === 'ocr_agent' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-blue-600 text-lg">📄</span>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900">Prompts & Instructions</h3>
+              
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="vision_service" className="block text-sm font-medium text-gray-700 mb-2">
+                    Modelo de Visión
+                  </label>
+                  <select
+                    id="vision_service"
+                    value={formData.vision_service_id || ''}
+                    onChange={(e) => handleInputChange('vision_service_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  >
+                    <option value="">-- Seleccionar modelo de visión --</option>
+                    {agent?.ai_services.map((service) => (
+                      <option key={service.service_id} value={service.service_id}>
+                        {service.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="vision_system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                    System Prompt (Visión)
+                  </label>
+                  <textarea
+                    id="vision_system_prompt"
+                    value={formData.vision_system_prompt || ''}
+                    onChange={(e) => handleInputChange('vision_system_prompt', e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    placeholder="Añade el system prompt para el modelo de visión..."
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="text_service" className="block text-sm font-medium text-gray-700 mb-2">
+                    Modelo de Texto
+                  </label>
+                  <select
+                    id="text_service"
+                    value={formData.service_id || ''}
+                    onChange={(e) => handleInputChange('service_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  >
+                    <option value="">-- Seleccionar modelo de texto --</option>
+                    {agent?.ai_services.map((service) => (
+                      <option key={service.service_id} value={service.service_id}>
+                        {service.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="text_system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                    System Prompt (Texto)
+                  </label>
+                  <textarea
+                    id="text_system_prompt"
+                    value={formData.text_system_prompt || ''}
+                    onChange={(e) => handleInputChange('text_system_prompt', e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    placeholder="Añade el system prompt para el modelo de texto..."
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={showOutputParser}
+                      onChange={(e) => {
+                        setShowOutputParser(e.target.checked);
+                        if (!e.target.checked) {
+                          handleInputChange('output_parser_id', undefined);
+                        }
+                      }}
+                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-700">Data Structure</span>
+                  </div>
+                  
+                  {showOutputParser && (
+                    <select
+                      id="output_parser"
+                      value={formData.output_parser_id || ''}
+                      onChange={(e) => handleInputChange('output_parser_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    >
+                      <option value="">-- Select a Data Structure --</option>
+                      {agent?.output_parsers.map((parser) => (
+                        <option key={parser.parser_id} value={parser.parser_id}>
+                          {parser.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
             </div>
-            
-            <div className="space-y-6">
-              <div>
-                <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
-                  System Prompt
-                </label>
-                <textarea
-                  id="system_prompt"
-                  value={formData.system_prompt}
-                  onChange={(e) => handleInputChange('system_prompt', e.target.value)}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  placeholder="Define the agent's behavior and capabilities..."
-                />
-              </div>
+          )}
 
-              <div>
-                <label htmlFor="prompt_template" className="block text-sm font-medium text-gray-700 mb-2">
-                  Prompt Template
-                </label>
-                <textarea
-                  id="prompt_template"
-                  value={formData.prompt_template}
-                  onChange={(e) => handleInputChange('prompt_template', e.target.value)}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  placeholder="Template for user interactions (must include {question})..."
-                />
-                <p className="text-xs text-gray-500 mt-2">💡 The template must include {'{question}'} to work properly</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Configuration Card */}
-          {agent && (
+          {/* Configuration Card - Only for regular agents */}
+          {agent && formData.type !== 'ocr_agent' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center mr-4">
@@ -446,8 +581,8 @@ function AgentFormPage() {
             </div>
           )}
 
-          {/* Tools Card */}
-          {agent && agent.tools.length > 0 && (
+          {/* Tools Card - Only for regular agents */}
+          {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
@@ -495,8 +630,8 @@ function AgentFormPage() {
             </div>
           )}
 
-          {/* MCP Configs Card */}
-          {agent && agent.mcp_configs && (
+          {/* MCP Configs Card - Only for regular agents */}
+          {agent && agent.mcp_configs && formData.type !== 'ocr_agent' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">

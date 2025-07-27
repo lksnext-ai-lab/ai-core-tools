@@ -193,6 +193,10 @@ async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get
         mcp_config_ids=agent_mcp_ids,
         created_at=agent.create_date,
         request_count=getattr(agent, 'request_count', 0) or 0,
+        # OCR-specific fields
+        vision_service_id=getattr(agent, 'vision_service_id', None),
+        vision_system_prompt=getattr(agent, 'vision_system_prompt', None),
+        text_system_prompt=getattr(agent, 'text_system_prompt', None),
         # Form data
         ai_services=ai_services,
         silos=silos,
@@ -234,8 +238,14 @@ async def create_or_update_agent(
         'has_memory': agent_data.has_memory,
         'service_id': agent_data.service_id,
         'silo_id': agent_data.silo_id,
-        'output_parser_id': agent_data.output_parser_id
+        'output_parser_id': agent_data.output_parser_id,
+        # OCR-specific fields
+        'vision_service_id': agent_data.vision_service_id,
+        'vision_system_prompt': agent_data.vision_system_prompt,
+        'text_system_prompt': agent_data.text_system_prompt
     }
+    
+    logger.info(f"Creating/updating agent with data: {agent_dict}")
     
     # Create or update agent
     created_agent_id = agent_service.create_or_update_agent(agent_dict, agent_data.type)

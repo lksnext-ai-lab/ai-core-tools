@@ -73,6 +73,10 @@ class AgentDetailSchema(BaseModel):
     mcp_config_ids: List[int] = []
     created_at: Optional[datetime]
     request_count: int
+    # OCR-specific fields
+    vision_service_id: Optional[int] = None
+    vision_system_prompt: Optional[str] = None
+    text_system_prompt: Optional[str] = None
     # Form data for editing
     ai_services: List[Dict[str, Any]]
     silos: List[Dict[str, Any]]
@@ -97,6 +101,10 @@ class CreateUpdateAgentSchema(BaseModel):
     output_parser_id: Optional[int] = None
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
+    # OCR-specific fields
+    vision_service_id: Optional[int] = None
+    vision_system_prompt: Optional[str] = None
+    text_system_prompt: Optional[str] = None
 
 
 class UpdatePromptSchema(BaseModel):
