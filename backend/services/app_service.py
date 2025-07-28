@@ -107,43 +107,101 @@ class AppService:
         
     @staticmethod
     def delete_app(app_id: int) -> bool:
-        """Delete an app and all its related data
+        """Delete an app and all its related data with proper cascade deletion
         
         Note: Access control should be handled at the API level
-        TODO: Implement cascade deletion of related entities once services are migrated
         """
+        from .repository_service import RepositoryService
+        from .domain_service import DomainService
+        from .agent_service import AgentService
+        from .output_parser_service import OutputParserService
+        from .ai_service_service import AIServiceService
+        from .silo_service import SiloService
+        from .embedding_service_service import EmbeddingServiceService
+        from .api_key_service import APIKeyService
+        from .mcp_config_service import MCPConfigService
+        
+        # First get the app with all relationships loaded
         session = SessionLocal()
         try:
             app = session.query(App).filter(App.app_id == app_id).first()
             if not app:
+                logger.warning(f"App {app_id} not found for deletion")
                 return False
             
-            # TODO: Delete all related entities once services are migrated
-            # - repositories and resources
-            # - domains and URLs  
-            # - agents
-            # - output parsers
-            # - AI services
-            # - silos
-            # - embedding services
-            # - API keys
-            # - MCP configs
+            logger.info(f"Starting cascade deletion for app {app_id}: {app.name}")
             
-            # Delete all collaborations
-            collaborations = session.query(AppCollaborator).filter(AppCollaborator.app_id == app_id).all()
-            for collab in collaborations:
-                session.delete(collab)
+            # Load relationships into lists before deletion (to avoid lazy loading issues)
+            repositories = list(app.repositories)
+            domains = list(app.domains) 
+            agents = list(app.agents)
+            ocr_agents = list(app.ocr_agents)
+            output_parsers = list(app.output_parsers)
+            silos = list(app.silos)
             
-            # Finally delete the app itself
-            session.delete(app)
-            session.commit()
-            
-            logger.info(f"App {app_id} deleted")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error deleting app {app_id}: {str(e)}")
-            session.rollback()
-            return False
         finally:
-            session.close() 
+            session.close()
+        
+        # Now delete using individual service methods (each manages its own transaction)
+        try:
+            # Phase 1: Delete repositories (handles resources, vector data, files)
+            logger.debug(f"Deleting {len(repositories)} repositories")
+            for repository in repositories:
+                RepositoryService.delete_repository(repository)
+            
+            # Phase 2: Delete domains (handles URLs, silos)
+            logger.debug(f"Deleting {len(domains)} domains")
+            for domain in domains:
+                DomainService.delete_domain(domain.domain_id)
+            
+            # Phase 3: Delete agents (including OCR agents, tool associations, MCP associations)
+            all_agents = agents + ocr_agents
+            logger.debug(f"Deleting {len(all_agents)} agents")
+            for agent in all_agents:
+                AgentService.delete_agent(agent.agent_id)
+            
+            # Phase 4: Delete output parsers
+            logger.debug(f"Deleting {len(output_parsers)} output parsers")
+            output_parser_service = OutputParserService()
+            for parser in output_parsers:
+                output_parser_service.delete_parser(parser.parser_id)
+            
+            # Phase 5: Delete remaining silos (in case any weren't deleted with repos/domains)
+            logger.debug(f"Deleting {len(silos)} remaining silos")
+            for silo in silos:
+                SiloService.delete_silo(silo.silo_id)
+            
+            # Phase 6: Delete service configurations (batch operations)
+            logger.debug("Deleting service configurations")
+            AIServiceService.delete_by_app_id(app_id)
+            EmbeddingServiceService.delete_by_app_id(app_id)
+            APIKeyService.delete_by_app_id(app_id)
+            MCPConfigService.delete_by_app_id(app_id)
+            
+            # Phase 7: Delete collaborations and app (final transaction)
+            session = SessionLocal()
+            try:
+                logger.debug("Deleting collaborations and app")
+                collaborations = session.query(AppCollaborator).filter(AppCollaborator.app_id == app_id).all()
+                for collab in collaborations:
+                    session.delete(collab)
+                
+                # Finally delete the app itself
+                app = session.query(App).filter(App.app_id == app_id).first()
+                if app:
+                    session.delete(app)
+                session.commit()
+                
+                logger.info(f"Successfully deleted app {app_id} and all related data")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error in final deletion phase for app {app_id}: {e}")
+                session.rollback()
+                raise
+            finally:
+                session.close()
+                
+        except Exception as e:
+            logger.error(f"Error during cascade deletion of app {app_id}: {str(e)}")
+            return False 

@@ -15,6 +15,13 @@ interface App {
   owner_email?: string;
   role: string; // "owner" or "editor"
   langsmith_configured: boolean;
+  
+  // Entity counts for display
+  agent_count: number;
+  repository_count: number;
+  domain_count: number;
+  silo_count: number;
+  collaborator_count: number;
 }
 
 // React Component = Function that returns HTML-like JSX
@@ -83,6 +90,43 @@ function AppsPage() {
       loadApps(); // Reload the list
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to leave app');
+    }
+  }
+
+  // Function to delete an app (for owners only)
+  async function handleDeleteApp(app: App) {
+    const confirmMessage = `⚠️ DELETE APP: "${app.name}"
+
+This will permanently delete:
+• All agents and configurations
+• All repositories and uploaded files
+• All domains and URLs
+• All silos and vector data
+• All API keys and settings
+• All collaborations
+
+This action cannot be undone!
+
+Type the app name to confirm: "${app.name}"`;
+
+    const userInput = window.prompt(confirmMessage);
+    
+    if (userInput !== app.name) {
+      if (userInput !== null) { // User didn't cancel
+        alert('App name does not match. Deletion cancelled.');
+      }
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await apiService.deleteApp(app.app_id);
+      loadApps(); // Reload the list
+      alert(`App "${app.name}" has been successfully deleted.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete app');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -171,11 +215,26 @@ function AppsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
                   </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    🤖 Agents
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    📁 Repos
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    🌐 Domains
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    🗄️ Silos
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    👥 Collabs
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Owner
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    LangSmith
+                    Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
@@ -210,6 +269,41 @@ function AppsPage() {
                           Editor
                         </span>
                       )}
+                    </td>
+
+                    {/* Agent Count */}
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
+                      <span className={`text-sm font-medium ${app.agent_count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {app.agent_count}
+                      </span>
+                    </td>
+
+                    {/* Repository Count */}
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
+                      <span className={`text-sm font-medium ${app.repository_count > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                        {app.repository_count}
+                      </span>
+                    </td>
+
+                    {/* Domain Count */}
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
+                      <span className={`text-sm font-medium ${app.domain_count > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+                        {app.domain_count}
+                      </span>
+                    </td>
+
+                    {/* Silo Count */}
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
+                      <span className={`text-sm font-medium ${app.silo_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                        {app.silo_count}
+                      </span>
+                    </td>
+
+                    {/* Collaborator Count */}
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
+                      <span className={`text-sm font-medium ${(app.collaborator_count + (app.role === 'owner' ? 1 : 0)) > 1 ? 'text-indigo-600' : 'text-gray-400'}`}>
+                        {app.collaborator_count + (app.role === 'owner' ? 1 : 0)}
+                      </span>
                     </td>
 
                     {/* Owner */}
@@ -316,6 +410,24 @@ function AppsPage() {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                     </svg>
                                     Leave App
+                                  </button>
+                                </div>
+                              )}
+
+                              {app.role === 'owner' && (
+                                <div className="border-t border-gray-100">
+                                  <button
+                                    onClick={() => {
+                                      handleDeleteApp(app);
+                                      setOpenActionMenu(null);
+                                    }}
+                                    className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
+                                    role="menuitem"
+                                  >
+                                    <svg className="w-4 h-4 mr-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1-1H8a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Delete App
                                   </button>
                                 </div>
                               )}

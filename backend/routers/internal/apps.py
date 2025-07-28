@@ -28,28 +28,68 @@ async def list_apps(current_user: dict = Depends(get_current_user_oauth)):
     """
     user_id = current_user["user_id"]
     
-    # Use the collaboration service method that already handles duplicates properly
-    accessible_apps = AppCollaborationService.get_user_accessible_apps(user_id)
-    
-    # Format response
-    apps = []
-    
-    # Import User model to get owner info
+    # Import models and create session
     from models.user import User
+    from models.app import App
+    from models.app_collaborator import AppCollaborator, CollaborationStatus
     from db.session import SessionLocal
+    from sqlalchemy.orm import joinedload
     
     session = SessionLocal()
     try:
-        for app in accessible_apps:
-            # Get owner info
-            owner = session.query(User).filter(User.user_id == app.owner_id).first()
-            
+        # Get apps with eager loading of all relationships we need
+        owned_apps = session.query(App)\
+            .options(
+                joinedload(App.agents),
+                joinedload(App.ocr_agents),
+                joinedload(App.repositories),
+                joinedload(App.domains),
+                joinedload(App.silos),
+                joinedload(App.collaborators),
+                joinedload(App.owner)
+            )\
+            .filter(App.owner_id == user_id)\
+            .all()
+        
+        # Get collaborated apps with eager loading
+        collaborated_apps_query = session.query(App)\
+            .options(
+                joinedload(App.agents),
+                joinedload(App.ocr_agents),
+                joinedload(App.repositories),
+                joinedload(App.domains),
+                joinedload(App.silos),
+                joinedload(App.collaborators),
+                joinedload(App.owner)
+            )\
+            .join(AppCollaborator)\
+            .filter(
+                AppCollaborator.user_id == user_id,
+                AppCollaborator.status == CollaborationStatus.ACCEPTED
+            )\
+            .all()
+        
+        # Combine and deduplicate
+        all_apps = {}
+        for app in owned_apps + collaborated_apps_query:
+            all_apps[app.app_id] = app
+        
+        # Format response
+        apps = []
+        for app in all_apps.values():
             # Determine user's role in this app
             if app.owner_id == user_id:
                 role = "owner"
             else:
                 # Get user's role as collaborator
                 role = AppCollaborationService.get_user_app_role(user_id, app.app_id) or "editor"
+            
+            # Count related entities (now safe since relationships are loaded)
+            agent_count = len(app.agents) + len(app.ocr_agents)
+            repository_count = len(app.repositories)
+            domain_count = len(app.domains)
+            silo_count = len(app.silos)
+            collaborator_count = len([c for c in app.collaborators if c.status == CollaborationStatus.ACCEPTED])
             
             apps.append(AppListItemSchema(
                 app_id=app.app_id,
@@ -58,9 +98,17 @@ async def list_apps(current_user: dict = Depends(get_current_user_oauth)):
                 created_at=app.create_date,
                 langsmith_configured=bool(app.langsmith_api_key),
                 owner_id=app.owner_id,
-                owner_name=owner.name if owner else None,
-                owner_email=owner.email if owner else None
+                owner_name=app.owner.name if app.owner else None,
+                owner_email=app.owner.email if app.owner else None,
+                agent_count=agent_count,
+                repository_count=repository_count,
+                domain_count=domain_count,
+                silo_count=silo_count,
+                collaborator_count=collaborator_count
             ))
+        
+        # Sort by creation date (most recent first)
+        apps.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
     
     finally:
         session.close()
