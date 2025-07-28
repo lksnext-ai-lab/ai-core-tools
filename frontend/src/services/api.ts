@@ -5,7 +5,6 @@ class ApiService {
   private getAuthToken(): string | null {
     // Get token from localStorage (same as auth service)
     const token = localStorage.getItem('auth_token');
-    console.log('API: Auth token from localStorage:', token ? 'Token exists' : 'No token found');
     return token;
   }
 
@@ -23,9 +22,6 @@ class ApiService {
     const token = this.getAuthToken();
     if (token) {
       defaultHeaders['Authorization'] = `Bearer ${token}`;
-      console.log('API: Authorization header set');
-    } else {
-      console.log('API: No token found, request will be unauthorized');
     }
 
     const config: RequestInit = {

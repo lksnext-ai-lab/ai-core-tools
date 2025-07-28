@@ -85,7 +85,6 @@ function AgentFormPage() {
       setLoading(true);
       setError(null);
       const response = await apiService.getAgent(parseInt(appId), parseInt(agentId));
-      console.log('Agent response:', response); // Debug log
       setAgent(response);
       
       // Initialize form data
@@ -171,10 +170,6 @@ function AgentFormPage() {
         text_system_prompt: formData.text_system_prompt,
         app_id: parseInt(appId!)
       };
-
-      console.log('Submitting OCR agent data:', submitData);
-      
-
 
       if (parseInt(agentId) === 0) {
         // Creating new agent

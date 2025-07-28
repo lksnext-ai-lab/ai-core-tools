@@ -54,7 +54,6 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
       // TODO: Implement repository search API call
       // For now, we'll show a placeholder
-      console.log('Searching repository:', repositoryId, 'with query:', query);
       
       // Simulate search results
       setTimeout(() => {

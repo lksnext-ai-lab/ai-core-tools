@@ -20,9 +20,7 @@ function UsersPage() {
   async function loadUsers() {
     try {
       setLoading(true);
-      console.log('Loading users...', { currentPage, perPage, searchQuery });
       const response: UserListResponse = await adminService.getUsers(currentPage, perPage, searchQuery || undefined);
-      console.log('Users response:', response);
       setUsers(response.users);
       setTotalPages(response.total_pages);
       setTotalUsers(response.total);

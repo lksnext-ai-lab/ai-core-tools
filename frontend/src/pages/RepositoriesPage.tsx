@@ -43,10 +43,8 @@ const RepositoriesPage: React.FC = () => {
 
   const loadRepositories = async () => {
     try {
-      console.log('Loading repositories for appId:', appId);
       setLoading(true);
       const data = await apiService.getRepositories(parseInt(appId!));
-      console.log('Repositories data received:', data);
       setRepositories(data);
       setError(null);
     } catch (err) {

@@ -37,9 +37,7 @@ const RepositoryFormPage: React.FC = () => {
 
   const loadEmbeddingServices = async () => {
     try {
-      console.log('Loading embedding services for appId:', appId);
       const services = await apiService.getEmbeddingServices(parseInt(appId!));
-      console.log('Loaded embedding services:', services);
       setEmbeddingServices(services);
     } catch (err) {
       console.error('Error loading embedding services:', err);
@@ -112,8 +110,6 @@ const RepositoryFormPage: React.FC = () => {
       </div>
     );
   }
-
-  console.log('RepositoryFormPage render - isNewRepository:', isNewRepository, 'embeddingServices count:', embeddingServices.length);
 
   return (
     <div className="container mx-auto px-4 py-8">
