@@ -30,6 +30,7 @@ function AppsPage() {
   const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
   const [loading, setLoading] = useState(true);          // Like self.loading = True
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
   const { user } = useUser();
@@ -59,6 +60,7 @@ function AppsPage() {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
       const response = await apiService.getApps();
       setApps(response);
     } catch (err) {
@@ -73,6 +75,8 @@ function AppsPage() {
     try {
       await apiService.createApp(data);
       setShowCreateModal(false);
+      setSuccess(`App "${data.name}" created successfully!`);
+      setError(null);
       loadApps(); // Reload the list
     } catch (err) {
       throw err; // Let the form handle the error
@@ -86,10 +90,13 @@ function AppsPage() {
     }
 
     try {
+      setError(null);
+      setSuccess(null);
       await apiService.leaveApp(app.app_id);
+      setSuccess(`Successfully left "${app.name}"`);
       loadApps(); // Reload the list
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to leave app');
+      setError(err instanceof Error ? err.message : 'Failed to leave app');
     }
   }
 
@@ -113,18 +120,21 @@ Type the app name to confirm: "${app.name}"`;
     
     if (userInput !== app.name) {
       if (userInput !== null) { // User didn't cancel
-        alert('App name does not match. Deletion cancelled.');
+        setError('App name does not match. Deletion cancelled.');
+        setSuccess(null);
       }
       return;
     }
 
     try {
       setLoading(true);
+      setError(null);
+      setSuccess(null);
       await apiService.deleteApp(app.app_id);
+      setSuccess(`App "${app.name}" has been successfully deleted.`);
       loadApps(); // Reload the list
-      alert(`App "${app.name}" has been successfully deleted.`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete app');
+      setError(err instanceof Error ? err.message : 'Failed to delete app');
     } finally {
       setLoading(false);
     }
@@ -175,6 +185,44 @@ Type the app name to confirm: "${app.name}"`;
   // Main render
   return (
     <div className="space-y-6">
+      {/* Success Message */}
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex">
+            <span className="text-green-400 text-xl mr-3">✅</span>
+            <div>
+              <h3 className="text-sm font-medium text-green-800">Success</h3>
+              <p className="text-sm text-green-600 mt-1">{success}</p>
+              <button 
+                onClick={() => setSuccess(null)}
+                className="mt-2 text-sm text-green-600 hover:text-green-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <div>
+              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <p className="text-sm text-red-600 mt-1">{error}</p>
+              <button 
+                onClick={() => setError(null)}
+                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

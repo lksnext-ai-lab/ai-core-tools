@@ -15,6 +15,7 @@ function PendingInvitationsNotification() {
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadPendingInvitations();
@@ -32,6 +33,7 @@ function PendingInvitationsNotification() {
   async function handleInvitationResponse(invitationId: number, action: 'accept' | 'decline') {
     try {
       setLoading(true);
+      setMessage(null);
       await apiService.respondToInvitation(invitationId, action);
       
       // Remove the invitation from the list
@@ -39,10 +41,13 @@ function PendingInvitationsNotification() {
       
       // Show success message
       const actionText = action === 'accept' ? 'accepted' : 'declined';
-      alert(`Invitation ${actionText} successfully!`);
+      setMessage({ type: 'success', text: `Invitation ${actionText} successfully!` });
+      
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setMessage(null), 3000);
       
     } catch (error) {
-      alert(`Failed to ${action} invitation`);
+      setMessage({ type: 'error', text: `Failed to ${action} invitation` });
     } finally {
       setLoading(false);
     }
@@ -86,6 +91,34 @@ function PendingInvitationsNotification() {
                 Pending Invitations ({invitations.length})
               </h3>
             </div>
+            
+            {/* Message Display */}
+            {message && (
+              <div className={`p-3 border-b border-gray-200 ${
+                message.type === 'success' ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <div className="flex items-center">
+                  <span className={`text-sm mr-2 ${
+                    message.type === 'success' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {message.type === 'success' ? '✅' : '⚠️'}
+                  </span>
+                  <p className={`text-xs ${
+                    message.type === 'success' ? 'text-green-800' : 'text-red-800'
+                  }`}>
+                    {message.text}
+                  </p>
+                  <button
+                    onClick={() => setMessage(null)}
+                    className={`ml-auto text-xs ${
+                      message.type === 'success' ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
+                    }`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
             
             <div className="max-h-60 overflow-y-auto">
               {invitations.map((invitation) => (

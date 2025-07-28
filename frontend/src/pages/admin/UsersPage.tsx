@@ -10,6 +10,8 @@ function UsersPage() {
   const [totalUsers, setTotalUsers] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingUser, setDeletingUser] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const perPage = 10;
 
@@ -20,14 +22,15 @@ function UsersPage() {
   async function loadUsers() {
     try {
       setLoading(true);
+      setError(null);
+      setSuccess(null);
       const response: UserListResponse = await adminService.getUsers(currentPage, perPage, searchQuery || undefined);
       setUsers(response.users);
       setTotalPages(response.total_pages);
       setTotalUsers(response.total);
     } catch (error) {
       console.error('Failed to load users:', error);
-      // Show error to user
-      alert(`Failed to load users: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(`Failed to load users: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -40,11 +43,14 @@ function UsersPage() {
 
     try {
       setDeletingUser(userId);
+      setError(null);
+      setSuccess(null);
       await adminService.deleteUser(userId);
+      setSuccess('User deleted successfully!');
       await loadUsers(); // Reload the list
     } catch (error) {
       console.error('Failed to delete user:', error);
-      alert('Failed to delete user. Please try again.');
+      setError('Failed to delete user. Please try again.');
     } finally {
       setDeletingUser(null);
     }
@@ -66,6 +72,44 @@ function UsersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Success Message */}
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex">
+            <span className="text-green-400 text-xl mr-3">✅</span>
+            <div>
+              <h3 className="text-sm font-medium text-green-800">Success</h3>
+              <p className="text-sm text-green-600 mt-1">{success}</p>
+              <button 
+                onClick={() => setSuccess(null)}
+                className="mt-2 text-sm text-green-600 hover:text-green-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <div>
+              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <p className="text-sm text-red-600 mt-1">{error}</p>
+              <button 
+                onClick={() => setError(null)}
+                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
