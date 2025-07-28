@@ -17,7 +17,7 @@ from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
 from models.ai_service import ProviderEnum
 from models.agent import Agent
 from db.session import SessionLocal
-from tools.pgVectorTools import PGVectorTools
+from tools.pgVectorTools import PGVectorTools, COLLECTION_PREFIX
 from tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
@@ -31,7 +31,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-pgVectorTools = PGVectorTools(db)
+# Initialize pgVectorTools lazily when needed
+_pgVectorTools = None
+
+def get_pgVectorTools():
+    """Get or create PGVectorTools instance"""
+    global _pgVectorTools
+    if _pgVectorTools is None:
+        from db.base import db
+        _pgVectorTools = PGVectorTools(db)
+    return _pgVectorTools
 
 def get_embedding(text, embedding_service=None):
     """Get embeddings using the configured service"""
@@ -78,15 +87,26 @@ def invoke(agent, input):
     logger.info(f"Response: {response}")
     return response
 
-def invoke_with_rag(agent: Agent, input):
+def invoke_with_rag(agent: Agent, input, search_params: dict = None):
     if agent.silo is None:
         print(agent.name + ' has no silo to relay on.')
         return invoke(agent, input)
     
     print(agent.name)
 
-    embed = get_embedding(input)
-    similar_resources = pgVectorTools.search_similar_resources(agent.silo, embed, RESULTS=1)
+    embed = get_embedding(input, agent.silo.embedding_service)
+    
+    # Always use search_similar_documents with metadata filtering
+    collection_name = COLLECTION_PREFIX + str(agent.silo.silo_id)
+    filter_metadata = search_params if search_params and isinstance(search_params, dict) else {}
+    similar_resources = get_pgVectorTools().search_similar_documents(
+        collection_name=collection_name,
+        query=embed,
+        embedding_service=agent.silo.embedding_service,
+        filter_metadata=filter_metadata,
+        RESULTS=5
+    )
+    
     info = ""
     print(similar_resources)
     for result in similar_resources:
@@ -130,7 +150,7 @@ def invoke_conversational_retrieval_chain(agent, input, session):
 
     retriever = None 
     if agent.silo:
-        retriever = pgVectorTools.get_pgvector_retriever("silo_" + str(agent.silo.silo_id), agent.silo.embedding_service)
+        retriever = get_pgVectorTools().get_pgvector_retriever("silo_" + str(agent.silo.silo_id), agent.silo.embedding_service)
     if agent.silo is None:
         retriever = VoidRetriever()
     template = """

@@ -50,7 +50,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])  # Add auth router
 app.include_router(internal_router, prefix="/internal")
 app.include_router(admin_router, prefix="/internal")  # Admin routes are under /internal/admin
-app.include_router(public_v1_router, prefix="/api/v1")
+app.include_router(public_v1_router, prefix="/public/v1")
 
 # ==================== CUSTOM OPENAPI DOCS ====================
 

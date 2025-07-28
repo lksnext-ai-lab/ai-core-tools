@@ -187,6 +187,11 @@ def prepare_agent_config(agent, tracer):
 def parse_agent_response(response_text, agent):
     """Helper function to parse agent response."""
     if agent.output_parser_id is not None:
+        # If response is already a dict (from JsonOutputParser), return it directly
+        if isinstance(response_text, dict):
+            return response_text
+        
+        # If response is a string, try to parse it as JSON
         content = response_text.strip()
         if content.startswith('```json'):
             content = content[7:]

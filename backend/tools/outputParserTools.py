@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Type, Dict, Any, List, get_origin, get_args
 from sqlalchemy.orm import Session
 from db.session import SessionLocal
+from db.base import db
 from models.output_parser import OutputParser
 import logging
 from datetime import date
@@ -164,12 +165,16 @@ def get_parser_model_by_id(parser_id: int, processed_parsers: set = None) -> Typ
     processed_parsers.add(parser_id)
     logging.info(f"Parsers procesados hasta ahora: {processed_parsers}")
     
-    parser = db.session.query(OutputParser).filter(OutputParser.parser_id == parser_id).first()
-    if not parser:
-        raise ValueError(f"No se encontró el parser con ID {parser_id}")
-    
-    schema_data = parser.fields
-    logging.info(f"Schema obtenido de la base de datos: {schema_data}")
+    session = SessionLocal()
+    try:
+        parser = session.query(OutputParser).filter(OutputParser.parser_id == parser_id).first()
+        if not parser:
+            raise ValueError(f"No se encontró el parser con ID {parser_id}")
+        
+        schema_data = parser.fields
+        logging.info(f"Schema obtenido de la base de datos: {schema_data}")
+    finally:
+        session.close()
     
     for field in schema_data:
         if field['type'] == 'parser':

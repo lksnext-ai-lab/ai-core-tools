@@ -163,6 +163,8 @@ async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get
         agent_tool_ids = []
         agent_mcp_ids = []
         
+        # Get silo information for playground
+        silo_info = None
         if agent_id != 0:
             # Get tool associations
             from models.agent import AgentTool
@@ -173,6 +175,37 @@ async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get
             from models.agent import AgentMCP
             mcp_assocs = session.query(AgentMCP).filter(AgentMCP.agent_id == agent_id).all()
             agent_mcp_ids = [assoc.config_id for assoc in mcp_assocs]
+            
+            # Get silo information if agent has a silo
+            if hasattr(agent, 'silo_id') and agent.silo_id:
+                silo = session.query(Silo).filter(Silo.silo_id == agent.silo_id).first()
+                if silo:
+                    silo_info = {
+                        "silo_id": silo.silo_id,
+                        "name": silo.name,
+                        "metadata_definition": None
+                    }
+                    
+                    # Get metadata definition if it exists
+                    if silo.metadata_definition_id:
+                        from models.output_parser import OutputParser
+                        metadata_parser = session.query(OutputParser).filter(OutputParser.parser_id == silo.metadata_definition_id).first()
+                        if metadata_parser and metadata_parser.fields:
+                            silo_info["metadata_definition"] = {
+                                "fields": metadata_parser.fields if metadata_parser.fields else []
+                            }
+        
+        # Get output parser information if agent has one
+        output_parser_info = None
+        if hasattr(agent, 'output_parser_id') and agent.output_parser_id:
+            output_parser = session.query(OutputParser).filter(OutputParser.parser_id == agent.output_parser_id).first()
+            if output_parser:
+                output_parser_info = {
+                    "parser_id": output_parser.parser_id,
+                    "name": output_parser.name,
+                    "description": output_parser.description,
+                    "fields": output_parser.fields if output_parser.fields else []
+                }
         
     finally:
         session.close()
@@ -197,6 +230,10 @@ async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get
         vision_service_id=getattr(agent, 'vision_service_id', None),
         vision_system_prompt=getattr(agent, 'vision_system_prompt', None),
         text_system_prompt=getattr(agent, 'text_system_prompt', None),
+        # Silo information for playground
+        silo=silo_info,
+        # Output parser information for playground
+        output_parser=output_parser_info,
         # Form data
         ai_services=ai_services,
         silos=silos,

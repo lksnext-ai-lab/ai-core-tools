@@ -77,6 +77,10 @@ class AgentDetailSchema(BaseModel):
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
     text_system_prompt: Optional[str] = None
+    # Silo information for playground
+    silo: Optional[Dict[str, Any]] = None
+    # Output parser information for playground
+    output_parser: Optional[Dict[str, Any]] = None
     # Form data for editing
     ai_services: List[Dict[str, Any]]
     silos: List[Dict[str, Any]]

@@ -441,6 +441,63 @@ class ApiService {
     return response.blob();
   }
 
+  // ==================== PLAYGROUND API ====================
+  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any) {
+    const formData = new FormData();
+    formData.append('message', message);
+    
+    if (searchParams) {
+      formData.append('search_params', JSON.stringify(searchParams));
+    }
+    
+    if (files && files.length > 0) {
+      files.forEach((file) => {
+        formData.append(`files`, file);
+      });
+    }
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/chat`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async resetAgentConversation(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
+      method: 'POST',
+    });
+  }
+
+  async uploadFileForChat(appId: number, agentId: number, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/upload-file`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async listAttachedFiles(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/files`);
+  }
+
+  async removeAttachedFile(appId: number, agentId: number, fileId: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/files/${fileId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async processOCR(appId: number, agentId: number, file: File) {
+    const formData = new FormData();
+    formData.append('pdf_file', file);
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/process`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
   // TODO: Add more endpoints as needed
 }
 

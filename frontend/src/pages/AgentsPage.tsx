@@ -50,6 +50,10 @@ function AgentsPage() {
     navigate(`/apps/${appId}/agents/${agentId}`);
   };
 
+  const handlePlayground = (agentId: number) => {
+    navigate(`/apps/${appId}/agents/${agentId}/playground`);
+  };
+
   const handleDeleteAgent = (agent: Agent) => {
     setAgentToDelete(agent);
     setShowDeleteModal(true);
@@ -188,6 +192,12 @@ function AgentsPage() {
               </div>
 
               <div className="flex space-x-2">
+                <button
+                  onClick={() => handlePlayground(agent.agent_id)}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 px-3 rounded-lg"
+                >
+                  Playground
+                </button>
                 <button
                   onClick={() => handleEditAgent(agent.agent_id)}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 px-3 rounded-lg"

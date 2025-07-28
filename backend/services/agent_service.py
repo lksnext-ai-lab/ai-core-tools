@@ -36,7 +36,7 @@ class AgentService:
             elif agent_type == 'basic' or agent_type == 'agent':
                 return session.query(Agent).filter(Agent.agent_id == agent_id).first()
             else:
-                # If no specific type or unknown type, check both tables
+                # Try both tables
                 agent = session.query(Agent).filter(Agent.agent_id == agent_id).first()
                 if not agent:
                     agent = session.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
@@ -52,9 +52,9 @@ class AgentService:
             agent = AgentService.get_agent(agent_id, agent_type) if agent_id else None
             
             if not agent:
-                agent = OCRAgent() if agent_type == 'ocr_agent' else Agent()
+                agent = Agent()
             
-            update_method = AgentService._update_ocr_agent if agent_type == 'ocr_agent' else AgentService._update_normal_agent
+            update_method = AgentService._update_normal_agent
             update_method(agent, agent_data)
             
             agent.type = agent_type
@@ -66,27 +66,7 @@ class AgentService:
         finally:
             session.close()
 
-    @staticmethod
-    def _update_ocr_agent(agent: OCRAgent, data: dict):
-        was_tool = agent.is_tool
-        agent.name = data['name']
-        agent.description = data.get('description', '')  # Ensure it's not None
-        agent.vision_service_id = data.get('vision_service_id')
-        agent.vision_system_prompt = data.get('vision_system_prompt')
-        agent.service_id = data.get('service_id')
-        agent.text_system_prompt = data.get('text_system_prompt')
-        agent.output_parser_id = data.get('output_parser_id') or None
-        agent.app_id = data['app_id']
-        # Handle is_tool field - can be boolean from API or 'on' from form
-        is_tool_value = data.get('is_tool')
-        if isinstance(is_tool_value, bool):
-            agent.is_tool = is_tool_value
-        else:
-            agent.is_tool = is_tool_value == 'on'
-        
-        # If agent was a tool but is no longer one, remove all references to it
-        if was_tool and not agent.is_tool:
-            AgentService._remove_tool_references(agent.agent_id)
+
     
     @staticmethod
     def _update_normal_agent(agent: Agent, data: dict):
@@ -108,6 +88,12 @@ class AgentService:
         else:
             agent.has_memory = has_memory_value == 'on'
         agent.output_parser_id = data.get('output_parser_id') or None
+        
+        # OCR-specific fields
+        agent.vision_service_id = data.get('vision_service_id')
+        agent.vision_system_prompt = data.get('vision_system_prompt')
+        agent.text_system_prompt = data.get('text_system_prompt')
+        
         # Handle is_tool field - can be boolean from API or 'on' from form
         is_tool_value = data.get('is_tool')
         if isinstance(is_tool_value, bool):

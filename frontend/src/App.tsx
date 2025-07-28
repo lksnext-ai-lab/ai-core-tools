@@ -14,6 +14,7 @@ import RepositoriesPage from './pages/RepositoriesPage';
 import RepositoryFormPage from './pages/RepositoryFormPage';
 import RepositoryDetailPage from './pages/RepositoryDetailPage';
 import RepositoryPlaygroundPage from './pages/RepositoryPlaygroundPage';
+import AgentPlaygroundPage from './pages/AgentPlaygroundPage';
 // Settings pages
 import AIServicesPage from './pages/settings/AIServicesPage';
 import APIKeysPage from './pages/settings/APIKeysPage';
@@ -67,6 +68,14 @@ function AppContent() {
           <ProtectedRoute>
             <AppLayout>
               <AgentFormPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/agents/:agentId/playground" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AgentPlaygroundPage />
             </AppLayout>
           </ProtectedRoute>
         } />
