@@ -39,42 +39,37 @@ function AIServiceForm({ aiService, onSubmit, onCancel, loading = false }: AISer
 
   const isEditing = !!aiService && aiService.service_id !== 0;
 
-  // Available providers (this could come from the API in the future)
+  // Available providers (matching backend ProviderEnum values)
   const providers = [
-    { value: 'openai', name: 'OpenAI' },
-    { value: 'azure', name: 'Azure OpenAI' },
-    { value: 'anthropic', name: 'Anthropic' },
-    { value: 'ollama', name: 'Ollama' },
-    { value: 'mistral', name: 'Mistral' },
-    { value: 'groq', name: 'Groq' }
+    { value: 'OpenAI', name: 'OpenAI' },
+    { value: 'Azure', name: 'Azure OpenAI' },
+    { value: 'Anthropic', name: 'Anthropic' },
+    { value: 'Custom', name: 'Custom/Ollama' },
+    { value: 'MistralAI', name: 'Mistral' }
   ];
 
-  // Provider-specific configurations
+  // Provider-specific configurations (matching backend ProviderEnum values)
   const getProviderDefaults = (provider: string) => {
     const defaults: Record<string, {baseUrl: string, modelPlaceholder: string}> = {
-      'openai': {
+      'OpenAI': {
         baseUrl: 'https://api.openai.com/v1',
         modelPlaceholder: 'gpt-4-turbo-preview'
       },
-      'azure': {
+      'Azure': {
         baseUrl: 'https://your-resource.openai.azure.com',
         modelPlaceholder: 'gpt-4'
       },
-      'anthropic': {
+      'Anthropic': {
         baseUrl: 'https://api.anthropic.com',
         modelPlaceholder: 'claude-3-opus-20240229'
       },
-      'ollama': {
+      'Custom': {
         baseUrl: 'http://localhost:11434',
         modelPlaceholder: 'llama2'
       },
-      'mistral': {
+      'MistralAI': {
         baseUrl: 'https://api.mistral.ai/v1',
         modelPlaceholder: 'mistral-large-latest'
-      },
-      'groq': {
-        baseUrl: 'https://api.groq.com/openai/v1',
-        modelPlaceholder: 'mixtral-8x7b-32768'
       }
     };
     return defaults[provider] || { baseUrl: '', modelPlaceholder: 'model-name' };

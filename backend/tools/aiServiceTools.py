@@ -82,6 +82,9 @@ def invoke(agent, input):
         ("human", agent.prompt_template)
     ])
     
+    if model is None:
+        raise ValueError(f"Agent {agent.agent_id} does not have an AI service configured")
+    
     chain = prompt | model | output_parser
     response = chain.invoke({"question": input})
     logger.info(f"Response: {response}")
@@ -132,6 +135,9 @@ def invoke_with_rag(agent: Agent, input, search_params: dict = None):
     
 
     model = get_llm(agent)
+    if model is None:
+        raise ValueError(f"Agent {agent.agent_id} does not have an AI service configured")
+    
     chain = prompt | model | output_parser
 
     return chain.invoke({"question": input})
@@ -194,6 +200,7 @@ def get_llm(agent, is_vision=False):
         
     if ai_service is None:
         return None
+    
     if ai_service.provider == ProviderEnum.OpenAI.value:
         return ChatOpenAI(model=ai_service.name, temperature=0, api_key=ai_service.api_key, base_url=ai_service.endpoint if ai_service.endpoint else None)
     if ai_service.provider == ProviderEnum.Anthropic.value:
