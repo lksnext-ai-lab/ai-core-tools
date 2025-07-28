@@ -11,6 +11,13 @@ interface App {
   owner_email?: string;
   role: string;
   langsmith_configured: boolean;
+  
+  // Entity counts for display
+  agent_count: number;
+  repository_count: number;
+  domain_count: number;
+  silo_count: number;
+  collaborator_count: number;
 }
 
 function AppDashboard() {
@@ -41,13 +48,12 @@ function AppDashboard() {
     }
   }
 
-  // Mock data - will be replaced with real API calls
+  // Get real entity counts from loaded app data
   const appStats = {
-    agents: 6,
-    repositories: 1,
-    silos: 1,
-    domains: 0,
-    api_keys: 0
+    agents: currentApp?.agent_count || 0,
+    repositories: currentApp?.repository_count || 0,
+    silos: currentApp?.silo_count || 0,
+    domains: currentApp?.domain_count || 0,
   };
 
   if (loading) {
@@ -104,7 +110,11 @@ function AppDashboard() {
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-2xl">🤖</span>
             </div>
-            <span className="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+            <span className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
+              appStats.agents > 0 
+                ? 'bg-blue-100 text-blue-800' 
+                : 'bg-gray-100 text-gray-500'
+            }`}>
               {appStats.agents}
             </span>
           </div>
@@ -127,7 +137,11 @@ function AppDashboard() {
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-2xl">📁</span>
             </div>
-            <span className="bg-green-100 text-green-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+            <span className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
+              appStats.repositories > 0 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-gray-100 text-gray-500'
+            }`}>
               {appStats.repositories}
             </span>
           </div>
@@ -150,7 +164,11 @@ function AppDashboard() {
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
               <span className="text-2xl">🗄️</span>
             </div>
-            <span className="bg-yellow-100 text-yellow-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+            <span className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
+              appStats.silos > 0 
+                ? 'bg-yellow-100 text-yellow-800' 
+                : 'bg-gray-100 text-gray-500'
+            }`}>
               {appStats.silos}
             </span>
           </div>
@@ -173,7 +191,11 @@ function AppDashboard() {
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <span className="text-2xl">🌐</span>
             </div>
-            <span className="bg-purple-100 text-purple-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+            <span className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
+              appStats.domains > 0 
+                ? 'bg-purple-100 text-purple-800' 
+                : 'bg-gray-100 text-gray-500'
+            }`}>
               {appStats.domains}
             </span>
           </div>
@@ -187,29 +209,6 @@ function AppDashboard() {
             className="block w-full bg-purple-600 hover:bg-purple-700 text-white text-center py-2 px-4 rounded-lg"
           >
             Manage Domains →
-          </Link>
-        </div>
-
-        {/* API Keys Card */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🔑</span>
-            </div>
-            <span className="bg-red-100 text-red-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
-              {appStats.api_keys}
-            </span>
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">API Keys</h3>
-          <p className="text-gray-600 text-sm mb-4">Access control</p>
-          <p className="text-gray-600 text-sm mb-4">
-            Manage API keys for secure access to your application's resources.
-          </p>
-          <Link 
-            to={`/apps/${appId}/settings/api-keys`}
-            className="block w-full bg-red-600 hover:bg-red-700 text-white text-center py-2 px-4 rounded-lg"
-          >
-            Manage API Keys →
           </Link>
         </div>
 
