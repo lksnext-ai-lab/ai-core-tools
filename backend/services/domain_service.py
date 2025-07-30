@@ -4,7 +4,7 @@ from models.url import Url
 from db.session import SessionLocal
 from services.silo_service import SiloService
 from services.output_parser_service import OutputParserService
-from models.silo import SiloType
+from models.silo import SiloType, Silo
 from utils.logger import get_logger
 from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
@@ -108,7 +108,7 @@ class DomainService:
     
     @staticmethod
     @handle_database_errors("create_or_update_domain") 
-    def create_or_update_domain(domain_data: dict, embedding_service_id: Optional[int] = None) -> Domain:
+    def create_or_update_domain(domain_data: dict, embedding_service_id: Optional[int] = None) -> int:
         """
         Create a new domain or update an existing one
         
@@ -117,7 +117,7 @@ class DomainService:
             embedding_service_id: Optional embedding service ID
             
         Returns:
-            Created or updated Domain instance
+            domain_id of the created or updated domain
         """
         # Validate required fields
         required_fields = ['name', 'base_url', 'app_id']
@@ -167,10 +167,19 @@ class DomainService:
                 session.add(domain)
                 session.flush()  # Get the ID
                 
-                # Now create domain filter with the domain object
+                # Now create domain filter with domain data (avoid detached instance)
                 output_parser_service = OutputParserService()
-                domain_filter = output_parser_service.create_default_filter_for_domain(domain)
-                silo.metadata_definition_id = domain_filter.parser_id
+                domain_filter_id = output_parser_service.create_default_filter_for_domain(
+                    silo_id=silo.silo_id,
+                    domain_name=name,
+                    app_id=domain_data['app_id']
+                )
+                
+                # Update silo with metadata_definition_id in current session (avoid detached instance)
+                silo_in_session = session.query(Silo).filter(Silo.silo_id == silo.silo_id).first()
+                if silo_in_session:
+                    silo_in_session.metadata_definition_id = domain_filter_id
+                    session.add(silo_in_session)
                 
             else:
                 # Update existing domain
@@ -191,7 +200,9 @@ class DomainService:
                 session.flush()
             
             session.commit()
-            return domain
+            session.refresh(domain)  # Ensure we have the domain_id
+            domain_id = domain.domain_id
+            return domain_id
         finally:
             session.close()
     
@@ -211,28 +222,35 @@ class DomainService:
         if not domain:
             raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
         
+        # Store domain info before session operations (avoid DetachedInstanceError)
+        domain_name = domain.name
+        silo_id = domain.silo_id
+        
         session = SessionLocal()
         try:
-            # Delete associated URLs
+            # Delete associated URLs first
             deleted_urls = session.query(Url).filter(Url.domain_id == domain_id).delete()
             logger.debug(f"Deleted {deleted_urls} URLs for domain {domain_id}")
             
-            # Delete the domain
+            # Delete the domain itself
             session.delete(domain)
             session.commit()
             
-            # Delete associated silo (outside the main transaction)
-            if domain.silo_id:
-                try:
-                    SiloService.delete_silo(domain.silo_id)
-                    logger.debug(f"Deleted silo {domain.silo_id} for domain {domain_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to delete silo {domain.silo_id} for domain {domain_id}: {e}")
+            logger.info(f"Successfully deleted domain {domain_id}: {domain_name}")
             
-            logger.info(f"Successfully deleted domain {domain_id}: {domain.name}")
-            return True
         finally:
             session.close()
+        
+        # Delete associated silo and all its data structures (silo, collection, output parser)
+        if silo_id:
+            try:
+                SiloService.delete_silo(silo_id)
+                logger.debug(f"Deleted silo {silo_id} and associated data structures for domain {domain_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete silo {silo_id} for domain {domain_id}: {e}")
+                # Don't fail the whole operation if silo deletion fails
+        
+        return True
     
     @staticmethod
     def validate_domain_data(form_data: dict) -> dict:

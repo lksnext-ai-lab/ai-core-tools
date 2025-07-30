@@ -2,7 +2,6 @@ from typing import List, Dict, Optional
 from db.session import SessionLocal
 from models.output_parser import OutputParser
 from models.repository import Repository
-from models.domain import Domain
 
 class OutputParserService:
     def __init__(self):
@@ -106,16 +105,17 @@ class OutputParserService:
         finally:
             session.close()
     
-    def create_default_filter_for_domain(self, domain: Domain) -> OutputParser:
+    def create_default_filter_for_domain(self, silo_id: int, domain_name: str, app_id: int) -> int:
         session = SessionLocal()
         try:
             parser = OutputParser()
-            parser.name = f"DEFAULT-DOMAIN-FILTER-{domain.silo_id}"
-            parser.description = f"Default filter for domain ({domain.name})"
-            parser.app_id = domain.app_id
+            parser.name = f"DEFAULT-DOMAIN-FILTER-{silo_id}"
+            parser.description = f"Default filter for domain ({domain_name})"
+            parser.app_id = app_id
             parser.fields = [{"name":"url_id","description":"url id","type":"int"}, {"name":"url","description":"url","type":"str"}, {"name":"domain_id","description":"domain id","type":"int"}, {"name":"page","description":"page of the document or chunk","type":"int"}]
             session.add(parser)
             session.commit()
-            return parser
+            session.refresh(parser)
+            return parser.parser_id
         finally:
             session.close() 

@@ -144,13 +144,25 @@ def invoke_with_rag(agent: Agent, input, search_params: dict = None):
 
 
 def invoke_conversational_retrieval_chain(agent, input, session):
-    print("app_id 1: ", session['app_id'])
-    MEM_KEY = "MEM_KEY-" + str(agent.agent_id)
-    if MEM_KEY not in session:
-        print("Create memories")
-        session[MEM_KEY] = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
-    print("MEMORIES: ", session[MEM_KEY])
-    print("app_id 2: ", session['app_id'])
+    # The session is a Session object from session_management_service, not a dict
+    # We need to get or create a memory object for this conversation
+    from langchain.memory import ConversationBufferMemory
+    
+    # Get existing memory or create new one
+    memory = session.get_memory()
+    if memory is None:
+        # Create a new memory instance for this conversation
+        memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
+        
+        # Add existing conversation history to memory if available
+        if session.messages:
+            for msg in session.messages:
+                # Add user message and agent response to memory
+                memory.chat_memory.add_user_message(msg.get('user_message', ''))
+                memory.chat_memory.add_ai_message(msg.get('agent_response', ''))
+        
+        # Store the memory in the session for future use
+        session.set_memory(memory)
     
     llm = get_llm(agent)
 
@@ -176,7 +188,7 @@ def invoke_conversational_retrieval_chain(agent, input, session):
 
     # Create the custom chain
     chain = ConversationalRetrievalChain.from_llm(
-            llm=llm, retriever=retriever, memory=session[MEM_KEY],
+            llm=llm, retriever=retriever, memory=memory,
             return_source_documents=False,
             verbose=True,
             combine_docs_chain_kwargs={'prompt': prompt})

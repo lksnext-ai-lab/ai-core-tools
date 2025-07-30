@@ -169,6 +169,15 @@ function AppLayout({ children }: AppLayoutProps) {
                       Repositories
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to={`/apps/${appId}/domains`}
+                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/domains`)}`}
+                    >
+                      <span className="mr-3">🌐</span>
+                      Domains
+                    </Link>
+                  </li>
                 </ul>
               </div>
 

@@ -3,6 +3,7 @@ from models.silo import Silo
 from models.output_parser import OutputParser
 from db.session import SessionLocal
 from sqlalchemy import text
+from utils.logger import get_logger
 from langchain_core.documents import Document
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.document_loaders.pdf import PyPDFLoader
@@ -249,6 +250,9 @@ class SiloService:
         try:
             silo = session.query(Silo).filter(Silo.silo_id == silo_id).first()
             if silo:
+                # Store metadata_definition_id before deleting (avoid DetachedInstanceError)
+                metadata_definition_id = silo.metadata_definition_id
+                
                 SiloService.delete_collection(silo.silo_id)
                 
                 silo.embedding_service_id = None
@@ -260,9 +264,9 @@ class SiloService:
                 session.commit()
 
                 # Finally delete the output parser if it exists
-                output_parser_service = OutputParserService()
-                if silo.metadata_definition_id:
-                    output_parser_service.delete_parser(silo.metadata_definition_id)
+                if metadata_definition_id:
+                    output_parser_service = OutputParserService()
+                    output_parser_service.delete_parser(metadata_definition_id)
         finally:
             session.close()
 
@@ -331,19 +335,32 @@ class SiloService:
         """Index multiple documents in a silo with the corresponding embedding service"""
         logger.info(f"Indexando documentos en silo {silo_id}")
         
-        silo = SiloService._get_silo_for_indexing(silo_id)
-        logger.debug(f"Usando embedding service: {silo.embedding_service.name if silo.embedding_service else 'None'}")
-        
         collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
+            # Get silo within this session to avoid detached instance
+            silo = session.query(Silo).filter(Silo.silo_id == silo_id).first()
+            if not silo:
+                logger.error(f"Silo con id {silo_id} no existe")
+                raise ValueError(f"Silo with id {silo_id} does not exist")
+            
+            # Get embedding service within the same session
+            embedding_service = None
+            if silo.embedding_service_id:
+                from models.embedding_service import EmbeddingService
+                embedding_service = session.query(EmbeddingService).filter(
+                    EmbeddingService.service_id == silo.embedding_service_id
+                ).first()
+            
+            logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
+            
             from db.base import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             docs = SiloService._create_documents_for_indexing(silo_id, documents)
             pg_vector_tools.index_documents(
                 collection_name,
                 docs,
-                embedding_service=silo.embedding_service
+                embedding_service=embedding_service
             )
             logger.info(f"Documentos indexados correctamente en silo {silo_id}")
         except Exception as e:
@@ -474,16 +491,26 @@ class SiloService:
         logger.info(f"Eliminando URL {url} del silo {silo_id}")
         collection_name = COLLECTION_PREFIX + str(silo_id)
         
-        silo = SiloService.get_silo(silo_id=silo_id)
-        if not silo:
-            logger.error(f"Silo no encontrado para la url {url}")
-            return
-
         session = SessionLocal()
         try:
+            # Get silo within this session to avoid detached instance
+            silo = session.query(Silo).filter(Silo.silo_id == silo_id).first()
+            if not silo:
+                logger.error(f"Silo no encontrado para la url {url}")
+                return
+
             from db.base import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
-            pg_vector_tools.delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=silo.embedding_service)
+            
+            # Get embedding service within the same session
+            embedding_service = None
+            if silo.embedding_service_id:
+                from models.embedding_service import EmbeddingService
+                embedding_service = session.query(EmbeddingService).filter(
+                    EmbeddingService.service_id == silo.embedding_service_id
+                ).first()
+            
+            pg_vector_tools.delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=embedding_service)
         finally:
             session.close()
             

@@ -494,6 +494,68 @@ class ApiService {
     });
   }
 
+  // ==================== DOMAINS API ====================
+  async getDomains(appId: number) {
+    return this.request(`/internal/apps/${appId}/domains/`);
+  }
+
+  async getDomain(appId: number, domainId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}`);
+  }
+
+  async createDomain(appId: number, domainId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateDomain(appId: number, domainId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteDomain(appId: number, domainId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getDomainUrls(appId: number, domainId: number, page = 1, perPage = 20) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls?page=${page}&per_page=${perPage}`);
+  }
+
+  async addUrlToDomain(appId: number, domainId: number, data: { url: string }) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteUrlFromDomain(appId: number, domainId: number, urlId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reindexUrl(appId: number, domainId: number, urlId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/reindex`, {
+      method: 'POST',
+    });
+  }
+
+  async reindexDomain(appId: number, domainId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/reindex`, {
+      method: 'POST',
+    });
+  }
+
+  async getUrlContent(appId: number, domainId: number, urlId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/content`);
+  }
+
   // TODO: Add more endpoints as needed
 }
 

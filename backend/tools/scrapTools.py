@@ -1,8 +1,22 @@
 from collections import Counter
 import requests
 from bs4 import BeautifulSoup
+from typing import Optional
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def remove_duplicates_and_sort(arr):
+    """
+    Remove duplicates from array and sort by frequency
+    
+    Args:
+        arr: List of items
+        
+    Returns:
+        Sorted list with duplicates removed
+    """
     # Count the frequency of items in the array
     counts = Counter(arr)
     
@@ -10,25 +24,136 @@ def remove_duplicates_and_sort(arr):
     sorted_arr = sorted(counts, key=lambda x: counts[x], reverse=True)
     return sorted_arr
 
-def get_text_from_url( url, tag="body", id=None, class_name=None):
-        attr_dict = {}
-        if id:
-            attr_dict["id"] = id
-        if class_name:
-            attr_dict["class"] = class_name
 
-        print(f"Getting text from {url} with tag {tag} and attrs {attr_dict}")
+def get_text_from_url(url: str, tag: str = "body", id: Optional[str] = None, class_name: Optional[str] = None) -> str:
+    """
+    Extract text content from a web page using specified HTML selectors
+    
+    Args:
+        url: The URL to scrape
+        tag: HTML tag to extract content from (default: "body")
+        id: HTML id attribute to filter by
+        class_name: HTML class attribute to filter by
+        
+    Returns:
+        Extracted text content or empty string if failed
+    """
+    attr_dict = {}
+    if id:
+        attr_dict["id"] = id
+    if class_name:
+        attr_dict["class"] = class_name
 
-        try:
-            response = requests.get(url, verify=False)
-            soup = BeautifulSoup(response.content, "html.parser")
-            main_content = soup.find(tag, attrs=attr_dict)
-            if main_content == None:
-                print("WARNING: No main content found")
-                return ""
-            #print(main_content.get_text())
-            print(len(main_content.get_text()))
-            return main_content.get_text()
-        except Exception as e:
-            print(e)
+    logger.info(f"Getting text from {url} with tag {tag} and attrs {attr_dict}")
+
+    try:
+        # Make request with timeout and user agent
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, verify=False, timeout=30, headers=headers)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        
+        soup = BeautifulSoup(response.content, "html.parser")
+        main_content = soup.find(tag, attrs=attr_dict)
+        
+        if main_content is None:
+            logger.warning(f"No main content found for {url} with tag {tag} and attrs {attr_dict}")
             return ""
+        
+        text_content = main_content.get_text(strip=True, separator=' ')
+        logger.info(f"Extracted {len(text_content)} characters from {url}")
+        
+        return text_content
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error when scraping {url}: {str(e)}")
+        return ""
+    except Exception as e:
+        logger.error(f"Unexpected error when scraping {url}: {str(e)}")
+        return ""
+
+
+def scrape_and_index_url(domain, url_path: str) -> bool:
+    """
+    Scrape a URL and index its content into the domain's silo
+    
+    Args:
+        domain: Domain object with scraping configuration
+        url_path: URL path to scrape (will be combined with domain.base_url)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Construct full URL
+        full_url = domain.base_url + url_path
+        
+        # Extract content using domain's scraping configuration
+        content = get_text_from_url(
+            url=full_url,
+            tag=domain.content_tag or "body",
+            id=domain.content_id if domain.content_id else None,
+            class_name=domain.content_class if domain.content_class else None
+        )
+        
+        if not content:
+            logger.warning(f"No content extracted from {full_url}")
+            return False
+        
+        # Index content into domain's silo
+        from services.silo_service import SiloService
+        SiloService.index_single_content(
+            domain.silo_id, 
+            content, 
+            {"url": full_url, "domain_id": domain.domain_id}
+        )
+        
+        logger.info(f"Successfully scraped and indexed {full_url}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error scraping and indexing {full_url}: {str(e)}")
+        return False
+
+
+def reindex_domain_urls(domain) -> dict:
+    """
+    Re-index all URLs for a domain
+    
+    Args:
+        domain: Domain object with URLs
+        
+    Returns:
+        Dictionary with success/failure counts
+    """
+    results = {"success": 0, "failed": 0, "total": 0}
+    
+    try:
+        from services.silo_service import SiloService
+        
+        for url in domain.urls:
+            results["total"] += 1
+            full_url = domain.base_url + url.url
+            
+            try:
+                # Remove old content
+                SiloService.delete_url(domain.silo_id, full_url)
+                
+                # Re-scrape and index
+                if scrape_and_index_url(domain, url.url):
+                    results["success"] += 1
+                else:
+                    results["failed"] += 1
+                    
+            except Exception as e:
+                logger.error(f"Error re-indexing URL {full_url}: {str(e)}")
+                results["failed"] += 1
+        
+        logger.info(f"Re-indexing complete for domain {domain.name}: {results}")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error during domain re-indexing: {str(e)}")
+        results["failed"] = results["total"]
+        return results

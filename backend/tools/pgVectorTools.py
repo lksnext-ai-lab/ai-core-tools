@@ -165,10 +165,8 @@ class PGVectorTools:
         vector_store = PGVector(
             embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
-            connection=self._async_engine,
+            connection=self.db.engine,
             use_jsonb=True,
-            async_mode=True
-
         )
         if search_params is not None:
             return vector_store.as_retriever(search_kwargs=search_params, **kwargs)

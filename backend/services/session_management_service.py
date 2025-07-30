@@ -20,6 +20,7 @@ class Session:
         self.messages: List[Dict] = []
         self.created_at = datetime.utcnow()
         self.last_accessed = datetime.utcnow()
+        self.memory = None  # Initialize memory attribute
     
     def add_message(self, user_message: str, agent_response: str):
         """Add a message pair to the session"""
@@ -38,15 +39,35 @@ class Session:
         """Clear conversation history"""
         self.messages = []
         self.last_accessed = datetime.utcnow()
+    
+    def set_memory(self, memory):
+        """Set the LangChain memory object for this session"""
+        self.memory = memory
+    
+    def get_memory(self):
+        """Get the LangChain memory object for this session"""
+        # Handle existing sessions that might not have the memory attribute
+        if not hasattr(self, 'memory'):
+            self.memory = None
+        return self.memory
 
 
 class SessionManagementService:
     """Unified session management - used by both public and internal APIs"""
     
+    # Global instance to ensure sessions persist across requests
+    _instance = None
+    _sessions: Dict[str, Session] = {}
+    _session_timeout = timedelta(hours=24)  # 24 hour timeout
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(SessionManagementService, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        # In-memory session storage (in production, use Redis or database)
-        self._sessions: Dict[str, Session] = {}
-        self._session_timeout = timedelta(hours=24)  # 24 hour timeout
+        # No need to initialize _sessions here since it's a class variable
+        pass
     
     async def get_user_session(
         self, 
@@ -67,14 +88,18 @@ class SessionManagementService:
             # Generate session ID based on user context
             session_id = self._generate_session_id(agent_id, user_context)
             
+            logger.info(f"Looking for session {session_id}, total sessions: {len(self.__class__._sessions)}")
+            logger.info(f"Available sessions: {list(self.__class__._sessions.keys())}")
+            
             # Check if session exists and is not expired
-            if session_id in self._sessions:
-                session = self._sessions[session_id]
+            if session_id in self.__class__._sessions:
+                session = self.__class__._sessions[session_id]
+                logger.info(f"Found existing session {session_id}")
                 
                 # Check if session is expired
-                if datetime.utcnow() - session.last_accessed > self._session_timeout:
+                if datetime.utcnow() - session.last_accessed > self.__class__._session_timeout:
                     # Remove expired session
-                    del self._sessions[session_id]
+                    del self.__class__._sessions[session_id]
                     logger.info(f"Removed expired session {session_id}")
                     return None
                 
@@ -84,9 +109,10 @@ class SessionManagementService:
             
             # Create new session
             session = Session(session_id, agent_id, user_context)
-            self._sessions[session_id] = session
+            self.__class__._sessions[session_id] = session
             
             logger.info(f"Created new session {session_id} for agent {agent_id}")
+            logger.info(f"Total sessions after creation: {len(self.__class__._sessions)}")
             return session
             
         except Exception as e:
@@ -108,10 +134,13 @@ class SessionManagementService:
             agent_response: Agent's response
         """
         try:
-            if session_id in self._sessions:
-                session = self._sessions[session_id]
+            logger.info(f"Adding message to session {session_id}, total sessions: {len(self.__class__._sessions)}")
+            logger.info(f"Available sessions: {list(self.__class__._sessions.keys())}")
+            
+            if session_id in self.__class__._sessions:
+                session = self.__class__._sessions[session_id]
                 session.add_message(user_message, agent_response)
-                logger.debug(f"Added message to session {session_id}")
+                logger.info(f"Added message to session {session_id}, messages count: {len(session.messages)}")
             else:
                 logger.warning(f"Session {session_id} not found for message addition")
                 
@@ -136,8 +165,8 @@ class SessionManagementService:
         try:
             session_id = self._generate_session_id(agent_id, user_context)
             
-            if session_id in self._sessions:
-                session = self._sessions[session_id]
+            if session_id in self.__class__._sessions:
+                session = self.__class__._sessions[session_id]
                 session.clear_history()
                 logger.info(f"Reset session {session_id} for agent {agent_id}")
                 return True
@@ -167,8 +196,8 @@ class SessionManagementService:
         try:
             session_id = self._generate_session_id(agent_id, user_context)
             
-            if session_id in self._sessions:
-                session = self._sessions[session_id]
+            if session_id in self.__class__._sessions:
+                session = self.__class__._sessions[session_id]
                 return session.get_conversation_history()
             else:
                 return []
@@ -208,12 +237,12 @@ class SessionManagementService:
             current_time = datetime.utcnow()
             expired_sessions = []
             
-            for session_id, session in self._sessions.items():
-                if current_time - session.last_accessed > self._session_timeout:
+            for session_id, session in self.__class__._sessions.items():
+                if current_time - session.last_accessed > self.__class__._session_timeout:
                     expired_sessions.append(session_id)
             
             for session_id in expired_sessions:
-                del self._sessions[session_id]
+                del self.__class__._sessions[session_id]
                 logger.info(f"Cleaned up expired session {session_id}")
                 
         except Exception as e:
@@ -226,17 +255,17 @@ class SessionManagementService:
             active_sessions = 0
             expired_sessions = 0
             
-            for session in self._sessions.values():
-                if current_time - session.last_accessed <= self._session_timeout:
+            for session in self.__class__._sessions.values():
+                if current_time - session.last_accessed <= self.__class__._session_timeout:
                     active_sessions += 1
                 else:
                     expired_sessions += 1
             
             return {
-                "total_sessions": len(self._sessions),
+                "total_sessions": len(self.__class__._sessions),
                 "active_sessions": active_sessions,
                 "expired_sessions": expired_sessions,
-                "session_timeout_hours": self._session_timeout.total_seconds() / 3600
+                "session_timeout_hours": self.__class__._session_timeout.total_seconds() / 3600
             }
             
         except Exception as e:

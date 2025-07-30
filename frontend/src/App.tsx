@@ -14,6 +14,9 @@ import RepositoriesPage from './pages/RepositoriesPage';
 import RepositoryFormPage from './pages/RepositoryFormPage';
 import RepositoryDetailPage from './pages/RepositoryDetailPage';
 import RepositoryPlaygroundPage from './pages/RepositoryPlaygroundPage';
+import DomainsPage from './pages/DomainsPage';
+import DomainFormPage from './pages/DomainFormPage';
+import DomainDetailPage from './pages/DomainDetailPage';
 import AgentPlaygroundPage from './pages/AgentPlaygroundPage';
 // Settings pages
 import AIServicesPage from './pages/settings/AIServicesPage';
@@ -141,6 +144,39 @@ function AppContent() {
           <ProtectedRoute>
             <AppLayout>
               <RepositoryPlaygroundPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Domain routes */}
+        <Route path="/apps/:appId/domains" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <DomainsPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/domains/new" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <DomainFormPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/domains/:domainId" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <DomainDetailPage />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/apps/:appId/domains/:domainId/edit" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <DomainFormPage />
             </AppLayout>
           </ProtectedRoute>
         } />

@@ -12,13 +12,15 @@ class UrlService:
             session.close()
     
     @staticmethod
-    def create_url(url: str, domain_id: int) -> Url:
+    def create_url(url: str, domain_id: int) -> int:
         session = SessionLocal()
         try:
             url_obj = Url(url=url, domain_id=domain_id)
             session.add(url_obj)
             session.commit()
-            return url_obj
+            session.refresh(url_obj)  # Ensure we get the ID
+            url_id = url_obj.url_id
+            return url_id
         finally:
             session.close()
     

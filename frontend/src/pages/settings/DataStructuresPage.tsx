@@ -20,6 +20,8 @@ function DataStructuresPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStructure, setEditingStructure] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [structureToDelete, setStructureToDelete] = useState<DataStructure | null>(null);
 
   // Load data structures from the API
   useEffect(() => {
@@ -42,17 +44,19 @@ function DataStructuresPage() {
     }
   }
 
-  async function handleDelete(parserId: number) {
-    if (!confirm('Are you sure you want to delete this data structure? This action cannot be undone.')) {
-      return;
-    }
+  function handleDelete(structure: DataStructure) {
+    setStructureToDelete(structure);
+    setShowDeleteModal(true);
+  }
 
-    if (!appId) return;
+  async function confirmDeleteStructure() {
+    if (!structureToDelete || !appId) return;
 
     try {
-      await apiService.deleteOutputParser(parseInt(appId), parserId);
-      // Remove from local state
-      setDataStructures(dataStructures.filter(ds => ds.parser_id !== parserId));
+      await apiService.deleteOutputParser(parseInt(appId), structureToDelete.parser_id);
+      setDataStructures(dataStructures.filter(ds => ds.parser_id !== structureToDelete.parser_id));
+      setShowDeleteModal(false);
+      setStructureToDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete data structure');
       console.error('Error deleting data structure:', err);
@@ -222,7 +226,7 @@ function DataStructuresPage() {
                           Edit
                         </button>
                         <button 
-                          onClick={() => handleDelete(structure.parser_id)}
+                          onClick={() => handleDelete(structure)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Delete
@@ -309,6 +313,39 @@ function DataStructuresPage() {
             onSubmit={handleSaveStructure}
             onCancel={handleCloseModal}
           />
+        </Modal>
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setStructureToDelete(null);
+          }}
+          title="Delete Data Structure"
+        >
+          <div className="p-6">
+            <p className="text-gray-700 mb-6">
+              Are you sure you want to delete "{structureToDelete?.name}"? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setStructureToDelete(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteStructure}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </Modal>
       </div>
     </SettingsLayout>
