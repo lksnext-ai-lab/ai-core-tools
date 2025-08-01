@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useEffect } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { apiService } from '../../services/api';
+import VersionFooter from '../ui/VersionFooter';
 
 interface SettingsLayoutProps {
   children: ReactNode;
@@ -147,6 +148,9 @@ function SettingsLayout({ children }: SettingsLayoutProps) {
       <div className="bg-white rounded-lg">
         {children}
       </div>
+      
+      {/* Version Footer */}
+      <VersionFooter />
     </div>
   );
 }

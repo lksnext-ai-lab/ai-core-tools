@@ -2,6 +2,7 @@ import { type ReactNode, useState, useRef, useEffect } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
+import VersionFooter from '../ui/VersionFooter';
 import { apiService } from '../../services/api';
 
 interface AppLayoutProps {
@@ -393,6 +394,9 @@ function AppLayout({ children }: AppLayoutProps) {
         <main className="flex-1 overflow-auto p-6">
           {children}
         </main>
+        
+        {/* Version Footer */}
+        <VersionFooter />
       </div>
     </div>
   );

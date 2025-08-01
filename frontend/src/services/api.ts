@@ -568,7 +568,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/content`);
   }
 
-  // TODO: Add more endpoints as needed
+  // ==================== VERSION API ====================
+
+  async getVersion(): Promise<{ name: string; version: string }> {
+    const response = await this.request('/internal/version');
+    return response;
+  }
+
+  // ==================== UTILITY METHODS ====================
 }
 
 // Export singleton instance - like how you'd use services in backend

@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import type { ActionItem } from '../components/ui/ActionDropdown';
+import VersionFooter from '../components/ui/VersionFooter';
 
 // Define the App type (like your Pydantic models!)
 interface App {
@@ -431,6 +432,9 @@ Type the app name to confirm: "${app.name}"`;
           onCancel={() => setShowCreateModal(false)}
         />
       </Modal>
+      
+      {/* Version Footer */}
+      <VersionFooter />
     </div>
   );
 }
