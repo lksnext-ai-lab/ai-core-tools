@@ -164,4 +164,25 @@ class DetachFilePathSchema(BaseModel):
     """Detach file path parameters"""
     app_id: int
     agent_id: int
-    file_reference: str 
+    file_reference: str
+
+# ==================== AGENT SCHEMAS ====================
+
+class AgentSchema(BaseModel):
+    """Agent schema for public API"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    agent_id: int
+    name: str
+    description: Optional[str] = None
+    type: str
+    status: Optional[str] = None
+    is_tool: bool
+    has_memory: Optional[bool] = None
+    create_date: Optional[datetime] = None
+    request_count: int
+    system_prompt: Optional[str] = None
+
+class AgentsResponseSchema(BaseModel):
+    """Multiple agents response"""
+    agents: List[AgentSchema] 

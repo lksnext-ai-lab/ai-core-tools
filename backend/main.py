@@ -73,11 +73,15 @@ def get_openapi_public():
     """Generate OpenAPI schema for public API only"""
     from fastapi.openapi.utils import get_openapi
     
+    # Create a temporary app to get the correct routes with prefixes
+    temp_app = FastAPI()
+    temp_app.include_router(public_v1_router, prefix="/public/v1")
+    
     openapi_schema = get_openapi(
         title="IA Core Tools - Public API",
         version="1.0.0", 
         description="Public API for external applications",
-        routes=public_v1_router.routes,
+        routes=temp_app.routes,
     )
     return openapi_schema
 
