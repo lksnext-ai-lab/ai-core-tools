@@ -81,15 +81,33 @@ async def list_agents(app_id: int, current_user: dict = Depends(get_current_user
     agent_service = AgentService()
     agents = agent_service.get_agents(app_id)
     
+    # Get AI services for this app to include in response
+    from db.session import SessionLocal
+    from models.ai_service import AIService
+    
+    session = SessionLocal()
+    try:
+        ai_services_query = session.query(AIService).filter(AIService.app_id == app_id).all()
+        ai_services_dict = {s.service_id: {"name": s.name, "model_name": s.description, "provider": s.provider} for s in ai_services_query}
+    finally:
+        session.close()
+    
     result = []
     for agent in agents:
+        # Get AI service details if agent has one
+        ai_service_info = None
+        if hasattr(agent, 'service_id') and agent.service_id and agent.service_id in ai_services_dict:
+            ai_service_info = ai_services_dict[agent.service_id]
+        
         result.append(AgentListItemSchema(
             agent_id=agent.agent_id,
             name=agent.name,
             type=agent.type or "agent",
             is_tool=agent.is_tool or False,
             created_at=agent.create_date,
-            request_count=agent.request_count or 0
+            request_count=agent.request_count or 0,
+            service_id=getattr(agent, 'service_id', None),
+            ai_service=ai_service_info
         ))
     
     return result

@@ -59,6 +59,8 @@ class AgentListItemSchema(BaseModel):
     is_tool: bool
     created_at: Optional[datetime]
     request_count: int
+    service_id: Optional[int] = None
+    ai_service: Optional[Dict[str, Any]] = None  # AI service details
     
     model_config = ConfigDict(from_attributes=True)
 

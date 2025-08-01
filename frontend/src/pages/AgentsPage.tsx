@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import ActionDropdown from '../components/ui/ActionDropdown';
+import type { ActionItem } from '../components/ui/ActionDropdown';
 
 // Define the Agent type
 interface Agent {
@@ -10,6 +12,13 @@ interface Agent {
   is_tool: boolean;
   created_at: string;
   request_count: number;
+  description?: string;
+  service_id?: number;
+  ai_service?: {
+    name: string;
+    model_name: string;
+    provider: string;
+  };
 }
 
 function AgentsPage() {
@@ -146,7 +155,6 @@ function AgentsPage() {
         </div>
       )}
 
-      {/* Agents Grid */}
       {agents.length === 0 ? (
         <div className="bg-white rounded-lg shadow-md border p-8 text-center">
           <div className="text-6xl mb-4">🤖</div>
@@ -162,57 +170,141 @@ function AgentsPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {agents.map((agent) => (
-            <div key={agent.agent_id} className="bg-white rounded-lg shadow-md border p-6 hover:shadow-lg transition-shadow">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <span className="text-2xl mr-3">{getAgentTypeIcon(agent.type)}</span>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{agent.name}</h3>
-                    <span className="text-sm text-gray-500">{getAgentTypeLabel(agent.type)}</span>
-                  </div>
-                </div>
-                {agent.is_tool && (
-                  <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                    Tool
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Created:</span>
-                  <span className="text-gray-900">{formatDate(agent.created_at)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Requests:</span>
-                  <span className="text-gray-900">{agent.request_count}</span>
-                </div>
-              </div>
-
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handlePlayground(agent.agent_id)}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 px-3 rounded-lg"
-                >
-                  Playground
-                </button>
-                <button
-                  onClick={() => handleEditAgent(agent.agent_id)}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 px-3 rounded-lg"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDeleteAgent(agent)}
-                  className="bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-3 rounded-lg"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-lg shadow-md border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Agent
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    AI Service
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Usage
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {agents.map((agent) => (
+                  <tr key={agent.agent_id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                            <span className="text-blue-600 text-lg">{getAgentTypeIcon(agent.type)}</span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {agent.name}
+                          </div>
+                          {agent.is_tool && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Tool
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900 max-w-xs">
+                        {agent.description ? (
+                          <div className="truncate" title={agent.description}>
+                            {agent.description}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic">No description</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                        {getAgentTypeLabel(agent.type)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {agent.ai_service ? (
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-900">
+                            {agent.ai_service.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {agent.ai_service.model_name} • {agent.ai_service.provider}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic text-sm">No AI Service</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+                        Active
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        <div className="flex items-center">
+                          <span className="font-medium">{agent.request_count}</span>
+                          <span className="text-gray-500 ml-1">requests</span>
+                        </div>
+                        {agent.request_count > 0 && (
+                          <div className="text-xs text-gray-500">
+                            Last used: {formatDate(agent.created_at)}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(agent.created_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Playground',
+                            onClick: () => handlePlayground(agent.agent_id),
+                            icon: '🎮',
+                            variant: 'warning'
+                          },
+                          {
+                            label: 'Edit',
+                            onClick: () => handleEditAgent(agent.agent_id),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDeleteAgent(agent),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
