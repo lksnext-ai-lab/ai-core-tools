@@ -546,6 +546,18 @@ class ApiService {
     });
   }
 
+  async unindexUrl(appId: number, domainId: number, urlId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/unindex`, {
+      method: 'POST',
+    });
+  }
+
+  async rejectUrl(appId: number, domainId: number, urlId: number) {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/reject`, {
+      method: 'POST',
+    });
+  }
+
   async reindexDomain(appId: number, domainId: number) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/reindex`, {
       method: 'POST',

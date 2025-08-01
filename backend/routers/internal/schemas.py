@@ -547,7 +547,8 @@ class URLListItemSchema(BaseModel):
     url_id: int
     url: str
     created_at: Optional[datetime]
-    last_indexed: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    status: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -558,7 +559,8 @@ class URLDetailSchema(BaseModel):
     url: str
     domain_id: int
     created_at: Optional[datetime]
-    last_indexed: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    status: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 

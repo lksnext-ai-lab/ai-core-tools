@@ -74,18 +74,24 @@ def get_text_from_url(url: str, tag: str = "body", id: Optional[str] = None, cla
         return ""
 
 
-def scrape_and_index_url(domain, url_path: str) -> bool:
+def scrape_and_index_url(domain, url_path: str, url_id: int = None) -> bool:
     """
     Scrape a URL and index its content into the domain's silo
     
     Args:
         domain: Domain object with scraping configuration
         url_path: URL path to scrape (will be combined with domain.base_url)
+        url_id: Optional URL ID to update status
         
     Returns:
         True if successful, False otherwise
     """
     try:
+        # Update status to indexing if URL ID provided
+        if url_id:
+            from services.url_service import UrlService
+            UrlService.update_url_indexing(url_id, domain.domain_id)
+        
         # Construct full URL
         full_url = domain.base_url + url_path
         
@@ -99,6 +105,8 @@ def scrape_and_index_url(domain, url_path: str) -> bool:
         
         if not content:
             logger.warning(f"No content extracted from {full_url}")
+            if url_id:
+                UrlService.update_url_rejected(url_id, domain.domain_id)
             return False
         
         # Index content into domain's silo
@@ -109,17 +117,23 @@ def scrape_and_index_url(domain, url_path: str) -> bool:
             {"url": full_url, "domain_id": domain.domain_id}
         )
         
+        # Update status to indexed if successful
+        if url_id:
+            UrlService.update_url_indexed(url_id, domain.domain_id)
+        
         logger.info(f"Successfully scraped and indexed {full_url}")
         return True
         
     except Exception as e:
         logger.error(f"Error scraping and indexing {full_url}: {str(e)}")
+        if url_id:
+            UrlService.update_url_rejected(url_id, domain.domain_id)
         return False
 
 
 def reindex_domain_urls(domain) -> dict:
     """
-    Re-index all URLs for a domain
+    Re-index all URLs for a domain (skips rejected URLs)
     
     Args:
         domain: Domain object with URLs
@@ -127,12 +141,18 @@ def reindex_domain_urls(domain) -> dict:
     Returns:
         Dictionary with success/failure counts
     """
-    results = {"success": 0, "failed": 0, "total": 0}
+    results = {"success": 0, "failed": 0, "total": 0, "skipped": 0}
     
     try:
         from services.silo_service import SiloService
         
         for url in domain.urls:
+            # Skip rejected URLs - they should never be auto-indexed
+            if url.status == 'rejected':
+                results["skipped"] += 1
+                logger.info(f"Skipping rejected URL: {domain.base_url + url.url}")
+                continue
+            
             results["total"] += 1
             full_url = domain.base_url + url.url
             
@@ -140,8 +160,8 @@ def reindex_domain_urls(domain) -> dict:
                 # Remove old content
                 SiloService.delete_url(domain.silo_id, full_url)
                 
-                # Re-scrape and index
-                if scrape_and_index_url(domain, url.url):
+                # Re-scrape and index with URL ID for status updates
+                if scrape_and_index_url(domain, url.url, url.url_id):
                     results["success"] += 1
                 else:
                     results["failed"] += 1

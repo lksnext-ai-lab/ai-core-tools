@@ -313,7 +313,8 @@ async def list_domain_urls(
                 url_id=url.url_id,
                 url=url.url,
                 created_at=url.created_at,
-                last_indexed=getattr(url, 'last_indexed', None)
+                updated_at=url.updated_at,
+                status=url.status
             ))
         
         return result
@@ -361,7 +362,7 @@ async def add_url_to_domain(
         
         # Scrape content and index it
         try:
-            success = scrape_and_index_url(domain, clean_url)
+            success = scrape_and_index_url(domain, clean_url, url_id)
             if success:
                 message = "URL added and content indexed successfully"
             else:
@@ -460,7 +461,7 @@ async def reindex_url(
         SiloService.delete_url(domain.silo_id, full_url)
         
         # Re-scrape and index
-        success = scrape_and_index_url(domain, url.url)
+        success = scrape_and_index_url(domain, url.url, url_id)
         
         if success:
             message = "URL content re-indexed successfully"
@@ -478,6 +479,108 @@ async def reindex_url(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error re-indexing URL: {str(e)}"
+        )
+
+
+@domains_router.post("/{domain_id}/urls/{url_id}/unindex",
+                     summary="Unindex URL content",
+                     tags=["Domains", "URLs"],
+                     response_model=URLActionResponseSchema)
+async def unindex_url(
+    app_id: int,
+    domain_id: int,
+    url_id: int,
+    request: Request
+):
+    """
+    Remove URL content from index and mark as unindexed.
+    """
+    current_user = await get_current_user(request)
+    user_id = current_user["user_id"]
+    
+    # TODO: Add app access validation
+    
+    try:
+        # Get domain and URL info
+        domain = DomainService.get_domain(domain_id)
+        if not domain:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Domain not found"
+            )
+        
+        url = UrlService.get_url(url_id)
+        if not url or url.domain_id != domain_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="URL not found"
+            )
+        
+        # Unindex the URL
+        UrlService.unindex_url(url_id, domain_id)
+        
+        return URLActionResponseSchema(
+            success=True,
+            message="URL unindexed successfully",
+            url_id=url_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Error unindexing URL {url_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error unindexing URL: {str(e)}"
+        )
+
+
+@domains_router.post("/{domain_id}/urls/{url_id}/reject",
+                     summary="Reject URL",
+                     tags=["Domains", "URLs"],
+                     response_model=URLActionResponseSchema)
+async def reject_url(
+    app_id: int,
+    domain_id: int,
+    url_id: int,
+    request: Request
+):
+    """
+    Mark URL as rejected (content not suitable for indexing).
+    """
+    current_user = await get_current_user(request)
+    user_id = current_user["user_id"]
+    
+    # TODO: Add app access validation
+    
+    try:
+        # Get domain and URL info
+        domain = DomainService.get_domain(domain_id)
+        if not domain:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Domain not found"
+            )
+        
+        url = UrlService.get_url(url_id)
+        if not url or url.domain_id != domain_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="URL not found"
+            )
+        
+        # Reject the URL
+        UrlService.reject_url(url_id, domain_id)
+        
+        return URLActionResponseSchema(
+            success=True,
+            message="URL rejected successfully",
+            url_id=url_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Error rejecting URL {url_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error rejecting URL: {str(e)}"
         )
 
 
