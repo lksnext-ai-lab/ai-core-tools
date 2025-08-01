@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import ActionDropdown from '../components/ui/ActionDropdown';
+import type { ActionItem } from '../components/ui/ActionDropdown';
 
 // Define the Silo type based on the FastAPI schema
 interface Silo {
@@ -16,6 +18,7 @@ function SilosPage() {
   const [silos, setSilos] = useState<Silo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // Load silos from the API
   useEffect(() => {
@@ -189,26 +192,29 @@ function SilosPage() {
                       {silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end space-x-2">
-                        <Link
-                          to={`/apps/${appId}/silos/${silo.silo_id}/playground`}
-                          className="text-yellow-600 hover:text-yellow-900 bg-yellow-100 hover:bg-yellow-200 px-3 py-1 rounded-md text-sm"
-                        >
-                          Playground
-                        </Link>
-                        <Link
-                          to={`/apps/${appId}/silos/${silo.silo_id}`}
-                          className="text-blue-600 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-md text-sm"
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(silo.silo_id)}
-                          className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-md text-sm"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Playground',
+                            onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}/playground`),
+                            icon: '🎮',
+                            variant: 'warning'
+                          },
+                          {
+                            label: 'Edit',
+                            onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDelete(silo.silo_id),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))}

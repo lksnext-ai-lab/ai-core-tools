@@ -5,6 +5,8 @@ import Modal from '../../components/ui/Modal';
 import APIKeyForm from '../../components/forms/APIKeyForm';
 import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
 import { apiService } from '../../services/api';
+import ActionDropdown from '../../components/ui/ActionDropdown';
+import type { ActionItem } from '../../components/ui/ActionDropdown';
 
 interface APIKey {
   key_id: number;
@@ -246,26 +248,29 @@ function APIKeysPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => handleEditKey(apiKey.key_id)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => handleToggle(apiKey.key_id)}
-                          className="text-yellow-600 hover:text-yellow-900"
-                        >
-                          {apiKey.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(apiKey.key_id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Edit',
+                            onClick: () => handleEditKey(apiKey.key_id),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: apiKey.is_active ? 'Deactivate' : 'Activate',
+                            onClick: () => handleToggle(apiKey.key_id),
+                            icon: apiKey.is_active ? '⏸️' : '▶️',
+                            variant: apiKey.is_active ? 'warning' : 'success'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDelete(apiKey.key_id),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))}

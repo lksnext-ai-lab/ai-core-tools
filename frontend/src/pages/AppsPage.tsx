@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
+import ActionDropdown from '../components/ui/ActionDropdown';
+import type { ActionItem } from '../components/ui/ActionDropdown';
 
 // Define the App type (like your Pydantic models!)
 interface App {
@@ -32,28 +34,12 @@ function AppsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
   const { user } = useUser();
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
     loadApps();
   }, []);
-
-  // Close action menu when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Element;
-      if (openActionMenu !== null && !target.closest('.action-dropdown')) {
-        setOpenActionMenu(null);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [openActionMenu]);
 
   // Function to load apps from API
   async function loadApps() {
@@ -390,99 +376,41 @@ Type the app name to confirm: "${app.name}"`;
 
                     {/* Actions Dropdown */}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="relative action-dropdown">
-                        <button
-                          onClick={() => setOpenActionMenu(openActionMenu === app.app_id ? null : app.app_id)}
-                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                          aria-expanded={openActionMenu === app.app_id}
-                          aria-haspopup="true"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                          </svg>
-                        </button>
-
-                        {/* Dropdown Menu */}
-                        {openActionMenu === app.app_id && (
-                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
-                            <div className="py-1" role="menu" aria-orientation="vertical">
-                              <Link
-                                to={`/apps/${app.app_id}`}
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                                role="menuitem"
-                                onClick={() => setOpenActionMenu(null)}
-                              >
-                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z" />
-                                </svg>
-                                Open Dashboard
-                              </Link>
-
-                              <Link
-                                to={`/apps/${app.app_id}/agents`}
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                                role="menuitem"
-                                onClick={() => setOpenActionMenu(null)}
-                              >
-                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                Manage Agents
-                              </Link>
-
-                              <Link
-                                to={`/apps/${app.app_id}/settings`}
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                                role="menuitem"
-                                onClick={() => setOpenActionMenu(null)}
-                              >
-                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                App Settings
-                              </Link>
-
-                              {app.role === 'editor' && (
-                                <div className="border-t border-gray-100">
-                                  <button
-                                    onClick={() => {
-                                      handleLeaveApp(app);
-                                      setOpenActionMenu(null);
-                                    }}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
-                                    role="menuitem"
-                                  >
-                                    <svg className="w-4 h-4 mr-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                    </svg>
-                                    Leave App
-                                  </button>
-                                </div>
-                              )}
-
-                              {app.role === 'owner' && (
-                                <div className="border-t border-gray-100">
-                                  <button
-                                    onClick={() => {
-                                      handleDeleteApp(app);
-                                      setOpenActionMenu(null);
-                                    }}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
-                                    role="menuitem"
-                                  >
-                                    <svg className="w-4 h-4 mr-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1-1H8a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                    Delete App
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Open Dashboard',
+                            onClick: () => window.location.href = `/apps/${app.app_id}`,
+                            icon: '📊',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Manage Agents',
+                            onClick: () => window.location.href = `/apps/${app.app_id}/agents`,
+                            icon: '🤖',
+                            variant: 'secondary'
+                          },
+                          {
+                            label: 'App Settings',
+                            onClick: () => window.location.href = `/apps/${app.app_id}/settings`,
+                            icon: '⚙️',
+                            variant: 'secondary'
+                          },
+                          ...(app.role === 'editor' ? [{
+                            label: 'Leave App',
+                            onClick: () => handleLeaveApp(app),
+                            icon: '🚪',
+                            variant: 'danger' as const
+                          }] : []),
+                          ...(app.role === 'owner' ? [{
+                            label: 'Delete App',
+                            onClick: () => handleDeleteApp(app),
+                            icon: '🗑️',
+                            variant: 'danger' as const
+                          }] : [])
+                        ]}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))}

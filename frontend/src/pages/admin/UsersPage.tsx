@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
+import ActionDropdown from '../../components/ui/ActionDropdown';
+import type { ActionItem } from '../../components/ui/ActionDropdown';
 
 function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -203,13 +205,18 @@ function UsersPage() {
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => handleDeleteUser(user.user_id)}
-                        disabled={deletingUser === user.user_id}
-                        className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {deletingUser === user.user_id ? 'Deleting...' : 'Delete'}
-                      </button>
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: deletingUser === user.user_id ? 'Deleting...' : 'Delete',
+                            onClick: () => handleDeleteUser(user.user_id),
+                            icon: '🗑️',
+                            variant: 'danger',
+                            disabled: deletingUser === user.user_id
+                          }
+                        ]}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))

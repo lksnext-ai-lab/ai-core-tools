@@ -4,6 +4,8 @@ import SettingsLayout from '../../components/layout/SettingsLayout';
 import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
+import ActionDropdown from '../../components/ui/ActionDropdown';
+import type { ActionItem } from '../../components/ui/ActionDropdown';
 
 interface MCPConfig {
   config_id: number;
@@ -203,20 +205,23 @@ function MCPConfigsPage() {
                       {config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => handleEditConfig(config.config_id)}
-                          className="text-purple-600 hover:text-purple-900"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(config.config_id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Edit',
+                            onClick: () => handleEditConfig(config.config_id),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDelete(config.config_id),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))}

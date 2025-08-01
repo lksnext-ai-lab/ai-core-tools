@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
+import ActionDropdown from '../components/ui/ActionDropdown';
+import type { ActionItem } from '../components/ui/ActionDropdown';
 
 interface Domain {
   domain_id: number;
@@ -184,29 +186,29 @@ function DomainsPage() {
                     {new Date(domain.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => navigate(`/apps/${appId}/domains/${domain.domain_id}`)}
-                        className="text-blue-600 hover:text-blue-900 px-3 py-1 rounded-md hover:bg-blue-50"
-                        title="Manage URLs"
-                      >
-                        URLs
-                      </button>
-                      <button
-                        onClick={() => navigate(`/apps/${appId}/domains/${domain.domain_id}/edit`)}
-                        className="text-indigo-600 hover:text-indigo-900 px-3 py-1 rounded-md hover:bg-indigo-50"
-                        title="Edit domain"
-                      >
-                        Edit
-                      </button>
-                      <button
-                                                  onClick={() => handleDeleteDomain(domain)}
-                        className="text-red-600 hover:text-red-900 px-3 py-1 rounded-md hover:bg-red-50"
-                        title="Delete domain"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <ActionDropdown
+                      actions={[
+                        {
+                          label: 'URLs',
+                          onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
+                          icon: '🔗',
+                          variant: 'primary'
+                        },
+                        {
+                          label: 'Edit',
+                          onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/edit`),
+                          icon: '✏️',
+                          variant: 'secondary'
+                        },
+                        {
+                          label: 'Delete',
+                          onClick: () => handleDeleteDomain(domain),
+                          icon: '🗑️',
+                          variant: 'danger'
+                        }
+                      ]}
+                      size="sm"
+                    />
                   </td>
                 </tr>
               ))}

@@ -4,6 +4,8 @@ import SettingsLayout from '../../components/layout/SettingsLayout';
 import Modal from '../../components/ui/Modal';
 import AIServiceForm from '../../components/forms/AIServiceForm';
 import { apiService } from '../../services/api';
+import ActionDropdown from '../../components/ui/ActionDropdown';
+import type { ActionItem } from '../../components/ui/ActionDropdown';
 
 interface AIService {
   service_id: number;
@@ -201,20 +203,23 @@ function AIServicesPage() {
                       {service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => handleEditService(service.service_id)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(service.service_id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Edit',
+                            onClick: () => handleEditService(service.service_id),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDelete(service.service_id),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))}

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
+import ActionDropdown from '../components/ui/ActionDropdown';
+import type { ActionItem } from '../components/ui/ActionDropdown';
 
 interface Repository {
   repository_id: number;
@@ -153,20 +155,25 @@ const RepositoriesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleEditRepository(repository.repository_id)}
-                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                    title="Edit repository"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => handleDeleteRepository(repository)}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                    title="Delete repository"
-                  >
-                    🗑️
-                  </button>
+                  <ActionDropdown
+                    actions={[
+                      {
+                        label: 'Edit',
+                        onClick: () => handleEditRepository(repository.repository_id),
+                        icon: '✏️',
+                        variant: 'primary'
+                      },
+                      {
+                        label: 'Delete',
+                        onClick: () => handleDeleteRepository(repository),
+                        icon: '🗑️',
+                        variant: 'danger'
+                      }
+                    ]}
+                    triggerIcon="⚙️"
+                    triggerText=""
+                    size="sm"
+                  />
                 </div>
               </div>
 

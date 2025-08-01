@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
+import ActionDropdown from '../components/ui/ActionDropdown';
+import type { ActionItem } from '../components/ui/ActionDropdown';
 
 interface URL {
   url_id: number;
@@ -463,58 +465,44 @@ const DomainDetailPage: React.FC = () => {
                             {url.updated_at ? formatDate(url.updated_at) : 'Never'}
                           </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => handleViewContent(url)}
-                              className="text-green-600 hover:text-green-900 px-3 py-1 rounded-md hover:bg-green-50"
-                              title="View Content"
-                            >
-                              👁️
-                            </button>
-                            <button
-                              onClick={() => handleReindexUrl(url.url_id)}
-                              disabled={reindexingUrls.has(url.url_id)}
-                              className="text-blue-600 hover:text-blue-900 px-3 py-1 rounded-md hover:bg-blue-50 disabled:opacity-50"
-                              title="Reindex URL"
-                            >
-                              {reindexingUrls.has(url.url_id) ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                              ) : (
-                                '🔄'
-                              )}
-                            </button>
-                            <button
-                              onClick={() => handleUnindexUrl(url)}
-                              disabled={reindexingUrls.has(url.url_id)}
-                              className="text-yellow-600 hover:text-yellow-900 px-3 py-1 rounded-md hover:bg-yellow-50 disabled:opacity-50"
-                              title="Unindex URL (remove from search, can be re-indexed)"
-                            >
-                              {reindexingUrls.has(url.url_id) ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600"></div>
-                              ) : (
-                                '🚫'
-                              )}
-                            </button>
-                            <button
-                              onClick={() => handleRejectUrl(url)}
-                              disabled={reindexingUrls.has(url.url_id)}
-                              className="text-red-600 hover:text-red-900 px-3 py-1 rounded-md hover:bg-red-50 disabled:opacity-50"
-                              title="Reject URL (permanently exclude from auto-indexing)"
-                            >
-                              {reindexingUrls.has(url.url_id) ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                              ) : (
-                                '❌'
-                              )}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUrl(url)}
-                              className="text-red-600 hover:text-red-900 px-3 py-1 rounded-md hover:bg-red-50"
-                              title="Delete URL"
-                            >
-                              🗑️
-                            </button>
-                          </div>
+                          <ActionDropdown
+                            actions={[
+                              {
+                                label: 'View Content',
+                                onClick: () => handleViewContent(url),
+                                icon: '👁️',
+                                variant: 'success'
+                              },
+                              {
+                                label: 'Reindex URL',
+                                onClick: () => handleReindexUrl(url.url_id),
+                                icon: reindexingUrls.has(url.url_id) ? '⏳' : '🔄',
+                                variant: 'primary',
+                                disabled: reindexingUrls.has(url.url_id)
+                              },
+                              {
+                                label: 'Unindex URL',
+                                onClick: () => handleUnindexUrl(url),
+                                icon: reindexingUrls.has(url.url_id) ? '⏳' : '🚫',
+                                variant: 'warning',
+                                disabled: reindexingUrls.has(url.url_id)
+                              },
+                              {
+                                label: 'Reject URL',
+                                onClick: () => handleRejectUrl(url),
+                                icon: reindexingUrls.has(url.url_id) ? '⏳' : '❌',
+                                variant: 'danger',
+                                disabled: reindexingUrls.has(url.url_id)
+                              },
+                              {
+                                label: 'Delete URL',
+                                onClick: () => handleDeleteUrl(url),
+                                icon: '🗑️',
+                                variant: 'danger'
+                              }
+                            ]}
+                            size="sm"
+                          />
                         </td>
                       </tr>
                     );
