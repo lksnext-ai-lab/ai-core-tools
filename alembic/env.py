@@ -1,7 +1,9 @@
 import sys
 import os
 
-print("Importing sys and os")
+# Cargar variables de entorno desde .env
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 
 # Añadir ambas rutas posibles para cubrir tanto desarrollo local como Docker
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../app')))

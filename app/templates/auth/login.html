@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar Sesión{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-lg mt-5">
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <h2 class="h3 mb-0">Iniciar Sesión</h2>
+                    </div>
+                    
+                    <!-- Email/Password Login Form -->
+                    <form method="POST" action="{{ url_for('auth.email_login') }}">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" id="email" name="email" required
+                                   class="form-control"
+                                   placeholder="tu@email.com">
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="password" class="form-label">Contraseña</label>
+                            <input type="password" id="password" name="password" required
+                                   class="form-control"
+                                   placeholder="Tu contraseña">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>Iniciar Sesión
+                        </button>
+                    </form>
+                    
+                    <!-- Divider -->
+                    <div class="text-center mb-3">
+                        <hr class="my-3">
+                        <span class="text-muted small">o continúa con</span>
+                    </div>
+                    
+                    <!-- Google Login Button -->
+                    <a href="{{ url_for('google_login') }}" 
+                       class="btn btn-outline-danger w-100 mb-3">
+                        <i class="fab fa-google me-2"></i>Google
+                    </a>
+                    
+                    <!-- Register Link -->
+                    <div class="text-center">
+                        <p class="small text-muted mb-0">
+                            ¿No tienes cuenta? 
+                            <a href="{{ url_for('auth.register') }}" class="text-decoration-none">
+                                Crear cuenta
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -39,6 +39,7 @@ from blueprints.admin.users import admin_users_blueprint
 from blueprints.admin.stats import admin_stats_blueprint
 from blueprints.public import public_blueprint
 from blueprints.collaboration import collaboration_blueprint
+from blueprints.auth import auth_blueprint
 
 from api.api import api
 from api.silo_api import silo_api
@@ -92,6 +93,7 @@ app.register_blueprint(admin_users_blueprint)
 app.register_blueprint(admin_stats_blueprint)
 app.register_blueprint(public_blueprint)
 app.register_blueprint(collaboration_blueprint)
+app.register_blueprint(auth_blueprint)
 
 # Only register subscription blueprint in SaaS mode
 if AICT_MODE == 'ONLINE':
@@ -298,6 +300,12 @@ def delete_app(app_id: int):
 
 @app.route("/login")
 def login():
+    # Redirigir a la página de login con email (que también tiene opción de Google)
+    return redirect(url_for('auth.email_login'))
+
+@app.route("/google-login")
+def google_login():
+    """Ruta específica para login con Google"""
     nonce = uuid.uuid4().hex 
     session["oauth_nonce"] = nonce
     return google.authorize_redirect(url_for("auth_callback", _external=True), nonce=nonce)
@@ -323,11 +331,10 @@ def auth_callback():
 
     user = db.session.query(User).filter_by(email=user_info['email']).first()
     if not user:
-        user = User(email=user_info['email'], name=user_info['name'])
+        user = User(email=user_info['email'], name=user_info['name'], is_google_user=True)
         db.session.add(user)
         db.session.commit()
         
-        # Create free subscription for new user
         from services.subscription_service import SubscriptionService
         SubscriptionService.create_free_subscription(user.user_id)
     

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Cuenta{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-lg mt-5">
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <h2 class="h3 mb-0">Crear Cuenta</h2>
+                    </div>
+                    
+                    <form method="POST" action="{{ url_for('auth.register') }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Nombre completo</label>
+                            <input type="text" id="name" name="name" required
+                                   class="form-control"
+                                   placeholder="Tu nombre completo">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" id="email" name="email" required
+                                   class="form-control"
+                                   placeholder="tu@email.com">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Contraseña</label>
+                            <input type="password" id="password" name="password" required minlength="6"
+                                   class="form-control"
+                                   placeholder="Mínimo 6 caracteres">
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="confirm_password" class="form-label">Confirmar contraseña</label>
+                            <input type="password" id="confirm_password" name="confirm_password" required
+                                   class="form-control"
+                                   placeholder="Repite tu contraseña">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
+                            <i class="bi bi-person-plus me-2"></i>Crear Cuenta
+                        </button>
+                    </form>
+                    
+                    <!-- Divider -->
+                    <div class="text-center mb-3">
+                        <hr class="my-3">
+                        <span class="text-muted small">o continúa con</span>
+                    </div>
+                    
+                    <!-- Google Login Button -->
+                    <a href="{{ url_for('google_login') }}" 
+                       class="btn btn-outline-danger w-100 mb-3">
+                        <i class="fab fa-google me-2"></i>Google
+                    </a>
+                    
+                    <!-- Login Link -->
+                    <div class="text-center">
+                        <p class="small text-muted mb-0">
+                            ¿Ya tienes cuenta? 
+                            <a href="{{ url_for('auth.email_login') }}" class="text-decoration-none">
+                                Iniciar sesión
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Validar que las contraseñas coincidan
+document.getElementById('confirm_password').addEventListener('input', function() {
+    const password = document.getElementById('password').value;
+    const confirmPassword = this.value;
+    
+    if (password !== confirmPassword) {
+        this.setCustomValidity('Las contraseñas no coinciden');
+        this.classList.add('is-invalid');
+    } else {
+        this.setCustomValidity('');
+        this.classList.remove('is-invalid');
+    }
+});
+
+// También validar cuando se cambie la contraseña principal
+document.getElementById('password').addEventListener('input', function() {
+    const confirmPassword = document.getElementById('confirm_password');
+    if (confirmPassword.value && this.value !== confirmPassword.value) {
+        confirmPassword.setCustomValidity('Las contraseñas no coinciden');
+        confirmPassword.classList.add('is-invalid');
+    } else if (confirmPassword.value) {
+        confirmPassword.setCustomValidity('');
+        confirmPassword.classList.remove('is-invalid');
+    }
+});
+</script>
+{% endblock %}

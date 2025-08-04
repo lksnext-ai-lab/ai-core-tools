@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from db.base_class import Base
 from flask_login import UserMixin
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 class User(UserMixin, Base):
     '''User model class constructor'''
@@ -10,6 +11,8 @@ class User(UserMixin, Base):
     user_id = Column(Integer, primary_key=True)
     email = Column(String(255))
     name = Column(String(255))
+    password_hash = Column(String(255))  # Para usuarios con contraseña
+    is_google_user = Column(Boolean, default=False)  # Para distinguir tipo de usuario
     create_date = Column(DateTime, default=datetime.now)
     
     # Relationships
@@ -20,6 +23,16 @@ class User(UserMixin, Base):
 
     def get_id(self):
         return self.user_id
+    
+    def set_password(self, password):
+        """Set password hash for email/password authentication"""
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        """Check password for email/password authentication"""
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
     
     @property
     def apps(self):

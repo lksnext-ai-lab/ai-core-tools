@@ -76,7 +76,6 @@ document.getElementById('provider').addEventListener('change', function() {
     apiVersionDiv.style.display = this.value === 'Azure' ? 'block' : 'none';
 });
 
-// Show API version field on page load if Azure is selected
 window.addEventListener('load', function() {
     var provider = document.getElementById('provider').value;
     var apiVersionDiv = document.getElementById('api_version_div');
