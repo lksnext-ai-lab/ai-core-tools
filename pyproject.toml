@@ -1,6 +1,6 @@
 [project]
 name = "ai-core-tools"
-version = "0.2.18"
+version = "0.2.19"
 description = "Mattin AI by LKS Next is a tool to aid and complement other software projects with AI capabilities."
 authors = [
     {name = "Aritz Galdos, Mikel Lonbide"}
