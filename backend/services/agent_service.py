@@ -1,7 +1,7 @@
 from typing import Union
 from models.agent import Agent, AgentMCP
 from models.ocr_agent import OCRAgent
-from db.session import SessionLocal
+from db.database import SessionLocal
 
 class AgentService:
 

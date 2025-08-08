@@ -12,10 +12,9 @@ interface Collaborator {
   user_name?: string;
   role: string;
   status: string;
-  invited_by: number;
-  inviter_email?: string;
   invited_at: string;
   accepted_at?: string;
+  invited_by_name?: string;
 }
 
 function CollaborationPage() {
@@ -282,7 +281,7 @@ function CollaborationPage() {
                           {new Date(collaborator.invited_at).toLocaleDateString()}
                         </div>
                         <div className="text-xs">
-                          by {collaborator.inviter_email || 'Unknown'}
+                          by {collaborator.invited_by_name || 'Unknown'}
                         </div>
                       </td>
                       {isOwner && (

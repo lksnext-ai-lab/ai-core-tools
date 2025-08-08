@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from models.user import User
 from models.app import App
 from models.api_key import APIKey
-from db.session import SessionLocal
+from db.database import SessionLocal
 from typing import Tuple, List, Dict, Any
 from sqlalchemy import func, or_
 

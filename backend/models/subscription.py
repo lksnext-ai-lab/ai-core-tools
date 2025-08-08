@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum, Numeric
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
-from db.base import Base
+from db.database import Base
 import enum
 
 class PlanType(enum.Enum):

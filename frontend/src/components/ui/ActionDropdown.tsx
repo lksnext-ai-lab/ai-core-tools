@@ -67,16 +67,25 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
   const handleActionClick = (action: ActionItem) => {
     if (!action.disabled) {
-      action.onClick();
       setIsOpen(false);
+      // Use setTimeout to ensure the dropdown closes before executing the action
+      setTimeout(() => {
+        action.onClick();
+      }, 0);
     }
+  };
+
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOpen(!isOpen);
   };
 
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
       {/* Trigger Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleTriggerClick}
         className={`inline-flex items-center justify-center rounded-md border border-gray-300 bg-white ${getSizeStyles()} font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
       >
         {triggerIcon && <span className="mr-1">{triggerIcon}</span>}
@@ -96,16 +105,20 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+        <div className="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none" style={{ zIndex: 9999 }}>
           <div className="py-1">
             {actions.map((action, index) => (
               <button
                 key={index}
-                onClick={() => handleActionClick(action)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleActionClick(action);
+                }}
                 disabled={action.disabled}
-                className={`flex w-full items-center ${getSizeStyles()} ${getVariantStyles(action.variant)} ${
+                className={`flex w-full items-center text-left ${getSizeStyles()} ${getVariantStyles(action.variant)} ${
                   action.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                }`}
+                } transition-colors duration-200`}
               >
                 {action.icon && <span className="mr-2">{action.icon}</span>}
                 {action.label}

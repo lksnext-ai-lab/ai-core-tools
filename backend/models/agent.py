@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime
 from sqlalchemy.orm import relationship
-from db.base import Base
+from db.database import Base
 from datetime import datetime
 
 AGENT_ID = 'Agent.agent_id'

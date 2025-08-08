@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional
-from db.session import SessionLocal
+from db.database import SessionLocal
 from models.output_parser import OutputParser
 from models.repository import Repository
 

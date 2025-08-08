@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 # Import models and services
 from models.user import User
 from services.user_service import UserService
-from db.session import SessionLocal
+from db.database import SessionLocal
 from utils.logger import get_logger
 from utils.config import is_omniadmin
 
@@ -392,7 +392,12 @@ async def get_pending_invitations(request: Request):
         
         # Get pending invitations using the collaboration service
         from services.app_collaboration_service import AppCollaborationService
-        invitations = AppCollaborationService.get_user_pending_invitations(user_id)
+        db = SessionLocal()
+        try:
+            collaboration_service = AppCollaborationService(db)
+            invitations = collaboration_service.get_user_pending_invitations(user_id)
+        finally:
+            db.close()
         
         # Format response
         response = []
@@ -453,7 +458,12 @@ async def respond_to_invitation(invitation_id: int, action: dict, request: Reque
         
         # Respond to invitation using the collaboration service
         from services.app_collaboration_service import AppCollaborationService
-        success = AppCollaborationService.respond_to_invitation(invitation_id, user_id, action_value)
+        db = SessionLocal()
+        try:
+            collaboration_service = AppCollaborationService(db)
+            success = collaboration_service.respond_to_invitation(invitation_id, user_id, action_value)
+        finally:
+            db.close()
         
         if success:
             return {"message": f"Invitation {action_value}ed successfully"}

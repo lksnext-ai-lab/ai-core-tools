@@ -131,7 +131,7 @@ def check_api_usage_limit(resource_type):
             from models.api_key import APIKey
             from models.user import User
             from models.api_usage import APIUsage
-            from db.session import SessionLocal
+            from db.database import SessionLocal, db
             
             user = None
             
@@ -139,21 +139,29 @@ def check_api_usage_limit(resource_type):
             api_key = request.headers.get('X-API-KEY')
             if api_key:
                 # Find the API key and get the user
-                api_key_obj = db.session.query(APIKey).filter_by(key=api_key, is_active=True).first()
-                if not api_key_obj:
-                    return jsonify({'error': 'Invalid API key'}), 401
-                
-                user = db.session.query(User).filter_by(user_id=api_key_obj.user_id).first()
-                if not user:
-                    return jsonify({'error': 'User not found'}), 401
+                session_db = SessionLocal()
+                try:
+                    api_key_obj = session_db.query(APIKey).filter_by(key=api_key, is_active=True).first()
+                    if not api_key_obj:
+                        return jsonify({'error': 'Invalid API key'}), 401
+                    
+                    user = session_db.query(User).filter_by(user_id=api_key_obj.user_id).first()
+                    if not user:
+                        return jsonify({'error': 'User not found'}), 401
+                finally:
+                    session_db.close()
             else:
                 # Fall back to session-based authentication (for playground calls)
                 if not session.get('user_id'):
                     return jsonify({'error': 'Authentication required - API key or session required'}), 401
                 
-                user = db.session.query(User).filter_by(user_id=session['user_id']).first()
-                if not user:
-                    return jsonify({'error': 'User not found'}), 401
+                session_db = SessionLocal()
+                try:
+                    user = session_db.query(User).filter_by(user_id=session['user_id']).first()
+                    if not user:
+                        return jsonify({'error': 'User not found'}), 401
+                finally:
+                    session_db.close()
             
             # Get user's subscription and plan
             subscription = user.subscription
@@ -199,7 +207,6 @@ def check_api_usage_limit(resource_type):
                     }
                     
                 except Exception as e:
-                    db.session.rollback()
                     logger.error(f"Failed to track API usage: {e}")
                     return jsonify({'error': 'Failed to track API usage'}), 500
             else:

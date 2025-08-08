@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 from models.domain import Domain
 from models.url import Url
-from db.session import SessionLocal
+from db.database import SessionLocal
 from services.silo_service import SiloService
 from services.output_parser_service import OutputParserService
 from models.silo import SiloType, Silo
@@ -10,8 +10,6 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields, safe_execute
 )
-from utils.database import safe_db_execute
-
 logger = get_logger(__name__)
 
 

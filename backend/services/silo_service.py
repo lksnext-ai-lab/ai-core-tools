@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from models.silo import Silo
 from models.output_parser import OutputParser
-from db.session import SessionLocal
+from db.database import SessionLocal
 from sqlalchemy import text
 from utils.logger import get_logger
 from langchain_core.documents import Document
@@ -71,7 +71,7 @@ class SiloService:
         try:
             session = SessionLocal()
             try:
-                from db.base import db  # Import the database object
+                from db.database import db  # Import the database object
                 pg_vector_tools = PGVectorTools(db)
                 collection_name = COLLECTION_PREFIX + str(silo_id)
                 keywords = {'search_kwargs': {'k': 30}}
@@ -354,7 +354,7 @@ class SiloService:
             
             logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
             
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             docs = SiloService._create_documents_for_indexing(silo_id, documents)
             pg_vector_tools.index_documents(
@@ -437,7 +437,7 @@ class SiloService:
 
             docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             embedding_service = resource_with_relations.repository.silo.embedding_service
             
@@ -474,7 +474,7 @@ class SiloService:
                 logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
                 return
 
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
         except Exception as e:
@@ -499,7 +499,7 @@ class SiloService:
                 logger.error(f"Silo no encontrado para la url {url}")
                 return
 
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             
             # Get embedding service within the same session
@@ -533,7 +533,7 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         session = SessionLocal()
         try:
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(
                 collection_name, 
@@ -558,7 +558,7 @@ class SiloService:
                 return
                 
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_collection(collection_name, silo.embedding_service)
         finally:
@@ -584,7 +584,7 @@ class SiloService:
                 return
 
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             pg_vector_tools.delete_documents(
                 collection_name, 
@@ -605,7 +605,7 @@ class SiloService:
                 return []
             
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            from db.base import db  # Import the database object
+            from db.database import db  # Import the database object
             pg_vector_tools = PGVectorTools(db)
             return pg_vector_tools.search_similar_documents(
                 collection_name, 

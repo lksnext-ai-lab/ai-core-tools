@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from typing import List, Optional
-import json
+from typing import List
+from sqlalchemy.orm import Session
 
 # Import schemas and auth
-from .schemas import *
+from schemas.mcp_config_schemas import MCPConfigListItemSchema, MCPConfigDetailSchema, CreateUpdateMCPConfigSchema
 from .auth_utils import get_current_user_oauth
+
+# Import database and service
+from db.database import get_db
+from services.mcp_config_service import MCPConfigService
 
 # Import logger
 from utils.logger import get_logger
@@ -19,7 +23,11 @@ mcp_configs_router = APIRouter()
                         summary="List MCP configs",
                         tags=["MCP Configs"],
                         response_model=List[MCPConfigListItemSchema])
-async def list_mcp_configs(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def list_mcp_configs(
+    app_id: int, 
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
     """
     List all MCP configs for a specific app.
     """
@@ -28,27 +36,8 @@ async def list_mcp_configs(app_id: int, current_user: dict = Depends(get_current
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.mcp_config import MCPConfig
+        return MCPConfigService.list_mcp_configs(db, app_id)
         
-        session = SessionLocal()
-        try:
-            configs = session.query(MCPConfig).filter(MCPConfig.app_id == app_id).all()
-            
-            result = []
-            for config in configs:
-                result.append(MCPConfigListItemSchema(
-                    config_id=config.config_id,
-                    name=config.name,
-                    transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
-                    created_at=config.create_date
-                ))
-            
-            return result
-            
-        finally:
-            session.close()
-            
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -60,7 +49,12 @@ async def list_mcp_configs(app_id: int, current_user: dict = Depends(get_current
                         summary="Get MCP config details",
                         tags=["MCP Configs"],
                         response_model=MCPConfigDetailSchema)
-async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def get_mcp_config(
+    app_id: int, 
+    config_id: int, 
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
     """
     Get detailed information about a specific MCP config.
     """
@@ -69,56 +63,16 @@ async def get_mcp_config(app_id: int, config_id: int, current_user: dict = Depen
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.mcp_config import MCPConfig, TransportType
+        config_detail = MCPConfigService.get_mcp_config_detail(db, app_id, config_id)
         
-        session = SessionLocal()
-        try:
-            if config_id == 0:
-                # New MCP config
-                # Get available transport types
-                transport_types = [{"value": t.value, "name": t.value} for t in TransportType]
-                
-                return MCPConfigDetailSchema(
-                    config_id=0,
-                    name="",
-                    transport_type=None,
-                    command="",
-                    args="",
-                    env="",
-                    created_at=None,
-                    available_transport_types=transport_types
-                )
-            
-            # Existing MCP config
-            config = session.query(MCPConfig).filter(
-                MCPConfig.config_id == config_id,
-                MCPConfig.app_id == app_id
-            ).first()
-            
-            if not config:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="MCP config not found"
-                )
-            
-            # Get available transport types
-            transport_types = [{"value": t.value, "name": t.value} for t in TransportType]
-            
-            return MCPConfigDetailSchema(
-                config_id=config.config_id,
-                name=config.name,
-                transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
-                command=config.command or "",
-                args=json.dumps(config.args) if config.args else "",
-                env=json.dumps(config.env) if config.env else "",
-                created_at=config.create_date,
-                available_transport_types=transport_types
+        if config_detail is None and config_id != 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MCP config not found"
             )
-            
-        finally:
-            session.close()
-            
+        
+        return config_detail
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -136,7 +90,8 @@ async def create_or_update_mcp_config(
     app_id: int,
     config_id: int,
     config_data: CreateUpdateMCPConfigSchema,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Create a new MCP config or update an existing one.
@@ -146,56 +101,17 @@ async def create_or_update_mcp_config(
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.mcp_config import MCPConfig, TransportType
-        from datetime import datetime
+        config = MCPConfigService.create_or_update_mcp_config(db, app_id, config_id, config_data)
         
-        session = SessionLocal()
-        try:
-            if config_id == 0:
-                # Create new MCP config
-                config = MCPConfig()
-                config.app_id = app_id
-                config.create_date = datetime.now()
-            else:
-                # Update existing MCP config
-                config = session.query(MCPConfig).filter(
-                    MCPConfig.config_id == config_id,
-                    MCPConfig.app_id == app_id
-                ).first()
-                
-                if not config:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="MCP config not found"
-                    )
-            
-            # Update config data
-            config.name = config_data.name
-            config.server_name = config_data.server_name
-            config.description = config_data.description
-            config.transport_type = TransportType(config_data.transport_type)
-            config.command = config_data.command
-            # Parse JSON fields
-            try:
-                config.args = json.loads(config_data.args) if config_data.args else []
-            except json.JSONDecodeError:
-                config.args = []
-            try:
-                config.env = json.loads(config_data.env) if config_data.env else {}
-            except json.JSONDecodeError:
-                config.env = {}
-            
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-            
-            # Return updated config (reuse the GET logic)
-            return await get_mcp_config(app_id, config.config_id, current_user)
-            
-        finally:
-            session.close()
-            
+        if config is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MCP config not found"
+            )
+        
+        # Return updated config (reuse the GET logic)
+        return await get_mcp_config(app_id, config.config_id, current_user, db)
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -208,7 +124,12 @@ async def create_or_update_mcp_config(
 @mcp_configs_router.delete("/{config_id}",
                            summary="Delete MCP config",
                            tags=["MCP Configs"])
-async def delete_mcp_config(app_id: int, config_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def delete_mcp_config(
+    app_id: int, 
+    config_id: int, 
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
     """
     Delete an MCP config.
     """
@@ -217,30 +138,16 @@ async def delete_mcp_config(app_id: int, config_id: int, current_user: dict = De
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.mcp_config import MCPConfig
+        success = MCPConfigService.delete_mcp_config(db, app_id, config_id)
         
-        session = SessionLocal()
-        try:
-            config = session.query(MCPConfig).filter(
-                MCPConfig.config_id == config_id,
-                MCPConfig.app_id == app_id
-            ).first()
-            
-            if not config:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="MCP config not found"
-                )
-            
-            session.delete(config)
-            session.commit()
-            
-            return {"message": "MCP config deleted successfully"}
-            
-        finally:
-            session.close()
-            
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MCP config not found"
+            )
+        
+        return {"message": "MCP config deleted successfully"}
+        
     except HTTPException:
         raise
     except Exception as e:

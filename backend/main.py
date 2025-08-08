@@ -24,10 +24,9 @@ from models.url import Url
 # Import routers
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
-from routers.auth import auth_router  # Add auth router
+from routers.auth import auth_router
 from routers.internal.admin import router as admin_router
 from routers.internal.version import version_router
-# Removed problematic direct imports - these are now handled in internal_router
 
 app = FastAPI(
     title="IA Core Tools API",

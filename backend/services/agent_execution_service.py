@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional, Union
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
-from db.session import SessionLocal
+from db.database import SessionLocal
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
@@ -262,7 +262,7 @@ class AgentExecutionService:
         """Process PDF using OCR workflow respecting output parser/data structure"""
         try:
             # Re-load agent with all relationships in a fresh session
-            from db.session import SessionLocal
+            from db.database import SessionLocal
             from models.ocr_agent import OCRAgent as OCRAgentModel
             from sqlalchemy.orm import joinedload
             
@@ -446,7 +446,7 @@ class AgentExecutionService:
         """Execute agent using LangChain with existing tools"""
         try:
             from tools.aiServiceTools import invoke, invoke_with_rag, invoke_conversational_retrieval_chain
-            from db.session import SessionLocal
+            from db.database import SessionLocal
             from models.agent import Agent as AgentModel
             from models.silo import Silo
             

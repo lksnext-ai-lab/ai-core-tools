@@ -1,6 +1,6 @@
 from models.subscription import Subscription, Plan, SubscriptionStatus
 from models.user import User
-from db.session import SessionLocal
+from db.database import SessionLocal
 from datetime import datetime, timedelta
 from typing import Optional, List
 import logging

@@ -269,11 +269,11 @@ class ApiService {
 
   // ==================== COLLABORATION ====================
   async getCollaborators(appId: number) {
-    return this.request(`/internal/apps/${appId}/collaboration/`);
+    return this.request(`/internal/collaboration/?app_id=${appId}`);
   }
 
   async inviteCollaborator(appId: number, email: string, role: string = 'editor') {
-    return this.request(`/internal/apps/${appId}/collaboration/invite`, {
+    return this.request(`/internal/collaboration/invite?app_id=${appId}`, {
       method: 'POST',
       body: JSON.stringify({
         email,
@@ -283,7 +283,7 @@ class ApiService {
   }
 
   async updateCollaboratorRole(appId: number, userId: number, role: string) {
-    return this.request(`/internal/apps/${appId}/collaboration/${userId}/role`, {
+    return this.request(`/internal/collaboration/${userId}/role?app_id=${appId}`, {
       method: 'PUT',
       body: JSON.stringify({
         role
@@ -292,13 +292,20 @@ class ApiService {
   }
 
   async removeCollaborator(appId: number, userId: number) {
-    return this.request(`/internal/apps/${appId}/collaboration/${userId}`, {
+    return this.request(`/internal/collaboration/${userId}?app_id=${appId}`, {
       method: 'DELETE',
     });
   }
 
   async getMyInvitations() {
-    return this.request(`/internal/apps/0/collaboration/my-invitations`);
+    return this.request(`/internal/collaboration/my-invitations`);
+  }
+
+  async respondToCollaborationInvitation(collaborationId: number, action: 'accept' | 'decline') {
+    return this.request(`/internal/collaboration/invitations/${collaborationId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
   }
 
   // ==================== SILOS API ====================
@@ -579,4 +586,4 @@ class ApiService {
 }
 
 // Export singleton instance - like how you'd use services in backend
-export const apiService = new ApiService(); 
+export const apiService = new ApiService();

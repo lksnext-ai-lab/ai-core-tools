@@ -16,7 +16,7 @@ from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
 
 from models.ai_service import ProviderEnum
 from models.agent import Agent
-from db.session import SessionLocal
+from db.database import SessionLocal
 from tools.pgVectorTools import PGVectorTools, COLLECTION_PREFIX
 from tools.outputParserTools import get_parser_model_by_id
 from typing import List
@@ -38,7 +38,7 @@ def get_pgVectorTools():
     """Get or create PGVectorTools instance"""
     global _pgVectorTools
     if _pgVectorTools is None:
-        from db.base import db
+        from db.database import db
         _pgVectorTools = PGVectorTools(db)
     return _pgVectorTools
 

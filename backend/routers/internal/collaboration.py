@@ -1,8 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional
+from typing import List, Optional, Tuple
+from sqlalchemy.orm import Session
+
+# Import database
+from db.database import get_db
+
+# Import services
+from services.app_collaboration_service import AppCollaborationService
+from services.app_service import AppService
 
 # Import schemas and auth
-from .schemas import *
+from schemas.apps_schemas import (
+    CollaboratorListItemSchema, CollaboratorDetailSchema, 
+    InviteCollaboratorSchema, UpdateCollaboratorRoleSchema,
+    InvitationResponseSchema
+)
+from schemas.common_schemas import MessageResponseSchema
 from .auth_utils import get_current_user_oauth
 
 # Import logger
@@ -12,29 +25,40 @@ logger = get_logger(__name__)
 
 collaboration_router = APIRouter()
 
+
+# Helper function to get services and avoid code duplication
+def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
+    """Get app and collaboration services instances."""
+    return AppService(db), AppCollaborationService(db)
+
+
 # ==================== COLLABORATION MANAGEMENT ====================
 
 @collaboration_router.get("/", 
                            summary="List app collaborators",
                            tags=["Collaboration"],
                            response_model=List[CollaboratorListItemSchema])
-async def list_collaborators(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def list_collaborators(
+    app_id: int, 
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
     """
     List all collaborators for a specific app.
     """
     user_id = current_user["user_id"]
     
     try:
-        from services.app_collaboration_service import AppCollaborationService
+        _, collaboration_service = get_services(db)
         
         # Check if user can access this app
-        if not AppCollaborationService.can_user_access_app(user_id, app_id):
+        if not collaboration_service.can_user_access_app(user_id, app_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to access this app"
             )
         
-        collaborators = AppCollaborationService.get_app_collaborators(app_id)
+        collaborators = collaboration_service.get_app_collaborators(app_id)
         
         result = []
         for collab in collaborators:
@@ -42,13 +66,12 @@ async def list_collaborators(app_id: int, current_user: dict = Depends(get_curre
                 id=collab.id,
                 user_id=collab.user_id,
                 user_email=collab.user.email if collab.user else "Unknown",
-                user_name=collab.user.name if collab.user else None,
+                user_name=collab.user.name if collab.user else "Unknown",
                 role=collab.role.value,
                 status=collab.status.value,
-                invited_by=collab.invited_by,
-                inviter_email=collab.inviter.email if collab.inviter else "Unknown",
                 invited_at=collab.invited_at,
-                accepted_at=collab.accepted_at
+                accepted_at=collab.accepted_at,
+                invited_by_name=collab.inviter.name if collab.inviter else "Unknown"
             ))
         
         return result
@@ -69,7 +92,8 @@ async def list_collaborators(app_id: int, current_user: dict = Depends(get_curre
 async def invite_collaborator(
     app_id: int,
     invitation_data: InviteCollaboratorSchema,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Invite a user to collaborate on an app.
@@ -77,16 +101,16 @@ async def invite_collaborator(
     user_id = current_user["user_id"]
     
     try:
-        from services.app_collaboration_service import AppCollaborationService
+        _, collaboration_service = get_services(db)
         
         # Check if user can manage this app (owner only)
-        if not AppCollaborationService.can_user_manage_app(user_id, app_id):
+        if not collaboration_service.can_user_manage_app(user_id, app_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only app owners can invite collaborators"
             )
         
-        collaboration = AppCollaborationService.invite_user_to_app(
+        collaboration = collaboration_service.invite_user_to_app(
             app_id=app_id,
             user_email=invitation_data.email,
             invited_by_user_id=user_id,
@@ -99,29 +123,30 @@ async def invite_collaborator(
                 detail="Failed to send invitation"
             )
         
-        # Load user and inviter data for response
-        from db.session import SessionLocal
         from models.user import User
-        session = SessionLocal()
-        try:
-            user_data = session.query(User).filter(User.user_id == collaboration.user_id).first()
-            inviter_data = session.query(User).filter(User.user_id == collaboration.invited_by).first()
-            
-            return CollaboratorDetailSchema(
-                id=collaboration.id,
-                app_id=app_id,
-                user_id=collaboration.user_id,
-                user_email=user_data.email if user_data else "Unknown",
-                user_name=user_data.name if user_data else None,
-                role=collaboration.role.value,
-                status=collaboration.status.value,
-                invited_by=collaboration.invited_by,
-                inviter_email=inviter_data.email if inviter_data else "Unknown",
-                invited_at=collaboration.invited_at,
-                accepted_at=collaboration.accepted_at
-            )
-        finally:
-            session.close()
+        user_data = db.query(User).filter(User.user_id == collaboration.user_id).first()
+        inviter_data = db.query(User).filter(User.user_id == collaboration.invited_by).first()
+        
+        return CollaboratorDetailSchema(
+            id=collaboration.id,
+            app_id=app_id,
+            user_id=collaboration.user_id,
+            role=collaboration.role.value,
+            status=collaboration.status.value,
+            invited_by=collaboration.invited_by,
+            invited_at=collaboration.invited_at,
+            accepted_at=collaboration.accepted_at,
+            user={
+                "user_id": user_data.user_id,
+                "email": user_data.email,
+                "name": user_data.name
+            } if user_data else None,
+            inviter={
+                "user_id": inviter_data.user_id,
+                "email": inviter_data.email,
+                "name": inviter_data.name
+            } if inviter_data else None
+        )
         
     except ValueError as e:
         raise HTTPException(
@@ -139,12 +164,14 @@ async def invite_collaborator(
 
 @collaboration_router.put("/{user_id}/role",
                          summary="Update collaborator role",
-                         tags=["Collaboration"])
+                         tags=["Collaboration"],
+                         response_model=MessageResponseSchema)
 async def update_collaborator_role(
     app_id: int,
     user_id: int,
     role_data: UpdateCollaboratorRoleSchema,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Update a collaborator's role.
@@ -152,16 +179,22 @@ async def update_collaborator_role(
     current_user_id = current_user["user_id"]
     
     try:
-        from services.app_collaboration_service import AppCollaborationService
+        _, collaboration_service = get_services(db)
         
-        AppCollaborationService.update_collaborator_role(
+        success = collaboration_service.update_collaborator_role(
             app_id=app_id,
             user_id=user_id,
             new_role=role_data.role,
             updated_by_user_id=current_user_id
         )
         
-        return {"message": "Role updated successfully"}
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update role"
+            )
+        
+        return MessageResponseSchema(message="Role updated successfully")
         
     except ValueError as e:
         raise HTTPException(
@@ -177,11 +210,13 @@ async def update_collaborator_role(
 
 @collaboration_router.delete("/{user_id}",
                             summary="Remove collaborator",
-                            tags=["Collaboration"])
+                            tags=["Collaboration"],
+                            response_model=MessageResponseSchema)
 async def remove_collaborator(
     app_id: int,
     user_id: int,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Remove a collaborator from an app.
@@ -189,15 +224,21 @@ async def remove_collaborator(
     current_user_id = current_user["user_id"]
     
     try:
-        from services.app_collaboration_service import AppCollaborationService
+        _, collaboration_service = get_services(db)
         
-        AppCollaborationService.remove_collaborator(
+        success = collaboration_service.remove_collaborator(
             app_id=app_id,
             user_id=user_id,
             removed_by_user_id=current_user_id
         )
         
-        return {"message": "Collaborator removed successfully"}
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to remove collaborator"
+            )
+        
+        return MessageResponseSchema(message="Collaborator removed successfully")
         
     except ValueError as e:
         raise HTTPException(
@@ -215,11 +256,13 @@ async def remove_collaborator(
 
 @collaboration_router.post("/invitations/{collaboration_id}/respond",
                            summary="Respond to invitation",
-                           tags=["Collaboration"])
+                           tags=["Collaboration"],
+                           response_model=MessageResponseSchema)
 async def respond_to_invitation(
     collaboration_id: int,
-    response_data: CollaborationResponseSchema,
-    current_user: dict = Depends(get_current_user_oauth)
+    response_data: InvitationResponseSchema,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Accept or decline a collaboration invitation.
@@ -227,16 +270,22 @@ async def respond_to_invitation(
     user_id = current_user["user_id"]
     
     try:
-        from services.app_collaboration_service import AppCollaborationService
+        _, collaboration_service = get_services(db)
         
-        AppCollaborationService.respond_to_invitation(
-            collaboration_id=collaboration_id,
+        success = collaboration_service.respond_to_invitation(
+            invitation_id=collaboration_id,
             user_id=user_id,
             action=response_data.action
         )
         
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid invitation or action"
+            )
+        
         action_message = "accepted" if response_data.action == "accept" else "declined"
-        return {"message": f"Invitation {action_message} successfully"}
+        return MessageResponseSchema(message=f"Invitation {action_message} successfully")
         
     except ValueError as e:
         raise HTTPException(
@@ -254,30 +303,32 @@ async def respond_to_invitation(
                          summary="Get my pending invitations",
                          tags=["Collaboration"],
                          response_model=List[CollaboratorListItemSchema])
-async def get_my_invitations(current_user: dict = Depends(get_current_user_oauth)):
+async def get_my_invitations(
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
     """
     Get all pending collaboration invitations for the current user.
     """
     user_id = current_user["user_id"]
     
     try:
-        from services.app_collaboration_service import AppCollaborationService
+        _, collaboration_service = get_services(db)
         
-        invitations = AppCollaborationService.get_user_pending_invitations(user_id)
+        invitations = collaboration_service.get_user_pending_invitations(user_id)
         
         result = []
         for invitation in invitations:
             result.append(CollaboratorListItemSchema(
                 id=invitation.id,
                 user_id=invitation.user_id,
-                user_email=current_user.get("email", "Unknown"),
-                user_name=current_user.get("name"),
+                user_email=invitation.user.email if invitation.user else "Unknown",
+                user_name=invitation.user.name if invitation.user else "Unknown",
                 role=invitation.role.value,
                 status=invitation.status.value,
-                invited_by=invitation.invited_by,
-                inviter_email=invitation.inviter.email if invitation.inviter else "Unknown",
                 invited_at=invitation.invited_at,
-                accepted_at=invitation.accepted_at
+                accepted_at=invitation.accepted_at,
+                invited_by_name=invitation.inviter.name if invitation.inviter else "Unknown"
             ))
         
         return result

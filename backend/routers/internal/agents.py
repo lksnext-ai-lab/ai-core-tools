@@ -1,15 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from typing import List, Optional, Dict, Any
+from typing import List
 
-# Import services
 from services.agent_service import AgentService
 
-# Import schemas and auth
 from .schemas import *
-# Switch to Google OAuth auth instead of temp token auth
 from routers.auth import verify_jwt_token
 
-# Import logger
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -82,7 +78,7 @@ async def list_agents(app_id: int, current_user: dict = Depends(get_current_user
     agents = agent_service.get_agents(app_id)
     
     # Get AI services for this app to include in response
-    from db.session import SessionLocal
+    from db.database import SessionLocal
     from models.ai_service import AIService
     
     session = SessionLocal()
@@ -149,7 +145,7 @@ async def get_agent(app_id: int, agent_id: int, current_user: dict = Depends(get
     
     # Get form data needed for agent configuration - simplified for now
     # TODO: Replace with proper service calls once they're implemented
-    from db.session import SessionLocal
+    from db.database import SessionLocal
     from models.ai_service import AIService
     from models.silo import Silo
     from models.output_parser import OutputParser

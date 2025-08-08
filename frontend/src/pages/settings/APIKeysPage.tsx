@@ -191,91 +191,93 @@ function APIKeysPage() {
 
         {/* API Keys Table */}
         {apiKeys.length > 0 ? (
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Key
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Used
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {apiKeys.map((apiKey) => (
-                  <tr key={apiKey.key_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-blue-400 text-xl mr-3">🔑</span>
-                        <div className="text-sm font-medium text-gray-900">{apiKey.name}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                        {maskApiKey(apiKey.key_preview)}
-                      </code>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {apiKey.last_used_at 
-                        ? new Date(apiKey.last_used_at).toLocaleDateString()
-                        : 'Never'
-                      }
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        apiKey.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {apiKey.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Edit',
-                            onClick: () => handleEditKey(apiKey.key_id),
-                            icon: '✏️',
-                            variant: 'primary'
-                          },
-                          {
-                            label: apiKey.is_active ? 'Deactivate' : 'Activate',
-                            onClick: () => handleToggle(apiKey.key_id),
-                            icon: apiKey.is_active ? '⏸️' : '▶️',
-                            variant: apiKey.is_active ? 'warning' : 'success'
-                          },
-                          {
-                            label: 'Delete',
-                            onClick: () => handleDelete(apiKey.key_id),
-                            icon: '🗑️',
-                            variant: 'danger'
-                          }
-                        ]}
-                        size="sm"
-                      />
-                    </td>
+          <div className="bg-white shadow rounded-lg overflow-visible">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Key
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Created
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last Used
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {apiKeys.map((apiKey) => (
+                    <tr key={apiKey.key_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-blue-400 text-xl mr-3">🔑</span>
+                          <div className="text-sm font-medium text-gray-900">{apiKey.name}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                          {maskApiKey(apiKey.key_preview)}
+                        </code>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {apiKey.last_used_at 
+                          ? new Date(apiKey.last_used_at).toLocaleDateString()
+                          : 'Never'
+                        }
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          apiKey.is_active 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {apiKey.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
+                        <ActionDropdown
+                          actions={[
+                            {
+                              label: 'Edit',
+                              onClick: () => handleEditKey(apiKey.key_id),
+                              icon: '✏️',
+                              variant: 'primary'
+                            },
+                            {
+                              label: apiKey.is_active ? 'Deactivate' : 'Activate',
+                              onClick: () => handleToggle(apiKey.key_id),
+                              icon: apiKey.is_active ? '⏸️' : '▶️',
+                              variant: apiKey.is_active ? 'warning' : 'success'
+                            },
+                            {
+                              label: 'Delete',
+                              onClick: () => handleDelete(apiKey.key_id),
+                              icon: '🗑️',
+                              variant: 'danger'
+                            }
+                          ]}
+                          size="sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <div className="text-center py-12">

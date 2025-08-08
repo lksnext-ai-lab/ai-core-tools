@@ -6,7 +6,7 @@ from datetime import datetime
 
 from models.api_key import APIKey
 from models.app import App
-from db.session import SessionLocal
+from db.database import SessionLocal
 
 # API Key authentication using header
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)

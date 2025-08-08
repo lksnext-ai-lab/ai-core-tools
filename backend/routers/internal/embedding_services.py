@@ -1,12 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy.orm import Session
 from typing import List, Optional
 
-# Import models for enum access
-from models.embedding_service import EmbeddingProvider
-
 # Import schemas and auth
-from .schemas import *
+from schemas.embedding_service_schemas import (
+    EmbeddingServiceListItemSchema,
+    EmbeddingServiceDetailSchema,
+    CreateUpdateEmbeddingServiceSchema
+)
 from .auth_utils import get_current_user_oauth
+
+# Import database dependency
+from db.database import get_db
+
+# Import service
+from services.embedding_service_service import EmbeddingServiceService
 
 # Import logger
 from utils.logger import get_logger
@@ -21,7 +29,11 @@ embedding_services_router = APIRouter()
                                summary="List embedding services",
                                tags=["Embedding Services"],
                                response_model=List[EmbeddingServiceListItemSchema])
-async def list_embedding_services(app_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def list_embedding_services(
+    app_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_oauth)
+):
     """
     List all embedding services for a specific app.
     """
@@ -30,27 +42,7 @@ async def list_embedding_services(app_id: int, current_user: dict = Depends(get_
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.embedding_service import EmbeddingService
-        
-        session = SessionLocal()
-        try:
-            embedding_services = session.query(EmbeddingService).filter(EmbeddingService.app_id == app_id).all()
-            
-            result = []
-            for service in embedding_services:
-                result.append(EmbeddingServiceListItemSchema(
-                    service_id=service.service_id,
-                    name=service.name,
-                    provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                    model_name=service.description or "",
-                    created_at=service.create_date
-                ))
-            
-            return result
-            
-        finally:
-            session.close()
+        return EmbeddingServiceService.get_embedding_services_list(db, app_id)
             
     except Exception as e:
         raise HTTPException(
@@ -63,7 +55,12 @@ async def list_embedding_services(app_id: int, current_user: dict = Depends(get_
                                summary="Get embedding service details",
                                tags=["Embedding Services"],
                                response_model=EmbeddingServiceDetailSchema)
-async def get_embedding_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def get_embedding_service(
+    app_id: int, 
+    service_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_oauth)
+):
     """
     Get detailed information about a specific embedding service.
     """
@@ -72,55 +69,15 @@ async def get_embedding_service(app_id: int, service_id: int, current_user: dict
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.embedding_service import EmbeddingService
+        service_detail = EmbeddingServiceService.get_embedding_service_detail(db, app_id, service_id)
         
-        session = SessionLocal()
-        try:
-            if service_id == 0:
-                # New embedding service
-                # Get available providers for the form
-                providers = [{"value": p.value, "name": p.value} for p in EmbeddingProvider]
-                
-                return EmbeddingServiceDetailSchema(
-                    service_id=0,
-                    name="",
-                    provider=None,
-                    model_name="",
-                    api_key="",
-                    base_url="",
-                    created_at=None,
-                    available_providers=providers
-                )
-            
-            # Existing embedding service
-            service = session.query(EmbeddingService).filter(
-                EmbeddingService.service_id == service_id,
-                EmbeddingService.app_id == app_id
-            ).first()
-            
-            if not service:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Embedding service not found"
-                )
-            
-            # Get available providers for the form
-            providers = [{"value": p.value, "name": p.value} for p in EmbeddingProvider]
-            
-            return EmbeddingServiceDetailSchema(
-                service_id=service.service_id,
-                name=service.name,
-                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                model_name=service.description or "",
-                api_key=service.api_key,
-                base_url=service.endpoint or "",  # Use endpoint as base_url
-                created_at=service.create_date,
-                available_providers=providers
+        if service_detail is None and service_id != 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Embedding service not found"
             )
-            
-        finally:
-            session.close()
+        
+        return service_detail
             
     except HTTPException:
         raise
@@ -139,6 +96,7 @@ async def create_or_update_embedding_service(
     app_id: int,
     service_id: int,
     service_data: CreateUpdateEmbeddingServiceSchema,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user_oauth)
 ):
     """
@@ -149,46 +107,18 @@ async def create_or_update_embedding_service(
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.embedding_service import EmbeddingService
-        from datetime import datetime
+        service = EmbeddingServiceService.create_or_update_embedding_service(
+            db, app_id, service_id, service_data
+        )
         
-        session = SessionLocal()
-        try:
-            if service_id == 0:
-                # Create new embedding service
-                service = EmbeddingService()
-                service.app_id = app_id
-                service.create_date = datetime.now()
-            else:
-                # Update existing embedding service
-                service = session.query(EmbeddingService).filter(
-                    EmbeddingService.service_id == service_id,
-                    EmbeddingService.app_id == app_id
-                ).first()
-                
-                if not service:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="Embedding service not found"
-                    )
-            
-            # Update service data
-            service.name = service_data.name
-            service.provider = service_data.provider
-            service.description = service_data.model_name
-            service.api_key = service_data.api_key
-            service.endpoint = service_data.base_url
-            
-            session.add(service)
-            session.commit()
-            session.refresh(service)
-            
-            # Return updated service (reuse the GET logic)
-            return await get_embedding_service(app_id, service.service_id, current_user)
-            
-        finally:
-            session.close()
+        if service is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Embedding service not found"
+            )
+        
+        # Return updated service details
+        return EmbeddingServiceService.get_embedding_service_detail(db, app_id, service.service_id)
             
     except HTTPException:
         raise
@@ -202,7 +132,12 @@ async def create_or_update_embedding_service(
 @embedding_services_router.delete("/{service_id}",
                                   summary="Delete embedding service",
                                   tags=["Embedding Services"])
-async def delete_embedding_service(app_id: int, service_id: int, current_user: dict = Depends(get_current_user_oauth)):
+async def delete_embedding_service(
+    app_id: int, 
+    service_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_oauth)
+):
     """
     Delete an embedding service.
     """
@@ -211,29 +146,15 @@ async def delete_embedding_service(app_id: int, service_id: int, current_user: d
     # TODO: Add app access validation
     
     try:
-        from db.session import SessionLocal
-        from models.embedding_service import EmbeddingService
+        success = EmbeddingServiceService.delete_embedding_service(db, app_id, service_id)
         
-        session = SessionLocal()
-        try:
-            service = session.query(EmbeddingService).filter(
-                EmbeddingService.service_id == service_id,
-                EmbeddingService.app_id == app_id
-            ).first()
-            
-            if not service:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Embedding service not found"
-                )
-            
-            session.delete(service)
-            session.commit()
-            
-            return {"message": "Embedding service deleted successfully"}
-            
-        finally:
-            session.close()
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Embedding service not found"
+            )
+        
+        return {"message": "Embedding service deleted successfully"}
             
     except HTTPException:
         raise

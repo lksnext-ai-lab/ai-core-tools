@@ -1,14 +1,118 @@
-from db.session import SessionLocal
-from models.ai_service import AIService
+from sqlalchemy.orm import Session
+from models.ai_service import AIService, ProviderEnum
+from repositories.ai_service_repository import AIServiceRepository
+from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
+from datetime import datetime
+from typing import List
 
 class AIServiceService:
     
     @staticmethod
+    def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIServiceListItemSchema]:
+        """Get all AI services for a specific app"""
+        ai_services = AIServiceRepository.get_by_app_id(db, app_id)
+        
+        result = []
+        for service in ai_services:
+            result.append(AIServiceListItemSchema(
+                service_id=service.service_id,
+                name=service.name,
+                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+                model_name=service.description or "",  # Use description as model info
+                created_at=service.create_date
+            ))
+        
+        return result
+    
+    @staticmethod
+    def get_ai_service_detail(db: Session, app_id: int, service_id: int) -> AIServiceDetailSchema:
+        """Get detailed information about a specific AI service"""
+        if service_id == 0:
+            # New AI service
+            # Get available providers for the form
+            providers = [{"value": p.value, "name": p.value} for p in ProviderEnum]
+            
+            return AIServiceDetailSchema(
+                service_id=0,
+                name="",
+                provider=None,
+                model_name="",
+                api_key="",
+                base_url="",
+                created_at=None,
+                # Form data
+                available_providers=providers
+            )
+        
+        # Existing AI service
+        service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        
+        if not service:
+            return None
+        
+        # Get available providers for the form
+        providers = [{"value": p.value, "name": p.value} for p in ProviderEnum]
+        
+        return AIServiceDetailSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",
+            api_key=service.api_key,
+            base_url=service.endpoint or "",  # Use endpoint as base_url
+            created_at=service.create_date,
+            available_providers=providers
+        )
+    
+    @staticmethod
+    def create_or_update_ai_service(db: Session, app_id: int, service_id: int, service_data: CreateUpdateAIServiceSchema) -> AIServiceDetailSchema:
+        """Create a new AI service or update an existing one"""
+        if service_id == 0:
+            # Create new AI service
+            service = AIService()
+            service.app_id = app_id
+            service.create_date = datetime.now()
+        else:
+            # Update existing AI service
+            service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+            
+            if not service:
+                return None
+        
+        # Update service data
+        service.name = service_data.name
+        service.provider = service_data.provider  # Store as string, not enum
+        service.description = service_data.model_name  # Store model name in description
+        service.api_key = service_data.api_key
+        service.endpoint = service_data.base_url  # Store base_url in endpoint
+        
+        # Create or update the service
+        if service_id == 0:
+            service = AIServiceRepository.create(db, service)
+        else:
+            service = AIServiceRepository.update(db, service)
+        
+        # Return updated service detail
+        return AIServiceService.get_ai_service_detail(db, app_id, service.service_id)
+    
+    @staticmethod
+    def delete_ai_service(db: Session, app_id: int, service_id: int) -> bool:
+        """Delete an AI service"""
+        service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        
+        if not service:
+            return False
+        
+        AIServiceRepository.delete(db, service)
+        
+        return True
+    
+    @staticmethod
     def delete_by_app_id(app_id: int):
         """Delete all AI services for a specific app"""
+        from db.database import SessionLocal
         session = SessionLocal()
         try:
-            session.query(AIService).filter(AIService.app_id == app_id).delete()
-            session.commit()
+            AIServiceRepository.delete_by_app_id(session, app_id)
         finally:
             session.close() 

@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, JSON, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from db.base import Base
+from db.database import Base
 from datetime import datetime
 
 class OutputParser(Base):

@@ -1,5 +1,5 @@
 from models.url import Url
-from db.session import SessionLocal
+from db.database import SessionLocal
 from services.silo_service import SiloService
 from datetime import datetime
 from utils.logger import get_logger

@@ -1,4 +1,4 @@
-from db.session import SessionLocal
+from db.database import SessionLocal
 from models.resource import Resource
 from typing import List, Tuple, Optional
 import os

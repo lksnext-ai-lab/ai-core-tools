@@ -2,22 +2,23 @@ from typing import List, Optional
 import secrets
 import string
 from datetime import datetime
-from db.session import SessionLocal
+from sqlalchemy.orm import Session
 from models.api_key import APIKey
-from models.app import App
+from repositories.api_key_repository import APIKeyRepository
 from utils.logger import get_logger
-from utils.error_handlers import (
-    handle_database_errors, NotFoundError, ValidationError, 
-    AuthorizationError, validate_required_fields
-)
+from schemas.api_key_schemas import APIKeyListItemSchema, APIKeyDetailSchema, APIKeyCreateResponseSchema
 
 logger = get_logger(__name__)
 
 
 class APIKeyService:
+    """Service class for API key business logic"""
+    
+    def __init__(self, api_key_repository: APIKeyRepository = None):
+        self.api_key_repository = api_key_repository or APIKeyRepository()
     
     @staticmethod
-    def generate_api_key(length: int = 48) -> str:
+    def generate_api_key(length: int = 32) -> str:
         """
         Generate a secure random API key
         
@@ -30,197 +31,193 @@ class APIKeyService:
         alphabet = string.ascii_letters + string.digits
         return ''.join(secrets.choice(alphabet) for _ in range(length))
     
-    @staticmethod
-    @handle_database_errors("get_api_keys_by_app")
-    def get_api_keys_by_app(app_id: int, user_id: int) -> List[APIKey]:
+    def get_api_keys_list(self, db: Session, app_id: int) -> List[APIKeyListItemSchema]:
         """
-        Get all API keys for a specific app and user
+        Get all API keys for a specific app as list items
         
         Args:
+            db: Database session
             app_id: ID of the app
-            user_id: ID of the user (for authorization)
             
         Returns:
-            List of API keys
-            
-        Raises:
-            ValidationError: If parameters are invalid
-            AuthorizationError: If user doesn't have access to the app
+            List of API key list items
         """
-        if not app_id or not user_id:
-            raise ValidationError("App ID and User ID are required")
+        api_keys = self.api_key_repository.get_by_app_id(db, app_id)
         
-        # Verify user has access to the app
-        APIKeyService._verify_app_access(app_id, user_id)
+        result = []
+        for api_key in api_keys:
+            result.append(APIKeyListItemSchema(
+                key_id=api_key.key_id,
+                name=api_key.name,
+                is_active=api_key.is_active,
+                created_at=api_key.created_at,
+                last_used_at=getattr(api_key, 'last_used_at', None),
+                key_preview=f"{api_key.key[:8]}..." if api_key.key else "***"
+            ))
         
-        session = SessionLocal()
-        try:
-            api_keys = session.query(APIKey).filter_by(app_id=app_id).all()
-            logger.info(f"Retrieved {len(api_keys)} API keys for app {app_id}")
-            return api_keys
-        finally:
-            session.close()
+        logger.info(f"Retrieved {len(result)} API keys for app {app_id}")
+        return result
     
-    @staticmethod
-    @handle_database_errors("create_api_key")
-    def create_api_key(name: str, app_id: int, user_id: int) -> APIKey:
+    def get_api_key_detail(self, db: Session, app_id: int, key_id: int) -> Optional[APIKeyDetailSchema]:
+        """
+        Get detailed information about a specific API key
+        
+        Args:
+            db: Database session
+            app_id: ID of the app
+            key_id: ID of the API key
+            
+        Returns:
+            API key detail or None if not found
+        """
+        if key_id == 0:
+            # New API key form
+            return APIKeyDetailSchema(
+                key_id=0,
+                name="",
+                is_active=True,
+                created_at=None,
+                last_used_at=None,
+                key_preview="Will be generated on save"
+            )
+        
+        api_key = self.api_key_repository.get_by_id_and_app(db, key_id, app_id)
+        
+        if not api_key:
+            return None
+        
+        return APIKeyDetailSchema(
+            key_id=api_key.key_id,
+            name=api_key.name,
+            is_active=api_key.is_active,
+            created_at=api_key.created_at,
+            last_used_at=getattr(api_key, 'last_used_at', None),
+            key_preview=f"{api_key.key[:8]}..." if api_key.key else "***"
+        )
+    
+    def create_api_key(self, db: Session, app_id: int, user_id: int, name: str, is_active: bool = True) -> APIKeyCreateResponseSchema:
         """
         Create a new API key
         
         Args:
-            name: Name for the API key
+            db: Database session
             app_id: ID of the app
             user_id: ID of the user
+            name: Name for the API key
+            is_active: Whether the key should be active
             
         Returns:
-            Created API key
-            
-        Raises:
-            ValidationError: If parameters are invalid
-            AuthorizationError: If user doesn't have access to the app
+            Created API key response with actual key value
         """
-        # Validate inputs
-        validate_required_fields(
-            {'name': name, 'app_id': app_id, 'user_id': user_id},
-            ['name', 'app_id', 'user_id']
+        # Create API key entity
+        api_key = APIKey()
+        api_key.app_id = app_id
+        api_key.user_id = user_id
+        api_key.created_at = datetime.now()
+        api_key.key = self.generate_api_key()
+        api_key.name = name
+        api_key.is_active = is_active
+        
+        # Save to database
+        created_api_key = self.api_key_repository.create(db, api_key)
+        
+        logger.info(f"Created API key '{name}' for app {app_id} by user {user_id}")
+        
+        return APIKeyCreateResponseSchema(
+            key_id=created_api_key.key_id,
+            name=created_api_key.name,
+            is_active=created_api_key.is_active,
+            created_at=created_api_key.created_at,
+            last_used_at=None,
+            key_preview=f"{created_api_key.key[:8]}...",
+            key_value=created_api_key.key,  # Show the actual key once
+            message="API key created successfully. Please save this key as it won't be shown again."
         )
-        
-        name = name.strip()
-        if not name:
-            raise ValidationError("API key name cannot be empty")
-        
-        # Verify user has access to the app
-        APIKeyService._verify_app_access(app_id, user_id)
-        
-        session = SessionLocal()
-        try:
-            api_key = APIKey(
-                key=APIKeyService.generate_api_key(),
-                name=name,
-                app_id=app_id,
-                user_id=user_id,
-                created_at=datetime.now(),
-                is_active=True
-            )
-            session.add(api_key)
-            session.commit()
-            session.refresh(api_key)
-            
-            # Create a detached copy to return
-            detached_key = APIKey()
-            detached_key.key_id = api_key.key_id
-            detached_key.key = api_key.key
-            detached_key.name = api_key.name
-            detached_key.app_id = api_key.app_id
-            detached_key.user_id = api_key.user_id
-            detached_key.created_at = api_key.created_at
-            detached_key.last_used_at = api_key.last_used_at
-            detached_key.is_active = api_key.is_active
-            
-            logger.info(f"Created API key '{name}' for app {app_id} by user {user_id}")
-            return detached_key
-        finally:
-            session.close()
     
-    @staticmethod
-    @handle_database_errors("delete_api_key")
-    def delete_api_key(key_id: int, user_id: int) -> bool:
+    def update_api_key(self, db: Session, app_id: int, key_id: int, name: str, is_active: bool) -> Optional[APIKeyCreateResponseSchema]:
+        """
+        Update an existing API key
+        
+        Args:
+            db: Database session
+            app_id: ID of the app
+            key_id: ID of the API key
+            name: New name for the API key
+            is_active: Whether the key should be active
+            
+        Returns:
+            Updated API key response or None if not found
+        """
+        api_key = self.api_key_repository.get_by_id_and_app(db, key_id, app_id)
+        
+        if not api_key:
+            return None
+        
+        # Update fields
+        api_key.name = name
+        api_key.is_active = is_active
+        
+        # Save changes
+        updated_api_key = self.api_key_repository.update(db, api_key)
+        
+        logger.info(f"Updated API key {key_id} for app {app_id}")
+        
+        return APIKeyCreateResponseSchema(
+            key_id=updated_api_key.key_id,
+            name=updated_api_key.name,
+            is_active=updated_api_key.is_active,
+            created_at=updated_api_key.created_at,
+            last_used_at=getattr(updated_api_key, 'last_used_at', None),
+            key_preview=f"{updated_api_key.key[:8]}...",
+            key_value=None,  # Don't show the actual key on update
+            message="API key updated successfully."
+        )
+    
+    def delete_api_key(self, db: Session, app_id: int, key_id: int) -> bool:
         """
         Delete an API key
         
         Args:
-            key_id: ID of the API key to delete
-            user_id: ID of the user (for authorization)
-            
-        Returns:
-            True if deleted successfully
-            
-        Raises:
-            NotFoundError: If API key not found
-            AuthorizationError: If user doesn't own the API key
-        """
-        api_key = APIKeyService._get_api_key_with_auth(key_id, user_id)
-        
-        session = SessionLocal()
-        try:
-            session.delete(api_key)
-            session.flush()
-            session.commit()
-            logger.info(f"Deleted API key {key_id} for user {user_id}")
-            return True
-        finally:
-            session.close()
-    
-    @staticmethod
-    def _verify_app_access(app_id: int, user_id: int) -> App:
-        """
-        Verify that user has access to the specified app
-        
-        Args:
+            db: Database session
             app_id: ID of the app
-            user_id: ID of the user
+            key_id: ID of the API key to delete
             
         Returns:
-            App instance if access is granted
-            
-        Raises:
-            NotFoundError: If app not found
-            AuthorizationError: If user doesn't have access
+            True if deleted successfully, False if not found
         """
-        session = SessionLocal()
-        try:
-            app = session.query(App).filter_by(app_id=app_id).first()
-            
-            if not app:
-                raise NotFoundError(f"App with ID {app_id} not found", "app")
-            
-            if app.owner_id != user_id:
-                raise AuthorizationError(f"User {user_id} does not have access to app {app_id}")
-            
-            return app
-        finally:
-            session.close()
+        api_key = self.api_key_repository.get_by_id_and_app(db, key_id, app_id)
+        
+        if not api_key:
+            return False
+        
+        self.api_key_repository.delete(db, api_key)
+        
+        logger.info(f"Deleted API key {key_id} for app {app_id}")
+        return True
     
-    @staticmethod
-    def _get_api_key_with_auth(key_id: int, user_id: int) -> APIKey:
+    def toggle_api_key(self, db: Session, app_id: int, key_id: int) -> Optional[str]:
         """
-        Get API key with authorization check
+        Toggle the active status of an API key
         
         Args:
+            db: Database session
+            app_id: ID of the app
             key_id: ID of the API key
-            user_id: ID of the user
             
         Returns:
-            API key instance
-            
-        Raises:
-            NotFoundError: If API key not found
-            AuthorizationError: If user doesn't own the API key
+            Status message or None if not found
         """
-        session = SessionLocal()
-        try:
-            api_key = session.query(APIKey).filter_by(key_id=key_id).first()
-            
-            if not api_key:
-                raise NotFoundError(f"API key with ID {key_id} not found", "api_key")
-            
-            if api_key.user_id != user_id:
-                raise AuthorizationError(f"User {user_id} does not own API key {key_id}")
-            
-            return api_key
-        finally:
-            session.close()
-    
-    @staticmethod
-    @handle_database_errors("delete_by_app_id")
-    def delete_by_app_id(app_id: int):
-        """Delete all API keys for a specific app"""
-        session = SessionLocal()
-        try:
-            deleted_count = session.query(APIKey).filter(APIKey.app_id == app_id).delete()
-            session.flush()
-            session.commit()
-            logger.info(f"Deleted {deleted_count} API keys for app {app_id}")
-            return deleted_count
-        finally:
-            session.close() 
+        api_key = self.api_key_repository.get_by_id_and_app(db, key_id, app_id)
+        
+        if not api_key:
+            return None
+        
+        # Toggle the active status
+        api_key.is_active = not api_key.is_active
+        
+        # Save changes
+        self.api_key_repository.update(db, api_key)
+        
+        status_text = "activated" if api_key.is_active else "deactivated"
+        logger.info(f"API key {key_id} {status_text} for app {app_id}")
+        return f"API key {status_text} successfully" 

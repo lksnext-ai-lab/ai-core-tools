@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from db.base import Base
+from db.database import Base
 
 class APIUsage(Base):
     '''API Usage tracking model for subscription limits'''
@@ -31,7 +31,7 @@ class APIUsage(Base):
     @classmethod
     def get_or_create_current_usage(cls, user_id: int, subscription_id: int):
         """Get or create API usage record for current month"""
-        from extensions import db
+        from db.database import db
         
         now = datetime.utcnow()
         current_year = now.year
@@ -59,7 +59,7 @@ class APIUsage(Base):
     
     def increment_api_calls(self):
         """Atomically increment API calls counter"""
-        from extensions import db
+        from db.database import db
         
         self.api_calls_count += 1
         self.updated_at = datetime.utcnow()

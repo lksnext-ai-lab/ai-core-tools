@@ -22,7 +22,7 @@ from models.api_usage import APIUsage
 from models.resource import Resource
 from models.url import Url
 
-from db.session import SessionLocal
+from db.database import SessionLocal
 from services.user_service import UserService
 
 def test_users():

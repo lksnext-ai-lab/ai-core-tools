@@ -1,7 +1,7 @@
 from models.repository import Repository
 from models.resource import Resource
 from models.output_parser import OutputParser
-from db.session import SessionLocal
+from db.database import SessionLocal
 from typing import Optional, List
 import os
 import shutil
