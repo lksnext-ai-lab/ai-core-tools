@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal';
 import EmbeddingServiceForm from '../../components/forms/EmbeddingServiceForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import type { ActionItem } from '../../components/ui/ActionDropdown';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 
 interface EmbeddingService {
   service_id: number;
@@ -17,13 +17,14 @@ interface EmbeddingService {
 
 function EmbeddingServicesPage() {
   const { appId } = useParams();
+  const settingsCache = useSettingsCache();
   const [services, setServices] = useState<EmbeddingService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
 
-  // Load embedding services from the API
+  // Load embedding services from cache or API
   useEffect(() => {
     loadEmbeddingServices();
   }, [appId]);
@@ -31,11 +32,40 @@ function EmbeddingServicesPage() {
   async function loadEmbeddingServices() {
     if (!appId) return;
     
+    // Check if we have cached data first
+    const cachedData = settingsCache.getEmbeddingServices(appId);
+    if (cachedData) {
+      setServices(cachedData);
+      setLoading(false);
+      return;
+    }
+    
+    // If no cache, load from API
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getEmbeddingServices(parseInt(appId));
       setServices(response);
+      // Cache the response
+      settingsCache.setEmbeddingServices(appId, response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load embedding services');
+      console.error('Error loading embedding services:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forceReloadEmbeddingServices() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getEmbeddingServices(parseInt(appId));
+      setServices(response);
+      // Cache the response
+      settingsCache.setEmbeddingServices(appId, response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load embedding services');
       console.error('Error loading embedding services:', err);
@@ -54,7 +84,10 @@ function EmbeddingServicesPage() {
     try {
       await apiService.deleteEmbeddingService(parseInt(appId), serviceId);
       // Remove from local state
-      setServices(services.filter(s => s.service_id !== serviceId));
+      const newServices = services.filter(s => s.service_id !== serviceId);
+      setServices(newServices);
+      // Update cache
+      settingsCache.setEmbeddingServices(appId, newServices);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete service');
       console.error('Error deleting embedding service:', err);
@@ -84,15 +117,16 @@ function EmbeddingServicesPage() {
 
     try {
       if (editingService && editingService.service_id !== 0) {
-        // Update existing service
+        // Update existing service - no need to invalidate cache
         await apiService.updateEmbeddingService(parseInt(appId), editingService.service_id, data);
+        await loadEmbeddingServices();
       } else {
-        // Create new service
+        // Create new service - invalidate cache and force reload
         await apiService.createEmbeddingService(parseInt(appId), data);
+        settingsCache.invalidateEmbeddingServices(appId);
+        await forceReloadEmbeddingServices();
       }
       
-      // Reload services list
-      await loadEmbeddingServices();
       setIsModalOpen(false);
       setEditingService(null);
     } catch (err) {

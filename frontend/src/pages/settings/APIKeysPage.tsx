@@ -6,7 +6,7 @@ import APIKeyForm from '../../components/forms/APIKeyForm';
 import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import type { ActionItem } from '../../components/ui/ActionDropdown';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 
 interface APIKey {
   key_id: number;
@@ -19,6 +19,7 @@ interface APIKey {
 
 function APIKeysPage() {
   const { appId } = useParams();
+  const settingsCache = useSettingsCache();
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ function APIKeysPage() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [createdKey, setCreatedKey] = useState<any>(null);
 
-  // Load API keys from the API
+  // Load API keys from cache or API
   useEffect(() => {
     loadAPIKeys();
   }, [appId]);
@@ -35,11 +36,40 @@ function APIKeysPage() {
   async function loadAPIKeys() {
     if (!appId) return;
     
+    // Check if we have cached data first
+    const cachedData = settingsCache.getAPIKeys(appId);
+    if (cachedData) {
+      setApiKeys(cachedData);
+      setLoading(false);
+      return;
+    }
+    
+    // If no cache, load from API
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getAPIKeys(parseInt(appId));
       setApiKeys(response);
+      // Cache the response
+      settingsCache.setAPIKeys(appId, response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      console.error('Error loading API keys:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forceReloadAPIKeys() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getAPIKeys(parseInt(appId));
+      setApiKeys(response);
+      // Cache the response
+      settingsCache.setAPIKeys(appId, response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load API keys');
       console.error('Error loading API keys:', err);
@@ -58,7 +88,10 @@ function APIKeysPage() {
     try {
       await apiService.deleteAPIKey(parseInt(appId), keyId);
       // Remove from local state
-      setApiKeys(apiKeys.filter(k => k.key_id !== keyId));
+      const newApiKeys = apiKeys.filter(k => k.key_id !== keyId);
+      setApiKeys(newApiKeys);
+      // Update cache
+      settingsCache.setAPIKeys(appId, newApiKeys);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete API key');
       console.error('Error deleting API key:', err);
@@ -71,11 +104,14 @@ function APIKeysPage() {
     try {
       const response = await apiService.toggleAPIKey(parseInt(appId), keyId);
       // Update local state
-      setApiKeys(apiKeys.map(key => 
+      const updatedApiKeys = apiKeys.map(key => 
         key.key_id === keyId 
           ? { ...key, is_active: response.is_active }
           : key
-      ));
+      );
+      setApiKeys(updatedApiKeys);
+      // Update cache
+      settingsCache.setAPIKeys(appId, updatedApiKeys);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to toggle API key');
       console.error('Error toggling API key:', err);
@@ -105,13 +141,13 @@ function APIKeysPage() {
 
     try {
       if (editingKey && editingKey.key_id !== 0) {
-        // Update existing key
+        // Update existing key - no need to invalidate cache
         await apiService.updateAPIKey(parseInt(appId), editingKey.key_id, data);
         await loadAPIKeys(); // Reload the list
         setIsModalOpen(false);
         setEditingKey(null);
       } else {
-        // Create new key
+        // Create new key - invalidate cache and force reload
         const response = await apiService.createAPIKey(parseInt(appId), data);
         
         // Show the API key value in a special modal
@@ -120,8 +156,9 @@ function APIKeysPage() {
         setIsModalOpen(false);
         setEditingKey(null);
         
-        // Reload the list to include the new key
-        await loadAPIKeys();
+        // Invalidate cache and force reload to include the new key
+        settingsCache.invalidateAPIKeys(appId);
+        await forceReloadAPIKeys();
       }
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to save API key');

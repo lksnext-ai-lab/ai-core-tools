@@ -74,7 +74,7 @@ def get_text_from_url(url: str, tag: str = "body", id: Optional[str] = None, cla
         return ""
 
 
-def scrape_and_index_url(domain, url_path: str, url_id: int = None) -> bool:
+def scrape_and_index_url(domain, url_path: str, url_id: int = None, db = None) -> bool:
     """
     Scrape a URL and index its content into the domain's silo
     
@@ -82,15 +82,16 @@ def scrape_and_index_url(domain, url_path: str, url_id: int = None) -> bool:
         domain: Domain object with scraping configuration
         url_path: URL path to scrape (will be combined with domain.base_url)
         url_id: Optional URL ID to update status
+        db: Database session (required if url_id is provided)
         
     Returns:
         True if successful, False otherwise
     """
     try:
         # Update status to indexing if URL ID provided
-        if url_id:
+        if url_id and db:
             from services.url_service import UrlService
-            UrlService.update_url_indexing(url_id, domain.domain_id)
+            UrlService.update_url_indexing(url_id, db, domain.domain_id)
         
         # Construct full URL
         full_url = domain.base_url + url_path
@@ -105,8 +106,8 @@ def scrape_and_index_url(domain, url_path: str, url_id: int = None) -> bool:
         
         if not content:
             logger.warning(f"No content extracted from {full_url}")
-            if url_id:
-                UrlService.update_url_rejected(url_id, domain.domain_id)
+            if url_id and db:
+                UrlService.update_url_rejected(url_id, db, domain.domain_id)
             return False
         
         # Index content into domain's silo
@@ -114,29 +115,31 @@ def scrape_and_index_url(domain, url_path: str, url_id: int = None) -> bool:
         SiloService.index_single_content(
             domain.silo_id, 
             content, 
-            {"url": full_url, "domain_id": domain.domain_id}
+            {"url": full_url, "domain_id": domain.domain_id},
+            db
         )
         
         # Update status to indexed if successful
-        if url_id:
-            UrlService.update_url_indexed(url_id, domain.domain_id)
+        if url_id and db:
+            UrlService.update_url_indexed(url_id, db, domain.domain_id)
         
         logger.info(f"Successfully scraped and indexed {full_url}")
         return True
         
     except Exception as e:
         logger.error(f"Error scraping and indexing {full_url}: {str(e)}")
-        if url_id:
-            UrlService.update_url_rejected(url_id, domain.domain_id)
+        if url_id and db:
+            UrlService.update_url_rejected(url_id, db, domain.domain_id)
         return False
 
 
-def reindex_domain_urls(domain) -> dict:
+def reindex_domain_urls(domain, db = None) -> dict:
     """
     Re-index all URLs for a domain (skips rejected URLs)
     
     Args:
         domain: Domain object with URLs
+        db: Database session (required for URL status updates)
         
     Returns:
         Dictionary with success/failure counts
@@ -158,10 +161,10 @@ def reindex_domain_urls(domain) -> dict:
             
             try:
                 # Remove old content
-                SiloService.delete_url(domain.silo_id, full_url)
+                SiloService.delete_url(domain.silo_id, full_url, db)
                 
                 # Re-scrape and index with URL ID for status updates
-                if scrape_and_index_url(domain, url.url, url.url_id):
+                if scrape_and_index_url(domain, url.url, url.url_id, db):
                     results["success"] += 1
                 else:
                     results["failed"] += 1

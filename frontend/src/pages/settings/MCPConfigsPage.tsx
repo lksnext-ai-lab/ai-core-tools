@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import type { ActionItem } from '../../components/ui/ActionDropdown';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 
 interface MCPConfig {
   config_id: number;
@@ -16,13 +16,14 @@ interface MCPConfig {
 
 function MCPConfigsPage() {
   const { appId } = useParams();
+  const settingsCache = useSettingsCache();
   const [configs, setConfigs] = useState<MCPConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<any>(null);
 
-  // Load MCP configs from the API
+  // Load MCP configs from cache or API
   useEffect(() => {
     loadMCPConfigs();
   }, [appId]);
@@ -30,11 +31,40 @@ function MCPConfigsPage() {
   async function loadMCPConfigs() {
     if (!appId) return;
     
+    // Check if we have cached data first
+    const cachedData = settingsCache.getMCPConfigs(appId);
+    if (cachedData) {
+      setConfigs(cachedData);
+      setLoading(false);
+      return;
+    }
+    
+    // If no cache, load from API
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getMCPConfigs(parseInt(appId));
       setConfigs(response);
+      // Cache the response
+      settingsCache.setMCPConfigs(appId, response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load MCP configs');
+      console.error('Error loading MCP configs:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forceReloadMCPConfigs() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getMCPConfigs(parseInt(appId));
+      setConfigs(response);
+      // Cache the response
+      settingsCache.setMCPConfigs(appId, response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load MCP configs');
       console.error('Error loading MCP configs:', err);
@@ -53,7 +83,10 @@ function MCPConfigsPage() {
     try {
       await apiService.deleteMCPConfig(parseInt(appId), configId);
       // Remove from local state
-      setConfigs(configs.filter(c => c.config_id !== configId));
+      const newConfigs = configs.filter(c => c.config_id !== configId);
+      setConfigs(newConfigs);
+      // Update cache
+      settingsCache.setMCPConfigs(appId, newConfigs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete config');
       console.error('Error deleting MCP config:', err);
@@ -83,15 +116,16 @@ function MCPConfigsPage() {
 
     try {
       if (editingConfig && editingConfig.config_id !== 0) {
-        // Update existing config
+        // Update existing config - no need to invalidate cache
         await apiService.updateMCPConfig(parseInt(appId), editingConfig.config_id, data);
+        await loadMCPConfigs();
       } else {
-        // Create new config
+        // Create new config - invalidate cache and force reload
         await apiService.createMCPConfig(parseInt(appId), data);
+        settingsCache.invalidateMCPConfigs(appId);
+        await forceReloadMCPConfigs();
       }
       
-      // Reload configs list
-      await loadMCPConfigs();
       setIsModalOpen(false);
       setEditingConfig(null);
     } catch (err) {

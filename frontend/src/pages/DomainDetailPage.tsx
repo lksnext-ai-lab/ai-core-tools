@@ -49,14 +49,17 @@ const DomainDetailPage: React.FC = () => {
   // Delete URL modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [urlToDelete, setUrlToDelete] = useState<URL | null>(null);
+  const [deletingUrl, setDeletingUrl] = useState(false);
   
   // Unindex URL modal
   const [showUnindexModal, setShowUnindexModal] = useState(false);
   const [urlToUnindex, setUrlToUnindex] = useState<URL | null>(null);
+  const [unindexingUrl, setUnindexingUrl] = useState(false);
   
   // Reject URL modal
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [urlToReject, setUrlToReject] = useState<URL | null>(null);
+  const [rejectingUrl, setRejectingUrl] = useState(false);
   
   // Content preview modal
   const [showContentModal, setShowContentModal] = useState(false);
@@ -131,13 +134,19 @@ const DomainDetailPage: React.FC = () => {
     if (!urlToDelete || !appId || !domainId) return;
     
     try {
+      setDeletingUrl(true);
       await apiService.deleteUrlFromDomain(parseInt(appId), parseInt(domainId), urlToDelete.url_id);
       setUrls(urls.filter(u => u.url_id !== urlToDelete.url_id));
       setShowDeleteModal(false);
       setUrlToDelete(null);
+      setSuccessMessage('URL deleted successfully');
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error('Error deleting URL:', err);
-      alert('Failed to delete URL');
+      setErrorMessage('Failed to delete URL');
+      setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setDeletingUrl(false);
     }
   };
 
@@ -146,11 +155,23 @@ const DomainDetailPage: React.FC = () => {
     
     try {
       setReindexingUrls(prev => new Set(prev).add(urlId));
-      await apiService.reindexUrl(parseInt(appId), parseInt(domainId), urlId);
+      const response = await apiService.reindexUrl(parseInt(appId), parseInt(domainId), urlId);
       await loadUrls(); // Reload to get updated timestamps
+      
+      // Show success message
+      if (response.success) {
+        setSuccessMessage(response.message || 'URL re-indexed successfully');
+      } else {
+        setErrorMessage(response.message || 'Failed to re-index URL');
+      }
+      setTimeout(() => {
+        setSuccessMessage(null);
+        setErrorMessage(null);
+      }, 3000);
     } catch (err) {
       console.error('Error reindexing URL:', err);
-      alert('Failed to reindex URL');
+      setErrorMessage('Failed to re-index URL');
+      setTimeout(() => setErrorMessage(null), 3000);
     } finally {
       setReindexingUrls(prev => {
         const newSet = new Set(prev);
@@ -171,6 +192,7 @@ const DomainDetailPage: React.FC = () => {
     if (!urlToUnindex || !appId || !domainId) return;
     
     try {
+      setUnindexingUrl(true);
       await apiService.unindexUrl(parseInt(appId), parseInt(domainId), urlToUnindex.url_id);
       await loadUrls(); // Reload to get updated status
       setShowUnindexModal(false);
@@ -181,6 +203,8 @@ const DomainDetailPage: React.FC = () => {
       console.error('Error unindexing URL:', err);
       setErrorMessage('Failed to unindex URL');
       setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setUnindexingUrl(false);
     }
   };
 
@@ -195,6 +219,7 @@ const DomainDetailPage: React.FC = () => {
     if (!urlToReject || !appId || !domainId) return;
     
     try {
+      setRejectingUrl(true);
       await apiService.rejectUrl(parseInt(appId), parseInt(domainId), urlToReject.url_id);
       await loadUrls(); // Reload to get updated status
       setShowRejectModal(false);
@@ -205,6 +230,8 @@ const DomainDetailPage: React.FC = () => {
       console.error('Error rejecting URL:', err);
       setErrorMessage('Failed to reject URL');
       setTimeout(() => setErrorMessage(null), 3000);
+    } finally {
+      setRejectingUrl(false);
     }
   };
 
@@ -215,9 +242,14 @@ const DomainDetailPage: React.FC = () => {
       setReindexingDomain(true);
       await apiService.reindexDomain(parseInt(appId), parseInt(domainId));
       await loadUrls(); // Reload to get updated timestamps
+      
+      // Show success message
+      setSuccessMessage('Domain re-indexed successfully');
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error('Error reindexing domain:', err);
-      alert('Failed to reindex domain');
+      setErrorMessage('Failed to re-index domain');
+      setTimeout(() => setErrorMessage(null), 3000);
     } finally {
       setReindexingDomain(false);
     }
@@ -602,9 +634,17 @@ const DomainDetailPage: React.FC = () => {
                 </button>
                 <button
                   onClick={confirmDeleteUrl}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                  disabled={deletingUrl}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
-                  Delete
+                  {deletingUrl ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Deleting...
+                    </div>
+                  ) : (
+                    'Delete'
+                  )}
                 </button>
               </div>
             </div>
@@ -640,9 +680,17 @@ const DomainDetailPage: React.FC = () => {
                 </button>
                 <button
                   onClick={confirmUnindexUrl}
-                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
+                  disabled={unindexingUrl}
+                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
-                  Unindex
+                  {unindexingUrl ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Unindexing...
+                    </div>
+                  ) : (
+                    'Unindex'
+                  )}
                 </button>
               </div>
             </div>
@@ -678,9 +726,17 @@ const DomainDetailPage: React.FC = () => {
                 </button>
                 <button
                   onClick={confirmRejectUrl}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                  disabled={rejectingUrl}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
-                  Reject
+                  {rejectingUrl ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Rejecting...
+                    </div>
+                  ) : (
+                    'Reject'
+                  )}
                 </button>
               </div>
             </div>

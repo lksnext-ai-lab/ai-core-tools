@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal';
 import AIServiceForm from '../../components/forms/AIServiceForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import type { ActionItem } from '../../components/ui/ActionDropdown';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 
 interface AIService {
   service_id: number;
@@ -17,13 +17,14 @@ interface AIService {
 
 function AIServicesPage() {
   const { appId } = useParams();
+  const settingsCache = useSettingsCache();
   const [services, setServices] = useState<AIService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
 
-  // Load AI services from the API
+  // Load AI services from cache or API
   useEffect(() => {
     loadAIServices();
   }, [appId]);
@@ -31,11 +32,40 @@ function AIServicesPage() {
   async function loadAIServices() {
     if (!appId) return;
     
+    // Check if we have cached data first
+    const cachedData = settingsCache.getAIServices(appId);
+    if (cachedData) {
+      setServices(cachedData);
+      setLoading(false);
+      return;
+    }
+    
+    // If no cache, load from API
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getAIServices(parseInt(appId));
       setServices(response);
+      // Cache the response
+      settingsCache.setAIServices(appId, response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load AI services');
+      console.error('Error loading AI services:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forceReloadAIServices() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getAIServices(parseInt(appId));
+      setServices(response);
+      // Cache the response
+      settingsCache.setAIServices(appId, response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load AI services');
       console.error('Error loading AI services:', err);
@@ -54,7 +84,10 @@ function AIServicesPage() {
     try {
       await apiService.deleteAIService(parseInt(appId), serviceId);
       // Remove from local state
-      setServices(services.filter(s => s.service_id !== serviceId));
+      const newServices = services.filter(s => s.service_id !== serviceId);
+      setServices(newServices);
+      // Update cache
+      settingsCache.setAIServices(appId, newServices);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete service');
       console.error('Error deleting AI service:', err);
@@ -84,15 +117,18 @@ function AIServicesPage() {
 
     try {
       if (editingService && editingService.service_id !== 0) {
-        // Update existing service
+        // Update existing service - no need to invalidate cache
         await apiService.updateAIService(parseInt(appId), editingService.service_id, data);
+        // Just reload normally since cache is still valid
+        await loadAIServices();
       } else {
-        // Create new service
+        // Create new service - invalidate cache and force reload
         await apiService.createAIService(parseInt(appId), data);
+        settingsCache.invalidateAIServices(appId);
+        // Force reload from API to get fresh data
+        await forceReloadAIServices();
       }
       
-      // Reload services list
-      await loadAIServices();
       setIsModalOpen(false);
       setEditingService(null);
     } catch (err) {

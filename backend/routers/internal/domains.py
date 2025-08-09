@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, status, Request
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, status, Request, Depends
+from sqlalchemy.orm import Session
+from typing import List
 
 # Import services
 from services.domain_service import DomainService
@@ -7,8 +8,19 @@ from services.url_service import UrlService
 from tools.scrapTools import scrape_and_index_url, reindex_domain_urls
 
 # Import schemas and auth
-from .schemas import *
+from schemas.domain_url_schemas import (
+    DomainListItemSchema,
+    DomainDetailSchema,
+    CreateUpdateDomainSchema,
+    URLListItemSchema,
+    URLDetailSchema,
+    CreateURLSchema,
+    URLActionResponseSchema
+)
 from routers.auth import verify_jwt_token
+
+# Import database dependencies
+from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
@@ -74,7 +86,7 @@ async def get_current_user(request: Request):
                     summary="List domains",
                     tags=["Domains"],
                     response_model=List[DomainListItemSchema])
-async def list_domains(app_id: int, request: Request):
+async def list_domains(app_id: int, request: Request, db: Session = Depends(get_db)):
     """
     List all domains for a specific app.
     """
@@ -84,20 +96,10 @@ async def list_domains(app_id: int, request: Request):
     # TODO: Add app access validation
     
     try:
-        domains = DomainService.get_domains_by_app_id(app_id)
+        domains_with_counts = DomainService.get_domains_with_url_counts(app_id, db)
         
         result = []
-        for domain in domains:
-            # Count URLs for this domain
-            from db.session import SessionLocal
-            from models.url import Url
-            
-            session = SessionLocal()
-            try:
-                url_count = session.query(Url).filter(Url.domain_id == domain.domain_id).count()
-            finally:
-                session.close()
-            
+        for domain, url_count in domains_with_counts:
             result.append(DomainListItemSchema(
                 domain_id=domain.domain_id,
                 name=domain.name,
@@ -121,7 +123,7 @@ async def list_domains(app_id: int, request: Request):
                     summary="Get domain details",
                     tags=["Domains"],
                     response_model=DomainDetailSchema)
-async def get_domain(app_id: int, domain_id: int, request: Request):
+async def get_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db)):
     """
     Get detailed information about a specific domain.
     """
@@ -132,15 +134,7 @@ async def get_domain(app_id: int, domain_id: int, request: Request):
     
     if domain_id == 0:
         # New domain - return empty template with embedding services
-        from db.session import SessionLocal
-        from models.embedding_service import EmbeddingService
-        
-        session = SessionLocal()
-        try:
-            embedding_services_query = session.query(EmbeddingService).filter(EmbeddingService.app_id == app_id).all()
-            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
-        finally:
-            session.close()
+        embedding_services = DomainService.get_embedding_services_for_app(app_id, db)
         
         return DomainDetailSchema(
             domain_id=0,
@@ -158,51 +152,14 @@ async def get_domain(app_id: int, domain_id: int, request: Request):
         )
     
     # Existing domain
-    domain = DomainService.get_domain(domain_id)
-    if not domain:
+    domain_detail = DomainService.get_domain_detail(domain_id, app_id, db)
+    if not domain_detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Domain not found"
         )
     
-    # Count URLs for this domain
-    from db.session import SessionLocal
-    from models.url import Url
-    from models.embedding_service import EmbeddingService
-    
-    session = SessionLocal()
-    try:
-        url_count = session.query(Url).filter(Url.domain_id == domain.domain_id).count()
-        
-        # Get embedding services for form data
-        embedding_services_query = session.query(EmbeddingService).filter(EmbeddingService.app_id == app_id).all()
-        embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
-        
-        # Get current embedding service ID from domain's silo (avoid detached instance)
-        embedding_service_id = None
-        if domain.silo_id:
-            from models.silo import Silo
-            silo = session.query(Silo).filter(Silo.silo_id == domain.silo_id).first()
-            if silo and silo.embedding_service_id:
-                embedding_service_id = silo.embedding_service_id
-            
-    finally:
-        session.close()
-    
-    return DomainDetailSchema(
-        domain_id=domain.domain_id,
-        name=domain.name,
-        description=domain.description or "",
-        base_url=domain.base_url,
-        content_tag=domain.content_tag or "body",
-        content_class=domain.content_class or "",
-        content_id=domain.content_id or "",
-        created_at=domain.create_date,
-        silo_id=domain.silo_id,
-        url_count=url_count,
-        embedding_services=embedding_services,
-        embedding_service_id=embedding_service_id
-    )
+    return domain_detail
 
 
 @domains_router.post("/{domain_id}",
@@ -213,7 +170,8 @@ async def create_or_update_domain(
     app_id: int,
     domain_id: int,
     domain_data: CreateUpdateDomainSchema,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Create a new domain or update an existing one.
@@ -237,10 +195,10 @@ async def create_or_update_domain(
         }
         
         # Create or update domain using service
-        created_domain_id = DomainService.create_or_update_domain(data, domain_data.embedding_service_id)
+        created_domain_id = DomainService.create_or_update_domain(data, domain_data.embedding_service_id, db)
         
         # Return updated domain (reuse the GET logic)
-        return await get_domain(app_id, created_domain_id, request)
+        return await get_domain(app_id, created_domain_id, request, db)
         
     except Exception as e:
         logger.error(f"Error creating/updating domain: {str(e)}")
@@ -253,7 +211,7 @@ async def create_or_update_domain(
 @domains_router.delete("/{domain_id}",
                        summary="Delete domain",
                        tags=["Domains"])
-async def delete_domain(app_id: int, domain_id: int, request: Request):
+async def delete_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db)):
     """
     Delete a domain and its associated silo and URLs.
     """
@@ -263,7 +221,7 @@ async def delete_domain(app_id: int, domain_id: int, request: Request):
     # TODO: Add app access validation
     
     try:
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -271,7 +229,7 @@ async def delete_domain(app_id: int, domain_id: int, request: Request):
             )
         
         # Delete domain using service (this should also handle silo and URL cleanup)
-        DomainService.delete_domain(domain_id)
+        DomainService.delete_domain(domain_id, db)
         
         return {"message": "Domain deleted successfully"}
         
@@ -293,6 +251,7 @@ async def list_domain_urls(
     app_id: int,
     domain_id: int,
     request: Request,
+    db: Session = Depends(get_db),
     page: int = 1,
     per_page: int = 20
 ):
@@ -305,7 +264,7 @@ async def list_domain_urls(
     # TODO: Add app access validation
     
     try:
-        domain, urls, pagination = DomainService.get_domain_with_urls(domain_id, page, per_page)
+        domain, urls, pagination = DomainService.get_domain_with_urls(domain_id, db, page, per_page)
         
         result = []
         for url in urls:
@@ -335,7 +294,8 @@ async def add_url_to_domain(
     app_id: int,
     domain_id: int,
     url_data: CreateURLSchema,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Add a new URL to a domain and scrape its content.
@@ -347,7 +307,7 @@ async def add_url_to_domain(
     
     try:
         # Get domain info
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -358,11 +318,11 @@ async def add_url_to_domain(
         clean_url = url_data.url.split('?')[0]
         
         # Create URL using service
-        url_id = UrlService.create_url(clean_url, domain_id)
+        url_id = UrlService.create_url(clean_url, domain_id, db)
         
         # Scrape content and index it
         try:
-            success = scrape_and_index_url(domain, clean_url, url_id)
+            success = scrape_and_index_url(domain, clean_url, url_id, db)
             if success:
                 message = "URL added and content indexed successfully"
             else:
@@ -394,7 +354,8 @@ async def delete_url_from_domain(
     app_id: int,
     domain_id: int,
     url_id: int,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Delete a URL from a domain and remove its indexed content.
@@ -406,7 +367,7 @@ async def delete_url_from_domain(
     
     try:
         # Delete URL using service (this should also remove indexed content)
-        UrlService.delete_url(url_id, domain_id)
+        UrlService.delete_url(url_id, domain_id, db)
         
         return URLActionResponseSchema(
             success=True,
@@ -429,7 +390,8 @@ async def reindex_url(
     app_id: int,
     domain_id: int,
     url_id: int,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Re-index content for a specific URL.
@@ -441,14 +403,14 @@ async def reindex_url(
     
     try:
         # Get domain and URL info
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Domain not found"
             )
         
-        url = UrlService.get_url(url_id)
+        url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -458,10 +420,10 @@ async def reindex_url(
         # Remove old content and re-scrape
         from services.silo_service import SiloService
         full_url = domain.base_url + url.url
-        SiloService.delete_url(domain.silo_id, full_url)
+        SiloService.delete_url(domain.silo_id, full_url, db)
         
         # Re-scrape and index
-        success = scrape_and_index_url(domain, url.url, url_id)
+        success = scrape_and_index_url(domain, url.url, url_id, db)
         
         if success:
             message = "URL content re-indexed successfully"
@@ -490,7 +452,8 @@ async def unindex_url(
     app_id: int,
     domain_id: int,
     url_id: int,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Remove URL content from index and mark as unindexed.
@@ -502,14 +465,14 @@ async def unindex_url(
     
     try:
         # Get domain and URL info
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Domain not found"
             )
         
-        url = UrlService.get_url(url_id)
+        url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -517,7 +480,7 @@ async def unindex_url(
             )
         
         # Unindex the URL
-        UrlService.unindex_url(url_id, domain_id)
+        UrlService.unindex_url(url_id, db, domain_id)
         
         return URLActionResponseSchema(
             success=True,
@@ -541,7 +504,8 @@ async def reject_url(
     app_id: int,
     domain_id: int,
     url_id: int,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Mark URL as rejected (content not suitable for indexing).
@@ -553,14 +517,14 @@ async def reject_url(
     
     try:
         # Get domain and URL info
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Domain not found"
             )
         
-        url = UrlService.get_url(url_id)
+        url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -568,7 +532,7 @@ async def reject_url(
             )
         
         # Reject the URL
-        UrlService.reject_url(url_id, domain_id)
+        UrlService.reject_url(url_id, db, domain_id)
         
         return URLActionResponseSchema(
             success=True,
@@ -590,7 +554,8 @@ async def reject_url(
 async def reindex_domain(
     app_id: int,
     domain_id: int,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Re-index content for all URLs in a domain.
@@ -602,7 +567,7 @@ async def reindex_domain(
     
     try:
         # Get domain info
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -610,7 +575,7 @@ async def reindex_domain(
             )
         
         # Re-index all URLs
-        results = reindex_domain_urls(domain)
+        results = reindex_domain_urls(domain, db)
         
         return {
             "message": f"Re-indexing complete. Success: {results['success']}, Failed: {results['failed']}, Total: {results['total']}",
@@ -632,7 +597,8 @@ async def get_url_content(
     app_id: int,
     domain_id: int,
     url_id: int,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Get the scraped content for a specific URL.
@@ -644,7 +610,7 @@ async def get_url_content(
     
     try:
         # Get domain and URL info
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -652,7 +618,7 @@ async def get_url_content(
             )
         
         # Get URL info
-        url = UrlService.get_url(url_id)
+        url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -675,7 +641,8 @@ async def get_url_content(
         results = SiloService.search_in_silo(
             silo_id=domain.silo_id,
             query=full_url,  # Search for the URL itself
-            limit=10
+            limit=10,
+            db=db
         )
         
         # Extract content from results

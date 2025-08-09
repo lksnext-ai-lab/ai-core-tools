@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
-import type { ActionItem } from '../components/ui/ActionDropdown';
 
 interface Domain {
   domain_id: number;
@@ -138,7 +137,8 @@ function DomainsPage() {
         </div>
       ) : (
         <div className="bg-white shadow rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -192,13 +192,13 @@ function DomainsPage() {
                           label: 'URLs',
                           onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
                           icon: '🔗',
-                          variant: 'primary'
+                          variant: 'warning'
                         },
                         {
                           label: 'Edit',
                           onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/edit`),
                           icon: '✏️',
-                          variant: 'secondary'
+                          variant: 'primary'
                         },
                         {
                           label: 'Delete',
@@ -214,6 +214,7 @@ function DomainsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -1,14 +1,18 @@
 from typing import List, Optional, Tuple
 from models.domain import Domain
 from models.url import Url
-from db.database import SessionLocal
+from models.silo import SiloType
+from schemas.domain_url_schemas import DomainDetailSchema
+from sqlalchemy.orm import Session
+from repositories.domain_repository import DomainRepository
+from repositories.embedding_service_repository import EmbeddingServiceRepository
+from repositories.silo_repository import SiloRepository
 from services.silo_service import SiloService
 from services.output_parser_service import OutputParserService
-from models.silo import SiloType, Silo
 from utils.logger import get_logger
 from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
-    validate_required_fields, safe_execute
+    validate_required_fields
 )
 logger = get_logger(__name__)
 
@@ -17,12 +21,13 @@ class DomainService:
 
     @staticmethod
     @handle_database_errors("get_domain")
-    def get_domain(domain_id: int) -> Optional[Domain]:
+    def get_domain(domain_id: int, db: Session) -> Optional[Domain]:
         """
         Get a domain by ID
         
         Args:
             domain_id: ID of the domain
+            db: Database session
             
         Returns:
             Domain instance or None if not found
@@ -30,23 +35,20 @@ class DomainService:
         if not domain_id or domain_id <= 0:
             return None
         
-        session = SessionLocal()
-        try:
-            domain = session.query(Domain).filter(Domain.domain_id == domain_id).first()
-            if domain:
-                logger.debug(f"Retrieved domain {domain_id}: {domain.name}")
-            return domain
-        finally:
-            session.close()
+        domain = DomainRepository.get_by_id(domain_id, db)
+        if domain:
+            logger.debug(f"Retrieved domain {domain_id}: {domain.name}")
+        return domain
     
     @staticmethod
     @handle_database_errors("get_domains_by_app_id")
-    def get_domains_by_app_id(app_id: int) -> List[Domain]:
+    def get_domains_by_app_id(app_id: int, db: Session) -> List[Domain]:
         """
         Get all domains for a specific app
         
         Args:
             app_id: ID of the app
+            db: Database session
             
         Returns:
             List of domains
@@ -54,69 +56,140 @@ class DomainService:
         if not app_id:
             raise ValidationError("App ID is required")
         
-        session = SessionLocal()
+        domains = DomainRepository.get_by_app_id(app_id, db)
+        logger.info(f"Retrieved {len(domains)} domains for app {app_id}")
+        return domains
+    
+    @staticmethod
+    @handle_database_errors("get_domains_with_url_counts")
+    def get_domains_with_url_counts(app_id: int, db: Session) -> List[Tuple[Domain, int]]:
+        """
+        Get all domains for a specific app with their URL counts
+        
+        Args:
+            app_id: ID of the app
+            db: Database session
+            
+        Returns:
+            List of tuples (domain, url_count)
+        """
+        if not app_id:
+            raise ValidationError("App ID is required")
+        
         try:
-            domains = session.query(Domain).filter(Domain.app_id == app_id).all()
-            logger.info(f"Retrieved {len(domains)} domains for app {app_id}")
-            return domains
-        finally:
-            session.close()
+            result = DomainRepository.get_domains_with_url_counts(app_id, db)
+            logger.info(f"Retrieved {len(result)} domains with URL counts for app {app_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Error getting domains with URL counts for app {app_id}: {str(e)}")
+            raise
+    
+    @staticmethod
+    @handle_database_errors("get_embedding_services_for_app")
+    def get_embedding_services_for_app(app_id: int, db: Session) -> List[dict]:
+        """
+        Get embedding services for a specific app
+        
+        Args:
+            app_id: ID of the app
+            db: Database session
+            
+        Returns:
+            List of embedding service dictionaries
+        """
+        try:
+            embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
+            
+            logger.debug(f"Retrieved {len(embedding_services)} embedding services for app {app_id}")
+            return embedding_services
+        except Exception as e:
+            logger.error(f"Error getting embedding services for app {app_id}: {str(e)}")
+            raise
+    
+    @staticmethod
+    @handle_database_errors("get_domain_detail")
+    def get_domain_detail(domain_id: int, app_id: int, db: Session) -> Optional[DomainDetailSchema]:
+        """
+        Get detailed information about a domain including URL count and embedding services
+        
+        Args:
+            domain_id: ID of the domain
+            app_id: ID of the app (for embedding services)
+            db: Database session
+            
+        Returns:
+            DomainDetailSchema or None if domain not found
+        """
+        try:
+            domain_data = DomainRepository.get_domain_detail_data(domain_id, db)
+            if not domain_data:
+                return None
+            
+            domain, url_count, embedding_service_id = domain_data
+            
+            # Get embedding services for form data
+            embedding_services = DomainService.get_embedding_services_for_app(app_id, db)
+            
+            return DomainDetailSchema(
+                domain_id=domain.domain_id,
+                name=domain.name,
+                description=domain.description or "",
+                base_url=domain.base_url,
+                content_tag=domain.content_tag or "body",
+                content_class=domain.content_class or "",
+                content_id=domain.content_id or "",
+                created_at=domain.create_date,
+                silo_id=domain.silo_id,
+                url_count=url_count,
+                embedding_services=embedding_services,
+                embedding_service_id=embedding_service_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Error getting domain detail for domain {domain_id}: {str(e)}")
+            raise
     
     @staticmethod
     @handle_database_errors("get_domain_with_urls")
-    def get_domain_with_urls(domain_id: int, page: int = 1, per_page: int = 20) -> Tuple[Optional[Domain], List[Url], dict]:
+    def get_domain_with_urls(domain_id: int, db: Session, page: int = 1, per_page: int = 20) -> Tuple[Optional[Domain], List[Url], dict]:
         """
         Get a domain with its URLs with pagination
         
         Args:
             domain_id: ID of the domain
+            db: Database session
             page: Page number (1-based)
             per_page: Number of items per page
             
         Returns:
             Tuple of (domain, urls_for_page, pagination_info)
         """
-        domain = DomainService.get_domain(domain_id)
+        domain, urls, pagination_info = DomainRepository.get_domain_with_urls_paginated(domain_id, db, page, per_page)
+        
         if not domain:
             raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
         
-        session = SessionLocal()
-        try:
-            # Get total count
-            total_urls = session.query(Url).filter(Url.domain_id == domain_id).count()
-            
-            # Get URLs for current page
-            offset = (page - 1) * per_page
-            urls = session.query(Url).filter(Url.domain_id == domain_id).offset(offset).limit(per_page).all()
-            
-            pagination_info = {
-                'page': page,
-                'per_page': per_page,
-                'total': total_urls,
-                'has_prev': page > 1,
-                'has_next': (page * per_page) < total_urls,
-                'prev_num': page - 1 if page > 1 else None,
-                'next_num': page + 1 if (page * per_page) < total_urls else None
-            }
-            
-            logger.debug(f"Retrieved {len(urls)} URLs for domain {domain_id} (page {page}/{per_page})")
-            return domain, urls, pagination_info
-        finally:
-            session.close()
+        logger.debug(f"Retrieved {len(urls)} URLs for domain {domain_id} (page {page}/{per_page})")
+        return domain, urls, pagination_info
     
     @staticmethod
     @handle_database_errors("create_or_update_domain") 
-    def create_or_update_domain(domain_data: dict, embedding_service_id: Optional[int] = None) -> int:
+    def create_or_update_domain(domain_data: dict, embedding_service_id: Optional[int] = None, db: Session = None) -> int:
         """
         Create a new domain or update an existing one
         
         Args:
             domain_data: Dictionary containing domain data
             embedding_service_id: Optional embedding service ID
+            db: Database session (required)
             
         Returns:
             domain_id of the created or updated domain
         """
+        if db is None:
+            raise ValidationError("Database session is required")
+            
         # Validate required fields
         required_fields = ['name', 'base_url', 'app_id']
         validate_required_fields(domain_data, required_fields)
@@ -132,117 +205,108 @@ class DomainService:
         
         domain_id = domain_data.get('domain_id')
         
-        session = SessionLocal()
-        try:
-            if not domain_id or domain_id == 0 or domain_id == '0':
-                # Create new domain
-                logger.info(f"Creating new domain: {name}")
-                
-                # Create associated silo
-                silo_data = {
-                    'silo_id': 0,
-                    'name': f'silo for domain {name}',
-                    'description': f'silo for domain {name}',
-                    'status': 'active',
-                    'app_id': domain_data['app_id'],
-                    'fixed_metadata': False,
-                    'embedding_service_id': embedding_service_id
-                }
-                silo = SiloService.create_or_update_silo(silo_data, SiloType.DOMAIN)
-                
-                # Create domain first
-                domain = Domain(
-                    name=name,
-                    description=domain_data.get('description', '').strip() or None,
-                    base_url=base_url,
-                    content_tag=domain_data.get('content_tag', '').strip() or None,
-                    content_class=domain_data.get('content_class', '').strip() or None,
-                    content_id=domain_data.get('content_id', '').strip() or None,
-                    app_id=domain_data['app_id'],
-                    silo_id=silo.silo_id
-                )
-                
-                session.add(domain)
-                session.flush()  # Get the ID
-                
-                # Now create domain filter with domain data (avoid detached instance)
-                output_parser_service = OutputParserService()
-                domain_filter_id = output_parser_service.create_default_filter_for_domain(
-                    silo_id=silo.silo_id,
-                    domain_name=name,
-                    app_id=domain_data['app_id']
-                )
-                
-                # Update silo with metadata_definition_id in current session (avoid detached instance)
-                silo_in_session = session.query(Silo).filter(Silo.silo_id == silo.silo_id).first()
-                if silo_in_session:
-                    silo_in_session.metadata_definition_id = domain_filter_id
-                    session.add(silo_in_session)
-                
-            else:
-                # Update existing domain
-                logger.info(f"Updating domain {domain_id}")
-                domain = DomainService.get_domain(domain_id)
-                if not domain:
-                    raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
-                
-                # Update fields
-                domain.name = name
-                domain.description = domain_data.get('description', '').strip() or None
-                domain.base_url = base_url
-                domain.content_tag = domain_data.get('content_tag', '').strip() or None
-                domain.content_class = domain_data.get('content_class', '').strip() or None
-                domain.content_id = domain_data.get('content_id', '').strip() or None
-                
-                session.add(domain)
-                session.flush()
-            
-            session.commit()
-            session.refresh(domain)  # Ensure we have the domain_id
-            domain_id = domain.domain_id
-            return domain_id
-        finally:
-            session.close()
+        if not domain_id or domain_id == 0 or domain_id == '0':
+            # Create new domain
+            return DomainService._create_new_domain(domain_data, embedding_service_id, name, base_url, db)
+        else:
+            # Update existing domain
+            return DomainService._update_existing_domain(domain_id, domain_data, name, base_url, db)
+    
+    @staticmethod
+    def _create_new_domain(domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, db: Session = None) -> int:
+        """Create a new domain with associated silo"""
+        logger.info(f"Creating new domain: {name}")
+        
+        # Create associated silo
+        silo_data = {
+            'silo_id': 0,
+            'name': f'silo for domain {name}',
+            'description': f'silo for domain {name}',
+            'status': 'active',
+            'app_id': domain_data['app_id'],
+            'fixed_metadata': False,
+            'embedding_service_id': embedding_service_id
+        }
+        silo = SiloService.create_or_update_silo(silo_data, SiloType.DOMAIN)
+        
+        # Create domain
+        domain = Domain(
+            name=name,
+            description=domain_data.get('description', '').strip() or None,
+            base_url=base_url,
+            content_tag=domain_data.get('content_tag', '').strip() or None,
+            content_class=domain_data.get('content_class', '').strip() or None,
+            content_id=domain_data.get('content_id', '').strip() or None,
+            app_id=domain_data['app_id'],
+            silo_id=silo.silo_id
+        )
+        
+        created_domain = DomainRepository.create(domain, db)
+        
+        # Create domain filter
+        output_parser_service = OutputParserService()
+        domain_filter_id = output_parser_service.create_default_filter_for_domain(
+            db=db,
+            silo_id=silo.silo_id,
+            domain_name=name,
+            app_id=domain_data['app_id']
+        )
+        
+        # Update silo with metadata_definition_id
+        silo.metadata_definition_id = domain_filter_id
+        SiloRepository.update(silo, db)
+        
+        return created_domain.domain_id
+    
+    @staticmethod
+    def _update_existing_domain(domain_id: int, domain_data: dict, name: str, base_url: str, db: Session) -> int:
+        """Update an existing domain"""
+        logger.info(f"Updating domain {domain_id}")
+        domain = DomainService.get_domain(domain_id, db)
+        if not domain:
+            raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
+        
+        # Update fields
+        domain.name = name
+        domain.description = domain_data.get('description', '').strip() or None
+        domain.base_url = base_url
+        domain.content_tag = domain_data.get('content_tag', '').strip() or None
+        domain.content_class = domain_data.get('content_class', '').strip() or None
+        domain.content_id = domain_data.get('content_id', '').strip() or None
+        
+        updated_domain = DomainRepository.update(domain, db)
+        return updated_domain.domain_id
     
     @staticmethod
     @handle_database_errors("delete_domain")
-    def delete_domain(domain_id: int) -> bool:
+    def delete_domain(domain_id: int, db: Session) -> bool:
         """
         Delete a domain and all associated data
         
         Args:
             domain_id: ID of the domain to delete
+            db: Database session
             
         Returns:
             True if deleted successfully
         """
-        domain = DomainService.get_domain(domain_id)
+        domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
         
-        # Store domain info before session operations (avoid DetachedInstanceError)
+        # Store domain info before deletion operations
         domain_name = domain.name
         silo_id = domain.silo_id
         
-        session = SessionLocal()
-        try:
-            # Delete associated URLs first
-            deleted_urls = session.query(Url).filter(Url.domain_id == domain_id).delete()
-            logger.debug(f"Deleted {deleted_urls} URLs for domain {domain_id}")
-            
-            # Delete the domain itself
-            session.delete(domain)
-            session.commit()
-            
-            logger.info(f"Successfully deleted domain {domain_id}: {domain_name}")
-            
-        finally:
-            session.close()
+        # Delete domain and associated URLs using repository
+        DomainRepository.delete_with_urls(domain_id, db)
+        
+        logger.info(f"Successfully deleted domain {domain_id}: {domain_name}")
         
         # Delete associated silo and all its data structures (silo, collection, output parser)
         if silo_id:
             try:
-                SiloService.delete_silo(silo_id)
+                SiloService.delete_silo(silo_id, db)
                 logger.debug(f"Deleted silo {silo_id} and associated data structures for domain {domain_id}")
             except Exception as e:
                 logger.warning(f"Failed to delete silo {silo_id} for domain {domain_id}: {e}")

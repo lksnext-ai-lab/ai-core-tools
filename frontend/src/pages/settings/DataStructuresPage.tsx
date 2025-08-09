@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import type { ActionItem } from '../../components/ui/ActionDropdown';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 
 interface DataStructure {
   parser_id: number;
@@ -17,6 +17,7 @@ interface DataStructure {
 
 function DataStructuresPage() {
   const { appId } = useParams();
+  const settingsCache = useSettingsCache();
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,7 @@ function DataStructuresPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [structureToDelete, setStructureToDelete] = useState<DataStructure | null>(null);
 
-  // Load data structures from the API
+  // Load data structures from cache or API
   useEffect(() => {
     loadDataStructures();
   }, [appId]);
@@ -33,11 +34,40 @@ function DataStructuresPage() {
   async function loadDataStructures() {
     if (!appId) return;
     
+    // Check if we have cached data first
+    const cachedData = settingsCache.getDataStructures(appId);
+    if (cachedData) {
+      setDataStructures(cachedData);
+      setLoading(false);
+      return;
+    }
+    
+    // If no cache, load from API
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getOutputParsers(parseInt(appId));
       setDataStructures(response);
+      // Cache the response
+      settingsCache.setDataStructures(appId, response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data structures');
+      console.error('Error loading data structures:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forceReloadDataStructures() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getOutputParsers(parseInt(appId));
+      setDataStructures(response);
+      // Cache the response
+      settingsCache.setDataStructures(appId, response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data structures');
       console.error('Error loading data structures:', err);
@@ -56,7 +86,10 @@ function DataStructuresPage() {
 
     try {
       await apiService.deleteOutputParser(parseInt(appId), structureToDelete.parser_id);
-      setDataStructures(dataStructures.filter(ds => ds.parser_id !== structureToDelete.parser_id));
+      const newDataStructures = dataStructures.filter(ds => ds.parser_id !== structureToDelete.parser_id);
+      setDataStructures(newDataStructures);
+      // Update cache
+      settingsCache.setDataStructures(appId, newDataStructures);
       setShowDeleteModal(false);
       setStructureToDelete(null);
     } catch (err) {
@@ -97,15 +130,16 @@ function DataStructuresPage() {
 
     try {
       if (editingStructure && editingStructure.parser_id !== 0) {
-        // Update existing structure
+        // Update existing structure - no need to invalidate cache
         await apiService.updateOutputParser(parseInt(appId), editingStructure.parser_id, data);
+        await loadDataStructures();
       } else {
-        // Create new structure
+        // Create new structure - invalidate cache and force reload
         await apiService.createOutputParser(parseInt(appId), data);
+        settingsCache.invalidateDataStructures(appId);
+        await forceReloadDataStructures();
       }
       
-      // Reload structures list
-      await loadDataStructures();
       setIsModalOpen(false);
       setEditingStructure(null);
     } catch (err) {

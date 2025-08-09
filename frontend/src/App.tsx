@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';
+import { SettingsCacheProvider } from './contexts/SettingsCacheContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 // Pages
@@ -273,7 +274,9 @@ function AppContent() {
 function App() {
   return (
     <UserProvider>
-      <AppContent />
+      <SettingsCacheProvider>
+        <AppContent />
+      </SettingsCacheProvider>
     </UserProvider>
   );
 }

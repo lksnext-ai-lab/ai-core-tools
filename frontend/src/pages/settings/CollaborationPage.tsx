@@ -4,6 +4,7 @@ import SettingsLayout from '../../components/layout/SettingsLayout';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 
 interface Collaborator {
   id: number;
@@ -20,12 +21,13 @@ interface Collaborator {
 function CollaborationPage() {
   const { appId } = useParams();
   const { user } = useUser();
+  const settingsCache = useSettingsCache();
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
-  // Load collaborators from the API
+  // Load collaborators from cache or API
   useEffect(() => {
     loadCollaborators();
     checkUserRole();
@@ -34,11 +36,40 @@ function CollaborationPage() {
   async function loadCollaborators() {
     if (!appId) return;
     
+    // Check if we have cached data first
+    const cachedData = settingsCache.getCollaborators(appId);
+    if (cachedData) {
+      setCollaborators(cachedData);
+      setLoading(false);
+      return;
+    }
+    
+    // If no cache, load from API
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getCollaborators(parseInt(appId));
       setCollaborators(response);
+      // Cache the response
+      settingsCache.setCollaborators(appId, response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load collaborators');
+      console.error('Error loading collaborators:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forceReloadCollaborators() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getCollaborators(parseInt(appId));
+      setCollaborators(response);
+      // Cache the response
+      settingsCache.setCollaborators(appId, response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load collaborators');
       console.error('Error loading collaborators:', err);
@@ -69,8 +100,9 @@ function CollaborationPage() {
 
     try {
       await apiService.inviteCollaborator(parseInt(appId), email, role);
-      // Reload collaborators list
-      await loadCollaborators();
+      // Invalidate cache and force reload collaborators list
+      settingsCache.invalidateCollaborators(appId);
+      await forceReloadCollaborators();
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to send invitation');
     }
@@ -81,8 +113,9 @@ function CollaborationPage() {
 
     try {
       await apiService.updateCollaboratorRole(parseInt(appId), userId, newRole);
-      // Reload collaborators list
-      await loadCollaborators();
+      // Invalidate cache and force reload collaborators list
+      settingsCache.invalidateCollaborators(appId);
+      await forceReloadCollaborators();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update role');
       console.error('Error updating role:', err);
@@ -99,7 +132,10 @@ function CollaborationPage() {
     try {
       await apiService.removeCollaborator(parseInt(appId), userId);
       // Remove from local state
-      setCollaborators(collaborators.filter(c => c.user_id !== userId));
+      const newCollaborators = collaborators.filter(c => c.user_id !== userId);
+      setCollaborators(newCollaborators);
+      // Update cache
+      settingsCache.setCollaborators(appId, newCollaborators);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove collaborator');
       console.error('Error removing collaborator:', err);
