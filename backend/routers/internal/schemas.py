@@ -76,46 +76,4 @@ class CreateUpdateAgentSchema(BaseModel):
 class UpdatePromptSchema(BaseModel):
     """Schema for updating agent prompts"""
     type: str  # "system" or "template"
-    prompt: str
-
-
-# ==================== REPOSITORY SCHEMAS ====================
-
-class RepositoryListItemSchema(BaseModel):
-    """Schema for repository list items"""
-    repository_id: int
-    name: str
-    created_at: Optional[datetime]
-    resource_count: int
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
-class RepositoryDetailSchema(BaseModel):
-    """Schema for detailed repository information"""
-    repository_id: int
-    name: str
-    created_at: Optional[datetime]
-    resources: List[Dict[str, Any]]
-    embedding_services: List[Dict[str, Any]]
-    embedding_service_id: Optional[int] = None
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CreateUpdateRepositorySchema(BaseModel):
-    """Schema for creating or updating a repository"""
-    name: str
-    embedding_service_id: Optional[int] = None
-
-
-# ==================== RESOURCE SCHEMAS ====================
-
-class ResourceListItemSchema(BaseModel):
-    """Schema for resource list items"""
-    resource_id: int
-    name: str
-    file_type: str
-    created_at: Optional[datetime]
-    
-    model_config = ConfigDict(from_attributes=True) 
+    prompt: str 

@@ -14,6 +14,9 @@ interface ActionDropdownProps {
   triggerIcon?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
+  position?: { x: number; y: number } | null;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 const ActionDropdown: React.FC<ActionDropdownProps> = ({
@@ -21,10 +24,29 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   triggerText = 'Actions',
   triggerIcon = '⋮',
   className = '',
-  size = 'md'
+  size = 'md',
+  position = null,
+  isOpen: externalIsOpen,
+  onClose
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = externalIsOpen !== undefined ? (open: boolean) => {
+    if (!open && onClose) onClose();
+  } : setInternalIsOpen;
+
+  useEffect(() => {
+    if (isOpen && !position) {
+      setTimeout(() => {
+        setDropdownStyle(calculateRegularDropdownStyle());
+      }, 0);
+    }
+  }, [isOpen, position]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -35,7 +57,82 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [setIsOpen]);
+
+  // Calculate dropdown position to avoid going off-screen for regular dropdown
+  const calculateRegularDropdownStyle = () => {
+    if (!menuRef.current || !dropdownRef.current) {
+      return {};
+    }
+
+    const triggerRect = dropdownRef.current.getBoundingClientRect();
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    
+    // Check if dropdown would go below viewport
+    const spaceBelow = viewportHeight - triggerRect.bottom;
+    const spaceAbove = triggerRect.top;
+    const dropdownHeight = menuRect.height || 200; // Estimate if not available
+
+    let style: React.CSSProperties = {};
+
+    // If not enough space below and more space above, position above
+    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+      style.bottom = '100%';
+      style.top = 'auto';
+      style.marginBottom = '0.5rem';
+      style.marginTop = '0';
+    } else {
+      style.top = '100%';
+      style.bottom = 'auto';
+      style.marginTop = '0.5rem';
+      style.marginBottom = '0';
+    }
+
+    // Check horizontal position
+    const spaceRight = viewportWidth - triggerRect.right;
+    if (spaceRight < 192) { // 192px is w-48
+      style.right = '0';
+      style.left = 'auto';
+    } else {
+      style.right = '0';
+      style.left = 'auto';
+    }
+
+    return style;
+  };
+
+  // Calculate dropdown position to avoid going off-screen
+  const calculateDropdownStyle = () => {
+    if (!position || !menuRef.current) {
+      return {};
+    }
+
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    let left = position.x;
+    let top = position.y;
+
+    // Adjust horizontal position if dropdown would go off-screen
+    if (left + menuRect.width > viewportWidth) {
+      left = viewportWidth - menuRect.width - 10;
+    }
+
+    // Adjust vertical position if dropdown would go off-screen
+    if (top + menuRect.height > viewportHeight) {
+      top = position.y - menuRect.height;
+    }
+
+    return {
+      position: 'fixed' as const,
+      left: `${left}px`,
+      top: `${top}px`,
+      zIndex: 9999
+    };
+  };
 
   const getVariantStyles = (variant: ActionItem['variant']) => {
     switch (variant) {
@@ -83,29 +180,35 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
-      {/* Trigger Button */}
-      <button
-        onClick={handleTriggerClick}
-        className={`inline-flex items-center justify-center rounded-md border border-gray-300 bg-white ${getSizeStyles()} font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
-      >
-        {triggerIcon && <span className="mr-1">{triggerIcon}</span>}
-        {triggerText}
-        <svg
-          className={`ml-1 h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="currentColor"
-          viewBox="0 0 20 20"
+      {/* Trigger Button - only show if no external position */}
+      {!position && (
+        <button
+          onClick={handleTriggerClick}
+          className={`inline-flex items-center justify-center rounded-md border border-gray-300 bg-white ${getSizeStyles()} font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
         >
-          <path
-            fillRule="evenodd"
-            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
+          {triggerIcon && <span className="mr-1">{triggerIcon}</span>}
+          {triggerText}
+          <svg
+            className={`ml-1 h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      )}
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none" style={{ zIndex: 9999 }}>
+        <div 
+          ref={menuRef}
+          className={`${position ? '' : 'absolute'} w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}
+          style={position ? calculateDropdownStyle() : { zIndex: 9999, ...dropdownStyle }}
+        >
           <div className="py-1">
             {actions.map((action, index) => (
               <button

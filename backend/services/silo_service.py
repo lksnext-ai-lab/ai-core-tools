@@ -793,10 +793,12 @@ class SiloService:
         # Convert results to response format
         response_results = []
         for doc in results:
+            # Extract score from metadata if available
+            score = doc.metadata.pop('_score', None) if '_score' in doc.metadata else None
             response_results.append({
                 "page_content": doc.page_content,
                 "metadata": doc.metadata,
-                "score": getattr(doc, 'score', None)  # Include score if available
+                "score": score
             })
         
         return {

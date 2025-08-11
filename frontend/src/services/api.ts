@@ -444,6 +444,17 @@ class ApiService {
     return response.blob();
   }
 
+  async searchRepositoryDocuments(appId: number, repositoryId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/search`, {
+      method: 'POST',
+      body: JSON.stringify({
+        query,
+        limit,
+        filter_metadata: filterMetadata
+      }),
+    });
+  }
+
   // ==================== PLAYGROUND API ====================
   async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any) {
     const formData = new FormData();

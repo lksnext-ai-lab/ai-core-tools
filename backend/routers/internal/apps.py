@@ -33,6 +33,65 @@ def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     collaboration_service = AppCollaborationService(db)
     return app_service, collaboration_service
 
+def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service: AppCollaborationService) -> dict:
+    """
+    Calculate entity counts for an app (agents, repositories, domains, silos, collaborators).
+    
+    Args:
+        app_id: The ID of the app
+        db: Database session
+        collaboration_service: Collaboration service instance
+        
+    Returns:
+        Dictionary with count values for each entity type
+    """
+    try:
+        # Import services needed for counting
+        from services.agent_service import AgentService
+        from services.repository_service import RepositoryService
+        from services.domain_service import DomainService
+        from services.silo_service import SiloService
+        
+        # Count agents
+        agent_service = AgentService()
+        agents = agent_service.get_agents(app_id)
+        agent_count = len(agents) if agents else 0
+        
+        # Count repositories
+        repositories = RepositoryService.get_repositories_by_app_id(app_id, db)
+        repository_count = len(repositories) if repositories else 0
+        
+        # Count domains
+        domains = DomainService.get_domains_by_app_id(app_id, db)
+        domain_count = len(domains) if domains else 0
+        
+        # Count silos
+        silos = SiloService.get_silos_by_app_id(app_id, db)
+        silo_count = len(silos) if silos else 0
+        
+        # Count collaborators
+        collaborators = collaboration_service.get_app_collaborators(app_id)
+        collaborator_count = len(collaborators) if collaborators else 0
+        
+        return {
+            'agent_count': agent_count,
+            'repository_count': repository_count,
+            'domain_count': domain_count,
+            'silo_count': silo_count,
+            'collaborator_count': collaborator_count
+        }
+        
+    except Exception as e:
+        logger.warning(f"Error calculating counts for app {app_id}: {str(e)}")
+        # Fallback to 0 if there are any errors
+        return {
+            'agent_count': 0,
+            'repository_count': 0,
+            'domain_count': 0,
+            'silo_count': 0,
+            'collaborator_count': 0
+        }
+
 # ==================== APP MANAGEMENT ====================
 
 @apps_router.get("/", 
@@ -57,6 +116,9 @@ async def list_apps(
     for app in apps:
         role = collaboration_service.get_user_app_role(user_id, app.app_id) or "owner"
         
+        # Calculate entity counts using helper function
+        counts = calculate_app_entity_counts(app.app_id, db, collaboration_service)
+        
         app_item = AppListItemSchema(
             app_id=app.app_id,
             name=app.name,
@@ -64,12 +126,7 @@ async def list_apps(
             created_at=app.create_date,
             langsmith_configured=bool(app.langsmith_api_key),
             owner_id=app.owner_id,
-            # TODO: Add entity counts and owner info when models are available
-            agent_count=0,
-            repository_count=0,
-            domain_count=0,
-            silo_count=0,
-            collaborator_count=0
+            **counts  # Unpack the counts dictionary
         )
         app_list.append(app_item)
     
@@ -109,13 +166,17 @@ async def get_app(
     
     user_role = collaboration_service.get_user_app_role(user_id, app_id)
     
+    # Calculate entity counts using helper function
+    counts = calculate_app_entity_counts(app_id, db, collaboration_service)
+    
     return AppDetailSchema(
         app_id=app.app_id,
         name=app.name,
         langsmith_api_key=app.langsmith_api_key or "",
         user_role=user_role,
         created_at=app.create_date,
-        owner_id=app.owner_id
+        owner_id=app.owner_id,
+        **counts  # Unpack the counts dictionary
     )
 
 

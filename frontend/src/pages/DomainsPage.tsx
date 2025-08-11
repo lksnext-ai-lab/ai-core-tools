@@ -66,14 +66,18 @@ function DomainsPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
+            <p className="text-gray-600">Web scraping domains for content extraction</p>
           </div>
+        </div>
+
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <span className="ml-2">Loading domains...</span>
         </div>
       </div>
     );
@@ -81,22 +85,27 @@ function DomainsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
+            <p className="text-gray-600">Web scraping domains for content extraction</p>
+          </div>
+        </div>
+
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <div className="mt-2 text-sm text-red-700">
-                <p>{error}</p>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={loadDomains}
-                  className="bg-red-100 px-2 py-1 rounded-md text-red-800 hover:bg-red-200"
-                >
-                  Try Again
-                </button>
-              </div>
+            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <div>
+              <h3 className="text-sm font-medium text-red-800">Error Loading Domains</h3>
+              <p className="text-sm text-red-600 mt-1">{error}</p>
+              <button 
+                onClick={() => loadDomains()}
+                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
+              >
+                Try again
+              </button>
             </div>
           </div>
         </div>
@@ -105,115 +114,117 @@ function DomainsPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
+          <p className="text-gray-600">Web scraping domains for content extraction</p>
+        </div>
         <button
           onClick={() => navigate(`/apps/${appId}/domains/new`)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
+          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
         >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          New Domain
+          <span className="mr-2">+</span>
+          Create Domain
         </button>
       </div>
 
+      {/* Domains List */}
       {(!domains || domains.length === 0) ? (
-        <div className="text-center py-12">
-          <div className="w-24 h-24 mx-auto mb-4 text-gray-400">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No domains yet</h3>
-          <p className="text-gray-500 mb-4">Get started by creating your first domain for web scraping.</p>
+        <div className="bg-white rounded-lg shadow-md border p-8 text-center">
+          <div className="text-6xl mb-4">🌐</div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Domains Yet</h3>
+          <p className="text-gray-600 mb-4">
+            Create your first domain to start extracting content from websites.
+          </p>
           <button
             onClick={() => navigate(`/apps/${appId}/domains/new`)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
           >
-            Create Domain
+            <span className="mr-2">+</span>
+            Create Your First Domain
           </button>
         </div>
       ) : (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-lg shadow-md border overflow-visible">
+          <div className="overflow-x-auto overflow-y-visible">
             <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Domain
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Base URL
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  URLs
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {domains.map((domain) => (
-                <tr key={domain.domain_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{domain.name}</div>
-                        <div className="text-sm text-gray-500">{domain.description}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{domain.base_url}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {domain.url_count} URLs
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(domain.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <ActionDropdown
-                      actions={[
-                        {
-                          label: 'URLs',
-                          onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
-                          icon: '🔗',
-                          variant: 'warning'
-                        },
-                        {
-                          label: 'Edit',
-                          onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/edit`),
-                          icon: '✏️',
-                          variant: 'primary'
-                        },
-                        {
-                          label: 'Delete',
-                          onClick: () => handleDeleteDomain(domain),
-                          icon: '🗑️',
-                          variant: 'danger'
-                        }
-                      ]}
-                      size="sm"
-                    />
-                  </td>
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Base URL
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    URLs
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {domains.map((domain) => (
+                  <tr key={domain.domain_id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                            <span className="text-purple-600 text-lg">🌐</span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {domain.name}
+                          </div>
+                          <div className="text-sm text-gray-500">{domain.description}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {domain.base_url}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {domain.url_count} URLs
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(domain.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative">
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'URLs',
+                            onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
+                            icon: '🔗',
+                            variant: 'warning'
+                          },
+                          {
+                            label: 'Edit',
+                            onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/edit`),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDeleteDomain(domain),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

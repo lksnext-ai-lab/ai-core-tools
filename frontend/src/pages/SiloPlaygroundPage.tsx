@@ -37,6 +37,7 @@ function SiloPlaygroundPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
+  const [hasSearched, setHasSearched] = useState(false);
 
   // Load silo data
   useEffect(() => {
@@ -64,12 +65,13 @@ function SiloPlaygroundPage() {
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     
-    if (!searchQuery.trim() || !appId || !siloId) return;
+    if (!appId || !siloId) return;
 
     try {
       setIsSearching(true);
       setSearchError(null);
       setSearchResults([]);
+      setHasSearched(true);
       
       // Build metadata filter object
       const filterMetadata: Record<string, any> = {};
@@ -254,13 +256,13 @@ function SiloPlaygroundPage() {
                 id="searchQuery"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Enter your search query..."
+                placeholder="Enter your search query (leave empty to browse all documents)..."
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                 disabled={isSearching}
               />
               <button
                 type="submit"
-                disabled={isSearching || !searchQuery.trim()}
+                disabled={isSearching}
                 className="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded-lg flex items-center"
               >
                 {isSearching && (
@@ -331,13 +333,16 @@ function SiloPlaygroundPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && searchResults.length === 0 && searchQuery && !searchError && (
+      {!isSearching && searchResults.length === 0 && hasSearched && !searchError && (
         <div className="bg-white shadow rounded-lg p-6">
           <div className="text-center">
             <span className="text-gray-400 text-4xl mb-4">🔍</span>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
             <p className="text-gray-600">
-              Try adjusting your search query or check if the silo contains documents.
+              {searchQuery ? 
+                "Try adjusting your search query or check if the silo contains documents." :
+                "Enter a search query to find documents, or leave empty to see all available documents."
+              }
             </p>
           </div>
         </div>
@@ -362,6 +367,8 @@ function SiloPlaygroundPage() {
                 <strong>Tips:</strong>
                 <br />
                 • Use natural language (e.g., "What is machine learning?")
+                <br />
+                • Leave empty to browse all available documents
                 <br />
                 • Try different phrasings for better results
                 <br />

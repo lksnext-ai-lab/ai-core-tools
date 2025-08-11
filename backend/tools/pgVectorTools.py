@@ -144,20 +144,40 @@ class PGVectorTools:
             use_jsonb=True,
         )
         
-        # Si recibimos directamente el embedding, lo usamos
-        if isinstance(query, (list, np.ndarray)):
-            results = vector_store.similarity_search_by_vector(
+        # Handle empty queries by returning documents with just metadata filtering
+        if not query or (isinstance(query, str) and not query.strip()):
+            # For empty queries, use similarity_search without query to get documents with metadata filtering
+            results_with_scores = vector_store.similarity_search_with_score(
+                " ",  # Use a space as minimal query
+                k=RESULTS,
+                filter=filter_metadata
+            )
+        elif isinstance(query, (list, np.ndarray)):
+            # Si recibimos directamente el embedding, lo usamos
+            results_with_scores = vector_store.similarity_search_with_score_by_vector(
                 embedding=query,
                 k=RESULTS,
                 filter=filter_metadata
             )
         else:
-            # Si recibimos texto, hacemos la búsqueda normal
-            results = vector_store.similarity_search(
+            # Si recibimos texto, hacemos la búsqueda normal con scores
+            results_with_scores = vector_store.similarity_search_with_score(
                 query,
                 k=RESULTS,
                 filter=filter_metadata
             )
+        
+        # Convert the results to include score in metadata
+        results = []
+        for doc, score in results_with_scores:
+            # Create a new Document with score in metadata instead of as attribute
+            print(f"Document: {doc}, Score: {score}")
+            new_doc = Document(
+                page_content=doc.page_content,
+                metadata={**doc.metadata, '_score': score}
+            )
+            results.append(new_doc)
+            
         return results
     
     def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None, **kwargs):

@@ -2,14 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 
+// Define the metadata field type
+interface MetadataField {
+  name: string;
+  type: string;
+  description: string;
+}
+
+// Define the repository type
+interface Repository {
+  repository_id: number;
+  name: string;
+  created_at?: string;
+  resources: any[];
+  embedding_services: any[];
+  embedding_service_id?: number;
+  metadata_fields?: MetadataField[];
+}
+
 interface SearchResult {
-  content: string;
+  page_content: string;
   metadata: {
     source: string;
     page?: number;
     [key: string]: any;
   };
-  score: number;
+  score?: number;
 }
 
 const RepositoryPlaygroundPage: React.FC = () => {
@@ -18,10 +36,11 @@ const RepositoryPlaygroundPage: React.FC = () => {
   
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [repositoryName, setRepositoryName] = useState('');
+  const [repository, setRepository] = useState<Repository | null>(null);
+  const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
+  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
     if (appId && repositoryId) {
@@ -31,8 +50,22 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
   const loadRepositoryInfo = async () => {
     try {
-      const repository = await apiService.getRepository(parseInt(appId!), parseInt(repositoryId!));
-      setRepositoryName(repository.name);
+      const repositoryData = await apiService.getRepository(parseInt(appId!), parseInt(repositoryId!));
+      setRepository(repositoryData);
+      
+      // The metadata_fields should already be included in the repository response from the backend
+      // If not available and there's a silo_id, we can try to load it separately
+      if (!repositoryData.metadata_fields?.length && repositoryData.silo_id) {
+        try {
+          const siloData = await apiService.getSilo(parseInt(appId!), repositoryData.silo_id);
+          setRepository(prev => ({
+            ...prev!,
+            metadata_fields: siloData.metadata_fields || []
+          }));
+        } catch (siloErr) {
+          console.warn('Could not load silo metadata fields:', siloErr);
+        }
+      }
     } catch (err) {
       console.error('Error loading repository info:', err);
       setError('Failed to load repository information');
@@ -41,66 +74,52 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!query.trim()) {
-      setError('Please enter a search query');
-      return;
-    }
 
     try {
       setSearching(true);
       setError(null);
       setResults([]);
+      setHasSearched(true);
 
-      // TODO: Implement repository search API call
-      // For now, we'll show a placeholder
+      // Build metadata filter object
+      const filterMetadata: Record<string, any> = {};
+      Object.entries(metadataFilters).forEach(([fieldName, value]) => {
+        if (value.trim()) {
+          filterMetadata[fieldName] = { $eq: value.trim() };
+        }
+      });
+
+      // Use the repository search API with filters
+      const response = await apiService.searchRepositoryDocuments(
+        parseInt(appId!), 
+        parseInt(repositoryId!), 
+        query,
+        10,
+        Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined
+      );
       
-      // Simulate search results
-      setTimeout(() => {
-        setResults([
-          {
-            content: "This is a sample search result from the repository. The content would be extracted from uploaded documents.",
-            metadata: {
-              source: "sample-document.pdf",
-              page: 1
-            },
-            score: 0.95
-          },
-          {
-            content: "Another search result showing how the repository search functionality works.",
-            metadata: {
-              source: "another-document.docx"
-            },
-            score: 0.87
-          }
-        ]);
-        setSearching(false);
-      }, 1000);
+      setResults(response.results || []);
 
     } catch (err) {
       console.error('Error searching repository:', err);
       setError('Failed to search repository');
       setSearching(false);
+    } finally {
+      setSearching(false);
     }
   };
 
-  const handleClearResults = () => {
-    setResults([]);
-    setQuery('');
-    setError(null);
+  const handleGoBack = () => {
+    // Go back to the previous page in history
+    navigate(-1);
   };
 
-  const formatScore = (score: number) => {
-    return Math.round(score * 100);
+  const handleMetadataFilterChange = (fieldName: string, value: string) => {
+    setMetadataFilters(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -109,7 +128,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <button
-              onClick={() => navigate(`/apps/${appId}/repositories/${repositoryId}`)}
+              onClick={handleGoBack}
               className="text-gray-500 hover:text-gray-700 transition-colors"
             >
               ← Back
@@ -117,7 +136,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-900">Repository Search</h1>
           </div>
           <p className="text-gray-600">
-            Search within "{repositoryName}" repository
+            Search within "{repository?.name || 'Repository'}" repository
           </p>
         </div>
       </div>
@@ -125,6 +144,38 @@ const RepositoryPlaygroundPage: React.FC = () => {
       {/* Search Form */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8">
         <form onSubmit={handleSearch} className="space-y-4">
+          {/* Metadata Filters */}
+          {repository?.metadata_fields && repository.metadata_fields.length > 0 && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                <span className="mr-2">🔍</span>
+                Filter by Metadata
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {repository.metadata_fields.map((field) => (
+                  <div key={field.name}>
+                    <label htmlFor={`filter_${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.name}
+                      <span className="text-xs text-gray-500 ml-1">({field.type})</span>
+                    </label>
+                    <input
+                      type="text"
+                      id={`filter_${field.name}`}
+                      value={metadataFilters[field.name] || ''}
+                      onChange={(e) => handleMetadataFilterChange(field.name, e.target.value)}
+                      placeholder={`Filter by ${field.name}`}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      disabled={searching}
+                    />
+                    {field.description && (
+                      <p className="text-xs text-gray-500 mt-1">{field.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
           <div>
             <label htmlFor="query" className="block text-sm font-medium text-gray-700 mb-2">
               Search Query
@@ -135,13 +186,13 @@ const RepositoryPlaygroundPage: React.FC = () => {
                 id="query"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter your search query..."
+                placeholder="Enter your search query (leave empty to browse all documents)..."
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={searching}
               />
               <button
                 type="submit"
-                disabled={searching || !query.trim()}
+                disabled={searching}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {searching ? (
@@ -165,47 +216,42 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
       {/* Search Results */}
       {results.length > 0 && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Search Results ({results.length})
-            </h2>
-            <button
-              onClick={handleClearResults}
-              className="text-gray-500 hover:text-gray-700 text-sm"
-            >
-              Clear Results
-            </button>
-          </div>
-
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Search Results ({results.length})
+          </h2>
+          
           <div className="space-y-4">
             {results.map((result, index) => (
-              <div key={index} className="bg-white border border-gray-200 rounded-lg p-6">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">📄</span>
-                    <span className="text-sm font-medium text-gray-700">
-                      {result.metadata.source}
+              <div key={index} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-500">
+                    Result #{index + 1}
+                  </span>
+                  {result.score && (
+                    <span className="text-sm text-gray-500">
+                      Score: {result.score.toFixed(3)}
                     </span>
-                    {result.metadata.page && (
-                      <span className="text-sm text-gray-500">
-                        (Page {result.metadata.page})
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Relevance:</span>
-                    <span className="text-sm font-medium text-green-600">
-                      {formatScore(result.score)}%
-                    </span>
-                  </div>
+                  )}
                 </div>
                 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-800 leading-relaxed">
-                    {result.content}
+                <div className="mb-3">
+                  <h3 className="text-sm font-medium text-gray-700 mb-1">Content:</h3>
+                  <p className="text-gray-900 text-sm leading-relaxed">
+                    {result.page_content}
                   </p>
                 </div>
+                
+                {result.metadata && Object.keys(result.metadata).length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Metadata:</h3>
+                    <div className="bg-gray-50 rounded p-2">
+                      <pre className="text-xs text-gray-600 overflow-x-auto">
+                        {JSON.stringify(result.metadata, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -213,26 +259,53 @@ const RepositoryPlaygroundPage: React.FC = () => {
       )}
 
       {/* No Results State */}
-      {!searching && !loading && results.length === 0 && query && (
-        <div className="text-center py-12">
-          <div className="text-4xl text-gray-400 mb-4">🔍</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No results found</h3>
-          <p className="text-gray-600">
-            Try adjusting your search query or check if the repository has documents.
-          </p>
+      {!searching && results.length === 0 && hasSearched && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="text-center">
+            <span className="text-gray-400 text-4xl mb-4">🔍</span>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
+            <p className="text-gray-600">
+              {query ? 
+                "Try adjusting your search query or check if the repository contains documents." :
+                "Enter a search query to find documents, or leave empty to see all available documents."
+              }
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Initial State */}
-      {!searching && !loading && results.length === 0 && !query && (
-        <div className="text-center py-12">
-          <div className="text-4xl text-gray-400 mb-4">🔍</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Ready to search</h3>
-          <p className="text-gray-600">
-            Enter a query above to search through the documents in this repository.
-          </p>
+      {/* Help Section */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <span className="text-blue-400 text-xl">ℹ️</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-800">
+              How to Use the Repository Playground
+            </h3>
+            <div className="mt-2 text-sm text-blue-700">
+              <p>
+                The playground allows you to test semantic search within your repository. 
+                Enter natural language queries to find relevant documents.
+              </p>
+              <p className="mt-2">
+                <strong>Tips:</strong>
+                <br />
+                • Use natural language (e.g., "What is machine learning?")
+                <br />
+                • Leave empty to browse all available documents
+                <br />
+                • Try different phrasings for better results
+                <br />
+                • Results are ranked by relevance score
+                <br />
+                • Use metadata filters to narrow down your search
+              </p>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

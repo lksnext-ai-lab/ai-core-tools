@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 interface Resource {
   resource_id: number;
   name: string;
+  uri: string;
   file_type: string;
   created_at: string;
 }
@@ -92,7 +93,7 @@ const RepositoryDetailPage: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = resource.name;
+      a.download = resource.uri; // Use uri which contains the filename with extension
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -124,14 +125,6 @@ const RepositoryDetailPage: React.FC = () => {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   if (loading) {

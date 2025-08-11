@@ -37,8 +37,8 @@ function AppDashboard() {
     
     try {
       setLoading(true);
-      const apps = await apiService.getApps();
-      const app = apps.find((a: App) => a.app_id === parseInt(appId));
+      // Use the specific app endpoint to get real entity counts
+      const app = await apiService.getApp(parseInt(appId));
       setCurrentApp(app || null);
     } catch (error) {
       console.error('Failed to load app data:', error);

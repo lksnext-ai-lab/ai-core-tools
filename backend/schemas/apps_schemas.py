@@ -34,6 +34,13 @@ class AppDetailSchema(BaseModel):
     created_at: Optional[datetime]
     owner_id: int
     
+    # Entity counts for dashboard display
+    agent_count: int = 0
+    repository_count: int = 0
+    domain_count: int = 0
+    silo_count: int = 0
+    collaborator_count: int = 0
+    
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -3,29 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
-import type { ActionItem } from '../components/ui/ActionDropdown';
 
 interface Repository {
   repository_id: number;
   name: string;
   created_at: string;
   resource_count: number;
-}
-
-interface RepositoryDetail {
-  repository_id: number;
-  name: string;
-  created_at: string;
-  resources: Array<{
-    resource_id: number;
-    name: string;
-    file_type: string;
-    created_at: string;
-  }>;
-  embedding_services: Array<{
-    service_id: number;
-    name: string;
-  }>;
 }
 
 const RepositoriesPage: React.FC = () => {
@@ -90,122 +73,159 @@ const RepositoriesPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
+            <p className="text-gray-600">Manage your document repositories</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+          <span className="ml-2">Loading repositories...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
+            <p className="text-gray-600">Manage your document repositories</p>
+          </div>
+        </div>
+
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <div>
+              <h3 className="text-sm font-medium text-red-800">Error Loading Repositories</h3>
+              <p className="text-sm text-red-600 mt-1">{error}</p>
+              <button 
+                onClick={() => loadRepositories()}
+                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Repositories</h1>
-          <p className="text-gray-600 mt-2">Manage your document repositories</p>
+          <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
+          <p className="text-gray-600">Manage your document repositories</p>
         </div>
         <button
           onClick={handleCreateRepository}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
         >
-          <span className="text-lg">+</span>
-          New Repository
+          <span className="mr-2">+</span>
+          Create Repository
         </button>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
-      )}
-
-      {/* Repositories Grid */}
+      {/* Repositories List */}
       {repositories.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-6xl text-gray-400 mb-4">📁</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No repositories yet</h3>
-          <p className="text-gray-600 mb-6">Create your first repository to start organizing documents</p>
+        <div className="bg-white rounded-lg shadow-md border p-8 text-center">
+          <div className="text-6xl mb-4">📁</div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Repositories Yet</h3>
+          <p className="text-gray-600 mb-4">
+            Create your first repository to start organizing and searching documents.
+          </p>
           <button
             onClick={handleCreateRepository}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 mx-auto transition-colors"
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
           >
-            <span className="text-lg">+</span>
-            Create Repository
+            <span className="mr-2">+</span>
+            Create Your First Repository
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {repositories.map((repository) => (
-            <div
-              key={repository.repository_id}
-              className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-            >
-              {/* Repository Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 p-2 rounded-lg">
-                    <span className="text-blue-600 text-lg">📁</span>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 truncate">{repository.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {repository.resource_count} {repository.resource_count === 1 ? 'document' : 'documents'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <ActionDropdown
-                    actions={[
-                      {
-                        label: 'Edit',
-                        onClick: () => handleEditRepository(repository.repository_id),
-                        icon: '✏️',
-                        variant: 'primary'
-                      },
-                      {
-                        label: 'Delete',
-                        onClick: () => handleDeleteRepository(repository),
-                        icon: '🗑️',
-                        variant: 'danger'
-                      }
-                    ]}
-                    triggerIcon="⚙️"
-                    triggerText=""
-                    size="sm"
-                  />
-                </div>
-              </div>
-
-              {/* Repository Details */}
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span>📅</span>
-                  <span>Created {formatDate(repository.created_at)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span>📄</span>
-                  <span>{repository.resource_count} files</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Manage
-                </button>
-                <button
-                  onClick={() => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`)}
-                  className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Search
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-lg shadow-md border overflow-visible">
+          <div className="overflow-x-auto overflow-y-visible">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Documents
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {repositories.map((repository) => (
+                  <tr key={repository.repository_id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
+                            <span className="text-green-600 text-lg">📁</span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {repository.name}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {repository.resource_count} documents
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(repository.created_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative">
+                      <ActionDropdown
+                        actions={[
+                          {
+                            label: 'Playground',
+                            onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`),
+                            icon: '🎮',
+                            variant: 'warning'
+                          },
+                          {
+                            label: 'Edit',
+                            onClick: () => handleEditRepository(repository.repository_id),
+                            icon: '✏️',
+                            variant: 'primary'
+                          },
+                          {
+                            label: 'Delete',
+                            onClick: () => handleDeleteRepository(repository),
+                            icon: '🗑️',
+                            variant: 'danger'
+                          }
+                        ]}
+                        size="sm"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

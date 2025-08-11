@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
-import type { ActionItem } from '../components/ui/ActionDropdown';
 
 // Define the Agent type
 interface Agent {
