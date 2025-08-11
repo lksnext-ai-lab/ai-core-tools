@@ -13,11 +13,10 @@ from schemas.domain_url_schemas import (
     DomainDetailSchema,
     CreateUpdateDomainSchema,
     URLListItemSchema,
-    URLDetailSchema,
     CreateURLSchema,
     URLActionResponseSchema
 )
-from routers.auth import verify_jwt_token
+from routers.internal.auth_utils import get_current_user_oauth
 
 # Import database dependencies
 from db.database import get_db
@@ -29,56 +28,7 @@ logger = get_logger(__name__)
 
 domains_router = APIRouter()
 
-# ==================== AUTHENTICATION HELPER ====================
 
-async def get_current_user(request: Request):
-    """
-    Get current authenticated user using Google OAuth JWT tokens.
-    
-    Args:
-        request: FastAPI request object
-        
-    Returns:
-        dict: User information from JWT token
-        
-    Raises:
-        HTTPException: If authentication fails
-    """
-    # Get token from Authorization header
-    auth_header = request.headers.get('Authorization')
-    logger.info(f"Auth header received: {auth_header[:20] if auth_header else 'None'}...")
-    
-    if not auth_header:
-        logger.error("No Authorization header found")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Please provide Authorization header with Bearer token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if not auth_header.startswith('Bearer '):
-        logger.error(f"Invalid Authorization header format: {auth_header[:50]}...")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization header format. Use 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    token = auth_header.split(' ')[1]
-    logger.info(f"Token extracted: {token[:20]}...")
-    
-    # Verify token using Google OAuth system
-    payload = verify_jwt_token(token)
-    if not payload:
-        logger.error("Token verification failed - invalid or expired token")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    logger.info(f"Token verified successfully for user: {payload.get('user_id')}")
-    return payload
 
 # ==================== DOMAIN MANAGEMENT ====================
 
@@ -90,7 +40,7 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
     """
     List all domains for a specific app.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -127,7 +77,7 @@ async def get_domain(app_id: int, domain_id: int, request: Request, db: Session 
     """
     Get detailed information about a specific domain.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -176,7 +126,7 @@ async def create_or_update_domain(
     """
     Create a new domain or update an existing one.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -215,7 +165,7 @@ async def delete_domain(app_id: int, domain_id: int, request: Request, db: Sessi
     """
     Delete a domain and its associated silo and URLs.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -258,7 +208,7 @@ async def list_domain_urls(
     """
     List URLs for a specific domain with pagination.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -300,7 +250,7 @@ async def add_url_to_domain(
     """
     Add a new URL to a domain and scrape its content.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -360,7 +310,7 @@ async def delete_url_from_domain(
     """
     Delete a URL from a domain and remove its indexed content.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -396,7 +346,7 @@ async def reindex_url(
     """
     Re-index content for a specific URL.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -458,7 +408,7 @@ async def unindex_url(
     """
     Remove URL content from index and mark as unindexed.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -510,7 +460,7 @@ async def reject_url(
     """
     Mark URL as rejected (content not suitable for indexing).
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -560,7 +510,7 @@ async def reindex_domain(
     """
     Re-index content for all URLs in a domain.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -603,7 +553,7 @@ async def get_url_content(
     """
     Get the scraped content for a specific URL.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation

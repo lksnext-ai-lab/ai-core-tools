@@ -1,19 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from typing import List, Optional, Dict, Any
-import json
-import tempfile
-import os
-
-# Import our services
-from services.agent_service import AgentService
-from services.silo_service import SiloService
-from services.repository_service import RepositoryService
-from services.resource_service import ResourceService
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 # Import Pydantic models and auth
 from .schemas import *
-from .auth import get_api_key_auth, validate_api_key_for_app, APIKeyAuth
+from .auth import get_api_key_auth, validate_api_key_for_app
+from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
@@ -32,7 +23,8 @@ async def call_agent(
     app_id: int,
     agent_id: int,
     request: ChatRequestSchema,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """
     Call an agent for chat completion.
@@ -50,7 +42,7 @@ async def call_agent(
     
     # Use unified service layer
     from services.agent_execution_service import AgentExecutionService
-    execution_service = AgentExecutionService()
+    execution_service = AgentExecutionService(db)
     
     try:
         result = await execution_service.execute_agent_chat(
@@ -58,7 +50,8 @@ async def call_agent(
             message=request.message,
             files=None,  # TODO: Handle file attachments from request
             search_params=request.search_params,
-            user_context=user_context
+            user_context=user_context,
+            db=db
         )
         
         return AgentResponseSchema(
@@ -78,7 +71,8 @@ async def call_agent(
 async def reset_conversation(
     app_id: int,
     agent_id: int,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Reset the conversation state for an agent."""
     # Validate API key for this app
@@ -93,12 +87,13 @@ async def reset_conversation(
     
     # Use unified service layer
     from services.agent_execution_service import AgentExecutionService
-    execution_service = AgentExecutionService()
+    execution_service = AgentExecutionService(db)
     
     try:
         success = await execution_service.reset_agent_conversation(
             agent_id=agent_id,
-            user_context=user_context
+            user_context=user_context,
+            db=db
         )
         
         if success:

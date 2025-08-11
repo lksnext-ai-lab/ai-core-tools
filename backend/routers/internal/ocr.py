@@ -1,22 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.orm import Session
 
+from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
+from schemas.ocr_schemas import OCRResponseSchema
 from services.agent_execution_service import AgentExecutionService
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 ocr_router = APIRouter(tags=["Internal OCR"])
-
-
-class OCRResponseSchema(BaseModel):
-    """Schema for OCR response"""
-    result: dict
-    agent_id: int
-    metadata: dict
-    extracted_text: Optional[str] = None
 
 
 @ocr_router.post("/{agent_id}/process",
@@ -26,7 +20,8 @@ class OCRResponseSchema(BaseModel):
 async def process_ocr_internal(
     agent_id: int,
     pdf_file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Internal API: Process OCR for playground (OAuth authentication)
@@ -40,11 +35,12 @@ async def process_ocr_internal(
         }
         
         # Use unified service layer
-        execution_service = AgentExecutionService()
+        execution_service = AgentExecutionService(db)
         result = await execution_service.execute_agent_ocr(
             agent_id=agent_id,
             pdf_file=pdf_file,
-            user_context=user_context
+            user_context=user_context,
+            db=db
         )
         
         logger.info(f"OCR processing completed for agent {agent_id} by user {current_user['user_id']}")

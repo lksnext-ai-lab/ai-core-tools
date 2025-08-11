@@ -1,9 +1,11 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from typing import List, Optional
-from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
+from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetResponseSchema
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService
 from utils.logger import get_logger
@@ -28,26 +30,7 @@ async def _save_uploaded_file(upload_file: UploadFile) -> str:
     return temp_file_path
 
 
-class ChatRequestSchema(BaseModel):
-    """Schema for chat request"""
-    message: str
-    files: Optional[List[str]] = None  # File IDs
-    search_params: Optional[dict] = None
-
-
 from typing import Union
-
-class ChatResponseSchema(BaseModel):
-    """Schema for chat response"""
-    response: Union[str, dict]  # Can be string or JSON object
-    agent_id: int
-    metadata: dict
-
-
-class ResetResponseSchema(BaseModel):
-    """Schema for reset response"""
-    success: bool
-    message: str
 
 
 @chat_router.post("/{agent_id}/chat",
@@ -59,7 +42,8 @@ async def chat_with_agent(
     message: str = Form(...),
     files: List[UploadFile] = File(None),
     search_params: Optional[str] = Form(None),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Internal API: Chat with agent for playground (OAuth authentication)
@@ -89,13 +73,14 @@ async def chat_with_agent(
                 file_objects.append(temp_file)
         
         # Use unified service layer
-        execution_service = AgentExecutionService()
+        execution_service = AgentExecutionService(db)
         result = await execution_service.execute_agent_chat(
             agent_id=agent_id,
             message=message,
             files=file_objects if file_objects else None,
             search_params=parsed_search_params,
-            user_context=user_context
+            user_context=user_context,
+            db=db
         )
         
         logger.info(f"Chat request processed for agent {agent_id} by user {current_user['user_id']}")
@@ -114,7 +99,8 @@ async def chat_with_agent(
                   response_model=ResetResponseSchema)
 async def reset_conversation(
     agent_id: int,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Internal API: Reset conversation for playground (OAuth authentication)
@@ -128,10 +114,11 @@ async def reset_conversation(
         }
         
         # Use unified service layer
-        execution_service = AgentExecutionService()
+        execution_service = AgentExecutionService(db)
         success = await execution_service.reset_agent_conversation(
             agent_id=agent_id,
-            user_context=user_context
+            user_context=user_context,
+            db=db
         )
         
         if success:
@@ -153,7 +140,8 @@ async def reset_conversation(
 async def upload_file_for_chat(
     agent_id: int,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Internal API: Upload file for chat (OAuth authentication)
@@ -194,7 +182,8 @@ async def upload_file_for_chat(
                  tags=["Internal Chat"])
 async def list_attached_files(
     agent_id: int,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Internal API: List attached files for chat (OAuth authentication)
@@ -227,7 +216,8 @@ async def list_attached_files(
 async def remove_attached_file(
     agent_id: int,
     file_id: str,
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
 ):
     """
     Internal API: Remove attached file (OAuth authentication)

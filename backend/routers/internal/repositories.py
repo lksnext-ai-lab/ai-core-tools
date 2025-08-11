@@ -9,7 +9,7 @@ from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
 
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, RepositorySearchSchema
-from routers.auth import verify_jwt_token
+from routers.internal.auth_utils import get_current_user_oauth
 
 # Import database dependency
 from db.database import get_db
@@ -22,56 +22,7 @@ repositories_router = APIRouter()
 # Debug log when router is loaded
 logger.info("Repositories router loaded successfully")
 
-# ==================== AUTHENTICATION HELPER ====================
 
-async def get_current_user(request: Request):
-    """
-    Get current authenticated user using Google OAuth JWT tokens.
-    
-    Args:
-        request: FastAPI request object
-        
-    Returns:
-        dict: User information from JWT token
-        
-    Raises:
-        HTTPException: If authentication fails
-    """
-    # Get token from Authorization header
-    auth_header = request.headers.get('Authorization')
-    logger.info(f"Auth header received: {auth_header[:20] if auth_header else 'None'}...")
-    
-    if not auth_header:
-        logger.error("No Authorization header found")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Please provide Authorization header with Bearer token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if not auth_header.startswith('Bearer '):
-        logger.error(f"Invalid Authorization header format: {auth_header[:50]}...")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization header format. Use 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    token = auth_header.split(' ')[1]
-    logger.info(f"Token extracted: {token[:20]}...")
-    
-    # Verify token using Google OAuth system
-    payload = verify_jwt_token(token)
-    if not payload:
-        logger.error("Token verification failed - invalid or expired token")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    logger.info(f"Token verified successfully for user: {payload.get('user_id')}")
-    return payload
 
 # ==================== REPOSITORY MANAGEMENT ====================
 
@@ -83,7 +34,7 @@ async def list_repositories(app_id: int, request: Request, db: Session = Depends
     """
     List all repositories for a specific app.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     logger.info(f"List repositories called for app_id: {app_id}, user_id: {user_id}")
@@ -102,7 +53,7 @@ async def get_repository(app_id: int, repository_id: int, request: Request, db: 
     """
     Get detailed information about a specific repository including its resources.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -125,7 +76,7 @@ async def create_or_update_repository(
     """
     Create a new repository or update an existing one.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -144,7 +95,7 @@ async def delete_repository(app_id: int, repository_id: int, request: Request, d
     """
     Delete a repository and all its resources.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -170,7 +121,7 @@ async def upload_resources(
     """
     Upload multiple resources to a repository.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, user_id: {user_id}")
@@ -201,7 +152,7 @@ async def delete_resource(
     """
     Delete a specific resource from a repository.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     logger.info(f"Delete resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
@@ -232,7 +183,7 @@ async def download_resource(
     """
     Download a specific resource from a repository.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     logger.info(f"Download resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
@@ -273,7 +224,7 @@ async def search_repository_documents(
     Search for documents in a repository using semantic search with optional metadata filtering.
     This leverages the repository's associated silo for searching.
     """
-    current_user = await get_current_user(request)
+    current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
     logger.info(f"Repository search request - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")

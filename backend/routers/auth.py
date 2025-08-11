@@ -219,6 +219,7 @@ async def auth_callback(request: Request):
         session = SessionLocal()
         try:
             user, created = UserService.get_or_create_user(
+                db=session,
                 email=user_info.get('email'),
                 name=user_info.get('name')
             )

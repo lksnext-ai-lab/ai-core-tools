@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -8,6 +8,7 @@ class AgentListItemSchema(BaseModel):
     """Schema for agent list items"""
     agent_id: int
     name: str
+    description: Optional[str] = None
     type: str  # "agent", "ocr_agent", etc.
     is_tool: bool
     created_at: Optional[datetime]
@@ -76,4 +77,4 @@ class CreateUpdateAgentSchema(BaseModel):
 class UpdatePromptSchema(BaseModel):
     """Schema for updating agent prompts"""
     type: str  # "system" or "template"
-    prompt: str 
+    prompt: str

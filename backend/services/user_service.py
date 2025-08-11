@@ -1,63 +1,41 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from models.user import User
-from models.app import App
-from models.api_key import APIKey
-from db.database import SessionLocal
+from repositories.user_repository import UserRepository
 from typing import Tuple, List, Dict, Any
-from sqlalchemy import func, or_
 
 class UserService:
     
     @staticmethod
-    def get_or_create_user(email: str, name: str = None) -> Tuple[User, bool]:
+    def get_or_create_user(db: Session, email: str, name: str = None) -> Tuple[User, bool]:
         """
         Get existing user or create new user if doesn't exist.
         Returns: (user, created) where created is True if user was just created
         """
-        session = SessionLocal()
-        try:
-            # Try to find existing user
-            user = session.query(User).filter(User.email == email).first()
-            
-            if user:
-                # User exists, update name if provided and different
-                if name and user.name != name:
-                    user.name = name
-                    session.commit()
-                    session.refresh(user)
-                return user, False
-            
-            # Create new user
-            new_user = User(
-                email=email,
-                name=name
-            )
-            session.add(new_user)
-            session.commit()
-            session.refresh(new_user)
-            
-            return new_user, True
-            
-        finally:
-            session.close()
+        user_repo = UserRepository(db)
+        
+        # Try to find existing user
+        user = user_repo.get_by_email(email)
+        
+        if user:
+            # User exists, update name if provided and different
+            user = user_repo.update(user, name)
+            return user, False
+        
+        # Create new user
+        new_user = user_repo.create(email, name)
+        return new_user, True
     
     @staticmethod
-    def get_user_by_id(user_id: int) -> User:
+    def get_user_by_id(db: Session, user_id: int) -> User:
         """Get user by ID"""
-        session = SessionLocal()
-        try:
-            return session.query(User).filter(User.user_id == user_id).first()
-        finally:
-            session.close()
+        user_repo = UserRepository(db)
+        return user_repo.get_by_id(user_id)
     
     @staticmethod
-    def get_user_by_email(email: str) -> User:
+    def get_user_by_email(db: Session, email: str) -> User:
         """Get user by email"""
-        session = SessionLocal()
-        try:
-            return session.query(User).filter(User.email == email).first()
-        finally:
-            session.close()
+        user_repo = UserRepository(db)
+        return user_repo.get_by_email(email)
     
     @staticmethod
     def get_user_accessible_apps(user_id: int):
@@ -100,201 +78,133 @@ class UserService:
     # ============================================================================
     
     @staticmethod
-    def get_all_users(page: int = 1, per_page: int = 10, db: Session = None) -> Tuple[List[Dict], int]:
+    def get_all_users(db: Session, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
         """
         Get all users with pagination
         
         Args:
+            db: Database session
             page: Page number (1-based)
             per_page: Number of users per page
-            db: Database session (optional)
             
         Returns:
             Tuple of (users_list, total_count)
         """
-        if page < 1:
-            page = 1
-        if per_page < 1 or per_page > 100:
-            per_page = 10
+        user_repo = UserRepository(db)
+        users, total = user_repo.get_all_paginated(page, per_page)
         
-        session = db or SessionLocal()
-        try:
-            users_query = session.query(User).options(
-                joinedload(User.owned_apps),
-                joinedload(User.api_keys)
-            )
-            total = users_query.count()
-            offset = (page - 1) * per_page
-            users = users_query.offset(offset).limit(per_page).all()
-            
-            # Convert to dict format
-            users_list = []
-            for user in users:
-                users_list.append({
-                    'user_id': user.user_id,
-                    'email': user.email,
-                    'name': user.name,
-                    'created_at': user.create_date.isoformat() if user.create_date else None,
-                    'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                    'api_keys_count': len(user.api_keys) if user.api_keys else 0
-                })
-            
-            return users_list, total
-        finally:
-            if not db:
-                session.close()
+        # Convert to dict format
+        users_list = []
+        for user in users:
+            users_list.append({
+                'user_id': user.user_id,
+                'email': user.email,
+                'name': user.name,
+                'created_at': user.create_date.isoformat() if user.create_date else None,
+                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
+                'api_keys_count': len(user.api_keys) if user.api_keys else 0
+            })
+        
+        return users_list, total
     
     @staticmethod
-    def get_user_by_id(user_id: int, db: Session = None) -> User:
+    def get_user_by_id_with_relations(db: Session, user_id: int) -> User:
         """
         Get user by ID with related data
         
         Args:
+            db: Database session
             user_id: ID of the user
-            db: Database session (optional)
             
         Returns:
             User instance or None if not found
         """
-        if not user_id or user_id <= 0:
-            return None
-        
-        session = db or SessionLocal()
-        try:
-            return session.query(User).options(
-                joinedload(User.owned_apps),
-                joinedload(User.api_keys)
-            ).filter(User.user_id == user_id).first()
-        finally:
-            if not db:
-                session.close()
+        user_repo = UserRepository(db)
+        return user_repo.get_by_id_with_relations(user_id)
     
     @staticmethod
-    def search_users(query: str, page: int = 1, per_page: int = 10, db: Session = None) -> Tuple[List[Dict], int]:
+    def search_users(db: Session, query: str, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
         """
         Search users by name or email
         
         Args:
+            db: Database session
             query: Search query
             page: Page number (1-based)
             per_page: Number of users per page
-            db: Database session (optional)
             
         Returns:
             Tuple of (users_list, total_count)
         """
-        if page < 1:
-            page = 1
-        if per_page < 1 or per_page > 100:
-            per_page = 10
+        user_repo = UserRepository(db)
+        users, total = user_repo.search_users(query, page, per_page)
         
-        session = db or SessionLocal()
-        try:
-            users_query = session.query(User).options(
-                joinedload(User.owned_apps),
-                joinedload(User.api_keys)
-            ).filter(
-                or_(
-                    User.name.ilike(f'%{query}%'),
-                    User.email.ilike(f'%{query}%')
-                )
-            )
-            total = users_query.count()
-            offset = (page - 1) * per_page
-            users = users_query.offset(offset).limit(per_page).all()
-            
-            # Convert to dict format
-            users_list = []
-            for user in users:
-                users_list.append({
-                    'user_id': user.user_id,
-                    'email': user.email,
-                    'name': user.name,
-                    'created_at': user.create_date.isoformat() if user.create_date else None,
-                    'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                    'api_keys_count': len(user.api_keys) if user.api_keys else 0
-                })
-            
-            return users_list, total
-        finally:
-            if not db:
-                session.close()
+        # Convert to dict format
+        users_list = []
+        for user in users:
+            users_list.append({
+                'user_id': user.user_id,
+                'email': user.email,
+                'name': user.name,
+                'created_at': user.create_date.isoformat() if user.create_date else None,
+                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
+                'api_keys_count': len(user.api_keys) if user.api_keys else 0
+            })
+        
+        return users_list, total
     
     @staticmethod
-    def delete_user(user_id: int, db: Session = None) -> bool:
+    def delete_user(db: Session, user_id: int) -> bool:
         """
         Delete a user and all associated data
         
         Args:
+            db: Database session
             user_id: ID of the user to delete
-            db: Database session (optional)
             
         Returns:
             True if successful, False otherwise
         """
-        session = db or SessionLocal()
-        try:
-            user = session.query(User).filter(User.user_id == user_id).first()
-            if not user:
-                return False
-            
-            # Delete user (cascade will handle related data)
-            session.delete(user)
-            session.commit()
-            return True
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            if not db:
-                session.close()
+        user_repo = UserRepository(db)
+        return user_repo.delete(user_id)
     
     @staticmethod
-    def get_user_stats(db: Session = None) -> Dict[str, Any]:
+    def get_user_stats(db: Session) -> Dict[str, Any]:
         """
         Get system-wide user statistics
         
         Args:
-            db: Database session (optional)
+            db: Database session
             
         Returns:
             Dictionary with user statistics
         """
-        session = db or SessionLocal()
-        try:
-            # Total users count
-            total_users = session.query(User).count()
-            
-            # Recent users (last 30 days)
-            from datetime import datetime, timedelta
-            thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-            recent_users = session.query(User).filter(
-                User.create_date >= thirty_days_ago
-            ).count()
-            
-            # Users with apps
-            users_with_apps = session.query(User).join(App).distinct().count()
-            
-            # Recent users list (last 10)
-            recent_users_list = session.query(User).filter(
-                User.create_date >= thirty_days_ago
-            ).order_by(User.create_date.desc()).limit(10).all()
-            
-            recent_users_data = []
-            for user in recent_users_list:
-                recent_users_data.append({
-                    'user_id': user.user_id,
-                    'email': user.email,
-                    'name': user.name,
-                    'created_at': user.create_date.isoformat() if user.create_date else None
-                })
-            
-            return {
-                'total_users': total_users,
-                'recent_users': recent_users,
-                'users_with_apps': users_with_apps,
-                'recent_users_list': recent_users_data
-            }
-        finally:
-            if not db:
-                session.close() 
+        user_repo = UserRepository(db)
+        
+        # Total users count
+        total_users = user_repo.get_total_count()
+        
+        # Recent users (last 30 days)
+        recent_users = user_repo.get_recent_users_count(30)
+        
+        # Users with apps
+        users_with_apps = user_repo.get_users_with_apps_count()
+        
+        # Recent users list (last 10)
+        recent_users_list = user_repo.get_recent_users_list(30, 10)
+        
+        recent_users_data = []
+        for user in recent_users_list:
+            recent_users_data.append({
+                'user_id': user.user_id,
+                'email': user.email,
+                'name': user.name,
+                'created_at': user.create_date.isoformat() if user.create_date else None
+            })
+        
+        return {
+            'total_users': total_users,
+            'recent_users': recent_users,
+            'users_with_apps': users_with_apps,
+            'recent_users_list': recent_users_data
+        } 

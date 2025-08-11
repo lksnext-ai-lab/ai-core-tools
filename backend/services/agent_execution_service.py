@@ -1,10 +1,8 @@
 import os
-import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
-from db.database import SessionLocal
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
@@ -17,9 +15,10 @@ from tools.ocrAgentTools import (
     get_document_data_from_pages
 )
 from tools.aiServiceTools import get_llm
-from tools.outputParserTools import get_parser_model_by_id, create_model_from_json_schema
+from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
 from services.session_management_service import SessionManagementService
+from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -28,9 +27,11 @@ logger = get_logger(__name__)
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
-    def __init__(self):
+    def __init__(self, db: Session = None):
         self.agent_service = AgentService()
         self.session_service = SessionManagementService()
+        self.agent_execution_repo = AgentExecutionRepository()
+        self.db = db
     
     async def execute_agent_chat(
         self, 
@@ -38,7 +39,8 @@ class AgentExecutionService:
         message: str, 
         files: List[UploadFile] = None,
         search_params: Dict = None,
-        user_context: Dict = None
+        user_context: Dict = None,
+        db: Session = None
     ) -> Dict[str, Any]:
         """
         Execute agent chat - used by both playground and public API
@@ -55,7 +57,7 @@ class AgentExecutionService:
         """
         try:
             # Get agent
-            agent = self.agent_service.get_agent(agent_id)
+            agent = self.agent_service.get_agent(db, agent_id)
             if not agent:
                 raise HTTPException(status_code=404, detail="Agent not found")
             
@@ -74,7 +76,7 @@ class AgentExecutionService:
             
             # Execute agent using LangChain
             response = self._execute_langchain_agent(
-                agent, message, processed_files, search_params, session
+                agent, message, processed_files, search_params, session, db
             )
             
             # Parse response based on agent's output parser
@@ -82,7 +84,7 @@ class AgentExecutionService:
             parsed_response = parse_agent_response(response, agent)
             
             # Update request count
-            self._update_request_count(agent)
+            self._update_request_count(agent, db)
             
             # Add to session history if memory enabled
             if session:
@@ -110,7 +112,8 @@ class AgentExecutionService:
         agent_id: int, 
         pdf_file: UploadFile,
         user_context: Dict = None,
-        for_api: bool = False  # True for public API, False for playground
+        for_api: bool = False,  # True for public API, False for playground
+        db: Session = None
     ) -> Dict[str, Any]:
         """
         Execute OCR processing - used by both playground and public API
@@ -125,7 +128,7 @@ class AgentExecutionService:
         """
         try:
             # Get OCR agent
-            agent = self.agent_service.get_agent(agent_id, agent_type='ocr_agent')
+            agent = self.agent_service.get_agent(db, agent_id, agent_type='ocr_agent')
             if not agent or not isinstance(agent, OCRAgent):
                 raise HTTPException(status_code=404, detail="OCR Agent not found")
             
@@ -141,10 +144,10 @@ class AgentExecutionService:
             
             try:
                 # Process PDF using existing tools
-                result = await self._process_pdf_with_ocr(agent, temp_pdf_path)
+                result = await self._process_pdf_with_ocr(agent, temp_pdf_path, db)
                 
                 # Update request count
-                self._update_request_count(agent)
+                self._update_request_count(agent, db)
                 
                 if for_api:
                     # Public API: Return just the structured content (output parser result)
@@ -182,7 +185,8 @@ class AgentExecutionService:
     async def reset_agent_conversation(
         self, 
         agent_id: int,
-        user_context: Dict = None
+        user_context: Dict = None,
+        db: Session = None
     ) -> bool:
         """
         Reset conversation - used by both playground and public API
@@ -196,7 +200,7 @@ class AgentExecutionService:
         """
         try:
             # Get agent
-            agent = self.agent_service.get_agent(agent_id)
+            agent = self.agent_service.get_agent(db, agent_id)
             if not agent:
                 raise HTTPException(status_code=404, detail="Agent not found")
             
@@ -258,52 +262,35 @@ class AgentExecutionService:
         
         return processed_files
     
-    async def _process_pdf_with_ocr(self, agent: OCRAgent, pdf_path: str) -> Dict[str, Any]:
+    async def _process_pdf_with_ocr(self, agent: OCRAgent, pdf_path: str, db: Session) -> Dict[str, Any]:
         """Process PDF using OCR workflow respecting output parser/data structure"""
         try:
-            # Re-load agent with all relationships in a fresh session
-            from db.database import SessionLocal
-            from models.ocr_agent import OCRAgent as OCRAgentModel
-            from sqlalchemy.orm import joinedload
+            # Re-load agent with all relationships
+            agent = self.agent_execution_repo.get_ocr_agent_with_relationships(db, agent.agent_id)
             
-            db_session = SessionLocal()
-            try:
-                # Re-query the agent with all necessary relationships
-                agent = db_session.query(OCRAgentModel).options(
-                    joinedload(OCRAgentModel.ai_service),
-                    joinedload(OCRAgentModel.vision_service_rel),
-                    joinedload(OCRAgentModel.output_parser)
-                ).filter(OCRAgentModel.agent_id == agent.agent_id).first()
-                
-                if not agent:
-                    raise Exception(f"Agent {agent.agent_id} not found")
-                
-                # Get output parser if configured - this is CRITICAL for structured output
-                pydantic_class = None
-                if agent.output_parser_id:
-                    try:
-                        # First try to get the output parser definition
-                        from models.output_parser import OutputParser
-                        
-                        output_parser = db_session.query(OutputParser).filter(
-                            OutputParser.parser_id == agent.output_parser_id
-                        ).first()
-                        
-                        if output_parser and output_parser.fields:
-                            logger.info(f"Found output parser: {output_parser.name} with fields: {output_parser.fields}")
-                            # Create pydantic model from schema like in original
-                            pydantic_class = create_model_from_json_schema(
-                                output_parser.fields,
-                                output_parser.name
-                            )
-                            logger.info(f"Output parser model created successfully: {output_parser.name} -> {pydantic_class}")
-                        else:
-                            logger.warning(f"Output parser {agent.output_parser_id} not found or has no fields")
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to load output parser: {str(e)}")
-            finally:
-                db_session.close()
+            if not agent:
+                raise Exception(f"Agent {agent.agent_id} not found")
+            
+            # Get output parser if configured - this is CRITICAL for structured output
+            pydantic_class = None
+            if agent.output_parser_id:
+                try:
+                    # Get the output parser definition using repository
+                    output_parser = self.agent_execution_repo.get_output_parser_by_id(db, agent.output_parser_id)
+                    
+                    if output_parser and output_parser.fields:
+                        logger.info(f"Found output parser: {output_parser.name} with fields: {output_parser.fields}")
+                        # Create pydantic model from schema like in original
+                        pydantic_class = create_model_from_json_schema(
+                            output_parser.fields,
+                            output_parser.name
+                        )
+                        logger.info(f"Output parser model created successfully: {output_parser.name} -> {pydantic_class}")
+                    else:
+                        logger.warning(f"Output parser {agent.output_parser_id} not found or has no fields")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to load output parser: {str(e)}")
             
             # Check if PDF has text
             has_text = check_pdf_has_text(pdf_path)
@@ -441,43 +428,32 @@ class AgentExecutionService:
         message: str, 
         processed_files: List[Dict], 
         search_params: Dict = None,
-        session = None
+        session = None,
+        db: Session = None
     ) -> str:
         """Execute agent using LangChain with existing tools"""
         try:
             from tools.aiServiceTools import invoke, invoke_with_rag, invoke_conversational_retrieval_chain
-            from db.database import SessionLocal
-            from models.agent import Agent as AgentModel
-            from models.silo import Silo
             
-            # Create a fresh session to handle lazy loading
-            db_session = SessionLocal()
-            try:
-                # Re-query the agent with relationships loaded
-                from sqlalchemy.orm import joinedload
-                fresh_agent = db_session.query(AgentModel).options(
-                    joinedload(AgentModel.silo).joinedload(Silo.embedding_service)
-                ).filter(AgentModel.agent_id == agent.agent_id).first()
-                
-                if not fresh_agent:
-                    raise Exception("Agent not found in database")
-                
-                # Check if agent has memory (conversational)
-                if fresh_agent.has_memory and session:
-                    # Use conversational retrieval chain
-                    return invoke_conversational_retrieval_chain(fresh_agent, message, session)
-                
-                # Check if agent has RAG capabilities (silo)
-                elif fresh_agent.silo:
-                    # Use RAG-enabled invocation with search parameters
-                    return invoke_with_rag(fresh_agent, message, search_params)
-                
-                # Default invocation
-                else:
-                    return invoke(fresh_agent, message)
-                    
-            finally:
-                db_session.close()
+            # Re-query the agent with relationships loaded using repository
+            fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent.agent_id)
+            
+            if not fresh_agent:
+                raise Exception("Agent not found in database")
+            
+            # Check if agent has memory (conversational)
+            if fresh_agent.has_memory and session:
+                # Use conversational retrieval chain
+                return invoke_conversational_retrieval_chain(fresh_agent, message, session)
+            
+            # Check if agent has RAG capabilities (silo)
+            elif fresh_agent.silo:
+                # Use RAG-enabled invocation with search parameters
+                return invoke_with_rag(fresh_agent, message, search_params)
+            
+            # Default invocation
+            else:
+                return invoke(fresh_agent, message)
                 
         except Exception as e:
             logger.error(f"Error executing LangChain agent: {str(e)}")
@@ -501,17 +477,6 @@ class AgentExecutionService:
         finally:
             temp_file.close()
     
-    def _update_request_count(self, agent: Agent):
+    def _update_request_count(self, agent: Agent, db: Session):
         """Update agent request count"""
-        try:
-            session = SessionLocal()
-            try:
-                # Get fresh agent instance
-                db_agent = session.query(Agent).filter(Agent.agent_id == agent.agent_id).first()
-                if db_agent:
-                    db_agent.request_count = (db_agent.request_count or 0) + 1
-                    session.commit()
-            finally:
-                session.close()
-        except Exception as e:
-            logger.warning(f"Failed to update request count: {e}") 
+        self.agent_execution_repo.update_agent_request_count(db, agent.agent_id) 

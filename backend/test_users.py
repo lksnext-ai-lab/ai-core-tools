@@ -41,7 +41,7 @@ def test_users():
         # Test UserService
         print("\nTesting UserService.get_all_users():")
         try:
-            users_list, total = UserService.get_all_users(1, 10)
+            users_list, total = UserService.get_all_users(session, 1, 10)
             print(f"UserService returned {len(users_list)} users, total: {total}")
             for user in users_list:
                 print(f"  {user['user_id']} - {user['email']} - {user['name']}")

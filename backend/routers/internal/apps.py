@@ -54,7 +54,7 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         
         # Count agents
         agent_service = AgentService()
-        agents = agent_service.get_agents(app_id)
+        agents = agent_service.get_agents(db, app_id)
         agent_count = len(agents) if agents else 0
         
         # Count repositories

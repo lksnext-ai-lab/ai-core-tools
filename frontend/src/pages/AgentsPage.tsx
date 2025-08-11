@@ -20,31 +20,45 @@ interface Agent {
   };
 }
 
+// Define the App type
+interface App {
+  app_id: number;
+  name: string;
+}
+
 function AgentsPage() {
   const { appId } = useParams();
   const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
 
-  // Load agents from the API
+  // Load agents and app info from the API
   useEffect(() => {
-    loadAgents();
+    loadData();
   }, [appId]);
 
-  async function loadAgents() {
+  async function loadData() {
     if (!appId) return;
     
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getAgents(parseInt(appId));
-      setAgents(response);
+      
+      // Load both agents and app info in parallel
+      const [agentsResponse, appResponse] = await Promise.all([
+        apiService.getAgents(parseInt(appId)),
+        apiService.getApp(parseInt(appId))
+      ]);
+      
+      setAgents(agentsResponse);
+      setApp(appResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agents');
-      console.error('Error loading agents:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+      console.error('Error loading data:', err);
     } finally {
       setLoading(false);
     }
@@ -112,7 +126,7 @@ function AgentsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-            <p className="text-gray-600">Manage your AI agents for app {appId}</p>
+            <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
           </div>
         </div>
 
@@ -130,7 +144,7 @@ function AgentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-          <p className="text-gray-600">Manage your AI agents for app {appId}</p>
+          <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
         </div>
         <button 
           onClick={handleCreateAgent}
