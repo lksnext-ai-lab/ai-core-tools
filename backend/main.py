@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
+import os
 
-# Import all models to ensure relationships are resolved
 from models.app import App
 from models.user import User
 from models.app_collaborator import AppCollaborator
@@ -21,7 +21,6 @@ from models.api_usage import APIUsage
 from models.resource import Resource
 from models.url import Url
 
-# Import routers
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
 from routers.auth import auth_router
@@ -34,13 +33,27 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Add CORS middleware to allow frontend requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# Get CORS origins from environment variables
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
+
+# Configure CORS origins based on environment
+cors_origins = [
+    FRONTEND_URL,  # Main frontend URL from environment
+]
+
+# Add development origins if in development mode
+if DEVELOPMENT_MODE:
+    cors_origins.extend([
         "http://localhost:5173",  # React dev server
         "http://127.0.0.1:5173",  # Alternative localhost
-    ],
+        "http://localhost:3000",  # Docker frontend
+        "http://127.0.0.1:3000",  # Alternative localhost for Docker
+    ])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
@@ -74,7 +87,6 @@ def get_openapi_public():
     """Generate OpenAPI schema for public API only"""
     from fastapi.openapi.utils import get_openapi
     
-    # Create a temporary app to get the correct routes with prefixes
     temp_app = FastAPI()
     temp_app.include_router(public_v1_router, prefix="/public/v1")
     

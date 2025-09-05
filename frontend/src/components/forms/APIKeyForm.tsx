@@ -21,7 +21,7 @@ interface APIKeyFormProps {
   loading?: boolean;
 }
 
-function APIKeyForm({ apiKey, onSubmit, onCancel, loading = false }: APIKeyFormProps) {
+function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
   const [formData, setFormData] = useState<APIKeyFormData>({
     name: '',
     is_active: true

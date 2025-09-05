@@ -26,7 +26,7 @@ interface EmbeddingServiceFormProps {
   loading?: boolean;
 }
 
-function EmbeddingServiceForm({ embeddingService, onSubmit, onCancel, loading = false }: EmbeddingServiceFormProps) {
+function EmbeddingServiceForm({ embeddingService, onSubmit, onCancel }: EmbeddingServiceFormProps) {
   const [formData, setFormData] = useState<EmbeddingServiceFormData>({
     name: '',
     provider: '',

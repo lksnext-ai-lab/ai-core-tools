@@ -240,8 +240,8 @@ async def auth_callback(request: Request):
             jwt_token = create_jwt_token(user_data)
             expires_at = (datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
             
-            # Redirect to frontend with token
-            redirect_url = f"{FRONTEND_URL}/auth/success?token={jwt_token}&expires={expires_at}"
+            # Redirect to frontend with token (use /login/success to avoid /auth prefix that goes to backend)
+            redirect_url = f"{FRONTEND_URL}/login/success?token={jwt_token}&expires={expires_at}"
             return RedirectResponse(url=redirect_url)
             
         finally:

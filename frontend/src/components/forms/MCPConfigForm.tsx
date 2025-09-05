@@ -30,7 +30,7 @@ interface MCPConfigFormProps {
   loading?: boolean;
 }
 
-function MCPConfigForm({ mcpConfig, onSubmit, onCancel, loading = false }: MCPConfigFormProps) {
+function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: MCPConfigFormProps) {
   const [formData, setFormData] = useState<MCPConfigFormData>({
     name: '',
     server_name: '',

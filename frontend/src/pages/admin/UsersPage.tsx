@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import type { ActionItem } from '../../components/ui/ActionDropdown';
 
 function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
 
 // Define the Silo type for form data
@@ -27,7 +27,7 @@ interface SiloFormProps {
   loading?: boolean;
 }
 
-function SiloForm({ silo, onSubmit, onCancel, loading = false }: SiloFormProps) {
+function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
   const { appId } = useParams();
   const [formData, setFormData] = useState<SiloFormData>({
     name: '',

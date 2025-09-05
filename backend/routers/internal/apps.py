@@ -46,30 +46,24 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         Dictionary with count values for each entity type
     """
     try:
-        # Import services needed for counting
         from services.agent_service import AgentService
         from services.repository_service import RepositoryService
         from services.domain_service import DomainService
         from services.silo_service import SiloService
         
-        # Count agents
         agent_service = AgentService()
         agents = agent_service.get_agents(db, app_id)
         agent_count = len(agents) if agents else 0
         
-        # Count repositories
         repositories = RepositoryService.get_repositories_by_app_id(app_id, db)
         repository_count = len(repositories) if repositories else 0
         
-        # Count domains
         domains = DomainService.get_domains_by_app_id(app_id, db)
         domain_count = len(domains) if domains else 0
         
-        # Count silos
         silos = SiloService.get_silos_by_app_id(app_id, db)
         silo_count = len(silos) if silos else 0
         
-        # Count collaborators
         collaborators = collaboration_service.get_app_collaborators(app_id)
         collaborator_count = len(collaborators) if collaborators else 0
         
@@ -83,7 +77,6 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         
     except Exception as e:
         logger.warning(f"Error calculating counts for app {app_id}: {str(e)}")
-        # Fallback to 0 if there are any errors
         return {
             'agent_count': 0,
             'repository_count': 0,
@@ -157,7 +150,6 @@ async def get_app(
             detail="App not found"
         )
     
-    # Check if user has access to this app
     if not collaboration_service.can_user_access_app(user_id, app_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -166,7 +158,6 @@ async def get_app(
     
     user_role = collaboration_service.get_user_app_role(user_id, app_id)
     
-    # Calculate entity counts using helper function
     counts = calculate_app_entity_counts(app_id, db, collaboration_service)
     
     return AppDetailSchema(
@@ -176,7 +167,7 @@ async def get_app(
         user_role=user_role,
         created_at=app.create_date,
         owner_id=app.owner_id,
-        **counts  # Unpack the counts dictionary
+        **counts
     )
 
 
@@ -197,14 +188,12 @@ async def create_app(
     
     app_service, _ = get_services(db)
     
-    # Prepare app data
     app_dict = {
         'name': app_data.name,
         'owner_id': user_id,
         'langsmith_api_key': app_data.langsmith_api_key
     }
     
-    # Create app using service
     app = app_service.create_or_update_app(app_dict)
     
     return AppDetailSchema(
@@ -234,7 +223,6 @@ async def update_app(
     
     app_service, collaboration_service = get_services(db)
     
-    # Get app and verify ownership
     app = app_service.get_app(app_id)
     if not app:
         raise HTTPException(
@@ -242,14 +230,12 @@ async def update_app(
             detail="App not found"
         )
     
-    # Check if user is owner
     if not collaboration_service.can_user_manage_app(user_id, app_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only app owners can update apps"
         )
     
-    # Prepare update data
     update_dict = {
         'app_id': app_id,
         'name': app_data.name,
@@ -325,7 +311,7 @@ async def leave_app(
     
     _, collaboration_service = get_services(db)
     
-    # Check if user is a collaborator (not owner)
+    # Check if user has access to the app
     user_role = collaboration_service.get_user_app_role(user_id, app_id)
     
     if not user_role:
@@ -334,15 +320,9 @@ async def leave_app(
             detail="App not found or access denied"
         )
     
-    if user_role == "owner":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="App owners cannot leave their own apps"
-        )
-    
-    # Remove collaboration
+    # Use the new leave_app_collaboration method
     try:
-        success = collaboration_service.remove_collaborator(app_id, user_id, user_id)
+        success = collaboration_service.leave_app_collaboration(app_id, user_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

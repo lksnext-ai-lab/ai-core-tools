@@ -6,13 +6,15 @@ pipeline {
     environment {
         REGISTRY_USER = credentials('lks-docker-registry-user')
         REGISTRY_PASSWORD = credentials('lks-docker-registry-password')
-        IMAGE_NAME = "ia-core-tools/ia-core-tools"
+        BACKEND_IMAGE_NAME = "ia-core-tools/ia-core-tools-backend"
+        FRONTEND_IMAGE_NAME = "ia-core-tools/ia-core-tools-frontend"
         KUBE_NAMESPACE = "test"
-        CONTEXT_PATH = "."
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
+        IMAGE_HELM = "registry.lksnext.com/alpine/helm:latest"
         IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
-        //INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
+        INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
+        HELM_RELEASE_NAME = "ia-core-tools"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
@@ -68,6 +70,24 @@ pipeline {
             }
         }
         
+        stage('Set Image Tags') {
+            steps {
+                script {
+                    // Read version from pyproject.toml
+                    def pyprojectContent = readFile('pyproject.toml')
+                    def versionMatch = (pyprojectContent =~ /version = "([^"]+)"/)
+                    def version = versionMatch ? versionMatch[0][1] : "latest"
+                    
+                    // Set image tags for both backend and frontend
+                    env.BACKEND_IMAGE_TAG = version
+                    env.FRONTEND_IMAGE_TAG = version
+                    
+                    echo "Backend Image Tag: ${env.BACKEND_IMAGE_TAG}"
+                    echo "Frontend Image Tag: ${env.FRONTEND_IMAGE_TAG}"
+                }
+            }
+        }
+        
         stage('Sonar') {
             steps {
                 script {
@@ -84,48 +104,74 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Backend Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ${CONTEXT_PATH} --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
-                    sh "echo 'Docker image built successfully'"
+                    sh "docker build -f backend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
+                    sh "echo 'Backend Docker image built successfully'"
                 }
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Build Frontend Docker Image') {
             steps {
                 script {
-                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
-                    sh "echo 'Docker image pushed successfully'"
+                    sh "docker build -f frontend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
+                    sh "echo 'Frontend Docker image built successfully'"
+                }
+            }
+        }
+
+        stage('Push Backend Docker Image') {
+            steps {
+                script {
+                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
+                    sh "echo 'Backend Docker image pushed successfully'"
+                }
+            }
+        }
+
+        stage('Push Frontend Docker Image') {
+            steps {
+                script {
+                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
+                    sh "echo 'Frontend Docker image pushed successfully'"
                 }
             }
         }
         
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to Kubernetes with Helm') {
             steps {
                 script {
-                    sh "sed -i 's|${IMAGE_NAME}:.*|${IMAGE_NAME}:${IMAGE_TAG}|g' app/kubernetes/test/app/deployment.yaml"
-                    sh "echo 'Tag de la imagen: ${IMAGE_TAG}'"
+                    echo "Backend Image Tag: ${BACKEND_IMAGE_TAG}"
+                    echo "Frontend Image Tag: ${FRONTEND_IMAGE_TAG}"
+                    
+                    // Deploy the main umbrella chart which includes backend and frontend as dependencies
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
-                        $IMAGE_KUBECTL \
-                        apply -f app/kubernetes/test/app/deployment.yaml
+                        $IMAGE_HELM \
+                        dependency update ./helm
                     '''
-                    sh "echo 'Deployment applied successfully'"
+                    sh "echo 'Helm dependencies updated'"
                     
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
-                        $IMAGE_KUBECTL \
-                        rollout restart deployment/ia-core-tools-app-test -n $KUBE_NAMESPACE
+                        $IMAGE_HELM \
+                        upgrade --install ${HELM_RELEASE_NAME} \
+                        ./helm \
+                        --namespace $KUBE_NAMESPACE \
+                        --create-namespace \
+                        --set aicoretools-backend-chart.image.tag=${BACKEND_IMAGE_TAG} \
+                        --set aicoretools-frontend-chart.image.tag=${FRONTEND_IMAGE_TAG} \
+                        --wait --timeout=10m
                     '''
-                    sh "echo 'Deployment restarted successfully'"
+                    sh "echo 'Application deployed successfully with Helm'"
                 }
             }
         }
@@ -133,7 +179,8 @@ pipeline {
         stage('Clean Docker Images') {
             steps {
                 script {
-                    sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
+                    sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
                     sh "echo 'Docker images cleaned successfully'"
                 }
             }

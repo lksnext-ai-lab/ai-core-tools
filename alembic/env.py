@@ -1,13 +1,17 @@
 import sys
 import os
+from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 
+# Load environment variables
+load_dotenv()
+
 # Añadir ambas rutas posibles para cubrir tanto desarrollo local como Docker
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../app')))
-sys.path.append('/app')  # Ruta absoluta en Docker
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../backend')))
+sys.path.append('/backend')  # Ruta absoluta en Docker
 
 from logging.config import fileConfig
 
@@ -16,12 +20,11 @@ from sqlalchemy import pool
 
 from alembic import context
 
-print("Importing base_class")
+print("Importing Base from database")
 
 # Importar después de ajustar el path
 try:
-    from db.base_class import Base
-    from db import base
+    from db.database import Base
 except ImportError as e:
     print(f"Error al importar: {e}")
     sys.exit(1)
@@ -42,8 +45,8 @@ config.set_main_option('script_location', script_location)
 fileConfig(config.config_file_name)
 
 # Sobreescribir la URL de SQLAlchemy con variables de entorno
-config.set_main_option('sqlalchemy.url', 
-    f"postgresql+psycopg://{os.getenv('DATABASE_USER')}:{os.getenv('DATABASE_PASSWORD')}@{os.getenv('DATABASE_HOST')}:{os.getenv('DATABASE_PORT')}/{os.getenv('DATABASE_NAME')}")
+database_url = f"postgresql://{os.getenv('DATABASE_USER')}:{os.getenv('DATABASE_PASSWORD')}@{os.getenv('DATABASE_HOST')}:{os.getenv('DATABASE_PORT')}/{os.getenv('DATABASE_NAME')}"
+config.set_main_option('sqlalchemy.url', database_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

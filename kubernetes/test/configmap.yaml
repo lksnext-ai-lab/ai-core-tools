@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ia-core-tools-config-test
+  namespace: test
+data:
+  # Backend API URL for frontend
+  VITE_API_BASE_URL: "https://iacoretoolstest.lksnext.com"
+  
+  # Database configuration
+  DATABASE_HOST: "ia-core-tools-postgresql-service-test"
+  DATABASE_PORT: "5432"
+  
+  # Authentication Configuration
+  DEVELOPMENT_MODE: "false"
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRATION_HOURS: "24"
+  FRONTEND_URL: "https://iacoretoolstest.lksnext.com"
+  GOOGLE_DISCOVERY_URL: "https://accounts.google.com/.well-known/openid-configuration"
+  GOOGLE_REDIRECT_URI: "https://iacoretoolstest.lksnext.com/auth/callback"
+  
+  # Application mode and admins
+  AICT_MODE: "SELF-HOSTED"
+  AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com"
+  
+  # Storage paths
+  REPO_BASE_FOLDER: "data/repositories"
+  
+  # LangChain configuration
+  LANGCHAIN_TRACING_V2: "true"
+  LANGCHAIN_PROJECT: "ia-core-tools"
+  LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+  
+  # Python environment
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"

@@ -4,7 +4,7 @@ import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import type { ActionItem } from '../components/ui/ActionDropdown';
 
-// Define the Silo type based on the FastAPI schema
+// ...existing code...
 interface Silo {
   silo_id: number;
   name: string;

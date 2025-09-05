@@ -1,6 +1,6 @@
 // API Service - Think of this like your backend services!
 class ApiService {
-  private baseURL = 'http://localhost:8000';
+  private baseURL = import.meta.env.VITE_API_BASE_URL || 'https://iacoretoolstest.lksnext.com';
 
   private getAuthToken(): string | null {
     // Get token from localStorage (same as auth service)

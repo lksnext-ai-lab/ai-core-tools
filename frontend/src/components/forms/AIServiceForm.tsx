@@ -26,7 +26,7 @@ interface AIServiceFormProps {
   loading?: boolean;
 }
 
-function AIServiceForm({ aiService, onSubmit, onCancel, loading = false }: AIServiceFormProps) {
+function AIServiceForm({ aiService, onSubmit, onCancel }: AIServiceFormProps) {
   const [formData, setFormData] = useState<AIServiceFormData>({
     name: '',
     provider: '',

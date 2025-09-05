@@ -32,7 +32,7 @@ interface DataStructureFormProps {
   loading?: boolean;
 }
 
-function DataStructureForm({ dataStructure, onSubmit, onCancel, loading = false }: DataStructureFormProps) {
+function DataStructureForm({ dataStructure, onSubmit, onCancel }: DataStructureFormProps) {
   const [formData, setFormData] = useState<DataStructureFormData>({
     name: '',
     description: '',

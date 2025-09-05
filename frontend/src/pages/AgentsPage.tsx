@@ -36,7 +36,6 @@ function AgentsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
 
-  // Load agents and app info from the API
   useEffect(() => {
     loadData();
   }, [appId]);
@@ -48,7 +47,6 @@ function AgentsPage() {
       setLoading(true);
       setError(null);
       
-      // Load both agents and app info in parallel
       const [agentsResponse, appResponse] = await Promise.all([
         apiService.getAgents(parseInt(appId)),
         apiService.getApp(parseInt(appId))

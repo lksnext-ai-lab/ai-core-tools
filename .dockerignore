@@ -1,0 +1,100 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+env/
+venv/
+.venv/
+iactsvenv/
+
+# Poetry
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Documentation
+*.md
+docs/
+
+# Data directories (contain user data)
+backend/data/repositories/*
+app/data/repositories/*
+data/repositories/*
+
+# Environment files
+.env
+.env.*
+env.example
+backend/env.example
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+.hypothesis/
+
+# Node.js (frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+*.npm
+*.yarn
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Project specific
+version-bumper.Dockerfile
+azure_ai_*
+test_azure_connection.py
+test_mistral_agent.py
+sonar-project.properties
+helm/
+kubernetes/
+scripts/
+notebooks/
+aritz/
+
+# Poetry cache (but keep poetry.lock and pyproject.toml)
+.poetry/

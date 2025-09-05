@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ia-core-tools-postgresql-test
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ia-core-tools-postgresql-test
+  template:
+    metadata:
+      labels:
+        app: ia-core-tools-postgresql-test
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgresql
+          image: pgvector/pgvector:pg15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_DATABASE
+          volumeMounts:
+            - name: ia-core-tools-postgresql-data-test
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "500Mi"
+              cpu: "50m"
+              ephemeral-storage: "1Gi"
+            limits:
+              memory: "750Mi"
+              cpu: "100m"
+              ephemeral-storage: "2Gi"
+      volumes:
+        - name: ia-core-tools-postgresql-data-test
+          persistentVolumeClaim:
+            claimName: ia-core-tools-postgresql-pvc-test
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ia-core-tools-postgresql-service-test
+  namespace: test
+spec:
+  selector:
+    app: ia-core-tools-postgresql-test
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  type: ClusterIP

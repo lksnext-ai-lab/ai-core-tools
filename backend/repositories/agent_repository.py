@@ -35,7 +35,6 @@ class AgentRepository:
         elif agent_type == 'basic' or agent_type == 'agent':
             return AgentRepository.get_by_id(db, agent_id)
         else:
-            # Try both tables
             agent = AgentRepository.get_by_id(db, agent_id)
             if not agent:
                 agent = AgentRepository.get_ocr_agent_by_id(db, agent_id)

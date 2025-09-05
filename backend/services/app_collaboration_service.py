@@ -147,6 +147,34 @@ class AppCollaborationService:
             logger.error(f"Error removing user {user_id} from app {app_id}: {str(e)}")
             raise
     
+    def leave_app_collaboration(self, app_id: int, user_id: int) -> bool:
+        """Allow a collaborator to leave an app collaboration themselves"""
+        try:
+            # Find collaboration
+            collaboration = self.repo.get_collaboration_by_app_and_user(app_id, user_id)
+            if not collaboration:
+                raise ValueError("Collaboration not found")
+            
+            # Check if user is the owner (owners cannot leave their own apps)
+            if self.repo.can_user_manage_app(user_id, app_id):
+                raise ValueError("App owners cannot leave their own apps")
+            
+            # Check if collaboration is accepted
+            if collaboration.status != CollaborationStatus.ACCEPTED:
+                raise ValueError("Can only leave accepted collaborations")
+            
+            # Delete collaboration
+            success = self.repo.delete_collaboration(collaboration)
+            
+            if success:
+                logger.info(f"User {user_id} left app {app_id}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error leaving app {app_id} for user {user_id}: {str(e)}")
+            raise
+    
     def respond_to_invitation(self, invitation_id: int, user_id: int, action: str) -> bool:
         """Respond to a collaboration invitation"""
         try:

@@ -40,7 +40,6 @@ class AgentExecutionRepository:
     def update_agent_request_count(db: Session, agent_id: int) -> bool:
         """Update agent request count"""
         try:
-            # Get fresh agent instance using AgentRepository
             db_agent = AgentRepository.get_by_id(db, agent_id)
             if db_agent:
                 db_agent.request_count = (db_agent.request_count or 0) + 1

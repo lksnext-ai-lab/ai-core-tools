@@ -40,7 +40,7 @@ function AppContent() {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/auth/success" element={<AuthSuccessPage />} />
+        <Route path="/login/success" element={<AuthSuccessPage />} />
 
         {/* Protected routes */}
         <Route path="/apps" element={

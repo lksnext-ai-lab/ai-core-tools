@@ -1,0 +1,60 @@
+# Data storage for backend repositories and uploaded files
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ia-core-tools-data-pv-test
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/data/ia-core-tools-data-test
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ia-core-tools-data-pvc-test
+  namespace: test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: manual
+
+---
+# Logs storage for backend application logs
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ia-core-tools-logs-pv-test
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/data/ia-core-tools-logs-test
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ia-core-tools-logs-pvc-test
+  namespace: test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: manual
