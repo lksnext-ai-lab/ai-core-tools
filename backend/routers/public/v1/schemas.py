@@ -18,6 +18,7 @@ class ChatRequestSchema(BaseModel):
     """Chat request payload"""
     message: str
     attachments: Optional[List[Dict[str, Any]]] = None
+    search_params: Optional[Dict[str, Any]] = None
     conversation_id: Optional[str] = None
 
 class AgentResponseSchema(BaseModel):

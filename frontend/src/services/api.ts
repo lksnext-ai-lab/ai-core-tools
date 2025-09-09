@@ -470,14 +470,14 @@ class ApiService {
       });
     }
 
-    return this.request(`/internal/apps/${appId}/chat/${agentId}/chat`, {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/chat`, {
       method: 'POST',
       body: formData,
     });
   }
 
   async resetAgentConversation(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/chat/${agentId}/reset`, {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
       method: 'POST',
     });
   }
@@ -486,18 +486,18 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
 
-    return this.request(`/internal/apps/${appId}/chat/${agentId}/upload-file`, {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/upload-file`, {
       method: 'POST',
       body: formData,
     });
   }
 
   async listAttachedFiles(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/chat/${agentId}/files`);
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/files`);
   }
 
   async removeAttachedFile(appId: number, agentId: number, fileId: string) {
-    return this.request(`/internal/apps/${appId}/chat/${agentId}/files/${fileId}`, {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/files/${fileId}`, {
       method: 'DELETE',
     });
   }
@@ -506,7 +506,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('pdf_file', file);
 
-    return this.request(`/internal/apps/${appId}/ocr/${agentId}/process`, {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/ocr`, {
       method: 'POST',
       body: formData,
     });
