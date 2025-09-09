@@ -6,3 +6,25 @@ dist
 .vscode
 .DS_Store
 **/Thumbs.db
+
+# Environment files - should not be included in Docker images
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+
+# Build cache
+.next/
+.cache/
+
+# Test files
+**/*.test.js
+**/*.test.ts
+**/*.spec.js
+**/*.spec.ts
+coverage/
+
+# Documentation
+*.md
+docs/

@@ -28,27 +28,28 @@ from routers.internal.admin import router as admin_router
 from routers.internal.version import version_router
 
 app = FastAPI(
-    title="IA Core Tools API",
-    description="Modern FastAPI backend for IA Core Tools",
-    version="2.0.0"
+    title=os.getenv('APP_TITLE', 'IA Core Tools API'),
+    description=os.getenv('APP_DESCRIPTION', 'Modern FastAPI backend for IA Core Tools'),
+    version=os.getenv('APP_VERSION', '2.0.0')
 )
 
-# Get CORS origins from environment variables
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
+DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'true').lower() == 'true'  # Default to true for development
 
-# Configure CORS origins based on environment
 cors_origins = [
     FRONTEND_URL,  # Main frontend URL from environment
+    os.getenv('CORS_ORIGIN_DEV_SERVER', 'http://localhost:5173'),  # React dev server
+    os.getenv('CORS_ORIGIN_DEV_SERVER_ALT', 'http://127.0.0.1:5173'),  # Alternative localhost
+    os.getenv('CORS_ORIGIN_DOCKER', 'http://localhost:3000'),  # Docker frontend
+    os.getenv('CORS_ORIGIN_DOCKER_ALT', 'http://127.0.0.1:3000'),  # Alternative localhost for Docker
 ]
 
-# Add development origins if in development mode
 if DEVELOPMENT_MODE:
     cors_origins.extend([
-        "http://localhost:5173",  # React dev server
-        "http://127.0.0.1:5173",  # Alternative localhost
-        "http://localhost:3000",  # Docker frontend
-        "http://127.0.0.1:3000",  # Alternative localhost for Docker
+        os.getenv('CORS_ORIGIN_DEV_8080', 'http://localhost:8080'),  # Additional dev ports
+        os.getenv('CORS_ORIGIN_DEV_8080_ALT', 'http://127.0.0.1:8080'),
+        os.getenv('CORS_ORIGIN_VITE_PREVIEW', 'http://localhost:4173'),  # Vite preview
+        os.getenv('CORS_ORIGIN_VITE_PREVIEW_ALT', 'http://127.0.0.1:4173'),
     ])
 
 app.add_middleware(
@@ -76,9 +77,9 @@ def get_openapi_internal():
         return app.openapi_schema
     
     openapi_schema = get_openapi(
-        title="IA Core Tools - Internal API",
-        version="2.0.0",
-        description="Internal API for frontend-backend communication",
+        title=os.getenv('INTERNAL_API_TITLE', 'IA Core Tools - Internal API'),
+        version=os.getenv('INTERNAL_API_VERSION', '2.0.0'),
+        description=os.getenv('INTERNAL_API_DESCRIPTION', 'Internal API for frontend-backend communication'),
         routes=internal_router.routes,
     )
     return openapi_schema
@@ -91,9 +92,9 @@ def get_openapi_public():
     temp_app.include_router(public_v1_router, prefix="/public/v1")
     
     openapi_schema = get_openapi(
-        title="IA Core Tools - Public API",
-        version="1.0.0", 
-        description="Public API for external applications",
+        title=os.getenv('PUBLIC_API_TITLE', 'IA Core Tools - Public API'),
+        version=os.getenv('PUBLIC_API_VERSION', '1.0.0'), 
+        description=os.getenv('PUBLIC_API_DESCRIPTION', 'Public API for external applications'),
         routes=temp_app.routes,
     )
     return openapi_schema
@@ -103,8 +104,8 @@ async def internal_docs():
     """Swagger UI for internal API"""
     from fastapi.openapi.docs import get_swagger_ui_html
     return get_swagger_ui_html(
-        openapi_url="/openapi-internal.json",
-        title="Internal API Docs"
+        openapi_url=os.getenv('INTERNAL_DOCS_OPENAPI_URL', '/openapi-internal.json'),
+        title=os.getenv('INTERNAL_DOCS_TITLE', 'Internal API Docs')
     )
 
 @app.get("/docs/public", include_in_schema=False)
@@ -112,8 +113,8 @@ async def public_docs():
     """Swagger UI for public API"""
     from fastapi.openapi.docs import get_swagger_ui_html
     return get_swagger_ui_html(
-        openapi_url="/openapi-public.json",
-        title="Public API Docs"
+        openapi_url=os.getenv('PUBLIC_DOCS_OPENAPI_URL', '/openapi-public.json'),
+        title=os.getenv('PUBLIC_DOCS_TITLE', 'Public API Docs')
     )
 
 @app.get("/openapi-internal.json", include_in_schema=False)
@@ -129,10 +130,10 @@ async def public_openapi():
 @app.get("/")
 async def root():
     return {
-        "message": "IA Core Tools FastAPI Backend",
-        "version": "2.0.0",
+        "message": os.getenv('ROOT_MESSAGE', 'IA Core Tools FastAPI Backend'),
+        "version": os.getenv('APP_VERSION', '2.0.0'),
         "docs": {
-            "internal": "/docs/internal",
-            "public": "/docs/public"
+            "internal": os.getenv('INTERNAL_DOCS_PATH', '/docs/internal'),
+            "public": os.getenv('PUBLIC_DOCS_PATH', '/docs/public')
         }
     } 

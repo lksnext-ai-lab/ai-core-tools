@@ -2,7 +2,6 @@ from typing import Optional, List, Dict, Any
 import os
 from models.silo import Silo
 from models.resource import Resource
-from models.embedding_service import EmbeddingService
 from db.database import SessionLocal
 from sqlalchemy.orm import Session
 from sqlalchemy import text

@@ -200,6 +200,12 @@ const RepositoriesPage: React.FC = () => {
                       <ActionDropdown
                         actions={[
                           {
+                            label: 'Manage Resources',
+                            onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`),
+                            icon: '📁',
+                            variant: 'success'
+                          },
+                          {
                             label: 'Playground',
                             onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`),
                             icon: '🎮',

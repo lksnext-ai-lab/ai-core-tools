@@ -210,7 +210,7 @@ class DomainService:
             return DomainService._create_new_domain(domain_data, embedding_service_id, name, base_url, db)
         else:
             # Update existing domain
-            return DomainService._update_existing_domain(domain_id, domain_data, name, base_url, db)
+            return DomainService._update_existing_domain(domain_id, domain_data, embedding_service_id, name, base_url, db)
     
     @staticmethod
     def _create_new_domain(domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, db: Session = None) -> int:
@@ -259,14 +259,14 @@ class DomainService:
         return created_domain.domain_id
     
     @staticmethod
-    def _update_existing_domain(domain_id: int, domain_data: dict, name: str, base_url: str, db: Session) -> int:
-        """Update an existing domain"""
+    def _update_existing_domain(domain_id: int, domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, db: Session) -> int:
+        """Update an existing domain and its associated silo"""
         logger.info(f"Updating domain {domain_id}")
         domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
         
-        # Update fields
+        # Update domain fields
         domain.name = name
         domain.description = domain_data.get('description', '').strip() or None
         domain.base_url = base_url
@@ -275,6 +275,18 @@ class DomainService:
         domain.content_id = domain_data.get('content_id', '').strip() or None
         
         updated_domain = DomainRepository.update(domain, db)
+        
+        # Update the associated silo's embedding service if provided
+        if domain.silo_id and embedding_service_id is not None:
+            logger.info(f"Updating embedding service for silo {domain.silo_id} to service {embedding_service_id}")
+            silo = SiloService.get_silo(domain.silo_id, db)
+            if silo:
+                silo.embedding_service_id = embedding_service_id
+                SiloRepository.update(silo, db)
+                logger.info(f"Successfully updated silo {domain.silo_id} embedding service")
+            else:
+                logger.warning(f"Silo {domain.silo_id} not found for domain {domain_id}")
+        
         return updated_domain.domain_id
     
     @staticmethod

@@ -189,6 +189,8 @@ class RepositoryService:
             result.append(RepositoryListItemSchema(
                 repository_id=repo.repository_id,
                 name=repo.name,
+                type=repo.type,
+                status=repo.status,
                 created_at=repo.create_date,
                 resource_count=resource_count
             ))
@@ -218,6 +220,8 @@ class RepositoryService:
             return RepositoryDetailSchema(
                 repository_id=0,
                 name="",
+                type=None,
+                status=None,
                 created_at=None,
                 resources=[],
                 embedding_services=[],
@@ -277,6 +281,8 @@ class RepositoryService:
         return RepositoryDetailSchema(
             repository_id=repo.repository_id,
             name=repo.name,
+            type=repo.type,
+            status=repo.status,
             created_at=repo.create_date,
             resources=resources,
             embedding_services=embedding_services,
@@ -314,6 +320,8 @@ class RepositoryService:
             repo = Repository()
             repo.app_id = app_id
             repo.name = repo_data.name
+            repo.type = repo_data.type
+            repo.status = repo_data.status or 'active'
             repo.create_date = datetime.now()
             
             # Use RepositoryService to create repository with silo
@@ -329,6 +337,10 @@ class RepositoryService:
             
             # Update repository data
             repo.name = repo_data.name
+            if repo_data.type is not None:
+                repo.type = repo_data.type
+            if repo_data.status is not None:
+                repo.status = repo_data.status
             repo = RepositoryService.update_repository(repo, repo_data.embedding_service_id, db)
         
         return repo

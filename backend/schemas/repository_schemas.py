@@ -14,6 +14,8 @@ class RepositoryListItemSchema(BaseModel):
     """Schema for repository list items"""
     repository_id: int
     name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
     created_at: Optional[datetime]
     resource_count: int
     
@@ -24,6 +26,8 @@ class RepositoryDetailSchema(BaseModel):
     """Schema for detailed repository information"""
     repository_id: int
     name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
     created_at: Optional[datetime]
     resources: List[Dict[str, Any]]
     embedding_services: List[Dict[str, Any]]
@@ -37,6 +41,8 @@ class RepositoryDetailSchema(BaseModel):
 class CreateUpdateRepositorySchema(BaseModel):
     """Schema for creating or updating a repository"""
     name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
     embedding_service_id: Optional[int] = None
 
 

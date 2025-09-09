@@ -12,7 +12,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-chat_router = APIRouter(tags=["Internal Chat"])
+chat_router = APIRouter(tags=["Chat"])
 
 
 async def _save_uploaded_file(upload_file: UploadFile) -> str:

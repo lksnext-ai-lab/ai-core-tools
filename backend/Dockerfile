@@ -54,10 +54,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copiar código de la aplicación
+# Copiar código de la aplicación (excluding .env files via .dockerignore)
 COPY backend/ /aict_backend/
 COPY alembic /alembic/
 COPY alembic.ini /alembic.ini
+COPY pyproject.toml /aict_backend/pyproject.toml
 
 # Crear directorios necesarios
 RUN mkdir -p /aict_backend/data/repositories \

@@ -5,9 +5,10 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
+# Copy frontend source code (excluding .env files via .dockerignore)
 COPY frontend .
 
-# Build-time API base URL - using the correct production URL
+# Build-time API base URL - using build argument instead of .env files
 ARG VITE_API_BASE_URL=https://iacoretoolstest.lksnext.com
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
