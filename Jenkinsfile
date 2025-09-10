@@ -11,10 +11,8 @@ pipeline {
         KUBE_NAMESPACE = "test"
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_HELM = "registry.lksnext.com/alpine/helm:latest"
         IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
         INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
-        HELM_RELEASE_NAME = "ia-core-tools"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
@@ -140,38 +138,93 @@ pipeline {
             }
         }
         
-        stage('Deploy to Kubernetes with Helm') {
+        stage('Deploy to Kubernetes') {
             steps {
                 script {
                     echo "Backend Image Tag: ${BACKEND_IMAGE_TAG}"
                     echo "Frontend Image Tag: ${FRONTEND_IMAGE_TAG}"
                     
-                    // Deploy the main umbrella chart which includes backend and frontend as dependencies
+                    // Update backend image tag in deployment manifest
+                    sh "sed -i 's|${BACKEND_IMAGE_NAME}:.*|${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}|g' kubernetes/test/backend/deployment.yaml"
+                    
+                    // Update frontend image tag in deployment manifest
+                    sh "sed -i 's|${FRONTEND_IMAGE_NAME}:.*|${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}|g' kubernetes/test/frontend/deployment.yaml"
+                    
+                    // Apply configmap and secrets first
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
-                        $IMAGE_HELM \
-                        dependency update ./helm
+                        $IMAGE_KUBECTL \
+                        apply -f kubernetes/test/configmap.yaml
                     '''
-                    sh "echo 'Helm dependencies updated'"
+                    sh "echo 'ConfigMap applied successfully'"
                     
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
-                        $IMAGE_HELM \
-                        upgrade --install ${HELM_RELEASE_NAME} \
-                        ./helm \
-                        --namespace $KUBE_NAMESPACE \
-                        --create-namespace \
-                        --set aicoretools-backend-chart.image.tag=${BACKEND_IMAGE_TAG} \
-                        --set aicoretools-frontend-chart.image.tag=${FRONTEND_IMAGE_TAG} \
-                        --wait --timeout=10m
+                        $IMAGE_KUBECTL \
+                        apply -f kubernetes/test/secrets.yaml
                     '''
-                    sh "echo 'Application deployed successfully with Helm'"
+                    sh "echo 'Secrets applied successfully'"
+                    
+                    // Apply backend deployment
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        apply -f kubernetes/test/backend/deployment.yaml
+                    '''
+                    sh "echo 'Backend deployment applied successfully'"
+                    
+                    // Apply frontend deployment
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        apply -f kubernetes/test/frontend/deployment.yaml
+                    '''
+                    sh "echo 'Frontend deployment applied successfully'"
+                    
+                    // Apply ingress
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        apply -f kubernetes/test/ia-core-tools-ingress-test.yaml
+                    '''
+                    sh "echo 'Ingress applied successfully'"
+                    
+                    // Restart backend deployment to ensure new image is pulled
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout restart deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE
+                    '''
+                    sh "echo 'Backend deployment restarted successfully'"
+                    
+                    // Restart frontend deployment to ensure new image is pulled
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout restart deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE
+                    '''
+                    sh "echo 'Frontend deployment restarted successfully'"
                 }
             }
         }
@@ -199,7 +252,6 @@ pipeline {
     }
 }
 
-// Helper function to increment version
 def incrementVersion(String version, String type) {
     def parts = version.split("\\.")
     if (type == "major") {
