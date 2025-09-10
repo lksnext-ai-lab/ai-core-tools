@@ -85,22 +85,6 @@ pipeline {
                 }
             }
         }
-        
-        stage('Sonar') {
-            steps {
-                script {
-                    sh '''
-                        docker run --rm \
-                        -v "$(pwd)":/app \
-                        -e SONAR_HOST_URL=$SONARENTERPRISE_URL \
-                        -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
-                        -e JOB_ACTION=sonar \
-                        -e SONAR_BRANCH_NAME=$SONAR_BRANCH \
-                        $IMAGE_NODE
-                    '''
-                }
-            }
-        }
 
         stage('Build Backend Docker Image') {
             steps {
