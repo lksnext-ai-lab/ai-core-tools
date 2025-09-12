@@ -89,7 +89,7 @@ pipeline {
         stage('Build Backend Docker Image') {
             steps {
                 script {
-                    sh "docker build -f backend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
+                    sh "docker build -f backend/Dockerfile -t 172.20.133.198:8086/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
                     sh "echo 'Backend Docker image built successfully'"
                 }
             }
@@ -98,7 +98,7 @@ pipeline {
         stage('Build Frontend Docker Image') {
             steps {
                 script {
-                    sh "docker build -f frontend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
+                    sh "docker build -f frontend/Dockerfile -t 172.20.133.198:8086/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
                     sh "echo 'Frontend Docker image built successfully'"
                 }
             }
