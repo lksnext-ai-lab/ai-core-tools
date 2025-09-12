@@ -189,6 +189,17 @@ pipeline {
                     '''
                     sh "echo 'Backend deployment restarted successfully'"
                     
+                    // Wait for backend rollout to complete
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout status deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE --timeout=300s
+                    '''
+                    sh "echo 'Backend rollout completed successfully'"
+
                     
                     // Restart frontend deployment to ensure new image is pulled
                     sh '''
@@ -200,8 +211,17 @@ pipeline {
                         rollout restart deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE
                     '''
                     sh "echo 'Frontend deployment restarted successfully'"
-
                     
+                    // Wait for frontend rollout to complete
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout status deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE --timeout=300s
+                    '''
+                    sh "echo 'Frontend rollout completed successfully'"                    
                     // Verify running pods are using the correct image version
                     sh '''
                         echo "Verifying backend pod image version:"
