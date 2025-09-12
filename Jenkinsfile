@@ -145,16 +145,6 @@ pipeline {
                     '''
                     sh "echo 'ConfigMap applied successfully'"
                     
-                    sh '''
-                        docker run --rm \
-                        -v "$(pwd)":/workspace \
-                        -v $KUBE_CONFIG:/.kube/config \
-                        -w /workspace \
-                        $IMAGE_KUBECTL \
-                        apply -f kubernetes/test/secrets.yaml
-                    '''
-                    sh "echo 'Secrets applied successfully'"
-                    
                     // Apply backend deployment
                     sh '''
                         docker run --rm \
