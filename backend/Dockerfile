@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir "poetry>=1.4.0,<2.0.0"
 
 # Copiar archivos de dependencias
-COPY ../pyproject.toml ../poetry.lock ./
+COPY pyproject.toml poetry.lock ./
 
 # Generar requirements.txt usando Poetry y crear ambiente virtual limpio
 RUN poetry config virtualenvs.create false && \
