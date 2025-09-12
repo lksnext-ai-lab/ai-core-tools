@@ -129,10 +129,10 @@ pipeline {
                     echo "Frontend Image Tag: ${FRONTEND_IMAGE_TAG}"
                     
                     // Update backend image tag in deployment manifest
-                    sh "sed -i 's|${BACKEND_IMAGE_NAME}:.*|${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}|g' kubernetes/test/backend/deployment.yaml"
+                    sh "sed -i 's|registry.lksnext.com/${BACKEND_IMAGE_NAME}:.*|registry.lksnext.com/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}|g' kubernetes/test/backend/deployment.yaml"
                     
                     // Update frontend image tag in deployment manifest
-                    sh "sed -i 's|${FRONTEND_IMAGE_NAME}:.*|${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}|g' kubernetes/test/frontend/deployment.yaml"
+                    sh "sed -i 's|registry.lksnext.com/${FRONTEND_IMAGE_NAME}:.*|registry.lksnext.com/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}|g' kubernetes/test/frontend/deployment.yaml"
                     
                     // Apply configmap and secrets first
                     sh '''
@@ -189,6 +189,17 @@ pipeline {
                     '''
                     sh "echo 'Backend deployment restarted successfully'"
                     
+                    // Wait for backend rollout to complete
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout status deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE --timeout=300s
+                    '''
+                    sh "echo 'Backend deployment rollout completed'"
+                    
                     // Restart frontend deployment to ensure new image is pulled
                     sh '''
                         docker run --rm \
@@ -199,6 +210,38 @@ pipeline {
                         rollout restart deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE
                     '''
                     sh "echo 'Frontend deployment restarted successfully'"
+                    
+                    // Wait for frontend rollout to complete
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        rollout status deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE --timeout=300s
+                    '''
+                    sh "echo 'Frontend deployment rollout completed'"
+                    
+                    // Verify running pods are using the correct image version
+                    sh '''
+                        echo "Verifying backend pod image version:"
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-backend-test -o jsonpath='{.items[*].spec.containers[*].image}'
+                    '''
+                    
+                    sh '''
+                        echo "Verifying frontend pod image version:"
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-frontend-test -o jsonpath='{.items[*].spec.containers[*].image}'
+                    '''
                 }
             }
         }
