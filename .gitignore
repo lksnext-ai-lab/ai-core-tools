@@ -36,7 +36,6 @@ images/
 agent_process.log
 __init__.py
 IA-CORE
-poetry.lock
 data/
 **/secrets.yaml
 **/secret.yaml
