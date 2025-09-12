@@ -107,7 +107,7 @@ pipeline {
         stage('Push Backend Docker Image') {
             steps {
                 script {
-                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
+                    sh "docker push 172.20.133.198:8086/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
                     sh "echo 'Backend Docker image pushed successfully'"
                 }
             }
@@ -116,7 +116,7 @@ pipeline {
         stage('Push Frontend Docker Image') {
             steps {
                 script {
-                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
+                    sh "docker push 172.20.133.198:8086/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
                     sh "echo 'Frontend Docker image pushed successfully'"
                 }
             }
