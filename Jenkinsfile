@@ -12,7 +12,7 @@ pipeline {
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
         IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
-        INTERNAL_LKS_DOCKER_REGISTRY_URL = "registry.lksnext.com"
+        INTERNAL_LKS_DOCKER_REGISTRY_URL = "172.20.133.198:8086"
 
         //Sonar Related
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
@@ -89,7 +89,7 @@ pipeline {
         stage('Build Backend Docker Image') {
             steps {
                 script {
-                    sh "docker build -f backend/Dockerfile -t 172.20.133.198:8086/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
+                    sh "docker build -f backend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
                     sh "echo 'Backend Docker image built successfully'"
                 }
             }
@@ -98,7 +98,7 @@ pipeline {
         stage('Build Frontend Docker Image') {
             steps {
                 script {
-                    sh "docker build -f frontend/Dockerfile -t 172.20.133.198:8086/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
+                    sh "docker build -f frontend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
                     sh "echo 'Frontend Docker image built successfully'"
                 }
             }
@@ -107,7 +107,7 @@ pipeline {
         stage('Push Backend Docker Image') {
             steps {
                 script {
-                    sh "docker push 172.20.133.198:8086/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
+                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
                     sh "echo 'Backend Docker image pushed successfully'"
                 }
             }
@@ -116,7 +116,7 @@ pipeline {
         stage('Push Frontend Docker Image') {
             steps {
                 script {
-                    sh "docker push 172.20.133.198:8086/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
+                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
                     sh "echo 'Frontend Docker image pushed successfully'"
                 }
             }
