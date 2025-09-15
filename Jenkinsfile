@@ -89,8 +89,13 @@ pipeline {
         stage('Build Backend Docker Image') {
             steps {
                 script {
+                    // Build with specific version tag
                     sh "docker build --no-cache -f backend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
-                    sh "echo 'Backend Docker image built successfully'"
+                    
+                    // Tag as latest as well
+                    sh "docker tag ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG} ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:latest"
+                    
+                    sh "echo 'Backend Docker image built successfully with tags ${BACKEND_IMAGE_TAG} and latest'"
                 }
             }
         }
@@ -98,8 +103,13 @@ pipeline {
         stage('Build Frontend Docker Image') {
             steps {
                 script {
+                    // Build with specific version tag
                     sh "docker build --no-cache -f frontend/Dockerfile -t ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} . --build-arg BUILD_DATE=\$(date +%Y-%m-%dT%H:%M:%S)"
-                    sh "echo 'Frontend Docker image built successfully'"
+                    
+                    // Tag as latest as well
+                    sh "docker tag ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG} ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:latest"
+                    
+                    sh "echo 'Frontend Docker image built successfully with tags ${FRONTEND_IMAGE_TAG} and latest'"
                 }
             }
         }
@@ -107,8 +117,13 @@ pipeline {
         stage('Push Backend Docker Image') {
             steps {
                 script {
+                    // Push specific version
                     sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
-                    sh "echo 'Backend Docker image pushed successfully'"
+                    
+                    // Push latest tag
+                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:latest"
+                    
+                    sh "echo 'Backend Docker image pushed successfully with tags ${BACKEND_IMAGE_TAG} and latest'"
                 }
             }
         }
@@ -116,8 +131,13 @@ pipeline {
         stage('Push Frontend Docker Image') {
             steps {
                 script {
+                    // Push specific version
                     sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
-                    sh "echo 'Frontend Docker image pushed successfully'"
+                    
+                    // Push latest tag
+                    sh "docker push ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:latest"
+                    
+                    sh "echo 'Frontend Docker image pushed successfully with tags ${FRONTEND_IMAGE_TAG} and latest'"
                 }
             }
         }
@@ -177,6 +197,28 @@ pipeline {
                         apply -f kubernetes/test/ia-core-tools-ingress-test.yaml
                     '''
                     sh "echo 'Ingress applied successfully'"
+                    
+                    // Force image pull by annotating deployments with current timestamp
+                    sh '''
+                        TIMESTAMP=$(date +%s)
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        patch deployment ia-core-tools-backend-test -n $KUBE_NAMESPACE -p "{\\"spec\\":{\\"template\\":{\\"metadata\\":{\\"annotations\\":{\\"deployment.kubernetes.io/revision\\":\\"$TIMESTAMP\\"}}}}}" || echo "Backend deployment does not exist"
+                    '''
+                    
+                    sh '''
+                        TIMESTAMP=$(date +%s)
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        patch deployment ia-core-tools-frontend-test -n $KUBE_NAMESPACE -p "{\\"spec\\":{\\"template\\":{\\"metadata\\":{\\"annotations\\":{\\"deployment.kubernetes.io/revision\\":\\"$TIMESTAMP\\"}}}}}" || echo "Frontend deployment does not exist"
+                    '''
+                    sh "echo 'Deployments patched to force image pull'"
                     
                     // Scale down to 0 replicas first to ensure clean deployment (only if deployments exist)
                     sh '''
@@ -345,9 +387,15 @@ pipeline {
         stage('Clean Docker Images') {
             steps {
                 script {
+                    // Clean specific version tags
                     sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:${BACKEND_IMAGE_TAG}"
                     sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:${FRONTEND_IMAGE_TAG}"
-                    sh "echo 'Docker images cleaned successfully'"
+                    
+                    // Clean latest tags
+                    sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${BACKEND_IMAGE_NAME}:latest"
+                    sh "docker rmi -f ${INTERNAL_LKS_DOCKER_REGISTRY_URL}/${FRONTEND_IMAGE_NAME}:latest"
+                    
+                    sh "echo 'Docker images cleaned successfully (both version tags and latest)'"
                 }
             }
         }
