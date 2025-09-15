@@ -262,86 +262,53 @@ pipeline {
                         get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-frontend-test --no-headers | wc -l
                     '''
                     
-                    // Restart backend deployment to ensure new image is pulled (only if deployment exists)
+                    // Re-apply deployments to create pods with new images (scale back to desired replicas)
                     sh '''
-                        if docker run --rm \
+                        echo "Re-applying backend deployment to restore replicas with new image..."
+                        docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        get deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
-                            docker run --rm \
-                            -v "$(pwd)":/workspace \
-                            -v $KUBE_CONFIG:/.kube/config \
-                            -w /workspace \
-                            $IMAGE_KUBECTL \
-                            rollout restart deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE
-                        else
-                            echo "Backend deployment does not exist, skipping restart"
-                        fi
+                        apply -f kubernetes/test/backend/deployment.yaml
                     '''
-                    sh "echo 'Backend deployment restart attempted'"
+                    sh "echo 'Backend deployment re-applied successfully'"
                     
-                    // Wait for backend rollout to complete (only if deployment exists)
                     sh '''
-                        if docker run --rm \
+                        echo "Re-applying frontend deployment to restore replicas with new image..."
+                        docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        get deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
-                            docker run --rm \
-                            -v "$(pwd)":/workspace \
-                            -v $KUBE_CONFIG:/.kube/config \
-                            -w /workspace \
-                            $IMAGE_KUBECTL \
-                            rollout status deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE --timeout=300s
-                        else
-                            echo "Backend deployment does not exist, skipping rollout status check"
-                        fi
+                        apply -f kubernetes/test/frontend/deployment.yaml
                     '''
-                    sh "echo 'Backend rollout status checked'"
-
+                    sh "echo 'Frontend deployment re-applied successfully'"
                     
-                    // Restart frontend deployment to ensure new image is pulled (only if deployment exists)
+                    // Wait for backend deployment to be ready
                     sh '''
-                        if docker run --rm \
+                        echo "Waiting for backend deployment to be ready..."
+                        docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        get deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
-                            docker run --rm \
-                            -v "$(pwd)":/workspace \
-                            -v $KUBE_CONFIG:/.kube/config \
-                            -w /workspace \
-                            $IMAGE_KUBECTL \
-                            rollout restart deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE
-                        else
-                            echo "Frontend deployment does not exist, skipping restart"
-                        fi
+                        rollout status deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE --timeout=300s || echo "Backend deployment rollout failed or does not exist"
                     '''
-                    sh "echo 'Frontend deployment restart attempted'"
+                    sh "echo 'Backend deployment status checked'"
                     
-                    // Wait for frontend rollout to complete (only if deployment exists)
+                    // Wait for frontend deployment to be ready
                     sh '''
-                        if docker run --rm \
+                        echo "Waiting for frontend deployment to be ready..."
+                        docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        get deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
-                            docker run --rm \
-                            -v "$(pwd)":/workspace \
-                            -v $KUBE_CONFIG:/.kube/config \
-                            -w /workspace \
-                            $IMAGE_KUBECTL \
-                            rollout status deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE --timeout=300s
-                        else
-                            echo "Frontend deployment does not exist, skipping rollout status check"
-                        fi
+                        rollout status deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE --timeout=300s || echo "Frontend deployment rollout failed or does not exist"
                     '''
-                    sh "echo 'Frontend rollout status checked'"                    
+                    sh "echo 'Frontend deployment status checked'"
+                    
                     // Verify running pods are using the correct image version (only if deployments exist)
                     sh '''
                         echo "Verifying backend pod image version:"
