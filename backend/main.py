@@ -30,7 +30,7 @@ from routers.internal.version import version_router
 app = FastAPI(
     title=os.getenv('APP_TITLE', 'IA Core Tools API'),
     description=os.getenv('APP_DESCRIPTION', 'Modern FastAPI backend for IA Core Tools'),
-    version=os.getenv('APP_VERSION', '2.0.1')
+    version=os.getenv('APP_VERSION', '2.0.3')
 )
 
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
