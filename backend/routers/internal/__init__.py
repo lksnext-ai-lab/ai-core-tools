@@ -16,7 +16,7 @@ from .repositories import repositories_router
 from .silos import silos_router
 
 # Create the main internal router
-internal_router = APIRouter(prefix="/internal", tags=["internal"])
+internal_router = APIRouter(tags=["internal"])
 
 # Include all sub-routers
 internal_router.include_router(agents_router, prefix="/agents")
