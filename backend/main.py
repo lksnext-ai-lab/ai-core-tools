@@ -24,8 +24,6 @@ from models.url import Url
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
 from routers.auth import auth_router
-from routers.internal.admin import router as admin_router
-from routers.internal.version import version_router
 
 app = FastAPI(
     title=os.getenv('APP_TITLE', 'IA Core Tools API'),
@@ -60,12 +58,10 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-# Mount routers
-app.include_router(auth_router, prefix="/auth", tags=["Authentication"])  # Add auth router
+# Mount routers - clean structure with no nesting
+app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(internal_router, prefix="/internal")
-app.include_router(admin_router, prefix="/internal")  # Admin routes are under /internal/admin
 app.include_router(public_v1_router, prefix="/public/v1")
-app.include_router(version_router, prefix="/internal")  # Version routes under /internal
 
 # ==================== CUSTOM OPENAPI DOCS ====================
 

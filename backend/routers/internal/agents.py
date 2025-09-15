@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from typing import List, Optional
 from sqlalchemy.orm import Session
+import json
 
 from services.agent_service import AgentService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
+from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetResponseSchema
+from services.agent_execution_service import AgentExecutionService
+from services.file_management_service import FileManagementService
 from routers.internal.auth_utils import get_current_user_oauth
 
 from utils.logger import get_logger
@@ -162,6 +166,7 @@ async def delete_agent(
                    summary="Update agent prompt",
                    tags=["Agents"])
 async def update_agent_prompt(
+    app_id: int,
     agent_id: int,
     prompt_data: UpdatePromptSchema,
     current_user: dict = Depends(get_current_user_oauth),
@@ -241,4 +246,241 @@ async def agent_analytics(
             detail=AGENT_NOT_FOUND_ERROR
         )
     
-    return analytics_data 
+    return analytics_data
+
+
+# ==================== CHAT ENDPOINTS ====================
+
+async def _save_uploaded_file(upload_file: UploadFile) -> str:
+    """Save uploaded file to temporary location and return file path"""
+    import tempfile
+    import os
+    
+    # Create temporary file
+    suffix = os.path.splitext(upload_file.filename)[1] if upload_file.filename else ''
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        content = await upload_file.read()
+        temp_file.write(content)
+        temp_file_path = temp_file.name
+    
+    return temp_file_path
+
+
+@agents_router.post("/{agent_id}/chat",
+                  summary="Chat with agent",
+                  tags=["Agents"],
+                  response_model=ChatResponseSchema)
+async def chat_with_agent(
+    app_id: int,
+    agent_id: int,
+    message: str = Form(...),
+    files: List[UploadFile] = File(None),
+    search_params: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: Chat with agent for playground (OAuth authentication)
+    """
+    try:
+        # Parse search params if provided
+        parsed_search_params = None
+        if search_params:
+            try:
+                parsed_search_params = json.loads(search_params)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid search_params JSON: {search_params}")
+        
+        # Create user context for OAuth user
+        user_context = {
+            "user_id": current_user["user_id"],
+            "oauth": True,
+            "app_id": app_id
+        }
+        
+        # Convert UploadFile objects to File objects for the service
+        file_objects = []
+        if files:
+            for upload_file in files:
+                # Save the uploaded file temporarily
+                temp_file = await _save_uploaded_file(upload_file)
+                file_objects.append(temp_file)
+        
+        # Use unified service layer
+        execution_service = AgentExecutionService(db)
+        result = await execution_service.execute_agent_chat(
+            agent_id=agent_id,
+            message=message,
+            files=file_objects if file_objects else None,
+            search_params=parsed_search_params,
+            user_context=user_context,
+            db=db
+        )
+        
+        logger.info(f"Chat request processed for agent {agent_id} by user {current_user['user_id']}")
+        return ChatResponseSchema(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@agents_router.post("/{agent_id}/reset",
+                  summary="Reset conversation",
+                  tags=["Agents"],
+                  response_model=ResetResponseSchema)
+async def reset_conversation(
+    app_id: int,
+    agent_id: int,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: Reset conversation for playground (OAuth authentication)
+    """
+    try:
+        # Create user context for OAuth user
+        user_context = {
+            "user_id": current_user["user_id"],
+            "oauth": True,
+            "app_id": app_id
+        }
+        
+        # Use unified service layer
+        execution_service = AgentExecutionService(db)
+        success = await execution_service.reset_agent_conversation(
+            agent_id=agent_id,
+            user_context=user_context,
+            db=db
+        )
+        
+        if success:
+            logger.info(f"Conversation reset for agent {agent_id} by user {current_user['user_id']}")
+            return ResetResponseSchema(success=True, message="Conversation reset successfully")
+        else:
+            return ResetResponseSchema(success=False, message="Failed to reset conversation")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in reset endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@agents_router.post("/{agent_id}/upload-file",
+                  summary="Upload file for chat",
+                  tags=["Agents"])
+async def upload_file_for_chat(
+    app_id: int,
+    agent_id: int,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: Upload file for chat (OAuth authentication)
+    """
+    try:
+        # Create user context for OAuth user
+        user_context = {
+            "user_id": current_user["user_id"],
+            "oauth": True,
+            "app_id": app_id
+        }
+        
+        # Use unified service layer
+        file_service = FileManagementService()
+        file_ref = await file_service.upload_file(
+            file=file,
+            agent_id=agent_id,
+            user_context=user_context
+        )
+        
+        logger.info(f"File uploaded for agent {agent_id} by user {current_user['user_id']}")
+        return {
+            "success": True,
+            "file_id": file_ref.file_id,
+            "filename": file_ref.filename,
+            "file_type": file_ref.file_type
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in file upload endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="File upload failed")
+
+
+@agents_router.get("/{agent_id}/files",
+                 summary="List attached files",
+                 tags=["Agents"])
+async def list_attached_files(
+    app_id: int,
+    agent_id: int,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: List attached files for chat (OAuth authentication)
+    """
+    try:
+        # Create user context for OAuth user
+        user_context = {
+            "user_id": current_user["user_id"],
+            "oauth": True,
+            "app_id": app_id
+        }
+        
+        # Use unified service layer
+        file_service = FileManagementService()
+        files = await file_service.list_attached_files(
+            agent_id=agent_id,
+            user_context=user_context
+        )
+        
+        return {"files": files}
+        
+    except Exception as e:
+        logger.error(f"Error in list files endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list files")
+
+
+@agents_router.delete("/{agent_id}/files/{file_id}",
+                    summary="Remove attached file",
+                    tags=["Agents"])
+async def remove_attached_file(
+    app_id: int,
+    agent_id: int,
+    file_id: str,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: Remove attached file (OAuth authentication)
+    """
+    try:
+        # Create user context for OAuth user
+        user_context = {
+            "user_id": current_user["user_id"],
+            "oauth": True,
+            "app_id": app_id
+        }
+        
+        # Use unified service layer
+        file_service = FileManagementService()
+        success = await file_service.remove_file(
+            file_id=file_id,
+            user_context=user_context
+        )
+        
+        if success:
+            logger.info(f"File {file_id} removed for agent {agent_id} by user {current_user['user_id']}")
+            return {"success": True, "message": "File removed successfully"}
+        else:
+            return {"success": False, "message": "File not found or already removed"}
+            
+    except Exception as e:
+        logger.error(f"Error in remove file endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to remove file") 

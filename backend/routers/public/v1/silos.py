@@ -220,7 +220,7 @@ async def delete_silo(
 
 # ==================== SILO DOCUMENT OPERATIONS ====================
 
-@silos_router.get("/{silo_id}/docs",
+@silos_router.get("/silos/{silo_id}/docs",
                   summary="Count docs in silo",
                   tags=["Silos"],
                   response_model=CountResponseSchema)
@@ -236,7 +236,7 @@ async def count_docs_in_silo(
     # TODO: Implement silo document counting
     return CountResponseSchema(count=0)
 
-@silos_router.post("/{silo_id}/docs/index",
+@silos_router.post("/silos/{silo_id}/docs/index",
                    summary="Index content",
                    tags=["Silos"],
                    response_model=MessageResponseSchema)
@@ -253,7 +253,7 @@ async def index_single_document(
     # TODO: Implement document indexing
     return MessageResponseSchema(message="Document indexed successfully")
 
-@silos_router.post("/{silo_id}/docs/multiple-index",
+@silos_router.post("/silos/{silo_id}/docs/multiple-index",
                    summary="Index multiple documents",
                    tags=["Silos"],
                    response_model=MessageResponseSchema)
@@ -270,7 +270,7 @@ async def index_multiple_documents(
     # TODO: Implement multiple document indexing
     return MessageResponseSchema(message="Documents indexed successfully")
 
-@silos_router.delete("/{silo_id}/docs/delete",
+@silos_router.delete("/silos/{silo_id}/docs/delete",
                      summary="Delete docs in collection",
                      tags=["Silos"],
                      response_model=MessageResponseSchema)
@@ -287,7 +287,7 @@ async def delete_docs_in_collection(
     # TODO: Implement document deletion
     return MessageResponseSchema(message="Documents deleted successfully")
 
-@silos_router.delete("/{silo_id}/docs/delete/all",
+@silos_router.delete("/silos/{silo_id}/docs/delete/all",
                      summary="Delete all docs in collection",
                      tags=["Silos"],
                      response_model=MessageResponseSchema)
@@ -303,7 +303,7 @@ async def delete_all_docs_in_collection(
     # TODO: Implement all document deletion
     return MessageResponseSchema(message="All documents deleted successfully")
 
-@silos_router.post("/{silo_id}/docs/find",
+@silos_router.post("/silos/{silo_id}/docs/find",
                    summary="Find docs in collection",
                    tags=["Silos"],
                    response_model=DocsResponseSchema)
@@ -320,7 +320,7 @@ async def find_docs_in_collection(
     # TODO: Implement document search
     return DocsResponseSchema(docs=[])
 
-@silos_router.post("/{silo_id}/docs/index-file",
+@silos_router.post("/silos/{silo_id}/docs/index-file",
                    summary="Index file content",
                    tags=["Silos"],
                    response_model=FileIndexResponseSchema)

@@ -16,12 +16,37 @@ from schemas.apps_schemas import (
 from schemas.common_schemas import MessageResponseSchema
 from .auth_utils import get_current_user_oauth
 
+# Import nested routers for app-specific resources
+from .agents import agents_router
+from .silos import silos_router
+from .ai_services import ai_services_router
+from .api_keys import api_keys_router
+from .domains import domains_router
+from .embedding_services import embedding_services_router
+from .mcp_configs import mcp_configs_router
+from .ocr import ocr_router
+from .output_parsers import output_parsers_router
+from .repositories import repositories_router
+
 # Import logger
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 apps_router = APIRouter()
+
+# Include nested routers under apps/{app_id}/
+# Based on frontend API calls - all app-specific resources go here
+apps_router.include_router(agents_router, prefix="/{app_id}/agents", tags=["Agents"])
+apps_router.include_router(silos_router, prefix="/{app_id}/silos", tags=["Silos"])
+apps_router.include_router(ai_services_router, prefix="/{app_id}/ai-services", tags=["AI Services"])
+apps_router.include_router(api_keys_router, prefix="/{app_id}/api-keys", tags=["API Keys"])
+apps_router.include_router(domains_router, prefix="/{app_id}/domains", tags=["Domains"])
+apps_router.include_router(embedding_services_router, prefix="/{app_id}/embedding-services", tags=["Embedding Services"])
+apps_router.include_router(mcp_configs_router, prefix="/{app_id}/mcp-configs", tags=["MCP Configs"])
+apps_router.include_router(ocr_router, prefix="/{app_id}/ocr", tags=["OCR"])
+apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parsers", tags=["Output Parsers"])
+apps_router.include_router(repositories_router, prefix="/{app_id}/repositories", tags=["Repositories"])
 
 # ==================== HELPER FUNCTIONS ====================
 
