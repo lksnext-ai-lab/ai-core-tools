@@ -34,7 +34,6 @@ __pycache__
 downloads/
 images/
 agent_process.log
-__init__.py
 IA-CORE
 data/
 **/secrets.yaml
