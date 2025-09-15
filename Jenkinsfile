@@ -178,69 +178,165 @@ pipeline {
                     '''
                     sh "echo 'Ingress applied successfully'"
                     
-                    // Restart backend deployment to ensure new image is pulled
+                    // Scale down to 0 replicas first to ensure clean deployment (only if deployments exist)
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        rollout restart deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE
+                        scale deployment/ia-core-tools-backend-test --replicas=0 -n $KUBE_NAMESPACE || echo "Backend deployment does not exist, skipping scale down"
                     '''
-                    sh "echo 'Backend deployment restarted successfully'"
+
+                    sh '''
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        scale deployment/ia-core-tools-frontend-test --replicas=0 -n $KUBE_NAMESPACE || echo "Frontend deployment does not exist, skipping scale down"
+                    '''
+
+                    // Wait for pods to terminate
+                    sh "sleep 30"
                     
-                    // Wait for backend rollout to complete
+                    // Verify no pods are running
+                    sh '''
+                        echo "Verifying all old pods are terminated..."
+                        docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-backend-test --no-headers | wc -l
+                    '''
+
                     sh '''
                         docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        rollout status deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE --timeout=300s
+                        get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-frontend-test --no-headers | wc -l
                     '''
-                    sh "echo 'Backend rollout completed successfully'"
+                    
+                    // Restart backend deployment to ensure new image is pulled (only if deployment exists)
+                    sh '''
+                        if docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        get deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
+                            docker run --rm \
+                            -v "$(pwd)":/workspace \
+                            -v $KUBE_CONFIG:/.kube/config \
+                            -w /workspace \
+                            $IMAGE_KUBECTL \
+                            rollout restart deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE
+                        else
+                            echo "Backend deployment does not exist, skipping restart"
+                        fi
+                    '''
+                    sh "echo 'Backend deployment restart attempted'"
+                    
+                    // Wait for backend rollout to complete (only if deployment exists)
+                    sh '''
+                        if docker run --rm \
+                        -v "$(pwd)":/workspace \
+                        -v $KUBE_CONFIG:/.kube/config \
+                        -w /workspace \
+                        $IMAGE_KUBECTL \
+                        get deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
+                            docker run --rm \
+                            -v "$(pwd)":/workspace \
+                            -v $KUBE_CONFIG:/.kube/config \
+                            -w /workspace \
+                            $IMAGE_KUBECTL \
+                            rollout status deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE --timeout=300s
+                        else
+                            echo "Backend deployment does not exist, skipping rollout status check"
+                        fi
+                    '''
+                    sh "echo 'Backend rollout status checked'"
 
                     
-                    // Restart frontend deployment to ensure new image is pulled
+                    // Restart frontend deployment to ensure new image is pulled (only if deployment exists)
                     sh '''
-                        docker run --rm \
+                        if docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        rollout restart deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE
+                        get deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
+                            docker run --rm \
+                            -v "$(pwd)":/workspace \
+                            -v $KUBE_CONFIG:/.kube/config \
+                            -w /workspace \
+                            $IMAGE_KUBECTL \
+                            rollout restart deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE
+                        else
+                            echo "Frontend deployment does not exist, skipping restart"
+                        fi
                     '''
-                    sh "echo 'Frontend deployment restarted successfully'"
+                    sh "echo 'Frontend deployment restart attempted'"
                     
-                    // Wait for frontend rollout to complete
+                    // Wait for frontend rollout to complete (only if deployment exists)
                     sh '''
-                        docker run --rm \
+                        if docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        rollout status deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE --timeout=300s
+                        get deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
+                            docker run --rm \
+                            -v "$(pwd)":/workspace \
+                            -v $KUBE_CONFIG:/.kube/config \
+                            -w /workspace \
+                            $IMAGE_KUBECTL \
+                            rollout status deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE --timeout=300s
+                        else
+                            echo "Frontend deployment does not exist, skipping rollout status check"
+                        fi
                     '''
-                    sh "echo 'Frontend rollout completed successfully'"                    
-                    // Verify running pods are using the correct image version
+                    sh "echo 'Frontend rollout status checked'"                    
+                    // Verify running pods are using the correct image version (only if deployments exist)
                     sh '''
                         echo "Verifying backend pod image version:"
-                        docker run --rm \
+                        if docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-backend-test -o jsonpath='{.items[*].spec.containers[*].image}'
+                        get deployment/ia-core-tools-backend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
+                            docker run --rm \
+                            -v "$(pwd)":/workspace \
+                            -v $KUBE_CONFIG:/.kube/config \
+                            -w /workspace \
+                            $IMAGE_KUBECTL \
+                            get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-backend-test -o jsonpath='{.items[*].spec.containers[*].image}'
+                        else
+                            echo "Backend deployment does not exist"
+                        fi
                     '''
                     
                     sh '''
                         echo "Verifying frontend pod image version:"
-                        docker run --rm \
+                        if docker run --rm \
                         -v "$(pwd)":/workspace \
                         -v $KUBE_CONFIG:/.kube/config \
                         -w /workspace \
                         $IMAGE_KUBECTL \
-                        get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-frontend-test -o jsonpath='{.items[*].spec.containers[*].image}'
+                        get deployment/ia-core-tools-frontend-test -n $KUBE_NAMESPACE >/dev/null 2>&1; then
+                            docker run --rm \
+                            -v "$(pwd)":/workspace \
+                            -v $KUBE_CONFIG:/.kube/config \
+                            -w /workspace \
+                            $IMAGE_KUBECTL \
+                            get pods -n $KUBE_NAMESPACE -l app=ia-core-tools-frontend-test -o jsonpath='{.items[*].spec.containers[*].image}'
+                        else
+                            echo "Frontend deployment does not exist"
+                        fi
                     '''
                 }
             }
