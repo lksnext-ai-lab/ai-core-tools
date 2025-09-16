@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from typing import Dict
 import toml
 from pathlib import Path
+from .auth_utils import get_current_user_oauth
 
 version_router = APIRouter()
 
@@ -98,8 +99,9 @@ def get_version_info() -> Dict[str, str]:
 @version_router.get("/", 
                    summary="Get application version",
                    tags=["System"])
-async def get_app_version():
+async def get_app_version(current_user: dict = Depends(get_current_user_oauth)):
     """
     Get the current application version from pyproject.toml.
+    Requires authentication like other internal endpoints.
     """
     return get_version_info() 
