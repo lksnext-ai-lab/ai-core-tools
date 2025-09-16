@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai-core-tools"
-version = "0.2.24"
+version = "0.2.25"
 description = "Mattin AI by LKS Next is a tool to aid and complement other software projects with AI capabilities."
 authors = ["Aritz Galdos", "Mikel Lonbide"]
 readme = "docs/README.md"
