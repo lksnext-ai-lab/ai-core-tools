@@ -99,9 +99,9 @@ def get_version_info() -> Dict[str, str]:
 @version_router.get("/", 
                    summary="Get application version",
                    tags=["System"])
-async def get_app_version(current_user: dict = Depends(get_current_user_oauth)):
+async def get_app_version():
     """
     Get the current application version from pyproject.toml.
-    Requires authentication like other internal endpoints.
+    Public endpoint - no authentication required.
     """
     return get_version_info() 
