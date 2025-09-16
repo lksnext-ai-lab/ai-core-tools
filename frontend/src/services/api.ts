@@ -589,7 +589,7 @@ class ApiService {
   // ==================== VERSION API ====================
 
   async getVersion(): Promise<{ name: string; version: string }> {
-    const response = await this.request('/internal/version');
+    const response = await this.request('/internal/version/');
     return response;
   }
 
