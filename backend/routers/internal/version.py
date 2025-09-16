@@ -95,7 +95,7 @@ def get_version_info() -> Dict[str, str]:
             "name": "ai-core-tools"
         }
 
-@version_router.get("/version", 
+@version_router.get("/", 
                    summary="Get application version",
                    tags=["System"])
 async def get_app_version():
