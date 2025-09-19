@@ -13,7 +13,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(tags=["admin"])
 
 
 def require_admin(current_user: dict = Depends(get_current_user_oauth)):
