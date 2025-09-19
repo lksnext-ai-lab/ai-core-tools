@@ -169,6 +169,7 @@ class SessionManagementService:
             if session_id in self.__class__._sessions:
                 session = self.__class__._sessions[session_id]
                 session.clear_history()
+                session.set_memory(None)
                 logger.info(f"Reset session {session_id} for agent {agent_id}")
                 return True
             else:
