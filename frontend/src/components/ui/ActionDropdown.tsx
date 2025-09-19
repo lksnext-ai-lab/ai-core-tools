@@ -75,10 +75,15 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     const spaceAbove = triggerRect.top;
     const dropdownHeight = menuRect.height || 200; // Estimate if not available
 
+    // Check if this is likely the last row by looking at the table structure
+    const tableRow = dropdownRef.current.closest('tr');
+    const tableBody = dropdownRef.current.closest('tbody');
+    const isLastRow = tableRow && tableBody && tableRow === tableBody.lastElementChild;
+
     let style: React.CSSProperties = {};
 
-    // If not enough space below and more space above, position above
-    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+    // If it's the last row or not enough space below, position above
+    if (isLastRow || (spaceBelow < dropdownHeight && spaceAbove > spaceBelow)) {
       style.bottom = '100%';
       style.top = 'auto';
       style.marginBottom = '0.5rem';
@@ -206,7 +211,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
       {isOpen && (
         <div 
           ref={menuRef}
-          className={`${position ? '' : 'absolute'} w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}
+          className={`${position || (dropdownStyle.position === 'fixed') ? '' : 'absolute'} w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}
           style={position ? calculateDropdownStyle() : { zIndex: 9999, ...dropdownStyle }}
         >
           <div className="py-1">
