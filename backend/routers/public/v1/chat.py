@@ -52,6 +52,7 @@ async def call_agent(
             files=None,  # TODO: Handle file attachments from request
             search_params=request.search_params,
             user_context=user_context,
+            conversation_id=request.conversation_id,
             db=db
         )
         
