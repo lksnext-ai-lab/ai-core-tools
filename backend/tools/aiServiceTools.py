@@ -147,6 +147,7 @@ def invoke_conversational_retrieval_chain(agent, input, session):
     # The session is a Session object from session_management_service, not a dict
     # We need to get or create a memory object for this conversation
     from langchain.memory import ConversationBufferMemory
+    from services.agent_cache_service import CheckpointerCacheService
     
     # Get existing memory or create new one
     memory = session.get_memory()
@@ -163,6 +164,13 @@ def invoke_conversational_retrieval_chain(agent, input, session):
         
         # Store the memory in the session for future use
         session.set_memory(memory)
+    
+    # Update checkpointer cache with the actual session ID
+    checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, session.id)
+    if checkpointer is None:
+        from langgraph.checkpoint.memory import InMemorySaver
+        checkpointer = InMemorySaver()
+        CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, session.id)
     
     llm = get_llm(agent)
 

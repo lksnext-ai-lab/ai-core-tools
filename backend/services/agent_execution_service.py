@@ -40,6 +40,7 @@ class AgentExecutionService:
         files: List[UploadFile] = None,
         search_params: Dict = None,
         user_context: Dict = None,
+        conversation_id: str = None,
         db: Session = None
     ) -> Dict[str, Any]:
         """
@@ -72,7 +73,7 @@ class AgentExecutionService:
             # Get user session for memory-enabled agents
             session = None
             if agent.has_memory:
-                session = await self.session_service.get_user_session(agent_id, user_context)
+                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
             
             # Execute agent using LangChain
             response = self._execute_langchain_agent(

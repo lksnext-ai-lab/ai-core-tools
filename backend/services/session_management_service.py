@@ -72,7 +72,8 @@ class SessionManagementService:
     async def get_user_session(
         self, 
         agent_id: int, 
-        user_context: Dict
+        user_context: Dict,
+        conversation_id: str = None
     ) -> Optional[Session]:
         """
         Get or create user session for memory-enabled agents
@@ -86,7 +87,7 @@ class SessionManagementService:
         """
         try:
             # Generate session ID based on user context
-            session_id = self._generate_session_id(agent_id, user_context)
+            session_id = self._generate_session_id(agent_id, user_context, conversation_id)
             
             logger.info(f"Looking for session {session_id}, total sessions: {len(self.__class__._sessions)}")
             logger.info(f"Available sessions: {list(self.__class__._sessions.keys())}")
@@ -163,7 +164,7 @@ class SessionManagementService:
             True if reset successful
         """
         try:
-            session_id = self._generate_session_id(agent_id, user_context)
+            session_id = self._generate_session_id(agent_id, user_context, user_context.get("conversation_id"))
             
             if session_id in self.__class__._sessions:
                 session = self.__class__._sessions[session_id]
@@ -194,7 +195,7 @@ class SessionManagementService:
             List of conversation messages
         """
         try:
-            session_id = self._generate_session_id(agent_id, user_context)
+            session_id = self._generate_session_id(agent_id, user_context, user_context.get("conversation_id"))
             
             if session_id in self.__class__._sessions:
                 session = self.__class__._sessions[session_id]
@@ -206,17 +207,22 @@ class SessionManagementService:
             logger.error(f"Error getting conversation history: {str(e)}")
             return []
     
-    def _generate_session_id(self, agent_id: int, user_context: Dict) -> str:
+    def _generate_session_id(self, agent_id: int, user_context: Dict, conversation_id: str = None) -> str:
         """
         Generate unique session ID based on agent and user context
         
         Args:
             agent_id: ID of the agent
             user_context: User context (api_key, user_id, etc.)
+            conversation_id: Optional custom conversation ID
             
         Returns:
             Unique session ID
         """
+        # If conversation_id is provided, use it as the session ID
+        if conversation_id:
+            return f"conv_{agent_id}_{conversation_id}"
+        
         # Create a unique identifier based on user context
         if "user_id" in user_context:
             # OAuth user

@@ -37,7 +37,8 @@ async def call_agent(
     user_context = {
         "api_key": api_key,
         "app_id": app_id,
-        "oauth": False
+        "oauth": False,
+        "conversation_id": request.conversation_id
     }
     
     # Use unified service layer
@@ -56,7 +57,7 @@ async def call_agent(
         
         return AgentResponseSchema(
             response=result["response"],
-            conversation_id=f"api_{agent_id}_{api_key[:8]}",
+            conversation_id=request.conversation_id or f"api_{agent_id}_{api_key[:8]}",
             usage=result["metadata"]
         )
         
@@ -71,6 +72,7 @@ async def call_agent(
 async def reset_conversation(
     app_id: int,
     agent_id: int,
+    conversation_id: str = None,
     api_key: str = Depends(get_api_key_auth),
     db: Session = Depends(get_db)
 ):
@@ -82,7 +84,8 @@ async def reset_conversation(
     user_context = {
         "api_key": api_key,
         "app_id": app_id,
-        "oauth": False
+        "oauth": False,
+        "conversation_id": conversation_id
     }
     
     # Use unified service layer

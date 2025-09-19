@@ -86,13 +86,14 @@ async def create_agent(agent: Agent, search_params=None):
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
     if agent.has_memory:
-        # Try to get cached checkpointer for this agent and session
-        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id)
+        # For now, use default session - the actual session ID will be handled by the session management
+        # The checkpointer will be associated with the session through the session management service
+        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, "default")
         
         if checkpointer is None:
             # Create new checkpointer and cache it
             checkpointer = InMemorySaver()
-            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer)
+            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, "default")
             logger.info("Created and cached new checkpointer for agent")
         else:
             logger.info("Using cached checkpointer for agent")

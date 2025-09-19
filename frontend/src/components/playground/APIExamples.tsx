@@ -131,12 +131,16 @@ ${hasSilo ? `    if search_params:
     response.raise_for_status()
     return response.json()
 
-def reset_conversation():
+def reset_conversation(conversation_id=None):
     """Reset conversation for ${agentName}"""
-    url = f"{BASE_URL}/public/v1/app/{APP_ID}/reset/{AGENT_ID}"
+    url = f"{BASE_URL}/public/v1/app/{APP_ID}/chat/{AGENT_ID}/reset"
     headers = {"X-API-KEY": API_KEY}
     
-    response = requests.post(url, headers=headers)
+    params = {}
+    if conversation_id:
+        params["conversation_id"] = conversation_id
+    
+    response = requests.post(url, headers=headers, params=params)
     response.raise_for_status()
     return response.json()
 
@@ -319,14 +323,20 @@ async function callAgent(message, options = {}) {
 /**
  * Reset conversation for ${agentName}
  */
-async function resetConversation() {
-  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/reset/\${AGENT_ID}\`;
+async function resetConversation(conversationId = null) {
+  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/chat/\${AGENT_ID}/reset\`;
+  
+  const params = {};
+  if (conversationId) {
+    params.conversation_id = conversationId;
+  }
   
   try {
     const response = await axios.post(url, {}, {
       headers: {
         'X-API-KEY': API_KEY
-      }
+      },
+      params: params
     });
     
     return response.data;
