@@ -30,14 +30,19 @@ We welcome contributions from LKS Next community! To contribute to this project,
 2. Ensure your changes adhere to the project's coding standards and best practices.
 3. Make sure to include appropriate tests for your changes.
 4. Submit a pull request, explaining the purpose and details of your changes.
-5. All contributions are subject to the LKS Inner Source License (LKSISL).
+5. All contributions are subject to the Mozilla Public License Version 2.0 (MPL 2.0).
 
-By contributing to this project, you agree to the terms and conditions of the LKSISL.
+By contributing to this project, you agree to the terms and conditions of the MPL 2.0.
 
 ## Licensing
 
-This project is licensed under the LKS Inner Source License (LKSISL).
+This project is licensed under the Mozilla Public License Version 2.0 (MPL 2.0).
 
-The LKSISL is a permissive license specifically designed for Inner Source projects within the LKS Next group. It allows for the use, modification, and distribution of the project within the LKS S. Coop. group, subject to certain terms and conditions.
+The MPL 2.0 is a file-level copyleft license that allows for broad use while protecting contributors' rights. It provides:
 
-For more information about the LKSISL, please refer to the license file in this repository.
+- **File-level copyleft**: Only the specific files you modify need to be made available under MPL 2.0
+- **Commercial-friendly**: Companies can use this code in proprietary products
+- **Strong patent protection**: Contributors grant patent licenses for their contributions
+- **Compatibility**: Can be combined with GPL, Apache 2.0, and other licenses
+
+For the full license text, please refer to the [LICENSE](../LICENSE) file in this repository.
