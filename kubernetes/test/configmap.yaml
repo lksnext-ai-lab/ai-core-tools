@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ia-core-tools-config-test
+  namespace: test
+data:
+  # Backend API URL for frontend
+  VITE_API_BASE_URL: "https://iacoretoolstest.lksnext.com"
+  
+  # Application Configuration
+  APP_TITLE: "IA Core Tools API"
+  APP_DESCRIPTION: "Modern FastAPI backend for IA Core Tools"
+  APP_VERSION: "2.0.0"
+  ROOT_MESSAGE: "IA Core Tools FastAPI Backend"
+  
+  # API Documentation Configuration
+  INTERNAL_API_TITLE: "IA Core Tools - Internal API"
+  INTERNAL_API_VERSION: "2.0.0"
+  INTERNAL_API_DESCRIPTION: "Internal API for frontend-backend communication"
+  INTERNAL_DOCS_OPENAPI_URL: "/openapi-internal.json"
+  INTERNAL_DOCS_TITLE: "Internal API Docs"
+  INTERNAL_DOCS_PATH: "/docs/internal"
+  
+  PUBLIC_API_TITLE: "IA Core Tools - Public API"
+  PUBLIC_API_VERSION: "1.0.0"
+  PUBLIC_API_DESCRIPTION: "Public API for external applications"
+  PUBLIC_DOCS_OPENAPI_URL: "/openapi-public.json"
+  PUBLIC_DOCS_TITLE: "Public API Docs"
+  PUBLIC_DOCS_PATH: "/docs/public"
+  
+  # CORS Configuration
+  CORS_ORIGIN_DEV_SERVER: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_DEV_SERVER_ALT: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_DOCKER: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_DOCKER_ALT: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_DEV_8080: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_DEV_8080_ALT: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_VITE_PREVIEW: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_VITE_PREVIEW_ALT: "https://iacoretoolstest.lksnext.com"
+  
+  # Database configuration
+  DATABASE_HOST: "ia-core-tools-postgresql-service-test"
+  DATABASE_PORT: "5432"
+  SQLALCHEMY_DATABASE_URI: "postgresql://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
+  
+  # Authentication Configuration
+  DEVELOPMENT_MODE: "false"
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRATION_HOURS: "24"
+  FRONTEND_URL: "https://iacoretoolstest.lksnext.com"
+  GOOGLE_DISCOVERY_URL: "https://accounts.google.com/.well-known/openid-configuration"
+  GOOGLE_REDIRECT_URI: "https://iacoretoolstest.lksnext.com/auth/callback"
+  
+  # Application mode and admins
+  AICT_MODE: "SELF-HOSTED"
+  AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com"
+  
+  # Storage paths
+  REPO_BASE_FOLDER: "data/repositories"
+  
+  # LangChain configuration
+  LANGCHAIN_TRACING_V2: "true"
+  LANGCHAIN_PROJECT: "ia-core-tools"
+  LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+  
+  # Python environment
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
