@@ -8,9 +8,9 @@ class App(Base):
     __tablename__ = 'App'
     app_id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    agent_rate_limit = Column(Integer, default=0)
     create_date = Column(DateTime, default=datetime.now)
     langsmith_api_key = Column(String(255))
-    agent_rate_limit = Column(Integer, default=0)
     repositories = relationship('Repository', lazy=True)
     domains = relationship('Domain', back_populates='app', lazy=True)
     agents = relationship('Agent', lazy=True)
