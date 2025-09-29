@@ -1,6 +1,6 @@
 # Mattin AI - Your AI Toolbox
 
-[![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
+[![License: AGPL 3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 Mattin AI is a comprehensive AI toolbox that provides a wide range of artificial intelligence capabilities and tools. This project offers various AI functionalities including:
 
@@ -138,7 +138,30 @@ We welcome contributions! Please see our [Contributing Guidelines](docs/README.m
 
 ## License
 
-This project is licensed under the Mozilla Public License Version 2.0 (MPL 2.0). See the [LICENSE](LICENSE) file for details.
+This project is available under a dual licensing model:
+
+- **Open Source**: GNU Affero General Public License v3.0 (AGPL 3.0)
+- **Commercial**: Proprietary license with enhanced rights and features
+
+### Open Source (AGPL 3.0)
+- Free to use for development and personal use
+- Community contributions welcome
+- Source code disclosure required for network use
+- Copyleft obligations for modifications
+
+### Commercial License
+- Full AICT functionality without restrictions
+- Commercial use rights without copyleft obligations
+- Client modification rights for specific projects
+- Enterprise features and support
+- No source code disclosure requirements
+
+For more information, see:
+- [LICENSING.md](LICENSING.md) - Detailed licensing information
+- [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) - Commercial license terms
+- [CLIENT_LICENSE_AGREEMENT.md](CLIENT_LICENSE_AGREEMENT.md) - Client agreement template
+
+**Contact LKS Next for commercial licensing inquiries.**
 
 ## Support
 
