@@ -58,6 +58,7 @@ function AppContent() {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthSuccessPage />} />
         <Route path="/login/success" element={<AuthSuccessPage />} />
 
         {/* Protected routes */}

@@ -1,46 +1,26 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { authService } from '../services/auth';
-import { useUser } from '../contexts/UserContext';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { oidcService } from '../services/oidc';
 
 function AuthSuccessPage() {
-  const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
+  const [status, setStatus] = useState<'processing' | 'error'>('processing');
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const location = useLocation();
-  const { refreshUser } = useUser();
-  const processedRef = useRef(false);
 
   useEffect(() => {
-    const handleCallback = async () => {
-      // Prevent multiple processing
-      if (processedRef.current) {
-        return;
-      }
-      processedRef.current = true;
-
+    const completeLogin = async () => {
       try {
-        // Handle the OAuth callback
-        const result = authService.handleAuthCallback();
-        
-        if (result.success) {
-          // Refresh user data in context
-          await refreshUser();
-          // Redirect immediately to apps page
-          navigate('/apps');
-        } else {
-          setStatus('error');
-          setError(result.error || 'Authentication failed');
-        }
-      } catch (error) {
-        console.error('Auth callback error:', error);
+        await oidcService.handleAuthCallback();
+        navigate('/apps', { replace: true });
+      } catch (err) {
+        console.error('OIDC callback error:', err);
         setStatus('error');
-        setError('Authentication failed');
+        setError(err instanceof Error ? err.message : 'Authentication failed.');
       }
     };
 
-    handleCallback();
-  }, [refreshUser, navigate, location]);
+    void completeLogin();
+  }, [navigate]);
 
   if (status === 'processing') {
     return (
@@ -48,7 +28,7 @@ function AuthSuccessPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
           <h2 className="text-xl font-semibold text-gray-900">Completing sign in...</h2>
-          <p className="text-gray-600 mt-2">Please wait while we set up your account</p>
+          <p className="text-gray-600 mt-2">Please wait while we validate your credentials.</p>
         </div>
       </div>
     );
@@ -64,7 +44,7 @@ function AuthSuccessPage() {
           <h2 className="text-xl font-semibold text-gray-900">Sign in failed</h2>
           <p className="text-gray-600 mt-2">{error}</p>
         </div>
-        
+
         <div className="text-center">
           <button
             onClick={() => navigate('/login')}
@@ -78,4 +58,4 @@ function AuthSuccessPage() {
   );
 }
 
-export default AuthSuccessPage; 
+export default AuthSuccessPage;

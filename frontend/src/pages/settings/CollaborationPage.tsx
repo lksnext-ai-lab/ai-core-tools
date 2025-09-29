@@ -84,7 +84,7 @@ function CollaborationPage() {
     try {
       // Get app details to check if current user is owner
       const app = await apiService.getApp(parseInt(appId));
-      if (app.owner_id === user?.user_id) {
+      if (user?.user_id && String(app.owner_id) === user.user_id) {
         setCurrentUserRole('owner');
       } else {
         setCurrentUserRole('editor');

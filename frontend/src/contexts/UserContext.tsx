@@ -1,24 +1,62 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { authService } from '../services/auth';
+import { oidcService, type OidcSession } from '../services/oidc';
 
-interface User {
-  user_id: number;
-  email: string;
+export interface UserProfile {
+  user_id: string;
+  email?: string;
   name?: string;
+  preferred_username?: string;
+  picture?: string;
+  providerKey: string;
+  accessToken: string;
+  idToken: string;
+  rawProfile: Record<string, unknown>;
+  userInfo?: Record<string, unknown>;
   is_authenticated: boolean;
   is_admin?: boolean;
 }
 
 interface UserContextType {
-  user: User | null;
+  user: UserProfile | null;
   loading: boolean;
-  setUser: (user: User | null) => void;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+
+const deriveUser = (session: OidcSession | null): UserProfile | null => {
+  if (!session) {
+    return null;
+  }
+
+  const profile = session.userInfo ?? session.profile;
+  const email = (profile?.email as string | undefined) || (session.profile?.['email'] as string | undefined);
+  const name = (profile?.name as string | undefined) || (session.profile?.['name'] as string | undefined);
+  const preferredUsername = (profile?.preferred_username as string | undefined) ||
+    (session.profile?.['preferred_username'] as string | undefined);
+  const userId = (profile?.sub as string | undefined) || (session.profile?.['sub'] as string | undefined);
+
+  if (!userId) {
+    return null;
+  }
+
+  return {
+    user_id: userId,
+    email,
+    name,
+    preferred_username: preferredUsername,
+    picture: (profile?.picture as string | undefined) || (session.profile?.['picture'] as string | undefined),
+    providerKey: session.providerKey,
+    accessToken: session.tokens.accessToken,
+    idToken: session.tokens.idToken,
+    rawProfile: session.profile,
+    userInfo: session.userInfo,
+    is_authenticated: true,
+    is_admin: Boolean(profile?.['is_admin'] ?? session.profile?.['is_admin']),
+  };
+};
 
 export const useUser = () => {
   const context = useContext(UserContext);
@@ -33,50 +71,34 @@ interface UserProviderProps {
 }
 
 export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() => deriveUser(oidcService.getSession()));
   const [loading, setLoading] = useState(true);
 
-  const refreshUser = async () => {
-    try {
-      if (authService.isAuthenticated()) {
-        const userData = await authService.getCurrentUser();
-        setUser(userData);
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
-      setUser(null);
-    }
-  };
+  useEffect(() => {
+    const unsubscribe = oidcService.subscribe((session) => {
+      setUser(deriveUser(session));
+      setLoading(false);
+    });
+
+    setUser(deriveUser(oidcService.getSession()));
+    setLoading(false);
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
+    await oidcService.logout();
   };
 
-  useEffect(() => {
-    const initializeUser = async () => {
-      try {
-        if (authService.isAuthenticated()) {
-          const userData = await authService.getCurrentUser();
-          setUser(userData);
-        }
-      } catch (error) {
-        console.error('Failed to initialize user:', error);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeUser();
-  }, []);
+  const refreshUser = () => {
+    setUser(deriveUser(oidcService.getSession()));
+  };
 
   const value: UserContextType = {
     user,
     loading,
-    setUser,
     logout,
     refreshUser,
   };
@@ -86,4 +108,4 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       {children}
     </UserContext.Provider>
   );
-}; 
+};

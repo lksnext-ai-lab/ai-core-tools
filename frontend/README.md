@@ -1,5 +1,35 @@
 # React + TypeScript + Vite
 
+This frontend now ships with a built-in OpenID Connect (OIDC) flow that enables Microsoft, Google and Keycloak single sign-on without relying on the backend. The application performs the PKCE flow entirely from the browser and stores tokens in memory only.
+
+## Configuring identity providers
+
+Configure providers through Vite environment variables (e.g. `.env.local`). Only the authority and client ID are required—everything else has sensible defaults.
+
+```bash
+# Microsoft
+VITE_OIDC_MICROSOFT_AUTHORITY=https://login.microsoftonline.com/<tenant-id>/v2.0
+VITE_OIDC_MICROSOFT_CLIENT_ID=<app-client-id>
+VITE_OIDC_MICROSOFT_REDIRECT_URI=http://localhost:5173/auth/callback
+VITE_OIDC_MICROSOFT_LOGOUT_REDIRECT_URI=http://localhost:5173/login
+
+# Google
+VITE_OIDC_GOOGLE_AUTHORITY=https://accounts.google.com
+VITE_OIDC_GOOGLE_CLIENT_ID=<app-client-id>
+VITE_OIDC_GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
+VITE_OIDC_GOOGLE_LOGOUT_REDIRECT_URI=http://localhost:5173/login
+
+# Keycloak
+VITE_OIDC_KEYCLOAK_AUTHORITY=https://keycloak.example.com/realms/<realm>
+VITE_OIDC_KEYCLOAK_CLIENT_ID=<app-client-id>
+VITE_OIDC_KEYCLOAK_REDIRECT_URI=http://localhost:5173/auth/callback
+VITE_OIDC_KEYCLOAK_LOGOUT_REDIRECT_URI=http://localhost:5173/login
+```
+
+If more than one provider is configured, the login page renders a button for each. The redirect URI must match the `/auth/callback` route that processes OIDC responses.
+
+---
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

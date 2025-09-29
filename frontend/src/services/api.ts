@@ -1,11 +1,18 @@
+import { oidcService } from './oidc';
+
 // API Service - Think of this like your backend services!
+
 class ApiService {
   private baseURL = import.meta.env.VITE_API_BASE_URL || 'https://iacoretoolstest.lksnext.com';
 
   private getAuthToken(): string | null {
-    // Get token from localStorage (same as auth service)
-    const token = localStorage.getItem('auth_token');
-    return token;
+    try {
+      const session = oidcService.getSession();
+      return session?.tokens.accessToken ?? null;
+    } catch (error) {
+      console.warn('Unable to resolve OIDC access token', error);
+      return null;
+    }
   }
 
   async request(endpoint: string, options: RequestInit = {}) {
