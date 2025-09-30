@@ -16,7 +16,7 @@ interface App {
   owner_email?: string;
   role: string; // "owner" or "editor"
   langsmith_configured: boolean;
-  
+  agent_rate_limit: number;
   // Entity counts for display
   agent_count: number;
   repository_count: number;

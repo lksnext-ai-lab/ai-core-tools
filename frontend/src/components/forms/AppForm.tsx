@@ -5,6 +5,7 @@ interface App {
   name: string;
   created_at: string;
   owner_id: number;
+  agent_rate_limit: number;
 }
 
 interface AppFormProps {
