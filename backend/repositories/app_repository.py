@@ -73,6 +73,8 @@ class AppRepository:
             app.owner_id = data['owner_id']
         if 'langsmith_api_key' in data:
             app.langsmith_api_key = data['langsmith_api_key']
+        if 'agent_rate_limit' in data:
+            app.agent_rate_limit = data['agent_rate_limit']
     
     # Methods to get related entities for cascade deletion
     

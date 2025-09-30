@@ -35,6 +35,9 @@ logger = get_logger(__name__)
 
 apps_router = APIRouter()
 
+# Default value used when an app's agent_rate_limit is not set
+DEFAULT_AGENT_RATE_LIMIT = 0
+
 # Include nested routers under apps/{app_id}/
 # Based on frontend API calls - all app-specific resources go here
 apps_router.include_router(agents_router, prefix="/{app_id}/agents", tags=["Agents"])
@@ -144,6 +147,7 @@ async def list_apps(
             created_at=app.create_date,
             langsmith_configured=bool(app.langsmith_api_key),
             owner_id=app.owner_id,
+            agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
             **counts  # Unpack the counts dictionary
         )
         app_list.append(app_item)
@@ -192,6 +196,7 @@ async def get_app(
         user_role=user_role,
         created_at=app.create_date,
         owner_id=app.owner_id,
+        agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         **counts
     )
 
@@ -216,7 +221,8 @@ async def create_app(
     app_dict = {
         'name': app_data.name,
         'owner_id': user_id,
-        'langsmith_api_key': app_data.langsmith_api_key
+        'langsmith_api_key': app_data.langsmith_api_key,
+        'agent_rate_limit': (app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT)
     }
     
     app = app_service.create_or_update_app(app_dict)
@@ -227,7 +233,8 @@ async def create_app(
         langsmith_api_key=app.langsmith_api_key or "",
         user_role="owner",
         created_at=app.create_date,
-        owner_id=app.owner_id
+        owner_id=app.owner_id,
+        agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
     )
 
 
@@ -264,7 +271,8 @@ async def update_app(
     update_dict = {
         'app_id': app_id,
         'name': app_data.name,
-        'langsmith_api_key': app_data.langsmith_api_key
+        'langsmith_api_key': app_data.langsmith_api_key,
+        'agent_rate_limit': app.agent_rate_limit
     }
     
     # Update app using service
@@ -276,7 +284,8 @@ async def update_app(
         langsmith_api_key=updated_app.langsmith_api_key or "",
         user_role="owner",
         created_at=updated_app.create_date,
-        owner_id=updated_app.owner_id
+        owner_id=updated_app.owner_id,
+        agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
     )
 
 

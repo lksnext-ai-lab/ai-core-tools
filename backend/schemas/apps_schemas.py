@@ -14,8 +14,9 @@ class AppListItemSchema(BaseModel):
     owner_id: int
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
-    
+    agent_rate_limit: int
     # Entity counts for table display
+
     agent_count: int = 0
     repository_count: int = 0
     domain_count: int = 0
@@ -33,8 +34,9 @@ class AppDetailSchema(BaseModel):
     user_role: str
     created_at: Optional[datetime]
     owner_id: int
-    
+    agent_rate_limit: int
     # Entity counts for dashboard display
+     
     agent_count: int = 0
     repository_count: int = 0
     domain_count: int = 0
@@ -48,6 +50,7 @@ class CreateAppSchema(BaseModel):
     """Schema for creating a new app"""
     name: str
     langsmith_api_key: Optional[str] = ""
+    agent_rate_limit: Optional[int] = 0
 
 
 class UpdateAppSchema(BaseModel):
