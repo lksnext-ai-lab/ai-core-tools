@@ -1,7 +1,7 @@
 """add_temperature_to_agent
 
 Revision ID: 8fe20813a159
-Revises: 5706422a57c2
+Revises: c087a095bdd2
 Create Date: 2025-10-01 12:44:30.873964
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '8fe20813a159'
-down_revision = '5706422a57c2'
+down_revision = 'c087a095bdd2'
 branch_labels = None
 depends_on = None
 
