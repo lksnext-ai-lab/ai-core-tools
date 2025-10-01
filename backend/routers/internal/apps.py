@@ -272,7 +272,7 @@ async def update_app(
         'app_id': app_id,
         'name': app_data.name,
         'langsmith_api_key': app_data.langsmith_api_key,
-        'agent_rate_limit': app.agent_rate_limit
+        'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
     }
     
     # Update app using service

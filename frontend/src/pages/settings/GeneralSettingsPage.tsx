@@ -66,9 +66,11 @@ function GeneralSettingsPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.name === 'agent_rate_limit' ? parseInt(e.target.value) || 0 : e.target.value;
+    
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: newValue
     }));
   };
 

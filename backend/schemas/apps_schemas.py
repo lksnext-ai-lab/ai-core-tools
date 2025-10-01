@@ -57,6 +57,7 @@ class UpdateAppSchema(BaseModel):
     """Schema for updating an app"""
     name: str
     langsmith_api_key: Optional[str] = ""
+    agent_rate_limit: Optional[int] = 0
 
 
 # ==================== COLLABORATION SCHEMAS ====================
