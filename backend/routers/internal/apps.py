@@ -148,6 +148,7 @@ async def list_apps(
             langsmith_configured=bool(app.langsmith_api_key),
             owner_id=app.owner_id,
             agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
+            agent_cors_origins=app.agent_cors_origins,
             **counts  # Unpack the counts dictionary
         )
         app_list.append(app_item)
@@ -197,6 +198,7 @@ async def get_app(
         created_at=app.create_date,
         owner_id=app.owner_id,
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
+        agent_cors_origins=app.agent_cors_origins,
         **counts
     )
 
@@ -222,7 +224,8 @@ async def create_app(
         'name': app_data.name,
         'owner_id': user_id,
         'langsmith_api_key': app_data.langsmith_api_key,
-        'agent_rate_limit': (app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT)
+        'agent_rate_limit': (app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT),
+        'agent_cors_origins': app_data.agent_cors_origins
     }
     
     app = app_service.create_or_update_app(app_dict)
@@ -234,7 +237,8 @@ async def create_app(
         user_role="owner",
         created_at=app.create_date,
         owner_id=app.owner_id,
-        agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
+        agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
+        agent_cors_origins=app.agent_cors_origins
     )
 
 
@@ -272,7 +276,8 @@ async def update_app(
         'app_id': app_id,
         'name': app_data.name,
         'langsmith_api_key': app_data.langsmith_api_key,
-        'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
+        'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
+        'agent_cors_origins': app_data.agent_cors_origins
     }
     
     # Update app using service
@@ -285,7 +290,8 @@ async def update_app(
         user_role="owner",
         created_at=updated_app.create_date,
         owner_id=updated_app.owner_id,
-        agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
+        agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
+        agent_cors_origins=updated_app.agent_cors_origins
     )
 
 
