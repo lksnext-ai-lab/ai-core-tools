@@ -6,6 +6,8 @@ import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface DataStructure {
   parser_id: number;
@@ -18,6 +20,7 @@ interface DataStructure {
 function DataStructuresPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, userRole } = useAppRole(appId);
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -197,14 +200,19 @@ function DataStructuresPage() {
             <h2 className="text-xl font-semibold text-gray-900">Data Structures</h2>
             <p className="text-gray-600">Define schemas for structured data extraction and validation</p>
           </div>
-          <button 
-            onClick={handleCreateStructure}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Create Data Structure
-          </button>
+          {isOwner && (
+            <button 
+              onClick={handleCreateStructure}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Create Data Structure
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-owners */}
+        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Data Structures Table */}
         {dataStructures.length > 0 ? (
@@ -254,23 +262,27 @@ function DataStructuresPage() {
                       {structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Edit',
-                            onClick: () => handleEditStructure(structure.parser_id),
-                            icon: '✏️',
-                            variant: 'primary'
-                          },
-                          {
-                            label: 'Delete',
-                            onClick: () => handleDelete(structure),
-                            icon: '🗑️',
-                            variant: 'danger'
-                          }
-                        ]}
-                        size="sm"
-                      />
+                      {isOwner ? (
+                        <ActionDropdown
+                          actions={[
+                            {
+                              label: 'Edit',
+                              onClick: () => handleEditStructure(structure.parser_id),
+                              icon: '✏️',
+                              variant: 'primary'
+                            },
+                            {
+                              label: 'Delete',
+                              onClick: () => handleDelete(structure),
+                              icon: '🗑️',
+                              variant: 'danger'
+                            }
+                          ]}
+                          size="sm"
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-sm">View only</span>
+                      )}
                     </td>
                   </tr>
                 ))}

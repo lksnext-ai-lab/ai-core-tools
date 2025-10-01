@@ -6,6 +6,8 @@ import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface MCPConfig {
   config_id: number;
@@ -17,6 +19,7 @@ interface MCPConfig {
 function MCPConfigsPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, userRole } = useAppRole(appId);
   const [configs, setConfigs] = useState<MCPConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,14 +195,19 @@ function MCPConfigsPage() {
             <h2 className="text-xl font-semibold text-gray-900">MCP Configs</h2>
             <p className="text-gray-600">Manage Model Context Protocol server configurations</p>
           </div>
-          <button 
-            onClick={handleCreateConfig}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Add MCP Config
-          </button>
+          {isOwner && (
+            <button 
+              onClick={handleCreateConfig}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Add MCP Config
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-owners */}
+        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Configs Table */}
         {configs.length > 0 ? (
@@ -240,23 +248,27 @@ function MCPConfigsPage() {
                       {config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Edit',
-                            onClick: () => handleEditConfig(config.config_id),
-                            icon: '✏️',
-                            variant: 'primary'
-                          },
-                          {
-                            label: 'Delete',
-                            onClick: () => handleDelete(config.config_id),
-                            icon: '🗑️',
-                            variant: 'danger'
-                          }
-                        ]}
-                        size="sm"
-                      />
+                      {isOwner ? (
+                        <ActionDropdown
+                          actions={[
+                            {
+                              label: 'Edit',
+                              onClick: () => handleEditConfig(config.config_id),
+                              icon: '✏️',
+                              variant: 'primary'
+                            },
+                            {
+                              label: 'Delete',
+                              onClick: () => handleDelete(config.config_id),
+                              icon: '🗑️',
+                              variant: 'danger'
+                            }
+                          ]}
+                          size="sm"
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-sm">View only</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -271,12 +283,14 @@ function MCPConfigsPage() {
             <p className="text-gray-600 mb-6">
               Add your first MCP configuration to connect agents with external tools and data sources.
             </p>
-            <button 
-              onClick={handleCreateConfig}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-            >
-              Add First MCP Config
-            </button>
+            {isOwner && (
+              <button 
+                onClick={handleCreateConfig}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
+              >
+                Add First MCP Config
+              </button>
+            )}
           </div>
         )}
 

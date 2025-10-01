@@ -6,6 +6,8 @@ import AIServiceForm from '../../components/forms/AIServiceForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface AIService {
   service_id: number;
@@ -18,6 +20,7 @@ interface AIService {
 function AIServicesPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, userRole } = useAppRole(appId);
   const [services, setServices] = useState<AIService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -189,14 +192,19 @@ function AIServicesPage() {
             <h2 className="text-xl font-semibold text-gray-900">AI Services</h2>
             <p className="text-gray-600">Manage language models and AI providers for your agents</p>
           </div>
-          <button 
-            onClick={handleCreateService}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Add AI Service
-          </button>
+          {isOwner && (
+            <button 
+              onClick={handleCreateService}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Add AI Service
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-owners */}
+        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Services Table */}
         {services.length > 0 ? (
@@ -240,23 +248,27 @@ function AIServicesPage() {
                         {service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        <ActionDropdown
-                          actions={[
-                            {
-                              label: 'Edit',
-                              onClick: () => handleEditService(service.service_id),
-                              icon: '✏️',
-                              variant: 'primary'
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => handleDelete(service.service_id),
-                              icon: '🗑️',
-                              variant: 'danger'
-                            }
-                          ]}
-                          size="sm"
-                        />
+                        {isOwner ? (
+                          <ActionDropdown
+                            actions={[
+                              {
+                                label: 'Edit',
+                                onClick: () => handleEditService(service.service_id),
+                                icon: '✏️',
+                                variant: 'primary'
+                              },
+                              {
+                                label: 'Delete',
+                                onClick: () => handleDelete(service.service_id),
+                                icon: '🗑️',
+                                variant: 'danger'
+                              }
+                            ]}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-sm">View only</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -271,12 +283,14 @@ function AIServicesPage() {
             <p className="text-gray-600 mb-6">
               Add your first AI service to start using language models in your agents.
             </p>
-            <button 
-              onClick={handleCreateService}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-            >
-              Add First AI Service
-            </button>
+            {isOwner && (
+              <button 
+                onClick={handleCreateService}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+              >
+                Add First AI Service
+              </button>
+            )}
           </div>
         )}
 

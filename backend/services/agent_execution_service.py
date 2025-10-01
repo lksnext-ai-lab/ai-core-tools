@@ -1,5 +1,7 @@
 import os
+import asyncio
 from typing import List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,10 @@ logger = get_logger(__name__)
 
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
+    
+    # Shared thread pool for blocking operations (LLM calls, file I/O, etc.)
+    # This prevents blocking the event loop
+    _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="agent_exec")
     
     def __init__(self, db: Session = None):
         self.agent_service = AgentService()
@@ -75,8 +81,12 @@ class AgentExecutionService:
             if agent.has_memory:
                 session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
             
-            # Execute agent using LangChain
-            response = self._execute_langchain_agent(
+            # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
+            # This prevents blocking the event loop and allows other requests to be processed
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                self._executor,
+                self._execute_langchain_agent,
                 agent, message, processed_files, search_params, session, db
             )
             
@@ -234,24 +244,16 @@ class AgentExecutionService:
                 # Save file temporarily
                 temp_path = await self._save_uploaded_file(file)
                 
-                # Process based on file type
-                if file.filename.lower().endswith('.pdf'):
-                    # Use existing PDF tools
-                    text_content = extract_text_from_pdf(temp_path)
-                    processed_files.append({
-                        "filename": file.filename,
-                        "content": text_content,
-                        "type": "pdf"
-                    })
-                else:
-                    # Handle other file types
-                    with open(temp_path, 'r') as f:
-                        content = f.read()
-                    processed_files.append({
-                        "filename": file.filename,
-                        "content": content,
-                        "type": "text"
-                    })
+                # Process based on file type IN THREAD POOL (blocking I/O)
+                loop = asyncio.get_event_loop()
+                file_data = await loop.run_in_executor(
+                    self._executor,
+                    self._process_single_file,
+                    temp_path, file.filename
+                )
+                
+                if file_data:
+                    processed_files.append(file_data)
                 
                 # Clean up
                 if os.path.exists(temp_path):
@@ -263,8 +265,43 @@ class AgentExecutionService:
         
         return processed_files
     
+    def _process_single_file(self, temp_path: str, filename: str) -> Dict:
+        """Synchronous file processing - called in thread pool"""
+        try:
+            if filename.lower().endswith('.pdf'):
+                # Use existing PDF tools (blocking I/O)
+                text_content = extract_text_from_pdf(temp_path)
+                return {
+                    "filename": filename,
+                    "content": text_content,
+                    "type": "pdf"
+                }
+            else:
+                # Handle other file types (blocking I/O)
+                with open(temp_path, 'r') as f:
+                    content = f.read()
+                return {
+                    "filename": filename,
+                    "content": content,
+                    "type": "text"
+                }
+        except Exception as e:
+            logger.error(f"Error in _process_single_file: {str(e)}")
+            return None
+    
     async def _process_pdf_with_ocr(self, agent: OCRAgent, pdf_path: str, db: Session) -> Dict[str, Any]:
         """Process PDF using OCR workflow respecting output parser/data structure"""
+        # Run all OCR processing in thread pool (blocking operations: PDF parsing, LLM calls, etc.)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            self._executor,
+            self._process_pdf_with_ocr_sync,
+            agent, pdf_path, db
+        )
+        return result
+    
+    def _process_pdf_with_ocr_sync(self, agent: OCRAgent, pdf_path: str, db: Session) -> Dict[str, Any]:
+        """Synchronous OCR processing - called in thread pool"""
         try:
             # Re-load agent with all relationships
             agent = self.agent_execution_repo.get_ocr_agent_with_relationships(db, agent.agent_id)

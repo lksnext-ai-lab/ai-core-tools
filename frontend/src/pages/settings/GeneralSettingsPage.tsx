@@ -11,10 +11,14 @@ function GeneralSettingsPage() {
     agent_rate_limit: 0,
     agent_cors_origins: ''
   });
+  const [userRole, setUserRole] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Check if user is owner (can edit) or just a collaborator (read-only)
+  const isOwner = userRole === 'owner';
 
   // Load app data on mount
   useEffect(() => {
@@ -36,6 +40,7 @@ function GeneralSettingsPage() {
         agent_rate_limit: app.agent_rate_limit || 0,
         agent_cors_origins: app.agent_cors_origins || ''
       });
+      setUserRole(app.user_role || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load app data');
       console.error('Error loading app data:', err);
@@ -128,6 +133,16 @@ function GeneralSettingsPage() {
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-gray-900">General Settings</h2>
             <p className="text-gray-600">Configure basic app settings and integrations</p>
+            {!isOwner && (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="flex items-center">
+                  <span className="text-amber-500 text-lg mr-2">🔒</span>
+                  <p className="text-sm text-amber-700">
+                    <strong>Read-only mode:</strong> Only app owners can modify these settings. You have {userRole} access.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Settings Form */}
@@ -146,7 +161,8 @@ function GeneralSettingsPage() {
                     value={formData.name}
                     onChange={handleChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={!isOwner}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter app name"
                   />
                 </div>
@@ -162,7 +178,8 @@ function GeneralSettingsPage() {
                     name="langsmith_api_key"
                     value={formData.langsmith_api_key}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={!isOwner}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter Langsmith API key"
                   />
                   <p className="mt-1 text-sm text-gray-500">
@@ -182,7 +199,8 @@ function GeneralSettingsPage() {
                     value={formData.agent_rate_limit}
                     onChange={handleChange}
                     min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={!isOwner}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter agent rate limit"
                     />
                   <p className="mt-1 text-sm text-gray-500">
@@ -201,7 +219,8 @@ function GeneralSettingsPage() {
                     name="agent_cors_origins"
                     value={formData.agent_cors_origins}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={!isOwner}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
                     />
                   <p className="mt-1 text-sm text-gray-500">
@@ -229,27 +248,29 @@ function GeneralSettingsPage() {
                 </div>
               )}
 
-              {/* Submit Button */}
-              <div className="mt-6 flex items-center justify-between">
-                <div className="flex items-center">
-                  {saved && (
-                    <div className="flex items-center text-green-600">
-                      <span className="mr-2">✓</span>
-                      Settings saved successfully
-                    </div>
-                  )}
+              {/* Submit Button - Only show for owners */}
+              {isOwner && (
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="flex items-center">
+                    {saved && (
+                      <div className="flex items-center text-green-600">
+                        <span className="mr-2">✓</span>
+                        Settings saved successfully
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg flex items-center"
+                  >
+                    {saving && (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    )}
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg flex items-center"
-                >
-                  {saving && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  )}
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
+              )}
             </div>
           </form>
 

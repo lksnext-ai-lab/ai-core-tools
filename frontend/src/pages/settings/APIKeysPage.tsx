@@ -7,6 +7,8 @@ import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface APIKey {
   key_id: number;
@@ -20,6 +22,7 @@ interface APIKey {
 function APIKeysPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, userRole } = useAppRole(appId);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,14 +220,19 @@ function APIKeysPage() {
             <h2 className="text-xl font-semibold text-gray-900">API Keys</h2>
             <p className="text-gray-600">Manage API keys for external application access</p>
           </div>
-          <button 
-            onClick={handleCreateKey}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Create New API Key
-          </button>
+          {isOwner && (
+            <button 
+              onClick={handleCreateKey}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Create New API Key
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-owners */}
+        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
 
         {/* API Keys Table */}
         {apiKeys.length > 0 ? (
@@ -286,29 +294,33 @@ function APIKeysPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        <ActionDropdown
-                          actions={[
-                            {
-                              label: 'Edit',
-                              onClick: () => handleEditKey(apiKey.key_id),
-                              icon: '✏️',
-                              variant: 'primary'
-                            },
-                            {
-                              label: apiKey.is_active ? 'Deactivate' : 'Activate',
-                              onClick: () => handleToggle(apiKey.key_id),
-                              icon: apiKey.is_active ? '⏸️' : '▶️',
-                              variant: apiKey.is_active ? 'warning' : 'success'
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => handleDelete(apiKey.key_id),
-                              icon: '🗑️',
-                              variant: 'danger'
-                            }
-                          ]}
-                          size="sm"
-                        />
+                        {isOwner ? (
+                          <ActionDropdown
+                            actions={[
+                              {
+                                label: 'Edit',
+                                onClick: () => handleEditKey(apiKey.key_id),
+                                icon: '✏️',
+                                variant: 'primary'
+                              },
+                              {
+                                label: apiKey.is_active ? 'Deactivate' : 'Activate',
+                                onClick: () => handleToggle(apiKey.key_id),
+                                icon: apiKey.is_active ? '⏸️' : '▶️',
+                                variant: apiKey.is_active ? 'warning' : 'success'
+                              },
+                              {
+                                label: 'Delete',
+                                onClick: () => handleDelete(apiKey.key_id),
+                                icon: '🗑️',
+                                variant: 'danger'
+                              }
+                            ]}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-sm">View only</span>
+                        )}
                       </td>
                     </tr>
                   ))}

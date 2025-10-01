@@ -8,8 +8,14 @@ load_dotenv()
 
 DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI', 'postgresql://iacore:iacore@localhost:5432/iacore')
 
+# Configure engine with connection pooling for better concurrency
 engine = create_engine(
     DATABASE_URL, 
+    pool_size=20,              # Number of connections to maintain in the pool
+    max_overflow=10,           # Additional connections allowed when pool is full
+    pool_pre_ping=True,        # Verify connections before using them
+    pool_recycle=3600,         # Recycle connections after 1 hour (prevent stale connections)
+    echo=False,                # Set to True for SQL debugging
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 )
 
