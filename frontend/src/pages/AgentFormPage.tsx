@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 
 // Define the Agent types
 interface Agent {
@@ -15,6 +16,7 @@ interface Agent {
   service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
+  temperature: number;
   tool_ids?: number[];
   mcp_config_ids?: number[];
   created_at: string;
@@ -41,6 +43,7 @@ interface AgentFormData {
   service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
+  temperature: number;
   tool_ids: number[];
   mcp_config_ids: number[];
   // OCR-specific fields
@@ -64,6 +67,7 @@ function AgentFormPage() {
     type: 'agent',
     is_tool: false,
     has_memory: false,
+    temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: []
   });
@@ -99,6 +103,7 @@ function AgentFormPage() {
         service_id: response.service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
+        temperature: response.temperature || DEFAULT_AGENT_TEMPERATURE,
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         // OCR-specific fields
@@ -162,6 +167,7 @@ function AgentFormPage() {
         service_id: formData.service_id,
         silo_id: formData.silo_id,
         output_parser_id: formData.output_parser_id,
+        temperature: formData.temperature,
         tool_ids: formData.tool_ids,
         mcp_config_ids: formData.mcp_config_ids,
         // OCR-specific fields
@@ -538,6 +544,30 @@ function AgentFormPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label htmlFor="temperature" className="block text-sm font-medium text-gray-700 mb-2">
+                    Temperature
+                  </label>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="range"
+                      id="temperature"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={formData.temperature}
+                      onChange={(e) => handleInputChange('temperature', parseFloat(e.target.value))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-sm font-medium text-gray-600 w-12">
+                      {formData.temperature.toFixed(1)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Controls randomness: 0 = deterministic, 2 = very creative
+                  </p>
                 </div>
 
                 <div>

@@ -1,9 +1,12 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
 
 AGENT_ID = 'Agent.agent_id'
+
+# Default temperature for agents
+DEFAULT_AGENT_TEMPERATURE = 0.7
 
 class AgentMCP(Base):
     __tablename__ = 'agent_mcps'
@@ -50,6 +53,7 @@ class Agent(Base):
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
                         nullable=True)
+    temperature = Column(Float, default=DEFAULT_AGENT_TEMPERATURE, nullable=False)
     
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])

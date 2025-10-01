@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from models.agent import Agent
+from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
@@ -73,6 +73,7 @@ class AgentService:
             service_id=getattr(agent, 'service_id', None),
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
+            temperature=getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE) or DEFAULT_AGENT_TEMPERATURE,
             tool_ids=associations['tool_ids'],
             mcp_config_ids=associations['mcp_ids'],
             created_at=agent.create_date,
@@ -180,6 +181,9 @@ class AgentService:
         else:
             agent.has_memory = has_memory_value == 'on'
         agent.output_parser_id = data.get('output_parser_id') or None
+        
+        # Handle temperature field - default to DEFAULT_AGENT_TEMPERATURE if not provided
+        agent.temperature = data.get('temperature', DEFAULT_AGENT_TEMPERATURE)
         
         # OCR-specific fields
         agent.vision_service_id = data.get('vision_service_id')

@@ -109,6 +109,7 @@ async def create_or_update_agent(
         'service_id': agent_data.service_id,
         'silo_id': agent_data.silo_id,
         'output_parser_id': agent_data.output_parser_id,
+        'temperature': agent_data.temperature,
         # OCR-specific fields
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
