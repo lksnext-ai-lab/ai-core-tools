@@ -4,7 +4,7 @@ Uses in-memory fixed-window counters with thread-safe access.
 """
 import time
 import threading
-from typing import Dict, NamedTuple, Optional
+from typing import Dict, NamedTuple, Optional, Any
 from dataclasses import dataclass
 
 
@@ -146,6 +146,79 @@ class RateLimitService:
                 reset_epoch=reset_epoch,
                 limit=max_per_minute
             )
+    
+    def get_app_usage_stats(self, app_id: int, max_per_minute: int) -> Dict[str, any]:
+        """
+        Get detailed usage statistics for an app to calculate stress level.
+        
+        Args:
+            app_id: The app identifier
+            max_per_minute: Maximum requests per minute
+            
+        Returns:
+            Dictionary with usage statistics and stress metrics
+        """
+        if max_per_minute <= 0:
+            return {
+                'usage_percentage': 0,
+                'stress_level': 'unlimited',
+                'current_usage': 0,
+                'limit': max_per_minute,
+                'remaining': -1,
+                'reset_in_seconds': 60,
+                'is_over_limit': False
+            }
+        
+        current_time = time.time()
+        current_minute = int(current_time // 60)
+        
+        with self._lock:
+            if app_id not in self._counters:
+                return {
+                    'usage_percentage': 0,
+                    'stress_level': 'low',
+                    'current_usage': 0,
+                    'limit': max_per_minute,
+                    'remaining': max_per_minute,
+                    'reset_in_seconds': 60,
+                    'is_over_limit': False
+                }
+            
+            counter = self._counters[app_id]
+            
+            # Reset window if we're in a new minute
+            if counter['window_start'] < current_minute:
+                counter['window_start'] = current_minute
+                counter['count'] = 0
+            
+            current_usage = counter['count']
+            remaining = max(0, max_per_minute - current_usage)
+            usage_percentage = (current_usage / max_per_minute) * 100 if max_per_minute > 0 else 0
+            is_over_limit = current_usage > max_per_minute
+            
+            # Calculate stress level
+            if usage_percentage >= 95:
+                stress_level = 'critical'
+            elif usage_percentage >= 80:
+                stress_level = 'high'
+            elif usage_percentage >= 50:
+                stress_level = 'moderate'
+            else:
+                stress_level = 'low'
+            
+            # Calculate seconds until reset
+            reset_epoch = (current_minute + 1) * 60
+            reset_in_seconds = max(0, reset_epoch - int(current_time))
+            
+            return {
+                'usage_percentage': round(usage_percentage, 1),
+                'stress_level': stress_level,
+                'current_usage': current_usage,
+                'limit': max_per_minute,
+                'remaining': remaining,
+                'reset_in_seconds': reset_in_seconds,
+                'is_over_limit': is_over_limit
+            }
 
 
 # Global instance

@@ -76,6 +76,15 @@ class ApiService {
     });
   }
 
+  // ==================== USAGE STATS API ====================
+  async getUsageStats() {
+    return this.request('/internal/usage-stats/');
+  }
+
+  async getAppUsageStats(appId: number) {
+    return this.request(`/internal/usage-stats/${appId}`);
+  }
+
   async getPendingInvitations() {
     return this.request('/auth/pending-invitations');
   }

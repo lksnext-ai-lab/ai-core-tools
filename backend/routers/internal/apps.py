@@ -8,10 +8,11 @@ from db.database import get_db
 # Import services
 from services.app_service import AppService
 from services.app_collaboration_service import AppCollaborationService
+from services.rate_limit_service import rate_limit_service
 
 # Import schemas and auth
 from schemas.apps_schemas import (
-    AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema
+    AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema, AppUsageStatsSchema
 )
 from schemas.common_schemas import MessageResponseSchema
 from .auth_utils import get_current_user_oauth
@@ -37,6 +38,9 @@ apps_router = APIRouter()
 
 # Default value used when an app's agent_rate_limit is not set
 DEFAULT_AGENT_RATE_LIMIT = 0
+
+# Error messages
+APP_NOT_FOUND_MSG = "App not found"
 
 # Include nested routers under apps/{app_id}/
 # Based on frontend API calls - all app-specific resources go here
@@ -140,6 +144,13 @@ async def list_apps(
         # Calculate entity counts using helper function
         counts = calculate_app_entity_counts(app.app_id, db, collaboration_service)
         
+        # Get usage statistics for speedometer
+        usage_stats = rate_limit_service.get_app_usage_stats(
+            app.app_id, 
+            app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
+        )
+        usage_stats_schema = AppUsageStatsSchema(**usage_stats)
+        
         app_item = AppListItemSchema(
             app_id=app.app_id,
             name=app.name,
@@ -149,6 +160,7 @@ async def list_apps(
             owner_id=app.owner_id,
             agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
             agent_cors_origins=app.agent_cors_origins,
+            usage_stats=usage_stats_schema,
             **counts  # Unpack the counts dictionary
         )
         app_list.append(app_item)
@@ -177,7 +189,7 @@ async def get_app(
     if not app:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="App not found"
+            detail=APP_NOT_FOUND_MSG
         )
     
     if not collaboration_service.can_user_access_app(user_id, app_id):
@@ -263,7 +275,7 @@ async def update_app(
     if not app:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="App not found"
+            detail=APP_NOT_FOUND_MSG
         )
     
     if not collaboration_service.can_user_manage_app(user_id, app_id):
@@ -315,7 +327,7 @@ async def delete_app(
     if not app:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="App not found"
+            detail=APP_NOT_FOUND_MSG
         )
     
     if not collaboration_service.can_user_manage_app(user_id, app_id):
