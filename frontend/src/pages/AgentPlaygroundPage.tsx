@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
 import APIExamples from '../components/playground/APIExamples';
+import PromptModal from '../components/playground/PromptModal';
 
 interface Agent {
   agent_id: number;
@@ -11,6 +12,8 @@ interface Agent {
   description?: string;
   status: string;
   type: string;
+  system_prompt?: string;
+  prompt_template?: string;
   silo?: {
     silo_id: number;
     name: string;
@@ -41,6 +44,7 @@ function AgentPlaygroundPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('playground');
+  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
 
   useEffect(() => {
     if (appId && agentId) {
@@ -63,6 +67,11 @@ function AgentPlaygroundPage() {
       setLoading(false);
     }
   }
+
+  const handlePromptUpdate = async () => {
+    // Refresh agent data after prompt update
+    await loadAgent();
+  };
 
   function handleBack() {
     navigate(`/apps/${appId}/agents`);
@@ -131,12 +140,21 @@ function AgentPlaygroundPage() {
             Test and integrate your AI agent
           </p>
         </div>
-        <button
-          onClick={handleBack}
-          className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          ← Back to Agents
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setIsPromptModalOpen(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+          >
+            <span>✏️</span>
+            <span>Edit Prompts</span>
+          </button>
+          <button
+            onClick={handleBack}
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            ← Back to Agents
+          </button>
+        </div>
       </div>
 
       {/* Agent Info */}
@@ -237,6 +255,18 @@ function AgentPlaygroundPage() {
           )}
         </div>
       </div>
+
+      {/* Prompt Modal */}
+      <PromptModal
+        isOpen={isPromptModalOpen}
+        onClose={() => setIsPromptModalOpen(false)}
+        appId={parseInt(appId!)}
+        agentId={parseInt(agentId!)}
+        agentName={agent.name}
+        initialSystemPrompt={agent.system_prompt || ''}
+        initialPromptTemplate={agent.prompt_template || ''}
+        onPromptUpdate={handlePromptUpdate}
+      />
     </div>
   );
 }

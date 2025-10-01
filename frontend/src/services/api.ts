@@ -116,6 +116,22 @@ class ApiService {
     });
   }
 
+  async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: promptType,
+        prompt: prompt
+      }),
+    });
+  }
+
+  async resetAgentConversation(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
+      method: 'POST',
+    });
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);
@@ -473,12 +489,6 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/chat`, {
       method: 'POST',
       body: formData,
-    });
-  }
-
-  async resetAgentConversation(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
-      method: 'POST',
     });
   }
 

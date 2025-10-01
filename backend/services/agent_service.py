@@ -277,17 +277,16 @@ class AgentService:
         if not agent:
             return False
         
-        # Update the appropriate prompt
-        update_data = {'agent_id': agent_id}
+        # Update the appropriate prompt field directly
         if prompt_type == 'system':
-            update_data['system_prompt'] = prompt
+            agent.system_prompt = prompt
         elif prompt_type == 'template':
-            update_data['prompt_template'] = prompt
+            agent.prompt_template = prompt
         else:
             return False
         
-        # Update agent
-        self.create_or_update_agent(db, update_data, agent.type)
+        # Save the changes
+        db.commit()
         return True
 
     def get_agent_playground_data(self, db: Session, agent_id: int) -> Optional[Dict[str, Any]]:
