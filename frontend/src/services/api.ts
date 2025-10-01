@@ -57,7 +57,7 @@ class ApiService {
     });
   }
 
-  async updateApp(appId: number, data: { name: string }) {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number }) {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
