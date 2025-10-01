@@ -6,7 +6,8 @@ function GeneralSettingsPage() {
   const { appId } = useParams();
   const [formData, setFormData] = useState({
     name: 'My App',
-    langsmith_api_key: ''
+    langsmith_api_key: '',
+    agent_rate_limit: 0
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -77,6 +78,26 @@ function GeneralSettingsPage() {
                   />
                   <p className="mt-1 text-sm text-gray-500">
                     Your Langsmith API key for monitoring and tracing
+                  </p>
+                </div>
+
+                {/* Agent rate limit */}
+                <div>
+                    <label htmlFor="agent_rate_limit" className="block text-sm font-medium text-gray-700 mb-2">
+                    Agent Rate Limit
+                    </label>
+                    <input
+                    type="number"
+                    id="agent_rate_limit"
+                    name="agent_rate_limit"
+                    value={formData.agent_rate_limit}
+                    onChange={handleChange}
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter agent rate limit"
+                    />
+                  <p className="mt-1 text-sm text-gray-500">
+                    This will limit the number of calls your agents can make per minute in your application.
                   </p>
                 </div>
               </div>
