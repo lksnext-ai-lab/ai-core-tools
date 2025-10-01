@@ -1,26 +1,65 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import SettingsLayout from '../../components/layout/SettingsLayout';
+import { apiService } from '../../services/api';
 
 function GeneralSettingsPage() {
   const { appId } = useParams();
   const [formData, setFormData] = useState({
-    name: 'My App',
+    name: '',
     langsmith_api_key: ''
   });
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load app data on mount
+  useEffect(() => {
+    if (appId) {
+      loadAppData();
+    }
+  }, [appId]);
+
+  async function loadAppData() {
+    if (!appId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const app = await apiService.getApp(parseInt(appId));
+      setFormData({
+        name: app.name || '',
+        langsmith_api_key: app.langsmith_api_key || ''
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load app data');
+      console.error('Error loading app data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!appId) return;
+    
     setSaving(true);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      await apiService.updateApp(parseInt(appId), {
+        name: formData.name,
+        langsmith_api_key: formData.langsmith_api_key
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save settings');
+      console.error('Error saving app settings:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,6 +68,49 @@ function GeneralSettingsPage() {
       [e.target.name]: e.target.value
     }));
   };
+
+  if (loading) {
+    return (
+      <SettingsLayout>
+        <div className="p-6 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Loading app settings...</p>
+        </div>
+      </SettingsLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <SettingsLayout>
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-red-400 text-xl">⚠️</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">
+                  Error Loading Settings
+                </h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{error}</p>
+                </div>
+                <div className="mt-4">
+                  <button
+                    onClick={loadAppData}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SettingsLayout>
+    );
+  }
 
   return (
     <SettingsLayout>
@@ -80,6 +162,25 @@ function GeneralSettingsPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Error Display */}
+              {error && (
+                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <span className="text-red-400 text-xl">⚠️</span>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">
+                        Error Saving Settings
+                      </h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        <p>{error}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Submit Button */}
               <div className="mt-6 flex items-center justify-between">
