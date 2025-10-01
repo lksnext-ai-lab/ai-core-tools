@@ -50,14 +50,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}`);
   }
 
-  async createApp(data: { name: string }) {
+  async createApp(data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; agent_cors_origins?: string }) {
     return this.request('/internal/apps/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number }) {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; agent_cors_origins?: string }) {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),

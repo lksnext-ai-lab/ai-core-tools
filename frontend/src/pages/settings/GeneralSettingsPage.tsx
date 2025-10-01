@@ -8,7 +8,8 @@ function GeneralSettingsPage() {
   const [formData, setFormData] = useState({
     name: '',
     langsmith_api_key: '',
-    agent_rate_limit: 0
+    agent_rate_limit: 0,
+    agent_cors_origins: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,7 +33,8 @@ function GeneralSettingsPage() {
       setFormData({
         name: app.name || '',
         langsmith_api_key: app.langsmith_api_key || '',
-        agent_rate_limit: app.agent_rate_limit || 0
+        agent_rate_limit: app.agent_rate_limit || 0,
+        agent_cors_origins: app.agent_cors_origins || ''
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load app data');
@@ -53,7 +55,8 @@ function GeneralSettingsPage() {
       await apiService.updateApp(parseInt(appId), {
         name: formData.name,
         langsmith_api_key: formData.langsmith_api_key,
-        agent_rate_limit: formData.agent_rate_limit
+        agent_rate_limit: formData.agent_rate_limit,
+        agent_cors_origins: formData.agent_cors_origins
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -184,6 +187,25 @@ function GeneralSettingsPage() {
                     />
                   <p className="mt-1 text-sm text-gray-500">
                     This will limit the number of calls your agents can make per minute in your application.
+                  </p>
+                </div>
+
+                {/* Agent CORS Origins */}
+                <div>
+                    <label htmlFor="agent_cors_origins" className="block text-sm font-medium text-gray-700 mb-2">
+                    Agent CORS Origins
+                    </label>
+                    <input
+                    type="text"
+                    id="agent_cors_origins"
+                    name="agent_cors_origins"
+                    value={formData.agent_cors_origins}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
+                    />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Comma-separated list of allowed origins for CORS requests to your agents.
                   </p>
                 </div>
               </div>
