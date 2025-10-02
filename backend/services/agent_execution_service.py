@@ -220,7 +220,18 @@ class AgentExecutionService:
             
             # Reset session if memory enabled
             if agent.has_memory:
+                # Reset the session object (clears messages and memory)
                 await self.session_service.reset_user_session(agent_id, user_context)
+                
+                # IMPORTANT: Also invalidate the checkpointer to clear LangGraph's conversation history
+                from services.agent_cache_service import CheckpointerCacheService
+                
+                # Get the session to find the session_id
+                session = await self.session_service.get_user_session(agent_id, user_context)
+                if session:
+                    # Invalidate the checkpointer for this specific session
+                    CheckpointerCacheService.invalidate_checkpointer(agent_id, session.id)
+                    logger.info(f"Invalidated checkpointer for agent {agent_id}, session {session.id}")
             
             return True
             
@@ -469,9 +480,10 @@ class AgentExecutionService:
         session = None,
         db: Session = None
     ) -> str:
-        """Execute agent using LangChain with existing tools"""
+        """Execute agent using the new create_agent approach with full tool support"""
         try:
-            from tools.aiServiceTools import invoke, invoke_with_rag, invoke_conversational_retrieval_chain
+            import asyncio
+            from tools.agentTools import create_agent, prepare_agent_config
             
             # Re-query the agent with relationships loaded using repository
             fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent.agent_id)
@@ -479,19 +491,48 @@ class AgentExecutionService:
             if not fresh_agent:
                 raise Exception("Agent not found in database")
             
-            # Check if agent has memory (conversational)
+            # Create the agent chain with all tools and capabilities
+            # Pass session_id to ensure correct checkpointer is used
+            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+            agent_chain, tracer = asyncio.run(create_agent(fresh_agent, search_params, session_id_for_cache))
+            
+            # Prepare configuration with tracer
+            config = prepare_agent_config(fresh_agent, tracer)
+            
+            # Add session-specific configuration if memory is enabled
             if fresh_agent.has_memory and session:
-                # Use conversational retrieval chain
-                return invoke_conversational_retrieval_chain(fresh_agent, message, session)
-            
-            # Check if agent has RAG capabilities (silo)
-            elif fresh_agent.silo:
-                # Use RAG-enabled invocation with search parameters
-                return invoke_with_rag(fresh_agent, message, search_params)
-            
-            # Default invocation
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session.id}"
+                logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
             else:
-                return invoke(fresh_agent, message)
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
+            
+            # Add the question to config
+            config["configurable"]["question"] = message
+            
+            # Execute the agent - the checkpointer will automatically maintain conversation history
+            # based on the thread_id
+            # IMPORTANT: We pass the user's message in the messages array so it gets stored by the checkpointer
+            from langchain_core.messages import HumanMessage
+            formatted_user_message = fresh_agent.prompt_template.format(question=message)
+            result = agent_chain.invoke({"messages": [HumanMessage(content=formatted_user_message)]}, config=config)
+            
+            # Extract the response from the result
+            if isinstance(result, dict) and "messages" in result:
+                # Get the last AI message
+                messages = result["messages"]
+                for msg in reversed(messages):
+                    if hasattr(msg, 'content') and msg.content:
+                        return msg.content
+                # Fallback: return the last message content
+                if messages:
+                    return str(messages[-1].content) if hasattr(messages[-1], 'content') else str(messages[-1])
+            
+            # If result is a string, return it directly
+            if isinstance(result, str):
+                return result
+                
+            # Fallback: convert to string
+            return str(result)
                 
         except Exception as e:
             logger.error(f"Error executing LangChain agent: {str(e)}")

@@ -171,7 +171,6 @@ class PGVectorTools:
         results = []
         for doc, score in results_with_scores:
             # Create a new Document with score in metadata instead of as attribute
-            print(f"Document: {doc}, Score: {score}")
             new_doc = Document(
                 page_content=doc.page_content,
                 metadata={**doc.metadata, '_score': score}
@@ -188,6 +187,7 @@ class PGVectorTools:
             connection=self.db.engine,
             use_jsonb=True,
         )
+        
         if search_params is not None:
             return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
         return vector_store.as_retriever(**kwargs)

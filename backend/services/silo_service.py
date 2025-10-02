@@ -67,8 +67,41 @@ class SiloService:
             from db.database import db as db_obj  # Import the database object
             pg_vector_tools = PGVectorTools(db_obj)
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            keywords = {'search_kwargs': {'k': 30}}
-            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, search_params, **keywords)
+            
+            # Merge search_params with default k value
+            # search_params typically contains 'filter' for metadata filtering
+            merged_search_kwargs = {'k': 30}
+            
+            if search_params:
+                # Known retriever parameters that should not be wrapped in 'filter'
+                known_params = {'k', 'filter', 'score_threshold', 'fetch_k', 'lambda_mult', 'search_type'}
+                
+                # Separate known params from filter fields
+                filter_fields = {}
+                direct_params = {}
+                
+                for key, value in search_params.items():
+                    if key in known_params:
+                        direct_params[key] = value
+                    else:
+                        # Any unknown key is treated as a filter field
+                        filter_fields[key] = value
+                
+                # Update merged_search_kwargs with direct params
+                merged_search_kwargs.update(direct_params)
+                
+                # If there are filter fields, wrap them in 'filter' key
+                if filter_fields:
+                    if 'filter' in merged_search_kwargs:
+                        # Merge with existing filter
+                        merged_search_kwargs['filter'].update(filter_fields)
+                    else:
+                        # Create new filter with these fields
+                        merged_search_kwargs['filter'] = filter_fields
+                
+                logger.debug(f"Merged search_kwargs: {merged_search_kwargs}")
+            
+            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, merged_search_kwargs)
         except Exception as e:
             logger.error(f"Failed to create retriever for silo {silo_id}: {str(e)}", exc_info=True)
             raise

@@ -54,11 +54,27 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
     setIsLoading(true);
 
     try {
-      // Build metadata filter object
+      // Build metadata filter object with proper type conversion
       const filterMetadata: Record<string, any> = {};
       Object.entries(metadataFilters).forEach(([fieldName, value]) => {
         if (value.trim()) {
-          filterMetadata[fieldName] = { $eq: value.trim() };
+          // Find the field type from metadataFields
+          const field = metadataFields?.find(f => f.name === fieldName);
+          let convertedValue: any = value.trim();
+          
+          // Convert value to the appropriate type
+          if (field) {
+            if (field.type === 'int') {
+              convertedValue = parseInt(value.trim());
+            } else if (field.type === 'float') {
+              convertedValue = parseFloat(value.trim());
+            } else if (field.type === 'bool') {
+              convertedValue = value.trim().toLowerCase() === 'true';
+            }
+            // For 'str' and 'date', keep as string
+          }
+          
+          filterMetadata[fieldName] = { $eq: convertedValue };
         }
       });
 

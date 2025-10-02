@@ -64,11 +64,20 @@ class MCPClientManager:
             await self._client.__aexit__(None, None, None)
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None):
-    """Create a new agent instance with cached checkpointer if memory is enabled."""
+async def create_agent(agent: Agent, search_params=None, session_id=None):
+    """Create a new agent instance with cached checkpointer if memory is enabled.
+    
+    Args:
+        agent: The agent to create
+        search_params: Optional search parameters for silo-based retrieval
+        session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
+    """
     llm = get_llm(agent)
     if llm is None:
         raise ValueError("No LLM found for agent")
+    
+    # Setup tracer for LangSmith if configured
+    tracer = setup_tracer(agent)
     
     output_parser = get_output_parser(agent)
     format_instructions = ""
@@ -86,39 +95,30 @@ async def create_agent(agent: Agent, search_params=None):
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
     if agent.has_memory:
-        # For now, use default session - the actual session ID will be handled by the session management
-        # The checkpointer will be associated with the session through the session management service
-        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, "default")
+        # Use the session_id if provided, otherwise use "default"
+        cache_session_id = session_id if session_id else "default"
+        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, cache_session_id)
         
         if checkpointer is None:
             # Create new checkpointer and cache it
             checkpointer = InMemorySaver()
-            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, "default")
-            logger.info("Created and cached new checkpointer for agent")
+            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, cache_session_id)
+            logger.info(f"Created and cached new checkpointer for agent (session: {cache_session_id})")
         else:
-            logger.info("Using cached checkpointer for agent")
+            logger.info(f"Using cached checkpointer for agent (session: {cache_session_id})")
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-        # Get the initial question from config
-        initial_question = config.get("configurable", {}).get("question", "")
-        formatted_human_prompt = agent.prompt_template.format(question=initial_question)
-        
         messages = []
         
-        # Add system messages only if this is the first message in the conversation
-        history = state.get("messages", [])
+        # Add system messages for every turn
         messages.extend([
             SystemMessage(content=agent.system_prompt),
             SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
         ])
         
-        # Add conversation history
+        # Add conversation history (this already includes the new user message passed in invoke)
+        history = state.get("messages", [])
         messages.extend(history)
-        
-        # Only add human message if the last message wasn't a tool message
-        from langchain_core.messages import ToolMessage
-        if not history or not any(isinstance(msg, ToolMessage) for msg in history[-1:]):
-            messages.append(HumanMessage(content=formatted_human_prompt))
         
         return messages
 
@@ -128,6 +128,7 @@ async def create_agent(agent: Agent, search_params=None):
         tools.append(IACTTool(sub_agent))
 
     if agent.silo_id is not None:
+        
         retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
@@ -168,8 +169,9 @@ async def create_agent(agent: Agent, search_params=None):
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
+    logger.info(f"Tracer configured: {tracer is not None}")
 
-    return agent_chain
+    return agent_chain, tracer
 
 
 def prepare_agent_config(agent, tracer):
