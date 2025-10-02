@@ -469,9 +469,10 @@ class AgentExecutionService:
         session = None,
         db: Session = None
     ) -> str:
-        """Execute agent using LangChain with existing tools"""
+        """Execute agent using the new create_agent approach with full tool support"""
         try:
-            from tools.aiServiceTools import invoke, invoke_with_rag, invoke_conversational_retrieval_chain
+            import asyncio
+            from tools.agentTools import create_agent, prepare_agent_config
             
             # Re-query the agent with relationships loaded using repository
             fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent.agent_id)
@@ -479,19 +480,41 @@ class AgentExecutionService:
             if not fresh_agent:
                 raise Exception("Agent not found in database")
             
-            # Check if agent has memory (conversational)
+            # Create the agent chain with all tools and capabilities
+            agent_chain, tracer = asyncio.run(create_agent(fresh_agent, search_params))
+            
+            # Prepare configuration with tracer
+            config = prepare_agent_config(fresh_agent, tracer)
+            
+            # Add session-specific configuration if memory is enabled
             if fresh_agent.has_memory and session:
-                # Use conversational retrieval chain
-                return invoke_conversational_retrieval_chain(fresh_agent, message, session)
-            
-            # Check if agent has RAG capabilities (silo)
-            elif fresh_agent.silo:
-                # Use RAG-enabled invocation with search parameters
-                return invoke_with_rag(fresh_agent, message, search_params)
-            
-            # Default invocation
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session.id}"
             else:
-                return invoke(fresh_agent, message)
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
+            
+            # Add the question to config
+            config["configurable"]["question"] = message
+            
+            # Execute the agent
+            result = agent_chain.invoke({"messages": []}, config=config)
+            
+            # Extract the response from the result
+            if isinstance(result, dict) and "messages" in result:
+                # Get the last AI message
+                messages = result["messages"]
+                for msg in reversed(messages):
+                    if hasattr(msg, 'content') and msg.content:
+                        return msg.content
+                # Fallback: return the last message content
+                if messages:
+                    return str(messages[-1].content) if hasattr(messages[-1], 'content') else str(messages[-1])
+            
+            # If result is a string, return it directly
+            if isinstance(result, str):
+                return result
+                
+            # Fallback: convert to string
+            return str(result)
                 
         except Exception as e:
             logger.error(f"Error executing LangChain agent: {str(e)}")

@@ -70,6 +70,9 @@ async def create_agent(agent: Agent, search_params=None):
     if llm is None:
         raise ValueError("No LLM found for agent")
     
+    # Setup tracer for LangSmith if configured
+    tracer = setup_tracer(agent)
+    
     output_parser = get_output_parser(agent)
     format_instructions = ""
     pydantic_model = None
@@ -168,8 +171,9 @@ async def create_agent(agent: Agent, search_params=None):
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
+    logger.info(f"Tracer configured: {tracer is not None}")
 
-    return agent_chain
+    return agent_chain, tracer
 
 
 def prepare_agent_config(agent, tracer):
