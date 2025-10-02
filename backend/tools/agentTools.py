@@ -128,6 +128,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
         tools.append(IACTTool(sub_agent))
 
     if agent.silo_id is not None:
+        
         retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
