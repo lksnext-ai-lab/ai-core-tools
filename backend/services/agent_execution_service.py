@@ -220,7 +220,18 @@ class AgentExecutionService:
             
             # Reset session if memory enabled
             if agent.has_memory:
+                # Reset the session object (clears messages and memory)
                 await self.session_service.reset_user_session(agent_id, user_context)
+                
+                # IMPORTANT: Also invalidate the checkpointer to clear LangGraph's conversation history
+                from services.agent_cache_service import CheckpointerCacheService
+                
+                # Get the session to find the session_id
+                session = await self.session_service.get_user_session(agent_id, user_context)
+                if session:
+                    # Invalidate the checkpointer for this specific session
+                    CheckpointerCacheService.invalidate_checkpointer(agent_id, session.id)
+                    logger.info(f"Invalidated checkpointer for agent {agent_id}, session {session.id}")
             
             return True
             
@@ -481,7 +492,9 @@ class AgentExecutionService:
                 raise Exception("Agent not found in database")
             
             # Create the agent chain with all tools and capabilities
-            agent_chain, tracer = asyncio.run(create_agent(fresh_agent, search_params))
+            # Pass session_id to ensure correct checkpointer is used
+            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+            agent_chain, tracer = asyncio.run(create_agent(fresh_agent, search_params, session_id_for_cache))
             
             # Prepare configuration with tracer
             config = prepare_agent_config(fresh_agent, tracer)
@@ -489,14 +502,19 @@ class AgentExecutionService:
             # Add session-specific configuration if memory is enabled
             if fresh_agent.has_memory and session:
                 config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session.id}"
+                logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
             else:
                 config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
             
             # Add the question to config
             config["configurable"]["question"] = message
             
-            # Execute the agent
-            result = agent_chain.invoke({"messages": []}, config=config)
+            # Execute the agent - the checkpointer will automatically maintain conversation history
+            # based on the thread_id
+            # IMPORTANT: We pass the user's message in the messages array so it gets stored by the checkpointer
+            from langchain_core.messages import HumanMessage
+            formatted_user_message = fresh_agent.prompt_template.format(question=message)
+            result = agent_chain.invoke({"messages": [HumanMessage(content=formatted_user_message)]}, config=config)
             
             # Extract the response from the result
             if isinstance(result, dict) and "messages" in result:

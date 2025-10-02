@@ -1,23 +1,16 @@
-import os
 import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_core.retrievers import BaseRetriever
-from langchain.prompts.prompt import PromptTemplate
-from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
 from langchain_mistralai import ChatMistralAI
 from mistralai import Mistral
 from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
 
 from models.ai_service import ProviderEnum
-from models.agent import Agent
-from db.database import SessionLocal
-from tools.pgVectorTools import PGVectorTools, COLLECTION_PREFIX
+from tools.pgVectorTools import PGVectorTools
 from tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
@@ -60,151 +53,8 @@ def get_output_parser(agent):
         print(f"Error al crear el modelo Pydantic: {str(e)}")
         return StrOutputParser()
 
-def invoke(agent, input):
-    print(agent.name)
-    
-    model = get_llm(agent)
-    if model is None:
-        raise ValueError("No se pudo inicializar el modelo para el agente")
-        
-    output_parser = get_output_parser(agent)
-    if agent.output_parser_id is None:
-        format_instructions = ""
-    else:
-        format_instructions = output_parser.get_format_instructions()
-        format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
-
-    system_prompt = agent.system_prompt
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("system", "<output_format_instructions>" + format_instructions + "</output_format_instructions>"),
-        ("human", agent.prompt_template)
-    ])
-    
-    if model is None:
-        raise ValueError(f"Agent {agent.agent_id} does not have an AI service configured")
-    
-    chain = prompt | model | output_parser
-    response = chain.invoke({"question": input})
-    logger.info(f"Response: {response}")
-    return response
-
-def invoke_with_rag(agent: Agent, input, search_params: dict = None):
-    if agent.silo is None:
-        print(agent.name + ' has no silo to relay on.')
-        return invoke(agent, input)
-    
-    print(agent.name)
-
-    embed = get_embedding(input, agent.silo.embedding_service)
-    
-    # Always use search_similar_documents with metadata filtering
-    collection_name = COLLECTION_PREFIX + str(agent.silo.silo_id)
-    filter_metadata = search_params if search_params and isinstance(search_params, dict) else {}
-    similar_resources = get_pgVectorTools().search_similar_documents(
-        collection_name=collection_name,
-        query=embed,
-        embedding_service=agent.silo.embedding_service,
-        filter_metadata=filter_metadata,
-        RESULTS=5
-    )
-    
-    info = ""
-    print(similar_resources)
-    for result in similar_resources:
-        print(result)
-        info += "\n\nINFO CHUNK: " + result.page_content
-    
-    if agent.output_parser_id is None:
-        print("output_parser_id is None")
-        output_parser = StrOutputParser()
-        format_instructions = ""
-    else:
-        print("output_parser_id is not None")
-        output_parser = get_output_parser(agent)
-        format_instructions = output_parser.get_format_instructions()
-        format_instructions = format_instructions.replace('{', '{{').replace('}', '}}')
-    
-    prompt = ChatPromptTemplate.from_messages([
-            ("system", agent.system_prompt),
-            ("system", "<output_format_instructions>" + format_instructions + "</output_format_instructions>"),    
-            ("human", "Here is some information that might help you: " + info if info != "" else ""),    
-            ("human", agent.prompt_template),
-        ])
-    
-
-    model = get_llm(agent)
-    if model is None:
-        raise ValueError(f"Agent {agent.agent_id} does not have an AI service configured")
-    
-    chain = prompt | model | output_parser
-
-    return chain.invoke({"question": input})
-
-
-def invoke_conversational_retrieval_chain(agent, input, session):
-    # The session is a Session object from session_management_service, not a dict
-    # We need to get or create a memory object for this conversation
-    from langchain.memory import ConversationBufferMemory
-    from services.agent_cache_service import CheckpointerCacheService
-    
-    # Get existing memory or create new one
-    memory = session.get_memory()
-    if memory is None:
-        # Create a new memory instance for this conversation
-        memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
-        
-        # Add existing conversation history to memory if available
-        if session.messages:
-            for msg in session.messages:
-                # Add user message and agent response to memory
-                memory.chat_memory.add_user_message(msg.get('user_message', ''))
-                memory.chat_memory.add_ai_message(msg.get('agent_response', ''))
-        
-        # Store the memory in the session for future use
-        session.set_memory(memory)
-    
-    # Update checkpointer cache with the actual session ID
-    checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, session.id)
-    if checkpointer is None:
-        from langgraph.checkpoint.memory import InMemorySaver
-        checkpointer = InMemorySaver()
-        CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, session.id)
-    
-    llm = get_llm(agent)
-
-    retriever = None 
-    if agent.silo:
-        retriever = get_pgVectorTools().get_pgvector_retriever("silo_" + str(agent.silo.silo_id), agent.silo.embedding_service)
-    if agent.silo is None:
-        retriever = VoidRetriever()
-    template = """
-    Responde a las preguntas basadas en el contexto o historial de chat dado.
-        <<HISTORIAL>>
-        {chat_history}
-
-        <<CONTEXTO>>
-        Context: {context}
-
-        Nueva pregunta: {question}
-        """
-
-    prompt = PromptTemplate(
-        input_variables=["context", "chat_history", "question"], template=template
-    )
-
-    # Create the custom chain
-    chain = ConversationalRetrievalChain.from_llm(
-            llm=llm, retriever=retriever, memory=memory,
-            return_source_documents=False,
-            verbose=True,
-            combine_docs_chain_kwargs={'prompt': prompt})
-
-    result = chain.invoke(input)
-    print("RESULT: ", result)
-    
-    return result["answer"]
+# Legacy functions removed - now using create_agent from agentTools.py
+# This provides full tool support, MCP integration, and LangSmith tracing
 
 def get_llm(agent, is_vision=False):
     """
