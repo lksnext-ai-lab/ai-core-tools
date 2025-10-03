@@ -37,13 +37,25 @@ class MCPClientManager:
         return cls._instance
 
     async def get_client(self, agent: Agent = None):
-        if self._client is None and agent is not None:
+        # Always create a new client for each agent execution to avoid ClosedResourceError
+        # Don't use singleton pattern as the client lifecycle is tied to the agent execution
+        if agent is not None:
             connections = {}
             for mcp_assoc in agent.mcp_associations:
                 mcp_config = mcp_assoc.mcp
                 try:
                     # Store the config directly without additional wrapping
-                    connection_config = mcp_config.to_connection_dict()
+                    connection_config = {
+                        "playwright": {
+                        "command": "npx",
+                        "args": [
+                            "@playwright/mcp@latest",
+                            "--isolated",
+                            "--allowed-hosts=localhost,127.0.0.1,::1,0.0.0.0"
+                        ]
+                        }
+                    }
+                    #connection_config = mcp_config.to_connection_dict()
                     if connection_config:
                         connections.update(connection_config)
                 except ValueError as e:
@@ -51,13 +63,16 @@ class MCPClientManager:
                     continue
                 
             if connections:
-                logger.info(f"Creating MCP client with connections: {connections}")
-                self._client = MultiServerMCPClient(connections=connections)
-                await self._client.__aenter__()
+                logger.info(f"Creating new MCP client with connections: {connections}")
+                # Create a new client each time - don't reuse the singleton
+                client = MultiServerMCPClient(connections=connections)
+                await client.__aenter__()
+                return client
             else:
                 logger.warning("No valid MCP configurations found for agent")
+                return None
                 
-        return self._client
+        return None
 
     async def close(self):
         if self._client is not None:
@@ -133,6 +148,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
         if retriever_tool is not None:
             tools.append(retriever_tool)
 
+    mcp_client = None
     try:
         logger.info("Starting MCP tools loading...")
         mcp_client = await MCPClientManager().get_client(agent)
@@ -143,6 +159,13 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
                 tools.extend(mcp_tools)
     except Exception as e:
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)
+        # Close the client if there was an error
+        if mcp_client:
+            try:
+                await mcp_client.__aexit__(None, None, None)
+            except Exception:
+                pass
+            mcp_client = None
     
     if pydantic_model:
         # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
@@ -171,7 +194,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
     logger.info(f"Tracer configured: {tracer is not None}")
 
-    return agent_chain, tracer
+    return agent_chain, tracer, mcp_client
 
 
 def prepare_agent_config(agent, tracer):

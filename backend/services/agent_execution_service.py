@@ -491,17 +491,41 @@ class AgentExecutionService:
             if not fresh_agent:
                 raise Exception("Agent not found in database")
             
-            # Create the agent chain with all tools and capabilities
-            # Pass session_id to ensure correct checkpointer is used
+            # Wrap all async operations in a single event loop to avoid conflicts
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
-            agent_chain, tracer = asyncio.run(create_agent(fresh_agent, search_params, session_id_for_cache))
+            result_text = asyncio.run(self._execute_agent_async(
+                fresh_agent, message, search_params, session_id_for_cache
+            ))
+            
+            return result_text
+                
+        except Exception as e:
+            logger.error(f"Error executing LangChain agent: {str(e)}")
+            raise Exception(f"Agent execution failed: {str(e)}")
+    
+    async def _execute_agent_async(
+        self,
+        fresh_agent: Agent,
+        message: str,
+        search_params: Dict = None,
+        session_id_for_cache: str = None
+    ) -> str:
+        """Async helper to execute agent with MCP client in same event loop"""
+        from tools.agentTools import create_agent, prepare_agent_config
+        from langchain_core.messages import HumanMessage
+        
+        mcp_client = None
+        try:
+            # Create the agent chain with all tools and capabilities
+            # All async operations happen in the SAME event loop
+            agent_chain, tracer, mcp_client = await create_agent(fresh_agent, search_params, session_id_for_cache)
             
             # Prepare configuration with tracer
             config = prepare_agent_config(fresh_agent, tracer)
             
             # Add session-specific configuration if memory is enabled
-            if fresh_agent.has_memory and session:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session.id}"
+            if fresh_agent.has_memory and session_id_for_cache:
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session_id_for_cache}"
                 logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
             else:
                 config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
@@ -509,12 +533,9 @@ class AgentExecutionService:
             # Add the question to config
             config["configurable"]["question"] = message
             
-            # Execute the agent - the checkpointer will automatically maintain conversation history
-            # based on the thread_id
-            # IMPORTANT: We pass the user's message in the messages array so it gets stored by the checkpointer
-            from langchain_core.messages import HumanMessage
+            # Execute the agent in the SAME event loop as where MCP client was created
             formatted_user_message = fresh_agent.prompt_template.format(question=message)
-            result = agent_chain.invoke({"messages": [HumanMessage(content=formatted_user_message)]}, config=config)
+            result = await agent_chain.ainvoke({"messages": [HumanMessage(content=formatted_user_message)]}, config=config)
             
             # Extract the response from the result
             if isinstance(result, dict) and "messages" in result:
@@ -533,10 +554,14 @@ class AgentExecutionService:
                 
             # Fallback: convert to string
             return str(result)
-                
-        except Exception as e:
-            logger.error(f"Error executing LangChain agent: {str(e)}")
-            raise Exception(f"Agent execution failed: {str(e)}")
+        finally:
+            # Always close the MCP client in the SAME event loop
+            if mcp_client:
+                try:
+                    await mcp_client.__aexit__(None, None, None)
+                    logger.info("MCP client closed successfully")
+                except Exception as e:
+                    logger.warning(f"Error closing MCP client: {e}")
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location"""
