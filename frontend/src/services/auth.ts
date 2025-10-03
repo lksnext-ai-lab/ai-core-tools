@@ -85,20 +85,43 @@ class AuthService {
 
   // ==================== AUTHENTICATION FLOW ====================
 
-  async getLoginUrl(): Promise<{ login_url: string; state: string }> {
+  async getLoginMode(): Promise<{ mode: string; login_url?: string; state?: string; message?: string }> {
     return this.request('/auth/login');
   }
 
   async login() {
     try {
-      const { login_url } = await this.getLoginUrl();
+      const response = await this.getLoginMode();
       
-      // Redirect to Google OAuth
-      window.location.href = login_url;
+      if (response.mode === 'FAKE') {
+        // Fake login mode - don't redirect
+        throw new Error('Fake login mode - use email login form');
+      }
+      
+      // OIDC mode - redirect to Google OAuth
+      if (response.login_url) {
+        window.location.href = response.login_url;
+      } else {
+        throw new Error('No login URL provided');
+      }
     } catch (error) {
       console.error('Login failed:', error);
-      throw new Error('Failed to initiate login');
+      throw error;
     }
+  }
+
+  async fakeLogin(email: string): Promise<{ access_token: string; user: any; expires_at: string }> {
+    const response = await this.request('/auth/fake-login', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    
+    // Store the token
+    if (response.access_token) {
+      this.setToken(response.access_token, response.expires_at);
+    }
+    
+    return response;
   }
 
   async verifyToken(token?: string): Promise<any> {

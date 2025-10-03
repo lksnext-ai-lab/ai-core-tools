@@ -40,6 +40,20 @@ class LoginURLResponse(BaseModel):
     login_url: str
     state: str
 
+class LoginModeResponse(BaseModel):
+    mode: str
+    message: Optional[str] = None
+    login_url: Optional[str] = None
+    state: Optional[str] = None
+
+class FakeLoginRequest(BaseModel):
+    email: str
+
+class FakeLoginResponse(BaseModel):
+    access_token: str
+    user: dict
+    expires_at: str
+
 class AuthCallbackResponse(BaseModel):
     access_token: str
     user: dict
@@ -102,11 +116,20 @@ def verify_jwt_token(token: str) -> Optional[dict]:
 
 # ==================== AUTHENTICATION ENDPOINTS ====================
 
-@auth_router.get("/login", response_model=LoginURLResponse)
+@auth_router.get("/login")
 async def login():
     """
-    Generate Google OAuth login URL or return development mode info
+    Get login information based on the configured login mode
+    Returns different responses for OIDC vs FAKE mode
     """
+    # Check if in FAKE login mode
+    if AuthConfig.is_fake_login_mode():
+        return LoginModeResponse(
+            mode="FAKE",
+            message="Fake login mode - POST email to /auth/fake-login"
+        )
+    
+    # OIDC mode - proceed with OAuth
     if not AuthConfig.is_oauth_configured():
         if AuthConfig.is_development_mode():
             # In development mode, return info about available tokens
@@ -156,7 +179,11 @@ async def login():
         
         login_url = f"{authorization_endpoint}?{urlencode(params)}"
         
-        return LoginURLResponse(login_url=login_url, state=state)
+        return LoginModeResponse(
+            mode="OIDC",
+            login_url=login_url,
+            state=state
+        )
         
     except Exception as e:
         logger.error(f"Error generating login URL: {str(e)}")
@@ -164,6 +191,64 @@ async def login():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate login URL"
         )
+
+@auth_router.post("/fake-login", response_model=FakeLoginResponse)
+async def fake_login(request: FakeLoginRequest):
+    """
+    Fake login endpoint for development/testing only.
+    Accepts an email and logs in if the user exists in the database.
+    Only works when AICT_LOGIN=FAKE
+    """
+    # Check if fake login mode is enabled
+    if not AuthConfig.is_fake_login_mode():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Fake login is not enabled. Set AICT_LOGIN=FAKE in environment variables."
+        )
+    
+    if not request.email or '@' not in request.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Valid email address is required"
+        )
+    
+    session = SessionLocal()
+    try:
+        # Check if user exists in database
+        user = session.query(User).filter(User.email == request.email).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with email {request.email} not found in database. User must exist to use fake login."
+            )
+        
+        logger.info(f"Fake login successful for user: {user.email}")
+        
+        # Create JWT token for session
+        user_data = {
+            'user_id': user.user_id,
+            'email': user.email,
+            'name': user.name,
+            'google_id': f'fake-{user.user_id}'
+        }
+        
+        jwt_token = create_jwt_token(user_data)
+        expires_at = (datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
+        
+        return FakeLoginResponse(
+            access_token=jwt_token,
+            user={
+                'user_id': user.user_id,
+                'email': user.email,
+                'name': user.name,
+                'is_admin': is_omniadmin(user.email)
+            },
+            expires_at=expires_at
+        )
+        
+    finally:
+        session.close()
 
 @auth_router.get("/callback")
 async def auth_callback(request: Request):
@@ -306,8 +391,10 @@ async def get_auth_config():
     """
     return {
         "auth_config": AuthConfig.get_config_summary(),
+        "login_mode": AuthConfig.LOGIN_MODE,
         "oauth_configured": AuthConfig.is_oauth_configured(),
         "development_mode": AuthConfig.is_development_mode(),
+        "fake_login_enabled": AuthConfig.is_fake_login_mode(),
         "available_dev_tokens": list(AuthConfig.DEV_USERS.keys()) if AuthConfig.is_development_mode() else []
     }
 
