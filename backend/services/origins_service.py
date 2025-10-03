@@ -5,7 +5,6 @@ Handles origin pattern matching and validation logic.
 import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 from utils.logger import get_logger
 
@@ -147,97 +146,6 @@ class OriginsService:
         
         # Ensure full match from start to end
         return f"^{regex_pattern}$"
-    
-    def validate_origins_format(self, origins: str) -> Dict[str, Any]:
-        """
-        Validate the format of origins configuration string.
-        
-        Args:
-            origins: Comma-separated list of origin patterns
-            
-        Returns:
-            Dict with validation result and details
-        """
-        if not origins or origins.strip() == "":
-            return {
-                "is_valid": True,
-                "message": "Empty origins (allows all)",
-                "parsed_origins": []
-            }
-        
-        try:
-            origins_list = self._parse_origins_list(origins)
-            invalid_patterns = []
-            
-            for origin in origins_list:
-                if not self._validate_single_origin_pattern(origin):
-                    invalid_patterns.append(origin)
-            
-            if invalid_patterns:
-                return {
-                    "is_valid": False,
-                    "message": f"Invalid origin patterns: {', '.join(invalid_patterns)}",
-                    "parsed_origins": origins_list,
-                    "invalid_patterns": invalid_patterns
-                }
-            
-            return {
-                "is_valid": True,
-                "message": f"Valid origins configuration with {len(origins_list)} patterns",
-                "parsed_origins": origins_list
-            }
-            
-        except Exception as e:
-            return {
-                "is_valid": False,
-                "message": f"Error parsing origins: {str(e)}",
-                "parsed_origins": []
-            }
-    
-    def _validate_single_origin_pattern(self, pattern: str) -> bool:
-        """Validate a single origin pattern format."""
-        if pattern == "*":
-            return True
-        
-        # Basic URL structure validation
-        if not (pattern.startswith("http://") or 
-                pattern.startswith("https://") or 
-                pattern.startswith("*://")):
-            return False
-        
-        # Try to parse as URL (with wildcard handling)
-        try:
-            test_pattern = pattern.replace("*", "test")
-            parsed = urlparse(test_pattern)
-            return bool(parsed.netloc)
-        except Exception:
-            return False
-    
-    def get_origins_suggestions(self, current_origins: str) -> List[str]:
-        """
-        Get suggestions for common origin patterns.
-        
-        Args:
-            current_origins: Current origins configuration
-            
-        Returns:
-            List of suggested origin patterns
-        """
-        suggestions = [
-            "https://localhost:3000",  # Common dev server
-            "https://localhost:8080",  # Another common dev server
-            "https://*.vercel.app",    # Vercel deployments
-            "https://*.netlify.app",   # Netlify deployments
-            "https://*.github.io",     # GitHub Pages
-            "*"                        # Allow all (not recommended for production)
-        ]
-        
-        # Filter out patterns that are already configured
-        if current_origins:
-            current_list = self._parse_origins_list(current_origins)
-            suggestions = [s for s in suggestions if s not in current_list]
-        
-        return suggestions
 
 
 # Global instance

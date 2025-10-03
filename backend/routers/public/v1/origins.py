@@ -4,7 +4,6 @@ Enforces per-app CORS origin restrictions based on app configuration.
 """
 from fastapi import HTTPException, Depends, Request, status
 from sqlalchemy.orm import Session
-from typing import List
 
 from models.app import App
 from db.database import get_db
@@ -70,42 +69,3 @@ async def enforce_allowed_origins(
         # Log other errors but don't block the request
         logger.error(f"Error in origin validation for app {app_id}: {str(e)}")
         # Continue without origin validation on errors
-
-
-def validate_origins_format(origins: str) -> dict:
-    """
-    Validate the format of origins configuration string.
-    
-    Args:
-        origins: Comma-separated list of origin patterns
-        
-    Returns:
-        Dict with validation result and details
-    """
-    return origins_service.validate_origins_format(origins)
-
-
-def get_origins_list(origins: str) -> List[str]:
-    """
-    Parse origins configuration string into a list.
-    
-    Args:
-        origins: Comma-separated list of origin patterns
-        
-    Returns:
-        List[str]: List of origin patterns
-    """
-    return origins_service._parse_origins_list(origins)
-
-
-def get_origins_suggestions(current_origins: str = "") -> List[str]:
-    """
-    Get suggestions for common origin patterns.
-    
-    Args:
-        current_origins: Current origins configuration
-        
-    Returns:
-        List of suggested origin patterns
-    """
-    return origins_service.get_origins_suggestions(current_origins)
