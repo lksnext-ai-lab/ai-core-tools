@@ -44,18 +44,8 @@ class MCPClientManager:
             for mcp_assoc in agent.mcp_associations:
                 mcp_config = mcp_assoc.mcp
                 try:
-                    # Store the config directly without additional wrapping
-                    connection_config = {
-                        "playwright": {
-                        "command": "npx",
-                        "args": [
-                            "@playwright/mcp@latest",
-                            "--isolated",
-                            "--allowed-hosts=localhost,127.0.0.1,::1,0.0.0.0"
-                        ]
-                        }
-                    }
-                    #connection_config = mcp_config.to_connection_dict()
+                    # Get the config from the database
+                    connection_config = mcp_config.to_connection_dict()
                     if connection_config:
                         connections.update(connection_config)
                 except ValueError as e:

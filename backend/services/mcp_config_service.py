@@ -1,5 +1,5 @@
 from typing import Optional, List
-from models.mcp_config import MCPConfig, TransportType
+from models.mcp_config import MCPConfig
 from repositories.mcp_config_repository import MCPConfigRepository
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -17,7 +17,7 @@ class MCPConfigService:
             result.append(MCPConfigListItemSchema(
                 config_id=config.config_id,
                 name=config.name,
-                transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
+                description=config.description or "",
                 created_at=config.create_date
             ))
         
@@ -28,39 +28,29 @@ class MCPConfigService:
         """Get detailed information about a specific MCP config"""
         if config_id == 0:
             # New MCP config
-            transport_types = [{"value": t.value, "name": t.value} for t in TransportType]
-            
             return MCPConfigDetailSchema(
                 config_id=0,
                 name="",
-                server_name="",
                 description="",
-                transport_type=None,
-                command="",
-                args="",
-                env="",
-                created_at=None,
-                available_transport_types=transport_types
-            )        # Existing MCP config
+                config="{}",
+                created_at=None
+            )
+        
+        # Existing MCP config
         config = MCPConfigRepository.get_by_id_and_app_id(db, config_id, app_id)
         
         if not config:
             return None
         
-        # Get available transport types
-        transport_types = [{"value": t.value, "name": t.value} for t in TransportType]
+        # Serialize config to JSON string if it's a dict
+        config_str = json.dumps(config.config) if isinstance(config.config, dict) else config.config
         
         return MCPConfigDetailSchema(
             config_id=config.config_id,
             name=config.name,
-            server_name=config.server_name or "",
             description=config.description or "",
-            transport_type=config.transport_type.value if hasattr(config.transport_type, 'value') else config.transport_type,
-            command=config.command or "",
-            args=json.dumps(config.args) if config.args else "",
-            env=json.dumps(config.env) if config.env else "",
-            created_at=config.create_date,
-            available_transport_types=transport_types
+            config=config_str,
+            created_at=config.create_date
         )
 
     @staticmethod
@@ -85,20 +75,13 @@ class MCPConfigService:
         
         # Update config data
         config.name = config_data.name
-        config.server_name = config_data.server_name
         config.description = config_data.description
-        config.transport_type = TransportType(config_data.transport_type)
-        config.command = config_data.command
         
-        # Parse JSON fields
+        # Parse config JSON field
         try:
-            config.args = json.loads(config_data.args) if config_data.args else []
+            config.config = json.loads(config_data.config) if isinstance(config_data.config, str) else config_data.config
         except json.JSONDecodeError:
-            config.args = []
-        try:
-            config.env = json.loads(config_data.env) if config_data.env else {}
-        except json.JSONDecodeError:
-            config.env = {}
+            config.config = {}
         
         # Use repository to save
         if config_id == 0:
