@@ -25,8 +25,15 @@ print("Importing Base from database")
 # Importar después de ajustar el path
 try:
     from db.database import Base
+    # CRITICAL: Import models to register them with Base.metadata
+    # models/__init__.py imports all model classes  
+    import models
+    #from db import base
+    print(f"✓ Base and models imported. Tables registered: {len(Base.metadata.tables)}")
 except ImportError as e:
     print(f"Error al importar: {e}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 
 # this is the Alembic Config object, which provides

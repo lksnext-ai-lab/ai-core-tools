@@ -24,6 +24,9 @@ class AuthConfig:
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     
+    # Login Mode Configuration
+    LOGIN_MODE: str = "OIDC"  # Options: OIDC, FAKE
+    
     # Development Mode
     DEVELOPMENT_MODE: bool = False
     DEV_USERS: Dict[str, Dict[str, Any]] = {}
@@ -42,6 +45,12 @@ class AuthConfig:
         cls.JWT_SECRET = os.getenv('SECRET_KEY', cls.JWT_SECRET)
         cls.JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', cls.JWT_ALGORITHM)
         cls.JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', cls.JWT_EXPIRATION_HOURS))
+        
+        # Login Mode Configuration
+        cls.LOGIN_MODE = os.getenv('AICT_LOGIN', 'OIDC').upper()
+        if cls.LOGIN_MODE not in ['OIDC', 'FAKE']:
+            logger.warning(f"Invalid AICT_LOGIN value '{cls.LOGIN_MODE}', defaulting to OIDC")
+            cls.LOGIN_MODE = 'OIDC'
         
         # Development Mode
         cls.DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
@@ -82,7 +91,12 @@ class AuthConfig:
     @classmethod
     def _log_config_status(cls):
         """Log the current configuration status"""
-        if cls.is_oauth_configured():
+        logger.info(f"🔐 Login mode: {cls.LOGIN_MODE}")
+        
+        if cls.LOGIN_MODE == 'FAKE':
+            logger.warning("⚠️  FAKE LOGIN MODE - For development/testing only!")
+            logger.info("   Any existing user email can log in without password")
+        elif cls.is_oauth_configured():
             logger.info("✅ Google OAuth is properly configured")
         else:
             if cls.DEVELOPMENT_MODE:
@@ -106,6 +120,11 @@ class AuthConfig:
         return cls.DEVELOPMENT_MODE
     
     @classmethod
+    def is_fake_login_mode(cls) -> bool:
+        """Check if running in fake login mode"""
+        return cls.LOGIN_MODE == 'FAKE'
+    
+    @classmethod
     def get_dev_user(cls, token: str) -> Optional[Dict[str, Any]]:
         """Get development user by token"""
         return cls.DEV_USERS.get(token)
@@ -114,6 +133,7 @@ class AuthConfig:
     def get_config_summary(cls) -> Dict[str, Any]:
         """Get configuration summary for debugging"""
         return {
+            "login_mode": cls.LOGIN_MODE,
             "oauth_configured": cls.is_oauth_configured(),
             "development_mode": cls.is_development_mode(),
             "jwt_secret_set": bool(cls.JWT_SECRET and cls.JWT_SECRET != 'your-secret-key-SXSCDSDASD'),

@@ -12,7 +12,7 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 interface MCPConfig {
   config_id: number;
   name: string;
-  transport_type: string;
+  description: string;
   created_at: string;
 }
 
@@ -141,22 +141,6 @@ function MCPConfigsPage() {
     setEditingConfig(null);
   }
 
-  const getTransportBadgeColor = (transportType: string) => {
-    const colors: Record<string, string> = {
-      'stdio': 'bg-blue-100 text-blue-800',
-      'sse': 'bg-purple-100 text-purple-800',
-    };
-    return colors[transportType] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getTransportDisplayName = (transportType: string) => {
-    const names: Record<string, string> = {
-      'stdio': 'STDIO',
-      'sse': 'SSE',
-    };
-    return names[transportType] || transportType.toUpperCase();
-  };
-
   if (loading) {
     return (
       <SettingsLayout>
@@ -220,7 +204,7 @@ function MCPConfigsPage() {
                       Name
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Transport
+                      Description
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Created
@@ -239,10 +223,10 @@ function MCPConfigsPage() {
                         <div className="text-sm font-medium text-gray-900">{config.name}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTransportBadgeColor(config.transport_type)}`}>
-                        {getTransportDisplayName(config.transport_type)}
-                      </span>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-600 max-w-xs truncate">
+                        {config.description || <span className="text-gray-400 italic">No description</span>}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A'}
