@@ -525,7 +525,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('pdf_file', file);
 
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/ocr`, {
+    return this.request(`/internal/apps/${appId}/ocr/${agentId}/process`, {
       method: 'POST',
       body: formData,
     });

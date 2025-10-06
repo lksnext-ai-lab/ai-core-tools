@@ -141,15 +141,26 @@ class AgentService:
     def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str) -> int:
         """Create or update agent"""
         agent_id = agent_data.get('agent_id')
+        
+        # If agent_id is 0, treat it as a new agent
+        if agent_id == 0:
+            agent_id = None
+        
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
         
         if not agent:
-            agent = Agent()
+            # Create the appropriate agent instance based on type
+            if agent_type == 'ocr_agent':
+                agent = OCRAgent()
+            else:
+                agent = Agent()
         
         update_method = self._update_normal_agent
         update_method(agent, agent_data)
         
-        agent.type = agent_type
+        # Set type only if it's not already set (OCRAgent sets it in __init__)
+        if not hasattr(agent, 'type') or agent.type is None:
+            agent.type = agent_type
         
         # Use repository to save the agent
         if agent.agent_id:
@@ -170,8 +181,6 @@ class AgentService:
         agent.prompt_template = data.get('prompt_template')
         agent.status = data.get('status')
         agent.service_id = data.get('service_id') or None
-        agent.host_url = data.get('host_url')
-        agent.ollama_model_name = data.get('ollama_model_name')
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
@@ -185,10 +194,11 @@ class AgentService:
         # Handle temperature field - default to DEFAULT_AGENT_TEMPERATURE if not provided
         agent.temperature = data.get('temperature', DEFAULT_AGENT_TEMPERATURE)
         
-        # OCR-specific fields
-        agent.vision_service_id = data.get('vision_service_id')
-        agent.vision_system_prompt = data.get('vision_system_prompt')
-        agent.text_system_prompt = data.get('text_system_prompt')
+        # OCR-specific fields (only set if the agent is an OCRAgent instance)
+        if isinstance(agent, OCRAgent):
+            agent.vision_service_id = data.get('vision_service_id')
+            agent.vision_system_prompt = data.get('vision_system_prompt')
+            agent.text_system_prompt = data.get('text_system_prompt')
         
         # Handle is_tool field - can be boolean from API or 'on' from form
         is_tool_value = data.get('is_tool')
