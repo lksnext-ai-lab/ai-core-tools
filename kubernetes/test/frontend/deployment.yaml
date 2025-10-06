@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ia-core-tools-frontend-test
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ia-core-tools-frontend-test
+  template:
+    metadata:
+      labels:
+        app: ia-core-tools-frontend-test
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: ia-core-tools-frontend-test
+          image: registry.lksnext.com/ia-core-tools/ia-core-tools-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+              ephemeral-storage: "100Mi"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+              ephemeral-storage: "500Mi"
+          env:
+            - name: VITE_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: VITE_API_BASE_URL
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+            
+      imagePullSecrets:
+        - name: lks-registry
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ia-core-tools-frontend-service-test
+  namespace: test
+spec:
+  selector:
+    app: ia-core-tools-frontend-test
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP

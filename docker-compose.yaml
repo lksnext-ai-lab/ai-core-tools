@@ -1,47 +1,88 @@
-version: '3.3'
-
 services:
 
-  ia-core-tools:
+  # Backend FastAPI service
+  backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: ia-core-tools
+      dockerfile: backend/Dockerfile
+    container_name: ia-core-tools-backend
     ports:
-      - "${APP_PORT}:5000"
+      - "8000:8000"
     environment:
-      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
+      - SQLALCHEMY_DATABASE_URI=postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - DATABASE_NAME=${DATABASE_NAME}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - IMAGES_PATH=${IMAGES_PATH}
+      - SECRET_KEY=${SECRET_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - AICT_OMNIADMINS=${AICT_OMNIADMINS}
+      - AICT_MODE=${AICT_MODE}
+      - DEVELOPMENT_MODE=${DEVELOPMENT_MODE}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_EXPIRATION_HOURS=${JWT_EXPIRATION_HOURS}
+      - REPO_BASE_FOLDER=${REPO_BASE_FOLDER}
+    volumes:
+      - ./backend/data:/aict_backend/data
+      - ./backend/logs:/aict_backend/logs
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
+  # Frontend React service
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ia-core-tools-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # PostgreSQL with pgvector extension
   postgres:
     image: pgvector/pgvector:pg17
     container_name: iacore_postgres
     ports:
-      - "${DATABASE_PORT}:5432"
+      - "${DATABASE_PORT:-5432}:5432"
     environment:
       - POSTGRES_DB=${DATABASE_NAME}
       - POSTGRES_USER=${DATABASE_USER}
       - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       app-network:
         aliases:
           - postgres
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-
-volumes:
-  postgres-data:
-    driver: local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres-data:

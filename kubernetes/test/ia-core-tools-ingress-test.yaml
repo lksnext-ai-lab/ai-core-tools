@@ -1,0 +1,98 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ia-core-tools-ingress-test
+  namespace: test
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "server: hide";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+      more_set_headers "Content-Security-Policy: default-src 'self' https://iacoretoolstest.lksnext.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:";
+      more_set_headers "Cross-Origin-Resource-Policy: same-site";
+spec:
+  tls:
+    - hosts:
+        - iacoretoolstest.lksnext.com
+      secretName: lksnext-tls-secret
+  rules:
+    - host: iacoretoolstest.lksnext.com
+      http:
+        paths:
+          # Backend API routes
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /public
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /redoc
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /openapi-internal.json
+            pathType: Exact
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /openapi-public.json
+            pathType: Exact
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          # Frontend static files (catch-all for SPA)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-frontend-service-test
+                port:
+                  number: 80

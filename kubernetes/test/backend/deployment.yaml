@@ -1,0 +1,343 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ia-core-tools-backend-test
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ia-core-tools-backend-test
+  template:
+    metadata:
+      labels:
+        app: ia-core-tools-backend-test
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: ia-core-tools-backend-test
+          image: registry.lksnext.com/ia-core-tools/ia-core-tools-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+              ephemeral-storage: "2Gi"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+              ephemeral-storage: "4Gi"
+          volumeMounts:
+            - name: temp-storage
+              mountPath: /aict_backend/data
+            - name: temp-storage
+              mountPath: /aict_backend/logs
+              subPath: logs
+          env:
+            # Application Configuration
+            - name: APP_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: APP_TITLE
+            - name: APP_DESCRIPTION
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: APP_DESCRIPTION
+            - name: APP_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: APP_VERSION
+            - name: ROOT_MESSAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: ROOT_MESSAGE
+            
+            # API Documentation Configuration
+            - name: INTERNAL_API_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: INTERNAL_API_TITLE
+            - name: INTERNAL_API_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: INTERNAL_API_VERSION
+            - name: INTERNAL_API_DESCRIPTION
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: INTERNAL_API_DESCRIPTION
+            - name: INTERNAL_DOCS_OPENAPI_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: INTERNAL_DOCS_OPENAPI_URL
+            - name: INTERNAL_DOCS_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: INTERNAL_DOCS_TITLE
+            - name: INTERNAL_DOCS_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: INTERNAL_DOCS_PATH
+            - name: PUBLIC_API_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PUBLIC_API_TITLE
+            - name: PUBLIC_API_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PUBLIC_API_VERSION
+            - name: PUBLIC_API_DESCRIPTION
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PUBLIC_API_DESCRIPTION
+            - name: PUBLIC_DOCS_OPENAPI_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PUBLIC_DOCS_OPENAPI_URL
+            - name: PUBLIC_DOCS_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PUBLIC_DOCS_TITLE
+            - name: PUBLIC_DOCS_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PUBLIC_DOCS_PATH
+            
+            # CORS Configuration
+            - name: CORS_ORIGIN_DEV_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_DEV_SERVER
+            - name: CORS_ORIGIN_DEV_SERVER_ALT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_DEV_SERVER_ALT
+            - name: CORS_ORIGIN_DOCKER
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_DOCKER
+            - name: CORS_ORIGIN_DOCKER_ALT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_DOCKER_ALT
+            - name: CORS_ORIGIN_DEV_8080
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_DEV_8080
+            - name: CORS_ORIGIN_DEV_8080_ALT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_DEV_8080_ALT
+            - name: CORS_ORIGIN_VITE_PREVIEW
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_VITE_PREVIEW
+            - name: CORS_ORIGIN_VITE_PREVIEW_ALT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: CORS_ORIGIN_VITE_PREVIEW_ALT
+            
+            # Database configuration
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: DATABASE_PORT
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-postgresql-secret-test
+                  key: POSTGRES_DATABASE
+            - name: SQLALCHEMY_DATABASE_URI
+              value: "postgresql://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
+            
+            # Authentication and OAuth
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: SECRET_KEY
+            - name: JWT_ALGORITHM
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: JWT_ALGORITHM
+            - name: JWT_EXPIRATION_HOURS
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: JWT_EXPIRATION_HOURS
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: GOOGLE_CLIENT_SECRET
+            - name: GOOGLE_DISCOVERY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: GOOGLE_DISCOVERY_URL
+            - name: GOOGLE_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: GOOGLE_REDIRECT_URI
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: FRONTEND_URL
+            
+            # Application configuration
+            - name: AICT_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: AICT_MODE
+            - name: AICT_OMNIADMINS
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: AICT_OMNIADMINS
+            - name: DEVELOPMENT_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: DEVELOPMENT_MODE
+            - name: REPO_BASE_FOLDER
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: REPO_BASE_FOLDER
+            
+            # AI API Keys
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: ANTHROPIC_API_KEY
+            
+            # LangChain configuration
+            - name: LANGCHAIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: LANGCHAIN_API_KEY
+            - name: LANGCHAIN_TRACING_V2
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: LANGCHAIN_TRACING_V2
+            - name: LANGCHAIN_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: LANGCHAIN_PROJECT
+            - name: LANGCHAIN_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: LANGCHAIN_ENDPOINT
+            
+            # Python environment
+            - name: PYTHONUNBUFFERED
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PYTHONUNBUFFERED
+            - name: PYTHONDONTWRITEBYTECODE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: PYTHONDONTWRITEBYTECODE
+            - name: PYTHONPATH
+              value: "/aict_backend:$PYTHONPATH"
+              
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            
+      imagePullSecrets:
+        - name: lks-registry
+      volumes:
+        - name: temp-storage
+          persistentVolumeClaim:
+            claimName: ia-core-tools-temp-pvc-test
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ia-core-tools-backend-service-test
+  namespace: test
+spec:
+  selector:
+    app: ia-core-tools-backend-test
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP

@@ -4,7 +4,6 @@
 *.pyc
 *.pyo
 *.wav
-repositories/
 ictvenv/
 env/
 *venv/
@@ -36,12 +35,11 @@ __pycache__
 downloads/
 images/
 agent_process.log
-__init__.py
 IA-CORE
-poetry.lock
 data/
 **/secrets.yaml
 **/secret.yaml
 *-secret.yaml
 *.code-workspace
 logs/
+local/

@@ -30,14 +30,23 @@ We welcome contributions from LKS Next community! To contribute to this project,
 2. Ensure your changes adhere to the project's coding standards and best practices.
 3. Make sure to include appropriate tests for your changes.
 4. Submit a pull request, explaining the purpose and details of your changes.
-5. All contributions are subject to the LKS Inner Source License (LKSISL).
+5. All contributions are subject to the GNU Affero General Public License v3.0 (AGPL 3.0).
 
-By contributing to this project, you agree to the terms and conditions of the LKSISL.
+By contributing to this project, you agree to the terms and conditions of the AGPL 3.0.
 
 ## Licensing
 
-This project is licensed under the LKS Inner Source License (LKSISL).
+This project is available under a dual licensing model:
 
-The LKSISL is a permissive license specifically designed for Inner Source projects within the LKS Next group. It allows for the use, modification, and distribution of the project within the LKS S. Coop. group, subject to certain terms and conditions.
+- **Open Source**: GNU Affero General Public License v3.0 (AGPL 3.0)
+- **Commercial**: Proprietary license with enhanced rights and features
 
-For more information about the LKSISL, please refer to the license file in this repository.
+The AGPL 3.0 is a strong copyleft license that ensures:
+
+- **Network use clause**: Modified versions used over a network must provide source code
+- **Strong copyleft**: Derivative works must be licensed under AGPL 3.0
+- **Commercial protection**: Prevents free commercial use without licensing
+- **Patent protection**: Contributors grant patent licenses for their contributions
+- **Community benefit**: Ensures improvements are shared with the community
+
+For the full license text, please refer to the [LICENSE](../LICENSE) file in this repository.

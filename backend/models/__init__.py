@@ -1,0 +1,26 @@
+# Import all models to ensure SQLAlchemy relationships are resolved
+# Import order matters for circular dependencies
+
+from .user import User
+from .app import App
+from .app_collaborator import AppCollaborator
+from .subscription import Subscription, Plan
+from .api_usage import APIUsage
+from .api_key import APIKey
+from .ai_service import AIService
+from .embedding_service import EmbeddingService
+from .output_parser import OutputParser
+from .mcp_config import MCPConfig
+from .silo import Silo
+from .agent import Agent
+from .ocr_agent import OCRAgent
+from .repository import Repository
+from .resource import Resource
+from .domain import Domain
+from .url import Url
+
+__all__ = [
+    'User', 'App', 'AppCollaborator', 'Subscription', 'Plan', 'APIUsage', 'APIKey',
+    'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
+    'Agent', 'OCRAgent', 'Repository', 'Resource', 'Domain', 'Url'
+] 

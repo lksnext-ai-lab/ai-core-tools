@@ -1,0 +1,87 @@
+# Environment files - should not be included in Docker images
+.env
+.env.*
+env.example
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+env/
+venv/
+.venv/
+../*venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Documentation
+*.md
+docs/
+
+# Data directories (contain user data)
+data/repositories/*
+data/temp/*
+data/uploads/*
+data/downloads/*
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+.hypothesis/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Project specific files that shouldn't be in backend image
+../frontend/
+../kubernetes/
+../scripts/
+../notebooks/
+../aritz/
+../version-bumper.Dockerfile
+../azure_ai_*
+../test_azure_connection.py
+../test_mistral_agent.py
+../sonar-project.properties
