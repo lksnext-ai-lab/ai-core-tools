@@ -21,8 +21,9 @@ engine = create_engine(
 )
 
 # Configure async engine for async operations (needed for async retrievers in LangGraph)
-# Convert postgresql:// to postgresql+asyncpg:// for async support
-ASYNC_DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+asyncpg://') if DATABASE_URL.startswith('postgresql://') else DATABASE_URL
+# Use psycopg (async) instead of asyncpg to avoid "cannot insert multiple commands" limitation
+# psycopg supports async natively and handles multiple SQL statements properly
+ASYNC_DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://') if DATABASE_URL.startswith('postgresql://') else DATABASE_URL
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
     pool_size=20,
