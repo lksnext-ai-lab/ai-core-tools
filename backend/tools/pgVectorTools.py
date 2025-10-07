@@ -27,8 +27,8 @@ class PGVectorTools:
         """Initializes the PGVectorTools with a SQLAlchemy engine."""
         self.Session = db.session
         self.db = db
-        # TODO: Setup async engine properly for vector operations
-        self._async_engine = None    
+        # Use async engine for vector operations (required for async retriever in LangGraph)
+        self._async_engine = getattr(db, '_async_engine', None)    
 
     @deprecation.deprecated(
         deprecated_in="0.1.0",
@@ -179,12 +179,23 @@ class PGVectorTools:
             
         return results
     
-    def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None, **kwargs):
-        """Returns a retriever object for the pgvector collection."""
+    def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None, use_async=False, **kwargs):
+        """Returns a retriever object for the pgvector collection.
+        
+        Args:
+            collection_name: Name of the collection
+            embedding_service: Embedding service to use
+            search_params: Optional search parameters
+            use_async: If True, uses async engine for async operations (e.g., in LangGraph with ainvoke)
+            **kwargs: Additional arguments to pass to as_retriever
+        """
+        # Use async engine if requested and available, otherwise fall back to sync engine
+        connection = self._async_engine if (use_async and self._async_engine) else self.db.engine
+        
         vector_store = PGVector(
             embeddings=get_embeddings_model(embedding_service),
             collection_name=collection_name,
-            connection=self.db.engine,
+            connection=connection,
             use_jsonb=True,
         )
         

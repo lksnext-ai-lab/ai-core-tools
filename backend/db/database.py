@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from typing import Generator
 import os
@@ -8,7 +9,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI', 'postgresql://iacore:iacore@localhost:5432/iacore')
 
-# Configure engine with connection pooling for better concurrency
+# Configure synchronous engine with connection pooling for better concurrency
 engine = create_engine(
     DATABASE_URL, 
     pool_size=20,              # Number of connections to maintain in the pool
@@ -17,6 +18,18 @@ engine = create_engine(
     pool_recycle=3600,         # Recycle connections after 1 hour (prevent stale connections)
     echo=False,                # Set to True for SQL debugging
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+)
+
+# Configure async engine for async operations (needed for async retrievers in LangGraph)
+# Convert postgresql:// to postgresql+asyncpg:// for async support
+ASYNC_DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+asyncpg://') if DATABASE_URL.startswith('postgresql://') else DATABASE_URL
+async_engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    pool_size=20,
+    max_overflow=10,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    echo=False,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -37,6 +50,7 @@ def get_db() -> Generator[Session, None, None]:
 class Database:
     def __init__(self):
         self.engine = engine
+        self._async_engine = async_engine  # Async engine for vector operations
         self.session = SessionLocal()
 
 db = Database()
