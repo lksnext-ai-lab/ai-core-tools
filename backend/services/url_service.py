@@ -126,8 +126,9 @@ class UrlService:
             # Get domain's silo to remove content
             domain = url.domain
             if domain and domain.silo_id:
-                SiloService.delete_url(domain.silo_id, url.url, db)
-                logger.info(f"Removed content from silo for deleted URL: {domain.base_url + url.url}")
+                full_url = domain.base_url + url.url
+                SiloService.delete_url(domain.silo_id, full_url, db)
+                logger.info(f"Removed content from silo for deleted URL: {full_url}")
             
             # Delete URL from database
             UrlRepository.delete(url, db)
