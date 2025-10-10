@@ -11,6 +11,13 @@ class UrlService:
     """Service layer for URL business logic"""
     
     @staticmethod
+    def _get_full_url(url: Url) -> str:
+        """Helper method to construct full URL from domain base_url and url path"""
+        if not url.domain or not url.domain.base_url:
+            return url.url
+        return url.domain.base_url + url.url
+    
+    @staticmethod
     def get_url(url_id: int, db: Session) -> Optional[Url]:
         """Get URL by ID"""
         return UrlRepository.get_by_id(url_id, db)
@@ -72,7 +79,7 @@ class UrlService:
             # Remove content from silo if it exists
             domain = url.domain
             if domain and domain.silo_id:
-                full_url = domain.base_url + url.url
+                full_url = UrlService._get_full_url(url)
                 SiloService.delete_url(domain.silo_id, full_url, db)
                 logger.info(f"Removed content from silo for URL: {full_url}")
             
@@ -99,7 +106,7 @@ class UrlService:
             # Remove content from silo if it was previously indexed
             domain = url.domain
             if domain and domain.silo_id and url.status == 'indexed':
-                full_url = domain.base_url + url.url
+                full_url = UrlService._get_full_url(url)
                 SiloService.delete_url(domain.silo_id, full_url, db)
                 logger.info(f"Removed indexed content for rejected URL: {full_url}")
             
@@ -126,7 +133,7 @@ class UrlService:
             # Get domain's silo to remove content
             domain = url.domain
             if domain and domain.silo_id:
-                full_url = domain.base_url + url.url
+                full_url = UrlService._get_full_url(url)
                 SiloService.delete_url(domain.silo_id, full_url, db)
                 logger.info(f"Removed content from silo for deleted URL: {full_url}")
             
