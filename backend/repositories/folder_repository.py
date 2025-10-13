@@ -143,16 +143,15 @@ class FolderRepository:
     @staticmethod
     def delete(db: Session, folder: Folder) -> None:
         """
-        Delete a folder and all its subfolders and resources (cascade)
+        Delete a folder and all its subfolders (cascade).
+        Note: Resources should be deleted separately using ResourceService.delete_resource()
+        to ensure proper cleanup of files and indexed data.
         
         Args:
             db: Database session
             folder: Folder instance to delete
         """
-        # Delete all resources in this folder
-        db.query(Resource).filter(Resource.folder_id == folder.folder_id).delete()
-        
-        # Recursively delete all subfolders
+        # Recursively delete all subfolders first
         subfolders = FolderRepository.get_subfolders(db, folder.folder_id)
         for subfolder in subfolders:
             FolderRepository.delete(db, subfolder)

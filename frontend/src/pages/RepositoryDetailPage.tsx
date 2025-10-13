@@ -93,8 +93,7 @@ const RepositoryDetailPage: React.FC = () => {
         formData.append('files', file);
       });
 
-      console.log('Uploading files with folder_id:', selectedFolderId);
-      await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files), selectedFolderId || undefined);
+      await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files), selectedFolderId ?? undefined);
       
       // Reload repository to get updated file list
       await loadRepository();
@@ -113,7 +112,6 @@ const RepositoryDetailPage: React.FC = () => {
 
   // Folder management functions
   const handleFolderSelect = (folderId: number | null, folderPath: string) => {
-    console.log('Folder selected:', { folderId, folderPath });
     setSelectedFolderId(folderId);
     setSelectedFolderPath(folderPath);
   };
@@ -137,7 +135,7 @@ const RepositoryDetailPage: React.FC = () => {
 
   const handleMoveFolder = (folderId: number, currentParentId?: number) => {
     setFolderActionData({ folderId, parentFolderId: currentParentId });
-    setNewParentFolderId(currentParentId || null);
+    setNewParentFolderId(null); // Start with no selection so user can choose
     setShowMoveFolderModal(true);
   };
 
@@ -154,9 +152,10 @@ const RepositoryDetailPage: React.FC = () => {
       setShowCreateFolderModal(false);
       setNewFolderName('');
       await loadRepository();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating folder:', err);
-      setError('Failed to create folder');
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to create folder';
+      setError(errorMessage);
     }
   };
 
@@ -173,9 +172,10 @@ const RepositoryDetailPage: React.FC = () => {
       setShowRenameFolderModal(false);
       setNewFolderName('');
       await loadRepository();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error renaming folder:', err);
-      setError('Failed to rename folder');
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to rename folder';
+      setError(errorMessage);
     }
   };
 
@@ -195,9 +195,10 @@ const RepositoryDetailPage: React.FC = () => {
         setSelectedFolderPath('');
       }
       await loadRepository();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting folder:', err);
-      setError('Failed to delete folder');
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to delete folder';
+      setError(errorMessage);
     }
   };
 
@@ -214,10 +215,51 @@ const RepositoryDetailPage: React.FC = () => {
       setShowMoveFolderModal(false);
       setNewParentFolderId(null);
       await loadRepository();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error moving folder:', err);
-      setError('Failed to move folder');
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to move folder';
+      setError(errorMessage);
     }
+  };
+
+  // Get all folder paths for display and filtering
+  const getAllFolderPaths = (folders: any[], parentPath: string = ''): Array<{folder_id: number, name: string, full_path: string}> => {
+    const result: Array<{folder_id: number, name: string, full_path: string}> = [];
+    
+    for (const folder of folders) {
+      const fullPath = parentPath ? `${parentPath}/${folder.name}` : folder.name;
+      result.push({
+        folder_id: folder.folder_id,
+        name: folder.name,
+        full_path: fullPath
+      });
+      
+      if (folder.subfolders && folder.subfolders.length > 0) {
+        result.push(...getAllFolderPaths(folder.subfolders, fullPath));
+      }
+    }
+    
+    return result;
+  };
+
+  // Get valid destination folders (exclude the folder being moved and its descendants)
+  const getValidDestinationFolders = () => {
+    if (!repository?.folders || !folderActionData.folderId) return [];
+    
+    // Get all folder paths
+    const allFolders = getAllFolderPaths(repository.folders);
+    
+    // Filter out the folder being moved and its descendants
+    const validFolders = allFolders.filter(folder => {
+      // Don't allow moving to the same folder
+      if (folder.folder_id === folderActionData.folderId) return false;
+      
+      // Don't allow moving to descendants (this would create circular reference)
+      // For now, we'll rely on backend validation, but we could add frontend validation here
+      return true;
+    });
+    
+    return validFolders;
   };
 
   // Filter resources by selected folder
@@ -405,7 +447,7 @@ const RepositoryDetailPage: React.FC = () => {
           <FolderTree
             appId={parseInt(appId!)}
             repositoryId={parseInt(repositoryId!)}
-            selectedFolderId={selectedFolderId}
+            selectedFolderId={selectedFolderId ?? undefined}
             onFolderSelect={handleFolderSelect}
             onFolderCreate={handleCreateFolder}
             onFolderRename={handleRenameFolder}
@@ -532,10 +574,11 @@ const RepositoryDetailPage: React.FC = () => {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="create-folder-name" className="block text-sm font-medium text-gray-700 mb-2">
               Folder Name
             </label>
             <input
+              id="create-folder-name"
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
@@ -570,10 +613,11 @@ const RepositoryDetailPage: React.FC = () => {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="rename-folder-name" className="block text-sm font-medium text-gray-700 mb-2">
               Folder Name
             </label>
             <input
+              id="rename-folder-name"
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
@@ -645,7 +689,11 @@ const RepositoryDetailPage: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Repository Root</option>
-              {/* TODO: Add folder options here */}
+              {getValidDestinationFolders().map((folder) => (
+                <option key={folder.folder_id} value={folder.folder_id}>
+                  {folder.full_path}
+                </option>
+              ))}
             </select>
           </div>
           <div className="flex justify-end space-x-3">
@@ -682,11 +730,11 @@ const RepositoryDetailPage: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Repository Root</option>
-              {repository?.folders?.map((folder) => (
+              {repository?.folders ? getAllFolderPaths(repository.folders).map((folder) => (
                 <option key={folder.folder_id} value={folder.folder_id}>
-                  {folder.name}
+                  {folder.full_path}
                 </option>
-              ))}
+              )) : null}
             </select>
           </div>
           <div className="flex justify-end space-x-3">
