@@ -153,6 +153,13 @@ async def list_apps(
         )
         usage_stats_schema = AppUsageStatsSchema(**usage_stats)
         
+        # Get owner information
+        owner_name = None
+        owner_email = None
+        if app.owner:
+            owner_name = app.owner.name
+            owner_email = app.owner.email
+        
         app_item = AppListItemSchema(
             app_id=app.app_id,
             name=app.name,
@@ -160,6 +167,8 @@ async def list_apps(
             created_at=app.create_date,
             langsmith_configured=bool(app.langsmith_api_key),
             owner_id=app.owner_id,
+            owner_name=owner_name,
+            owner_email=owner_email,
             agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
             agent_cors_origins=app.agent_cors_origins,
             usage_stats=usage_stats_schema,

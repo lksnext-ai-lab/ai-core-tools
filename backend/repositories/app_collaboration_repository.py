@@ -16,11 +16,13 @@ class AppCollaborationRepository:
     
     def get_user_accessible_apps(self, user_id: int) -> List[App]:
         """Get all apps that a user can access (owned + collaborated)"""
-        # Get owned apps
-        owned_apps = self.db.query(App).filter(App.owner_id == user_id).all()
+        # Get owned apps with owner relationship loaded
+        owned_apps = self.db.query(App).options(joinedload(App.owner)).filter(App.owner_id == user_id).all()
         
-        # Get collaborated apps (accepted collaborations only)
-        collaborations = self.db.query(AppCollaborator).filter(
+        # Get collaborated apps (accepted collaborations only) with owner relationship loaded
+        collaborations = self.db.query(AppCollaborator).options(
+            joinedload(AppCollaborator.app).joinedload(App.owner)
+        ).filter(
             AppCollaborator.user_id == user_id,
             AppCollaborator.status == CollaborationStatus.ACCEPTED
         ).all()
