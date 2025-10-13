@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 import os
+import json
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
@@ -383,6 +384,99 @@ class SiloService:
             if "page" in doc.metadata:
                 doc.metadata["page"] = doc.metadata["page"] + 1
         return docs
+
+    @staticmethod
+    def update_resource_metadata(resource: Resource, db_session: Session = None):
+        """
+        Update only the metadata of a resource in the vector database without re-indexing content.
+        This is more efficient for operations like moving files between folders.
+        
+        Args:
+            resource: Resource instance with updated folder information
+            db_session: Optional database session to use (if None, creates new session)
+        """
+        try:
+            # Use provided session or create new one
+            if db_session:
+                session = db_session
+            else:
+                session = SessionLocal()
+            
+            # Get resource with relations
+            resource_with_relations = session.query(Resource).filter(
+                Resource.resource_id == resource.resource_id
+            ).first()
+            
+            if not resource_with_relations:
+                logger.error(f"Resource {resource.resource_id} not found for metadata update")
+                return
+            
+            logger.info(f"Updating metadata for resource {resource.resource_id}, folder_id: {resource_with_relations.folder_id}")
+            
+            collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
+            
+            # Build the correct file path including folder structure
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+            else:
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            
+            file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
+            
+            # Prepare updated metadata
+            base_metadata = {
+                "repository_id": resource_with_relations.repository_id,
+                "resource_id": resource_with_relations.resource_id,
+                "silo_id": resource_with_relations.repository.silo_id,
+                "name": resource_with_relations.uri,
+                "file_type": file_extension
+            }
+            
+            # Add folder information if resource is in a folder
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                base_metadata["folder_id"] = resource_with_relations.folder_id
+                base_metadata["folder_path"] = folder_path
+                # Store relative path including folder structure
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+                logger.info(f"Resource in folder: {folder_path}, ref: {base_metadata['ref']}")
+            else:
+                # Resource is at root level
+                base_metadata["folder_id"] = None
+                base_metadata["folder_path"] = ""
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
+                logger.info(f"Resource at root, ref: {base_metadata['ref']}")
+            
+            # Update metadata in vector database using direct SQL
+            # The langchain_pg_embedding table stores documents with metadata as JSONB
+            update_query = text("""
+                UPDATE langchain_pg_embedding 
+                SET cmetadata = :new_metadata
+                WHERE collection_id = (
+                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
+                )
+                AND cmetadata->>'resource_id' = :resource_id
+            """)
+            
+            session.execute(update_query, {
+                'new_metadata': json.dumps(base_metadata),
+                'collection_name': collection_name,
+                'resource_id': str(resource.resource_id)
+            })
+            session.commit()
+            
+            logger.info(f"Updated metadata for resource {resource.resource_id} in collection {collection_name}")
+            
+        except Exception as e:
+            logger.error(f"Error updating resource metadata: {str(e)}")
+            raise
+        finally:
+            # Only close if we created the session
+            if not db_session:
+                session.close()
 
     @staticmethod
     def index_resource(resource: Resource):

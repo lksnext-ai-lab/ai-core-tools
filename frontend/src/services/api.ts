@@ -457,6 +457,18 @@ class ApiService {
     });
   }
 
+  async moveResource(appId: number, repositoryId: number, resourceId: number, newFolderId?: number) {
+    const formData = new FormData();
+    if (newFolderId !== undefined) {
+      formData.append('new_folder_id', newFolderId.toString());
+    }
+    
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}/move`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
   async downloadResource(appId: number, repositoryId: number, resourceId: number) {
     const token = this.getAuthToken();
     const headers: Record<string, string> = {};

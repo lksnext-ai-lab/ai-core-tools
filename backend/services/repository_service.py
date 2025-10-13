@@ -254,6 +254,11 @@ class RepositoryService:
         embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
         embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
         
+        # Get folders for the repository
+        from services.folder_service import FolderService
+        folders_query = FolderService.get_all_folders_in_repository(repository_id, db)
+        folders = [{"folder_id": f.folder_id, "name": f.name, "parent_folder_id": f.parent_folder_id} for f in folders_query]
+        
         # Get the current embedding service ID from the repository's silo
         embedding_service_id = None
         silo_id = None
@@ -286,6 +291,7 @@ class RepositoryService:
             status=repo.status,
             created_at=repo.create_date,
             resources=resources,
+            folders=folders,
             embedding_services=embedding_services,
             embedding_service_id=embedding_service_id,
             silo_id=silo_id,

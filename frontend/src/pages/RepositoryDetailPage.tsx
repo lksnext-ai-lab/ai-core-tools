@@ -41,6 +41,9 @@ const RepositoryDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [resourceToMove, setResourceToMove] = useState<Resource | null>(null);
+  const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
   
   // Folder-related state
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
@@ -250,6 +253,12 @@ const RepositoryDetailPage: React.FC = () => {
     setShowDeleteModal(true);
   };
 
+  const handleMoveResource = (resource: Resource) => {
+    setResourceToMove(resource);
+    setMoveToFolderId(null);
+    setShowMoveModal(true);
+  };
+
   const confirmDeleteResource = async () => {
     if (!resourceToDelete) return;
 
@@ -261,6 +270,29 @@ const RepositoryDetailPage: React.FC = () => {
     } catch (err) {
       console.error('Error deleting resource:', err);
       setError('Failed to delete file');
+    }
+  };
+
+  const confirmMoveResource = async () => {
+    if (!resourceToMove) return;
+
+    try {
+      await apiService.moveResource(
+        parseInt(appId!),
+        parseInt(repositoryId!),
+        resourceToMove.resource_id,
+        moveToFolderId || undefined
+      );
+      
+      // Reload repository to get updated file list
+      await loadRepository();
+      
+      setShowMoveModal(false);
+      setResourceToMove(null);
+      setMoveToFolderId(null);
+    } catch (err) {
+      console.error('Error moving resource:', err);
+      setError('Failed to move file');
     }
   };
 
@@ -429,6 +461,13 @@ const RepositoryDetailPage: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleMoveResource(resource)}
+                    className="p-2 text-gray-400 hover:text-purple-600 transition-colors"
+                    title="Move file"
+                  >
+                    ↔️
+                  </button>
                   <button
                     onClick={() => handleDownloadResource(resource)}
                     className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
@@ -618,6 +657,47 @@ const RepositoryDetailPage: React.FC = () => {
             </button>
             <button
               onClick={moveFolder}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Move
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Move File Modal */}
+      <Modal
+        isOpen={showMoveModal}
+        onClose={() => setShowMoveModal(false)}
+        title="Move File"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Move "{resourceToMove?.name}" to:
+            </label>
+            <select
+              value={moveToFolderId || ''}
+              onChange={(e) => setMoveToFolderId(e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Repository Root</option>
+              {repository?.folders?.map((folder) => (
+                <option key={folder.folder_id} value={folder.folder_id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowMoveModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmMoveResource}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               Move

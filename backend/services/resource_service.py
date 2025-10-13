@@ -45,6 +45,80 @@ class ResourceService:
         return ResourceRepository.get_by_id(db, resource_id)
     
     @staticmethod
+    def move_resource_to_folder(resource_id: int, repository_id: int, new_folder_id: Optional[int], db: Session) -> dict:
+        """
+        Move a resource to a different folder within the same repository.
+        Updates file system location, database record, and re-indexes in vector DB.
+        
+        Args:
+            resource_id: ID of the resource to move
+            repository_id: Repository ID (for validation)
+            new_folder_id: New folder ID (None for root)
+            db: Database session
+            
+        Returns:
+            dict: Result with success status and updated resource info
+        """
+        try:
+            # Get the resource
+            resource = ResourceService.get_resource(resource_id, db)
+            if not resource:
+                raise ValueError(f"Resource {resource_id} not found")
+            
+            # Validate repository ownership
+            if resource.repository_id != repository_id:
+                raise ValueError(f"Resource {resource_id} does not belong to repository {repository_id}")
+            
+            # Validate new folder if provided
+            if new_folder_id is not None:
+                if not FolderService.validate_folder_access(new_folder_id, repository_id, db):
+                    raise ValueError(f"Folder {new_folder_id} does not belong to repository {repository_id}")
+            
+            # Get old and new paths
+            old_path = ResourceService.get_resource_file_path(resource_id, db)
+            if not old_path:
+                raise ValueError(f"Could not determine current path for resource {resource_id}")
+            
+            # Build new path
+            repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
+            if new_folder_id:
+                folder_path = FolderService.get_folder_path(new_folder_id, db)
+                new_path = os.path.join(repository_path, folder_path, resource.uri)
+            else:
+                new_path = os.path.join(repository_path, resource.uri)
+            
+            # Create target directory if it doesn't exist
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            
+            # Move the file in the file system
+            import shutil
+            shutil.move(old_path, new_path)
+            logger.info(f"Moved file from {old_path} to {new_path}")
+            
+            # Update database record
+            resource.folder_id = new_folder_id
+            db.add(resource)
+            db.commit()  # Commit the database changes first
+            logger.info(f"Updated resource {resource_id} folder_id to {new_folder_id}")
+            
+            # Update metadata in vector database without re-indexing content
+            from services.silo_service import SiloService
+            SiloService.update_resource_metadata(resource, db)
+            logger.info(f"Updated metadata for resource {resource_id} with new folder information")
+            
+            return {
+                "success": True,
+                "message": "Resource moved successfully",
+                "resource_id": resource_id,
+                "new_folder_id": new_folder_id,
+                "new_path": new_path
+            }
+            
+        except Exception as e:
+            logger.error(f"Error moving resource {resource_id}: {str(e)}")
+            raise ValueError(f"Failed to move resource: {str(e)}")
+
+    @staticmethod
     def delete_resource(resource_id: int, db: Session) -> bool:
         """
         Delete a resource completely (file, database record, and silo indexing)
