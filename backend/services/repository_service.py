@@ -246,7 +246,8 @@ class RepositoryService:
                 "name": resource.name,
                 "uri": resource.uri,
                 "file_type": resource.type or "unknown",
-                "created_at": resource.create_date
+                "created_at": resource.create_date,
+                "folder_id": resource.folder_id
             })
         
         # Get embedding services for form data

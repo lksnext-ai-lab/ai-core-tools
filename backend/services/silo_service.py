@@ -396,7 +396,15 @@ class SiloService:
                 return
                 
             collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
-            path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            
+            # Build the correct file path including folder structure
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+            else:
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            
             file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
 
             # Prepare base metadata
@@ -405,10 +413,22 @@ class SiloService:
                 "resource_id": resource_with_relations.resource_id,
                 "silo_id": resource_with_relations.repository.silo_id,
                 "name": resource_with_relations.uri,
-                # Store relative path instead of absolute path for portability
-                "ref": os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri),
                 "file_type": file_extension
             }
+            
+            # Add folder information if resource is in a folder
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                base_metadata["folder_id"] = resource_with_relations.folder_id
+                base_metadata["folder_path"] = folder_path
+                # Store relative path including folder structure
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+            else:
+                # Resource is at root level
+                base_metadata["folder_id"] = None
+                base_metadata["folder_path"] = ""
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
 
             docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 

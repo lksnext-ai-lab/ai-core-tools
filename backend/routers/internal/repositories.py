@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from typing import List, Optional
 import os
 import logging
@@ -116,15 +116,17 @@ async def upload_resources(
     repository_id: int,
     request: Request,
     files: List[UploadFile] = File(...),
+    folder_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db)
 ):
     """
     Upload multiple resources to a repository.
+    Optionally specify a folder_id to upload files to a specific folder.
     """
     current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
-    logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, user_id: {user_id}")
+    logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, folder_id: {folder_id} (type: {type(folder_id)}), user_id: {user_id}")
     
     # TODO: Add app access validation
     
@@ -133,7 +135,8 @@ async def upload_resources(
         app_id=app_id,
         repository_id=repository_id,
         files=files,
-        db=db
+        db=db,
+        folder_id=folder_id
     )
     
     return result

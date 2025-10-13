@@ -28,6 +28,7 @@ from .mcp_configs import mcp_configs_router
 from .ocr import ocr_router
 from .output_parsers import output_parsers_router
 from .repositories import repositories_router
+from .folders import folders_router
 
 # Import logger
 from utils.logger import get_logger
@@ -54,6 +55,7 @@ apps_router.include_router(mcp_configs_router, prefix="/{app_id}/mcp-configs", t
 apps_router.include_router(ocr_router, prefix="/{app_id}/ocr", tags=["OCR"])
 apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parsers", tags=["Output Parsers"])
 apps_router.include_router(repositories_router, prefix="/{app_id}/repositories", tags=["Repositories"])
+apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repository_id}/folders", tags=["Folders"])
 
 # ==================== HELPER FUNCTIONS ====================
 

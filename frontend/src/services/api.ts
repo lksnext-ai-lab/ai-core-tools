@@ -405,14 +405,22 @@ class ApiService {
     });
   }
 
-  async uploadResources(appId: number, repositoryId: number, files: File[]) {
-    console.log('API: uploadResources called with:', { appId, repositoryId, filesCount: files.length });
+  async uploadResources(appId: number, repositoryId: number, files: File[], folderId?: number) {
+    console.log('API: uploadResources called with:', { appId, repositoryId, filesCount: files.length, folderId });
     
     const formData = new FormData();
     files.forEach(file => {
       formData.append('files', file);
       console.log('API: Added file to FormData:', file.name);
     });
+    
+    // Add folder_id if provided
+    if (folderId !== undefined && folderId !== null) {
+      formData.append('folder_id', folderId.toString());
+      console.log('API: Added folder_id to FormData:', folderId);
+    } else {
+      console.log('API: No folder_id provided or folderId is null/undefined');
+    }
 
     // Get the auth token manually for this request
     const token = this.getAuthToken();
@@ -610,6 +618,56 @@ class ApiService {
   async getVersion(): Promise<{ name: string; version: string }> {
     const response = await this.request('/internal/version/');
     return response;
+  }
+
+  // ==================== FOLDERS API ====================
+  
+  async getFolders(appId: number, repositoryId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/`);
+  }
+
+  async getFolderTree(appId: number, repositoryId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/tree`);
+  }
+
+  async getFolder(appId: number, repositoryId: number, folderId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`);
+  }
+
+  async createFolder(appId: number, repositoryId: number, name: string, parentFolderId?: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        parent_folder_id: parentFolderId || null
+      }),
+    });
+  }
+
+  async updateFolder(appId: number, repositoryId: number, folderId: number, name: string) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteFolder(appId: number, repositoryId: number, folderId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async moveFolder(appId: number, repositoryId: number, folderId: number, newParentFolderId?: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        new_parent_folder_id: newParentFolderId || null
+      }),
+    });
+  }
+
+  async uploadResourcesToFolder(appId: number, repositoryId: number, folderId: number, files: File[]) {
+    return this.uploadResources(appId, repositoryId, files, folderId);
   }
 
   // ==================== UTILITY METHODS ====================
