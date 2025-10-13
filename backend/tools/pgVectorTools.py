@@ -167,13 +167,13 @@ class PGVectorTools:
                 filter=filter_metadata
             )
         
-        # Convert the results to include score in metadata
+        # Convert the results to include score and id in metadata
         results = []
         for doc, score in results_with_scores:
-            # Create a new Document with score in metadata instead of as attribute
+            # Create a new Document with score AND id in metadata
             new_doc = Document(
                 page_content=doc.page_content,
-                metadata={**doc.metadata, '_score': score}
+                metadata={**doc.metadata, '_score': score, '_id': doc.id}
             )
             results.append(new_doc)
             

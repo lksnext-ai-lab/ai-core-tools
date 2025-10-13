@@ -24,6 +24,7 @@ interface SearchResult {
   page_content: string;
   metadata: Record<string, any>;
   score?: number;
+  id?: string;  // Add document ID
 }
 
 function SiloPlaygroundPage() {
@@ -38,6 +39,7 @@ function SiloPlaygroundPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [hasSearched, setHasSearched] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Load silo data
   useEffect(() => {
@@ -105,7 +107,12 @@ function SiloPlaygroundPage() {
         Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined
       );
       
-      setSearchResults(response.results || []);
+      // Extract _id from metadata and set as top-level id field
+      const resultsWithIds = (response.results || []).map((result: SearchResult) => ({
+        ...result,
+        id: result.metadata?._id,  // Extract document ID from metadata
+      }));
+      setSearchResults(resultsWithIds);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Search failed');
       console.error('Error searching silo:', err);
@@ -123,6 +130,40 @@ function SiloPlaygroundPage() {
       ...prev,
       [fieldName]: value
     }));
+  }
+
+  async function handleDeleteDocument(result: SearchResult, index: number) {
+    if (!appId || !siloId || !result.id) {
+      alert('Cannot delete: Document ID not available');
+      return;
+    }
+    
+    if (!window.confirm('Are you sure you want to delete this document from the silo? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setDeletingId(result.id);
+      
+      // Delete using document ID
+      await apiService.deleteSiloDocuments(
+        parseInt(appId),
+        parseInt(siloId),
+        [result.id]  // Pass as array of IDs
+      );
+      
+      // Remove from results locally
+      setSearchResults(prev => prev.filter((_, i) => i !== index));
+      
+      // Reload silo to update document count
+      await loadSilo();
+      
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      setSearchError(err instanceof Error ? err.message : 'Failed to delete document');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (loading) {
@@ -315,14 +356,40 @@ function SiloPlaygroundPage() {
             {searchResults.map((result, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500">
-                    Result #{index + 1}
-                  </span>
-                  {result.score && (
-                    <span className="text-sm text-gray-500">
-                      Score: {result.score.toFixed(3)}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-500">
+                      Result #{index + 1}
                     </span>
-                  )}
+                    {result.id && (
+                      <span className="text-xs text-gray-400" title={`Document ID: ${result.id}`}>
+                        (ID: {result.id.substring(0, 8)}...)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {result.score && (
+                      <span className="text-sm text-gray-500">
+                        Score: {result.score.toFixed(3)}
+                      </span>
+                    )}
+                    {result.id && (
+                      <button
+                        onClick={() => handleDeleteDocument(result, index)}
+                        disabled={deletingId === result.id}
+                        className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete this document from silo"
+                      >
+                        {deletingId === result.id ? (
+                          <span className="flex items-center gap-1">
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                            Deleting...
+                          </span>
+                        ) : (
+                          '🗑️ Delete'
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="mb-3">

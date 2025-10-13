@@ -373,6 +373,13 @@ class ApiService {
     });
   }
 
+  async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/documents`, {
+      method: 'DELETE',
+      body: JSON.stringify({ document_ids: documentIds }),
+    });
+  }
+
   // ==================== REPOSITORIES API ====================
   async getRepositories(appId: number) {
     console.log('API: Getting repositories for appId:', appId);
