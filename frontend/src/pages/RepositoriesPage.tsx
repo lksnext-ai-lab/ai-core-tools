@@ -48,6 +48,10 @@ const RepositoriesPage: React.FC = () => {
     navigate(`/apps/${appId}/repositories/${repositoryId}`);
   };
 
+  const handleManageResources = (repositoryId: number) => {
+    navigate(`/apps/${appId}/repositories/${repositoryId}/detail`);
+  };
+
   const handleDeleteRepository = (repository: Repository) => {
     setRepositoryToDelete(repository);
     setShowDeleteModal(true);
@@ -177,14 +181,17 @@ const RepositoriesPage: React.FC = () => {
                 {repositories.map((repository) => (
                   <tr key={repository.repository_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
+                      <div 
+                        className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
+                        onClick={() => handleManageResources(repository.repository_id)}
+                      >
                         <div className="flex-shrink-0 h-10 w-10">
                           <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
                             <span className="text-green-600 text-lg">📁</span>
                           </div>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
                             {repository.name}
                           </div>
                         </div>

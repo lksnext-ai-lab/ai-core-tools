@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiService } from '../services/api';
 
 interface Folder {
@@ -30,8 +30,11 @@ interface FolderNodeProps {
   isExpanded: boolean;
   onToggle: (folderId: number) => void;
   onSelect: (folderId: number, folderPath: string) => void;
-  onContextMenu: (e: React.MouseEvent, folder: Folder) => void;
+  onAction: (action: string, folder: Folder) => void;
   selectedFolderId?: number;
+  openDropdown: number | null;
+  onToggleDropdown: (folderId: number, e: React.MouseEvent) => void;
+  dropdownRefs: React.MutableRefObject<{ [key: number]: HTMLDivElement | null }>;
 }
 
 const FolderNode: React.FC<FolderNodeProps> = ({
@@ -40,54 +43,124 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   isExpanded,
   onToggle,
   onSelect,
-  onContextMenu,
-  selectedFolderId
+  onAction,
+  selectedFolderId,
+  openDropdown,
+  onToggleDropdown,
+  dropdownRefs
 }) => {
   const hasChildren = folder.subfolders && folder.subfolders.length > 0;
   const isSelected = selectedFolderId === folder.folder_id;
+  const folderPath = folder.folder_path || folder.name;
 
   return (
     <div className="select-none">
-      <div
-        className={`flex items-center py-1 px-2 hover:bg-gray-100 cursor-pointer rounded ${
-          isSelected ? 'bg-blue-100 text-blue-800' : ''
-        }`}
-        style={{ paddingLeft: `${level * 20 + 8}px` }}
-        onClick={() => onSelect(folder.folder_id, folder.folder_path)}
-        onContextMenu={(e) => onContextMenu(e, folder)}
-      >
-        {hasChildren ? (
+      <div className="relative">
+        <div
+          className={`flex items-center p-2 rounded-md cursor-pointer hover:bg-gray-100 transition-colors ${
+            isSelected ? 'bg-blue-100 text-blue-800' : ''
+          }`}
+          style={{ paddingLeft: `${level * 16 + 8}px` }}
+          onClick={() => onSelect(folder.folder_id, folderPath)}
+        >
           <button
-            className="mr-2 w-4 h-4 flex items-center justify-center"
             onClick={(e) => {
               e.stopPropagation();
               onToggle(folder.folder_id);
             }}
+            className="mr-2 text-gray-500 hover:text-gray-700 w-4 h-4 flex items-center justify-center"
           >
-            {isExpanded ? (
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
+            {hasChildren ? (
+              isExpanded ? (
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+              )
             ) : (
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-              </svg>
+              <span className="w-3 h-3"></span>
             )}
           </button>
-        ) : (
-          <div className="mr-2 w-4 h-4" />
-        )}
-        
-        <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-        </svg>
-        
-        <span className="flex-1 text-sm">{folder.name}</span>
-        
-        {folder.resource_count > 0 && (
-          <span className="text-xs text-gray-500 ml-2">
-            ({folder.resource_count})
-          </span>
+          
+          <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+          </svg>
+          
+          <span className="flex-1 text-sm truncate">{folder.name}</span>
+          
+          {folder.resource_count > 0 && (
+            <span className="text-xs text-gray-500 ml-2">
+              ({folder.resource_count})
+            </span>
+          )}
+
+          {/* Dropdown Menu Button */}
+          <button
+            onClick={(e) => onToggleDropdown(folder.folder_id, e)}
+            className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
+            title="Folder actions"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Dropdown Menu */}
+        {openDropdown === folder.folder_id && (
+          <div
+            ref={(el) => (dropdownRefs.current[folder.folder_id] = el)}
+            className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
+            style={{ top: '100%' }}
+          >
+            {console.log('Rendering dropdown for folder:', folder.folder_id)}
+            <div className="py-1">
+              <button
+                onClick={() => onAction('create', folder)}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                <svg className="w-4 h-4 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Create subfolder
+              </button>
+              
+              <button
+                onClick={() => onAction('rename', folder)}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                <svg className="w-4 h-4 mr-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Rename folder
+              </button>
+              
+              <button
+                onClick={() => onAction('move', folder)}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                <svg className="w-4 h-4 mr-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                Move folder
+              </button>
+              
+              <div className="border-t border-gray-100"></div>
+              
+              <button
+                onClick={() => onAction('delete', folder)}
+                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
+                <svg className="w-4 h-4 mr-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete folder
+              </button>
+            </div>
+          </div>
         )}
       </div>
       
@@ -98,11 +171,14 @@ const FolderNode: React.FC<FolderNodeProps> = ({
               key={subfolder.folder_id}
               folder={subfolder}
               level={level + 1}
-              isExpanded={isExpanded}
+              isExpanded={false} // This will be managed by parent state
               onToggle={onToggle}
               onSelect={onSelect}
-              onContextMenu={onContextMenu}
+              onAction={onAction}
               selectedFolderId={selectedFolderId}
+              openDropdown={openDropdown}
+              onToggleDropdown={onToggleDropdown}
+              dropdownRefs={dropdownRefs}
             />
           ))}
         </div>
@@ -119,22 +195,22 @@ const FolderTree: React.FC<FolderTreeProps> = ({
   onFolderCreate,
   onFolderRename,
   onFolderDelete,
-  onFolderMove
+  onFolderMove,
 }) => {
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+  const dropdownRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
   const loadFolders = async () => {
     try {
       setLoading(true);
-      setError(null);
       const response = await apiService.getFolderTree(appId, repositoryId);
+      console.log('FolderTree API response:', response);
       setFolders(response.folders || []);
-    } catch (err) {
-      console.error('Error loading folders:', err);
-      setError('Failed to load folders');
+    } catch (error) {
+      console.error('Error loading folders:', error);
     } finally {
       setLoading(false);
     }
@@ -144,7 +220,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     loadFolders();
   }, [appId, repositoryId]);
 
-  const handleToggle = (folderId: number) => {
+  const toggleExpand = (folderId: number) => {
     setExpandedFolders(prev => {
       const newSet = new Set(prev);
       if (newSet.has(folderId)) {
@@ -156,115 +232,154 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     });
   };
 
-  const handleSelect = (folderId: number, folderPath: string) => {
-    onFolderSelect(folderId, folderPath);
+  const toggleDropdown = (folderId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpenDropdown(openDropdown === folderId ? null : folderId);
   };
 
-  const handleContextMenu = (e: React.MouseEvent, folder: Folder) => {
-    e.preventDefault();
-    // Context menu implementation would go here
-    // For now, we'll just show a simple alert
-    const options = [
-      `Rename "${folder.name}"`,
-      `Delete "${folder.name}"`,
-      `Move "${folder.name}"`,
-      `Create subfolder in "${folder.name}"`
-    ];
-    
-    const choice = prompt(`Choose an action for "${folder.name}":\n\n${options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}\n\nEnter number (1-4):`);
-    
-    if (choice) {
-      const actionIndex = parseInt(choice) - 1;
-      switch (actionIndex) {
-        case 0:
-          onFolderRename?.(folder.folder_id, folder.name);
-          break;
-        case 1:
-          onFolderDelete?.(folder.folder_id, folder.name);
-          break;
-        case 2:
-          onFolderMove?.(folder.folder_id, folder.parent_folder_id);
-          break;
-        case 3:
-          onFolderCreate?.(folder.folder_id);
-          break;
+  const closeDropdown = () => {
+    setOpenDropdown(null);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDropdown !== null) {
+        const dropdownElement = dropdownRefs.current[openDropdown];
+        if (dropdownElement && !dropdownElement.contains(event.target as Node)) {
+          closeDropdown();
+        }
       }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openDropdown]);
+
+  const handleSelect = (folderId: number, folderPath: string) => {
+    onFolderSelect(folderId, folderPath);
+    closeDropdown();
+  };
+
+  const handleAction = (action: string, folder: Folder) => {
+    console.log('FolderTree: handleAction called', { action, folder });
+    closeDropdown();
+    switch (action) {
+      case 'create':
+        // For root folder (folder_id = 0), pass undefined to create at root level
+        const parentId = folder.folder_id === 0 ? undefined : folder.folder_id;
+        console.log('FolderTree: calling onFolderCreate with parentId:', parentId);
+        onFolderCreate?.(parentId);
+        break;
+      case 'rename':
+        console.log('FolderTree: calling onFolderRename');
+        onFolderRename?.(folder.folder_id, folder.name);
+        break;
+      case 'delete':
+        console.log('FolderTree: calling onFolderDelete');
+        onFolderDelete?.(folder.folder_id, folder.name);
+        break;
+      case 'move':
+        console.log('FolderTree: calling onFolderMove');
+        onFolderMove?.(folder.folder_id, folder.parent_folder_id);
+        break;
     }
   };
 
-  const renderFolderNode = (folder: Folder, level: number = 0) => (
-    <FolderNode
-      key={folder.folder_id}
-      folder={folder}
-      level={level}
-      isExpanded={expandedFolders.has(folder.folder_id)}
-      onToggle={handleToggle}
-      onSelect={handleSelect}
-      onContextMenu={handleContextMenu}
-      selectedFolderId={selectedFolderId}
-    />
-  );
-
   if (loading) {
     return (
-      <div className="p-4 text-center text-gray-500">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
-        Loading folders...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-4 text-center text-red-500">
-        <p>{error}</p>
-        <button
-          onClick={loadFolders}
-          className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-        >
-          Retry
-        </button>
+      <div className="p-4 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-2 text-sm text-gray-600">Loading folders...</p>
       </div>
     );
   }
 
   return (
-    <div className="border rounded-lg bg-white">
-      <div className="p-3 border-b bg-gray-50">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-gray-900">Folders</h3>
-          <button
-            onClick={() => onFolderCreate?.()}
-            className="text-blue-500 hover:text-blue-700 text-sm"
-            title="Create root folder"
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
+    <div className="bg-white border border-gray-200 rounded-lg">
+      <div className="p-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900">Folders</h3>
       </div>
       
-      <div className="max-h-96 overflow-y-auto">
-        {folders.length === 0 ? (
-          <div className="p-4 text-center text-gray-500">
-            <p>No folders yet</p>
+      <div className="p-4">
+        {/* Root folder option */}
+        <div className="relative">
+          <div
+            className={`flex items-center p-2 rounded-md cursor-pointer hover:bg-gray-100 transition-colors mb-2 ${
+              selectedFolderId === null ? 'bg-blue-100 text-blue-800' : ''
+            }`}
+            onClick={() => onFolderSelect(null, '')}
+          >
+            <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+            </svg>
+            <span className="text-sm font-medium">Repository Root</span>
+
+            {/* Dropdown Menu Button for Root */}
             <button
-              onClick={() => onFolderCreate?.()}
-              className="mt-2 text-blue-500 hover:text-blue-700 text-sm"
+              onClick={(e) => toggleDropdown(0, e)}
+              className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
+              title="Root folder actions"
             >
-              Create your first folder
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+              </svg>
             </button>
           </div>
-        ) : (
-          <div>
-            {folders.map(folder => renderFolderNode(folder))}
+
+          {/* Dropdown Menu for Root */}
+          {openDropdown === 0 && (
+            <div
+              ref={(el) => (dropdownRefs.current[0] = el)}
+              className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
+              style={{ top: '100%' }}
+            >
+              {console.log('Rendering root dropdown')}
+              <div className="py-1">
+                <button
+                  onClick={() => handleAction('create', { folder_id: 0, name: 'Root', parent_folder_id: null } as any)}
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  <svg className="w-4 h-4 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Create folder
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Folder tree */}
+        <div className="space-y-1">
+          {folders.map((folder) => (
+            <FolderNode
+              key={folder.folder_id}
+              folder={folder}
+              level={0}
+              isExpanded={expandedFolders.has(folder.folder_id)}
+              onToggle={toggleExpand}
+              onSelect={handleSelect}
+              onAction={handleAction}
+              selectedFolderId={selectedFolderId}
+              openDropdown={openDropdown}
+              onToggleDropdown={toggleDropdown}
+              dropdownRefs={dropdownRefs}
+            />
+          ))}
+        </div>
+
+        {folders.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+            </svg>
+            <p className="text-sm">No folders yet</p>
+            <p className="text-xs text-gray-400 mt-1">Create your first folder to organize files</p>
           </div>
         )}
-      </div>
-      
-      <div className="p-2 border-t bg-gray-50 text-xs text-gray-500">
-        Right-click folders for options
       </div>
     </div>
   );

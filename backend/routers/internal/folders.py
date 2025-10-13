@@ -99,15 +99,37 @@ async def get_folder_tree(
     # TODO: Add app access validation
     
     try:
-        folder_tree = FolderService.get_folder_tree(repository_id, db)
+        # Get all folders for the repository
+        all_folders = FolderService.get_all_folders_in_repository(repository_id, db)
         
-        # Convert to schema format
-        tree_items = []
-        for folder_data in folder_tree:
-            tree_item = _convert_folder_data_to_tree_schema(folder_data)
-            tree_items.append(tree_item)
-        
-        return FolderTreeResponseSchema(folders=tree_items)
+        # Get resources to count them per folder
+        from services.resource_service import ResourceService
+        all_resources = ResourceService.get_resources_by_repo_id(repository_id, db)
+        resource_counts = {}
+        for res in all_resources:
+            folder_id = res.folder_id if res.folder_id else 0  # Use 0 for root
+            resource_counts[folder_id] = resource_counts.get(folder_id, 0) + 1
+
+        def build_tree(parent_id: Optional[int] = None) -> List[FolderTreeSchema]:
+            tree = []
+            for folder in all_folders:
+                if folder.parent_folder_id == parent_id:
+                    item = FolderTreeSchema(
+                        folder_id=folder.folder_id,
+                        name=folder.name,
+                        create_date=folder.create_date,
+                        status=folder.status,
+                        repository_id=folder.repository_id,
+                        parent_folder_id=folder.parent_folder_id,
+                        resource_count=resource_counts.get(folder.folder_id, 0),
+                        subfolders=build_tree(folder.folder_id)
+                    )
+                    tree.append(item)
+            return tree
+
+        # Root folders are those with parent_folder_id == None
+        folder_tree = build_tree(None)
+        return FolderTreeResponseSchema(folders=folder_tree)
     except Exception as e:
         logger.error(f"Error getting folder tree: {str(e)}")
         raise HTTPException(
