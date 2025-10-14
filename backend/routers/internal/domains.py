@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Request, Depends
+from fastapi import APIRouter, HTTPException, status, Request, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -27,6 +27,46 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 domains_router = APIRouter()
+
+
+# ==================== BACKGROUND TASKS ====================
+
+def background_scrape_and_index(domain_id: int, url_path: str, url_id: int):
+    """
+    Background task to scrape and index a single URL
+    """
+    from db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        domain = DomainService.get_domain(domain_id, db)
+        if domain:
+            scrape_and_index_url(domain, url_path, url_id, db)
+            logger.info(f"Background indexing completed for URL {url_id}")
+        else:
+            logger.error(f"Domain {domain_id} not found for background indexing")
+    except Exception as e:
+        logger.error(f"Background indexing failed for URL {url_id}: {str(e)}")
+    finally:
+        db.close()
+
+
+def background_reindex_domain(domain_id: int):
+    """
+    Background task to reindex all URLs in a domain
+    """
+    from db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        domain = DomainService.get_domain(domain_id, db)
+        if domain:
+            results = reindex_domain_urls(domain, db)
+            logger.info(f"Background domain reindexing completed for domain {domain_id}: {results}")
+        else:
+            logger.error(f"Domain {domain_id} not found for background reindexing")
+    except Exception as e:
+        logger.error(f"Background domain reindexing failed for domain {domain_id}: {str(e)}")
+    finally:
+        db.close()
 
 
 
@@ -245,6 +285,7 @@ async def add_url_to_domain(
     domain_id: int,
     url_data: CreateURLSchema,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -270,17 +311,10 @@ async def add_url_to_domain(
         # Create URL using service
         url_id = UrlService.create_url(clean_url, domain_id, db)
         
-        # Scrape content and index it
-        try:
-            success = scrape_and_index_url(domain, clean_url, url_id, db)
-            if success:
-                message = "URL added and content indexed successfully"
-            else:
-                message = "URL added but content scraping failed"
-                logger.warning(f"Failed to scrape content for URL: {clean_url}")
-        except Exception as e:
-            logger.error(f"Error during scraping for URL {clean_url}: {str(e)}")
-            message = "URL added but content scraping failed"
+        # Add background task for scraping and indexing
+        background_tasks.add_task(background_scrape_and_index, domain_id, clean_url, url_id)
+        
+        message = "URL added and indexing started in background"
         
         return URLActionResponseSchema(
             success=True,
@@ -341,6 +375,7 @@ async def reindex_url(
     domain_id: int,
     url_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -367,21 +402,18 @@ async def reindex_url(
                 detail="URL not found"
             )
         
-        # Remove old content and re-scrape
+        # Remove old content first
         from services.silo_service import SiloService
         full_url = domain.base_url + url.url
         SiloService.delete_url(domain.silo_id, full_url, db)
         
-        # Re-scrape and index
-        success = scrape_and_index_url(domain, url.url, url_id, db)
+        # Add background task for re-scraping and indexing
+        background_tasks.add_task(background_scrape_and_index, domain_id, url.url, url_id)
         
-        if success:
-            message = "URL content re-indexed successfully"
-        else:
-            message = "URL re-indexing failed - could not scrape content"
+        message = "URL re-indexing started in background"
         
         return URLActionResponseSchema(
-            success=success,
+            success=True,
             message=message,
             url_id=url_id
         )
@@ -505,6 +537,7 @@ async def reindex_domain(
     app_id: int,
     domain_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -524,12 +557,12 @@ async def reindex_domain(
                 detail="Domain not found"
             )
         
-        # Re-index all URLs
-        results = reindex_domain_urls(domain, db)
+        # Add background task for re-indexing all URLs
+        background_tasks.add_task(background_reindex_domain, domain_id)
         
         return {
-            "message": f"Re-indexing complete. Success: {results['success']}, Failed: {results['failed']}, Total: {results['total']}",
-            "results": results
+            "message": "Domain re-indexing started in background",
+            "status": "started"
         }
         
     except Exception as e:

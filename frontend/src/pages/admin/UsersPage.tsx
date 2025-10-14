@@ -141,14 +141,14 @@ function UsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-lg shadow overflow-y-visible">
+      <div className="bg-white rounded-lg shadow overflow-visible">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
             Users ({totalUsers} total)
           </h2>
         </div>
 
-        <div className="overflow-x-auto overflow-y-visible">
+        <div className="overflow-x-auto overflow-visible">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>

@@ -20,6 +20,7 @@ docs/_build/
 .vscode
 uploads/
 static/img/heroes/*
+*node_modules*
 #static/vendor/*
 app/data
 app/demo

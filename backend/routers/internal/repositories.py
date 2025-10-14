@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from typing import List, Optional
 import os
 import logging
@@ -116,15 +116,17 @@ async def upload_resources(
     repository_id: int,
     request: Request,
     files: List[UploadFile] = File(...),
+    folder_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db)
 ):
     """
     Upload multiple resources to a repository.
+    Optionally specify a folder_id to upload files to a specific folder.
     """
     current_user = await get_current_user_oauth(request)
     user_id = current_user["user_id"]
     
-    logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, user_id: {user_id}")
+    logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, folder_id: {folder_id} (type: {type(folder_id)}), user_id: {user_id}")
     
     # TODO: Add app access validation
     
@@ -133,6 +135,39 @@ async def upload_resources(
         app_id=app_id,
         repository_id=repository_id,
         files=files,
+        db=db,
+        folder_id=folder_id
+    )
+    
+    return result
+
+
+@repositories_router.post("/{repository_id}/resources/{resource_id}/move",
+                         summary="Move resource to different folder",
+                         tags=["Resources"])
+async def move_resource(
+    app_id: int,
+    repository_id: int,
+    resource_id: int,
+    request: Request,
+    new_folder_id: Optional[int] = Form(default=None),
+    db: Session = Depends(get_db)
+):
+    """
+    Move a resource to a different folder within the same repository.
+    """
+    current_user = await get_current_user_oauth(request)
+    user_id = current_user["user_id"]
+    
+    logger.info(f"Move resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
+    
+    # TODO: Add app access validation
+    
+    # Use ResourceService to handle the business logic
+    result = ResourceService.move_resource_to_folder(
+        resource_id=resource_id,
+        repository_id=repository_id,
+        new_folder_id=new_folder_id,
         db=db
     )
     

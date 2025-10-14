@@ -30,6 +30,7 @@ class RepositoryDetailSchema(BaseModel):
     status: Optional[str] = None
     created_at: Optional[datetime]
     resources: List[Dict[str, Any]]
+    folders: List[Dict[str, Any]] = []
     embedding_services: List[Dict[str, Any]]
     embedding_service_id: Optional[int] = None
     silo_id: Optional[int] = None

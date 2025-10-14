@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
+import FolderTree from '../components/FolderTree';
 
 interface Resource {
   resource_id: number;
@@ -9,6 +10,8 @@ interface Resource {
   uri: string;
   file_type: string;
   created_at: string;
+  folder_id?: number;
+  folder_path?: string;
 }
 
 interface RepositoryDetail {
@@ -16,6 +19,11 @@ interface RepositoryDetail {
   name: string;
   created_at: string;
   resources: Resource[];
+  folders: Array<{
+    folder_id: number;
+    name: string;
+    parent_folder_id?: number;
+  }>;
   embedding_services: Array<{
     service_id: number;
     name: string;
@@ -33,6 +41,24 @@ const RepositoryDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [resourceToMove, setResourceToMove] = useState<Resource | null>(null);
+  const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
+  
+  // Folder-related state
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string>('');
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [showRenameFolderModal, setShowRenameFolderModal] = useState(false);
+  const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false);
+  const [showMoveFolderModal, setShowMoveFolderModal] = useState(false);
+  const [folderActionData, setFolderActionData] = useState<{
+    folderId?: number;
+    folderName?: string;
+    parentFolderId?: number;
+  }>({});
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newParentFolderId, setNewParentFolderId] = useState<number | null>(null);
 
   useEffect(() => {
     if (appId && repositoryId) {
@@ -67,7 +93,7 @@ const RepositoryDetailPage: React.FC = () => {
         formData.append('files', file);
       });
 
-      await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files));
+      await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files), selectedFolderId ?? undefined);
       
       // Reload repository to get updated file list
       await loadRepository();
@@ -83,6 +109,166 @@ const RepositoryDetailPage: React.FC = () => {
       setUploading(false);
     }
   };
+
+  // Folder management functions
+  const handleFolderSelect = (folderId: number | null, folderPath: string) => {
+    setSelectedFolderId(folderId);
+    setSelectedFolderPath(folderPath);
+  };
+
+  const handleCreateFolder = (parentFolderId?: number) => {
+    setFolderActionData({ parentFolderId });
+    setNewFolderName('');
+    setShowCreateFolderModal(true);
+  };
+
+  const handleRenameFolder = (folderId: number, currentName: string) => {
+    setFolderActionData({ folderId, folderName: currentName });
+    setNewFolderName(currentName);
+    setShowRenameFolderModal(true);
+  };
+
+  const handleDeleteFolder = (folderId: number, folderName: string) => {
+    setFolderActionData({ folderId, folderName });
+    setShowDeleteFolderModal(true);
+  };
+
+  const handleMoveFolder = (folderId: number, currentParentId?: number) => {
+    setFolderActionData({ folderId, parentFolderId: currentParentId });
+    setNewParentFolderId(null); // Start with no selection so user can choose
+    setShowMoveFolderModal(true);
+  };
+
+  const createFolder = async () => {
+    if (!newFolderName.trim()) return;
+    
+    try {
+      await apiService.createFolder(
+        parseInt(appId!),
+        parseInt(repositoryId!),
+        newFolderName.trim(),
+        folderActionData.parentFolderId
+      );
+      setShowCreateFolderModal(false);
+      setNewFolderName('');
+      await loadRepository();
+    } catch (err: any) {
+      console.error('Error creating folder:', err);
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to create folder';
+      setError(errorMessage);
+    }
+  };
+
+  const renameFolder = async () => {
+    if (!newFolderName.trim() || !folderActionData.folderId) return;
+    
+    try {
+      await apiService.updateFolder(
+        parseInt(appId!),
+        parseInt(repositoryId!),
+        folderActionData.folderId,
+        newFolderName.trim()
+      );
+      setShowRenameFolderModal(false);
+      setNewFolderName('');
+      await loadRepository();
+    } catch (err: any) {
+      console.error('Error renaming folder:', err);
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to rename folder';
+      setError(errorMessage);
+    }
+  };
+
+  const deleteFolder = async () => {
+    if (!folderActionData.folderId) return;
+    
+    try {
+      await apiService.deleteFolder(
+        parseInt(appId!),
+        parseInt(repositoryId!),
+        folderActionData.folderId
+      );
+      setShowDeleteFolderModal(false);
+      // Reset selection if deleted folder was selected
+      if (selectedFolderId === folderActionData.folderId) {
+        setSelectedFolderId(null);
+        setSelectedFolderPath('');
+      }
+      await loadRepository();
+    } catch (err: any) {
+      console.error('Error deleting folder:', err);
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to delete folder';
+      setError(errorMessage);
+    }
+  };
+
+  const moveFolder = async () => {
+    if (!folderActionData.folderId) return;
+    
+    try {
+      await apiService.moveFolder(
+        parseInt(appId!),
+        parseInt(repositoryId!),
+        folderActionData.folderId,
+        newParentFolderId || undefined
+      );
+      setShowMoveFolderModal(false);
+      setNewParentFolderId(null);
+      await loadRepository();
+    } catch (err: any) {
+      console.error('Error moving folder:', err);
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to move folder';
+      setError(errorMessage);
+    }
+  };
+
+  // Get all folder paths for display and filtering
+  const getAllFolderPaths = (folders: any[], parentPath: string = ''): Array<{folder_id: number, name: string, full_path: string}> => {
+    const result: Array<{folder_id: number, name: string, full_path: string}> = [];
+    
+    for (const folder of folders) {
+      const fullPath = parentPath ? `${parentPath}/${folder.name}` : folder.name;
+      result.push({
+        folder_id: folder.folder_id,
+        name: folder.name,
+        full_path: fullPath
+      });
+      
+      if (folder.subfolders && folder.subfolders.length > 0) {
+        result.push(...getAllFolderPaths(folder.subfolders, fullPath));
+      }
+    }
+    
+    return result;
+  };
+
+  // Get valid destination folders (exclude the folder being moved and its descendants)
+  const getValidDestinationFolders = () => {
+    if (!repository?.folders || !folderActionData.folderId) return [];
+    
+    // Get all folder paths
+    const allFolders = getAllFolderPaths(repository.folders);
+    
+    // Filter out the folder being moved and its descendants
+    const validFolders = allFolders.filter(folder => {
+      // Don't allow moving to the same folder
+      if (folder.folder_id === folderActionData.folderId) return false;
+      
+      // Don't allow moving to descendants (this would create circular reference)
+      // For now, we'll rely on backend validation, but we could add frontend validation here
+      return true;
+    });
+    
+    return validFolders;
+  };
+
+  // Filter resources by selected folder
+  const filteredResources = repository?.resources.filter(resource => {
+    if (selectedFolderId === null) {
+      return !resource.folder_id; // Show root-level resources
+    }
+    return resource.folder_id === selectedFolderId;
+  }) || [];
 
   const handleDownloadResource = async (resource: Resource) => {
     try {
@@ -109,6 +295,12 @@ const RepositoryDetailPage: React.FC = () => {
     setShowDeleteModal(true);
   };
 
+  const handleMoveResource = (resource: Resource) => {
+    setResourceToMove(resource);
+    setMoveToFolderId(null);
+    setShowMoveModal(true);
+  };
+
   const confirmDeleteResource = async () => {
     if (!resourceToDelete) return;
 
@@ -120,6 +312,29 @@ const RepositoryDetailPage: React.FC = () => {
     } catch (err) {
       console.error('Error deleting resource:', err);
       setError('Failed to delete file');
+    }
+  };
+
+  const confirmMoveResource = async () => {
+    if (!resourceToMove) return;
+
+    try {
+      await apiService.moveResource(
+        parseInt(appId!),
+        parseInt(repositoryId!),
+        resourceToMove.resource_id,
+        moveToFolderId || undefined
+      );
+      
+      // Reload repository to get updated file list
+      await loadRepository();
+      
+      setShowMoveModal(false);
+      setResourceToMove(null);
+      setMoveToFolderId(null);
+    } catch (err) {
+      console.error('Error moving resource:', err);
+      setError('Failed to move file');
     }
   };
 
@@ -168,6 +383,22 @@ const RepositoryDetailPage: React.FC = () => {
           <p className="text-gray-600">
             Created {formatDate(repository.created_at)} • {repository.resources.length} files
           </p>
+          
+          {/* Breadcrumb Navigation */}
+          <div className="mt-2 flex items-center text-sm text-gray-600">
+            <button
+              onClick={() => handleFolderSelect(null, '')}
+              className={`hover:text-blue-600 ${selectedFolderId === null ? 'text-blue-600 font-medium' : ''}`}
+            >
+              Repository Root
+            </button>
+            {selectedFolderPath && (
+              <>
+                <span className="mx-2">/</span>
+                <span className="text-blue-600 font-medium">{selectedFolderPath}</span>
+              </>
+            )}
+          </div>
         </div>
         
         <div className="flex gap-3">
@@ -209,27 +440,55 @@ const RepositoryDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Files Section */}
-      <div className="bg-white border border-gray-200 rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Files</h2>
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Folder Tree Sidebar */}
+        <div className="lg:col-span-1">
+          <FolderTree
+            appId={parseInt(appId!)}
+            repositoryId={parseInt(repositoryId!)}
+            selectedFolderId={selectedFolderId ?? undefined}
+            onFolderSelect={handleFolderSelect}
+            onFolderCreate={handleCreateFolder}
+            onFolderRename={handleRenameFolder}
+            onFolderDelete={handleDeleteFolder}
+            onFolderMove={handleMoveFolder}
+          />
         </div>
 
-        {repository.resources.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="text-4xl text-gray-400 mb-4">📄</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No files yet</h3>
-            <p className="text-gray-600 mb-4">Upload your first document to get started</p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-            >
-              Upload Files
-            </button>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {repository.resources.map((resource) => (
+        {/* Files Section */}
+        <div className="lg:col-span-3">
+          <div className="bg-white border border-gray-200 rounded-lg">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Files ({filteredResources.length})
+                {selectedFolderPath && (
+                  <span className="text-sm font-normal text-gray-600 ml-2">
+                    in {selectedFolderPath}
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            {filteredResources.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-4xl text-gray-400 mb-4">📄</div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {selectedFolderId === null ? 'No files in repository root' : 'No files in this folder'}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  {selectedFolderId === null ? 'Upload your first document to get started' : 'Upload files to this folder'}
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                >
+                  Upload Files
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {filteredResources.map((resource) => (
               <div key={resource.resource_id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="bg-gray-100 p-2 rounded-lg">
@@ -244,6 +503,13 @@ const RepositoryDetailPage: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleMoveResource(resource)}
+                    className="p-2 text-gray-400 hover:text-purple-600 transition-colors"
+                    title="Move file"
+                  >
+                    ↔️
+                  </button>
                   <button
                     onClick={() => handleDownloadResource(resource)}
                     className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
@@ -260,9 +526,11 @@ const RepositoryDetailPage: React.FC = () => {
                   </button>
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
@@ -293,6 +561,194 @@ const RepositoryDetailPage: React.FC = () => {
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
             >
               Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Create Folder Modal */}
+      <Modal
+        isOpen={showCreateFolderModal}
+        onClose={() => setShowCreateFolderModal(false)}
+        title="Create Folder"
+      >
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="create-folder-name" className="block text-sm font-medium text-gray-700 mb-2">
+              Folder Name
+            </label>
+            <input
+              id="create-folder-name"
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter folder name"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowCreateFolderModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createFolder}
+              disabled={!newFolderName.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              Create
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Rename Folder Modal */}
+      <Modal
+        isOpen={showRenameFolderModal}
+        onClose={() => setShowRenameFolderModal(false)}
+        title="Rename Folder"
+      >
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="rename-folder-name" className="block text-sm font-medium text-gray-700 mb-2">
+              Folder Name
+            </label>
+            <input
+              id="rename-folder-name"
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter folder name"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowRenameFolderModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={renameFolder}
+              disabled={!newFolderName.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              Rename
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Folder Modal */}
+      <Modal
+        isOpen={showDeleteFolderModal}
+        onClose={() => setShowDeleteFolderModal(false)}
+        title="Delete Folder"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            Are you sure you want to delete the folder "{folderActionData.folderName}"?
+            This will also delete all files and subfolders inside it.
+          </p>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowDeleteFolderModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={deleteFolder}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Move Folder Modal */}
+      <Modal
+        isOpen={showMoveFolderModal}
+        onClose={() => setShowMoveFolderModal(false)}
+        title="Move Folder"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Move "{folderActionData.folderName}" to:
+            </label>
+            <select
+              value={newParentFolderId || ''}
+              onChange={(e) => setNewParentFolderId(e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Repository Root</option>
+              {getValidDestinationFolders().map((folder) => (
+                <option key={folder.folder_id} value={folder.folder_id}>
+                  {folder.full_path}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowMoveFolderModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={moveFolder}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Move
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Move File Modal */}
+      <Modal
+        isOpen={showMoveModal}
+        onClose={() => setShowMoveModal(false)}
+        title="Move File"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Move "{resourceToMove?.name}" to:
+            </label>
+            <select
+              value={moveToFolderId || ''}
+              onChange={(e) => setMoveToFolderId(e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Repository Root</option>
+              {repository?.folders ? getAllFolderPaths(repository.folders).map((folder) => (
+                <option key={folder.folder_id} value={folder.folder_id}>
+                  {folder.full_path}
+                </option>
+              )) : null}
+            </select>
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowMoveModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmMoveResource}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Move
             </button>
           </div>
         </div>

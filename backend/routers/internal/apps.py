@@ -28,6 +28,7 @@ from .mcp_configs import mcp_configs_router
 from .ocr import ocr_router
 from .output_parsers import output_parsers_router
 from .repositories import repositories_router
+from .folders import folders_router
 
 # Import logger
 from utils.logger import get_logger
@@ -54,6 +55,7 @@ apps_router.include_router(mcp_configs_router, prefix="/{app_id}/mcp-configs", t
 apps_router.include_router(ocr_router, prefix="/{app_id}/ocr", tags=["OCR"])
 apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parsers", tags=["Output Parsers"])
 apps_router.include_router(repositories_router, prefix="/{app_id}/repositories", tags=["Repositories"])
+apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repository_id}/folders", tags=["Folders"])
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -151,6 +153,13 @@ async def list_apps(
         )
         usage_stats_schema = AppUsageStatsSchema(**usage_stats)
         
+        # Get owner information
+        owner_name = None
+        owner_email = None
+        if app.owner:
+            owner_name = app.owner.name
+            owner_email = app.owner.email
+        
         app_item = AppListItemSchema(
             app_id=app.app_id,
             name=app.name,
@@ -158,6 +167,8 @@ async def list_apps(
             created_at=app.create_date,
             langsmith_configured=bool(app.langsmith_api_key),
             owner_id=app.owner_id,
+            owner_name=owner_name,
+            owner_email=owner_email,
             agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
             agent_cors_origins=app.agent_cors_origins,
             usage_stats=usage_stats_schema,
