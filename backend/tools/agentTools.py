@@ -1,11 +1,8 @@
 from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from models.agent import Agent
 from models.silo import Silo
-from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
-import os
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from typing import Any
@@ -19,7 +16,6 @@ from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
 import json
 from utils.logger import get_logger
-import logging
 
 logger = get_logger(__name__)
 
@@ -95,18 +91,14 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
 
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
+    checkpointer_cm = None
     if agent.has_memory:
         # Use the session_id if provided, otherwise use "default"
         cache_session_id = session_id if session_id else "default"
-        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, cache_session_id)
-        
-        if checkpointer is None:
-            # Create new checkpointer and cache it
-            checkpointer = InMemorySaver()
-            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, cache_session_id)
-            logger.info(f"Created and cached new checkpointer for agent (session: {cache_session_id})")
-        else:
-            logger.info(f"Using cached checkpointer for agent (session: {cache_session_id})")
+        # Create the async PostgreSQL checkpointer in the current event loop
+        # This ensures the checkpointer uses the same event loop as ainvoke()
+        checkpointer, checkpointer_cm = await CheckpointerCacheService.get_async_checkpointer()
+        logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
         messages = []
@@ -180,7 +172,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
     logger.info(f"Tracer configured: {tracer is not None}")
 
-    return agent_chain, tracer, mcp_client
+    return agent_chain, tracer, mcp_client, checkpointer_cm
 
 
 def prepare_agent_config(agent, tracer):

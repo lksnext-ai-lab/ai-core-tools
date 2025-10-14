@@ -229,8 +229,8 @@ class AgentExecutionService:
                 # Get the session to find the session_id
                 session = await self.session_service.get_user_session(agent_id, user_context)
                 if session:
-                    # Invalidate the checkpointer for this specific session
-                    CheckpointerCacheService.invalidate_checkpointer(agent_id, session.id)
+                    # Invalidate the checkpointer for this specific session (use async version)
+                    await CheckpointerCacheService.invalidate_checkpointer_async(agent_id, session.id)
                     logger.info(f"Invalidated checkpointer for agent {agent_id}, session {session.id}")
             
             return True
@@ -500,8 +500,11 @@ class AgentExecutionService:
             return result_text
                 
         except Exception as e:
-            logger.error(f"Error executing LangChain agent: {str(e)}")
-            raise Exception(f"Agent execution failed: {str(e)}")
+            import traceback
+            error_msg = str(e) if str(e) else repr(e)
+            logger.error(f"Error executing LangChain agent: {error_msg}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise Exception(f"Agent execution failed: {error_msg}")
     
     async def _execute_agent_async(
         self,
@@ -515,10 +518,11 @@ class AgentExecutionService:
         from langchain_core.messages import HumanMessage
         
         mcp_client = None
+        checkpointer_cm = None
         try:
             # Create the agent chain with all tools and capabilities
             # All async operations happen in the SAME event loop
-            agent_chain, tracer, mcp_client = await create_agent(fresh_agent, search_params, session_id_for_cache)
+            agent_chain, tracer, mcp_client, checkpointer_cm = await create_agent(fresh_agent, search_params, session_id_for_cache)
             
             # Prepare configuration with tracer
             config = prepare_agent_config(fresh_agent, tracer)
@@ -562,6 +566,14 @@ class AgentExecutionService:
                     logger.info("MCP client closed successfully")
                 except Exception as e:
                     logger.warning(f"Error closing MCP client: {e}")
+            
+            # Always close the checkpointer context manager
+            if checkpointer_cm:
+                try:
+                    await checkpointer_cm.__aexit__(None, None, None)
+                    logger.debug("Checkpointer context manager closed successfully")
+                except Exception as e:
+                    logger.warning(f"Error closing checkpointer context manager: {e}")
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location"""
