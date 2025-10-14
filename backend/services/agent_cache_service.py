@@ -89,17 +89,21 @@ class CheckpointerCacheService:
         """
         Delete checkpoints for a specific thread (session) - async version.
         
+        The thread_id format must match the one used during agent execution:
+        f"thread_{agent_id}_{session_id}"
+        
         Args:
             agent_id: Agent ID
-            session_id: Session ID
+            session_id: Session ID (e.g., "oauth_9_2", "api_1_abc123")
         """
         try:
             # Create a temporary checkpointer to delete the thread
             checkpointer, checkpointer_cm = await cls.get_async_checkpointer()
             
             try:
-                # Generate thread_id that matches the one used in agentTools.py
-                thread_id = f"{session_id}"
+                # Generate thread_id that EXACTLY matches the one used in agent_execution_service.py
+                # Format: "thread_{agent_id}_{session_id}"
+                thread_id = f"thread_{agent_id}_{session_id}"
                 
                 # Delete the thread from PostgreSQL
                 await checkpointer.adelete_thread(thread_id)
@@ -138,39 +142,35 @@ class CheckpointerCacheService:
         logger.warning("To clear all data, use database operations or delete specific threads")
 
     @classmethod
-    async def invalidate_session_checkpointers_async(cls, session_id: str = "default"):
+    async def invalidate_session_checkpointers_async(cls, agent_id: int, session_id: str = "default"):
         """
         Clear checkpoints for a specific session - async version.
         
+        Note: This is a wrapper around invalidate_checkpointer_async.
+        Kept for backward compatibility but requires agent_id now.
+        
         Args:
+            agent_id: Agent ID (required to build correct thread_id)
             session_id: Session ID to clear
         """
         try:
-            # Create a temporary checkpointer to delete the thread
-            checkpointer, checkpointer_cm = await cls.get_async_checkpointer()
-            
-            try:
-                thread_id = f"{session_id}"
-                await checkpointer.adelete_thread(thread_id)
-                
-                logger.info(f"Deleted checkpoints for session {session_id}")
-            finally:
-                # Clean up the checkpointer
-                await checkpointer_cm.__aexit__(None, None, None)
-            
+            # Use the standard invalidate method which has correct thread_id format
+            await cls.invalidate_checkpointer_async(agent_id, session_id)
+            logger.info(f"Deleted checkpoints for session {session_id} (agent {agent_id})")
         except Exception as e:
             logger.error(f"Error invalidating session checkpointers: {str(e)}")
 
     @classmethod
-    def invalidate_session_checkpointers(cls, session_id: str = "default"):
+    def invalidate_session_checkpointers(cls, agent_id: int, session_id: str = "default"):
         """
         Clear checkpoints for a specific session - sync wrapper.
         
         Args:
+            agent_id: Agent ID (required to build correct thread_id)
             session_id: Session ID to clear
         """
         import asyncio
         try:
-            asyncio.run(cls.invalidate_session_checkpointers_async(session_id))
+            asyncio.run(cls.invalidate_session_checkpointers_async(agent_id, session_id))
         except Exception as e:
             logger.error(f"Error invalidating session checkpointers: {str(e)}") 

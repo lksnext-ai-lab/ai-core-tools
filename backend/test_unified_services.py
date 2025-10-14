@@ -28,27 +28,38 @@ async def test_session_management():
     session = await session_service.get_user_session(agent_id=1, user_context=user_context)
     if session:
         print(f"✅ Session created: {session.id}")
+        print(f"   Agent ID: {session.agent_id}")
+        print(f"   Created at: {session.created_at}")
     else:
         print("❌ Session creation failed")
         return False
     
-    # Test message addition
-    await session_service.add_message_to_session(session.id, "Hello", "Hi there!")
+    # Test session touch (keep alive)
+    await session_service.touch_session(session.id)
+    print(f"✅ Session touched successfully")
     
-    # Test conversation history
-    history = await session_service.get_conversation_history(agent_id=1, user_context=user_context)
-    if len(history) == 1:
-        print(f"✅ Message added to history: {history[0]}")
+    # Test session persistence (get same session again)
+    session2 = await session_service.get_user_session(agent_id=1, user_context=user_context)
+    if session2 and session2.id == session.id:
+        print(f"✅ Session persisted across requests: {session2.id}")
     else:
-        print("❌ Message not added to history")
+        print("❌ Session persistence failed")
         return False
     
     # Test session reset
     success = await session_service.reset_user_session(agent_id=1, user_context=user_context)
     if success:
-        print("✅ Session reset successful")
+        print("✅ Session reset successful (session removed from memory)")
     else:
         print("❌ Session reset failed")
+        return False
+    
+    # Test that session was removed
+    session3 = await session_service.get_user_session(agent_id=1, user_context=user_context)
+    if session3 and session3.id != session.id:
+        print(f"✅ New session created after reset: {session3.id}")
+    else:
+        print("❌ Session not properly reset")
         return False
     
     print("✅ Session Management Service tests passed!")

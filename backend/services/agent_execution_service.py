@@ -97,11 +97,9 @@ class AgentExecutionService:
             # Update request count
             self._update_request_count(agent, db)
             
-            # Add to session history if memory enabled
+            # Update session timestamp to keep it alive
             if session:
-                await self.session_service.add_message_to_session(
-                    session.id, message, parsed_response
-                )
+                await self.session_service.touch_session(session.id)
             
             return {
                 "response": parsed_response,
