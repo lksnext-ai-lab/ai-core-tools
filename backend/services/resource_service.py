@@ -1,5 +1,6 @@
 from models.resource import Resource
 from repositories.resource_repository import ResourceRepository
+from repositories.app_repository import AppRepository
 from services.folder_service import FolderService
 from typing import List, Tuple, Optional
 import os
@@ -15,6 +16,46 @@ class ResourceService:
 
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
+
+    @staticmethod
+    def _validate_file_size(file: UploadFile, max_size_mb: int, app_id: int) -> Optional[str]:
+        """
+        Validate file size against app configuration
+        
+        Args:
+            file: The uploaded file
+            max_size_mb: Maximum file size in MB (0 means no limit)
+            app_id: Application ID for logging
+            
+        Returns:
+            Error message if file is too large, None if valid
+        """
+        if max_size_mb <= 0:
+            # No limit configured
+            return None
+            
+        # Get file size
+        if hasattr(file, 'size') and file.size is not None:
+            file_size_bytes = file.size
+        else:
+            # For files without size attribute, read content to get size
+            if hasattr(file, 'file'):
+                current_pos = file.file.tell()
+                file.file.seek(0, 2)  # Seek to end
+                file_size_bytes = file.file.tell()
+                file.file.seek(current_pos)  # Reset position
+            else:
+                # Can't determine size, allow upload
+                logger.warning(f"Could not determine size for file {file.filename} in app {app_id}")
+                return None
+        
+        file_size_mb = file_size_bytes / (1024 * 1024)
+        
+        if file_size_mb > max_size_mb:
+            logger.warning(f"File {file.filename} ({file_size_mb:.2f}MB) exceeds limit of {max_size_mb}MB for app {app_id}")
+            return f"File size ({file_size_mb:.2f}MB) exceeds the maximum allowed size of {max_size_mb}MB"
+            
+        return None
 
     @staticmethod
     def get_resources_by_repo_id(repository_id: int, db: Session) -> List[Resource]:
@@ -109,7 +150,7 @@ class ResourceService:
             return os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
     
     @staticmethod
-    def create_multiple_resources(files: List, repository_id: int, db: Session, custom_names: dict = None, folder_id: Optional[int] = None) -> Tuple[List[Resource], List[dict]]:
+    def create_multiple_resources(files: List, repository_id: int, db: Session, custom_names: dict = None, folder_id: Optional[int] = None, app_id: Optional[int] = None, max_file_size_mb: int = 0) -> Tuple[List[Resource], List[dict]]:
         """
         Create multiple resources from uploaded files
         
@@ -119,6 +160,8 @@ class ResourceService:
             db: Database session
             custom_names: Dictionary mapping file indices to custom names (without extensions)
             folder_id: Optional folder ID to upload files to
+            app_id: Optional app ID for file size validation
+            max_file_size_mb: Maximum file size in MB (0 = no limit)
             
         Returns:
             Tuple containing a list of created Resource instances and a list of failed files
@@ -157,7 +200,7 @@ class ResourceService:
         
         for index, file in enumerate(files):
             custom_name = custom_names.get(index)
-            result = ResourceService._process_single_file(file, repository_id, target_path, custom_name, folder_id, db)
+            result = ResourceService._process_single_file(file, repository_id, target_path, custom_name, folder_id, db, app_id, max_file_size_mb)
             if isinstance(result, Resource):
                 created_resources.append(result)
                 logger.info(f"Resource {result.name} prepared for indexing")
@@ -181,7 +224,7 @@ class ResourceService:
         return created_resources, failed_files
 
     @staticmethod
-    def _process_single_file(file, repository_id: int, target_path: str, custom_name: str = None, folder_id: Optional[int] = None, db: Session = None):
+    def _process_single_file(file, repository_id: int, target_path: str, custom_name: str = None, folder_id: Optional[int] = None, db: Session = None, app_id: Optional[int] = None, max_file_size_mb: int = 0):
         """
         Process a single file upload
         
@@ -192,12 +235,20 @@ class ResourceService:
             custom_name: Custom name for the resource (without extension)
             folder_id: Optional folder ID
             db: Database session to use
+            app_id: Optional app ID for logging
+            max_file_size_mb: Maximum file size in MB (0 = no limit)
             
         Returns:
             Resource instance if successful, error dict if failed
         """
         if not file or not hasattr(file, 'filename') or file.filename == '':
             return {'filename': 'Unknown', 'error': 'Empty filename'}
+            
+        # Validate file size if app_id and limit are provided
+        if app_id and max_file_size_mb > 0:
+            size_error = ResourceService._validate_file_size(file, max_file_size_mb, app_id)
+            if size_error:
+                return {'filename': file.filename, 'error': size_error}
             
         file_extension = os.path.splitext(file.filename)[1].lower()
         if file_extension not in ResourceService.SUPPORTED_EXTENSIONS:
@@ -303,7 +354,20 @@ class ResourceService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No files provided"
             )
+
+        # Get app configuration for file size limit
+        app_repo = AppRepository(db)
+        app = app_repo.get_by_id(app_id)
+        if not app:
+            logger.error(f"App {app_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="App not found"
+            )
         
+        max_file_size_mb = app.max_file_size_mb or 0
+        logger.info(f"App {app_id} file size limit: {max_file_size_mb}MB (0 = no limit)")
+
         # Validate repository exists
         repo = ResourceRepository.get_repository_by_id(db, repository_id)
         if not repo:
@@ -317,7 +381,7 @@ class ResourceService:
         
         # Process files using create_multiple_resources method
         created_resources, failed_files = ResourceService.create_multiple_resources(
-            files, repository_id, db, folder_id=folder_id
+            files, repository_id, db, folder_id=folder_id, app_id=app_id, max_file_size_mb=max_file_size_mb
         )
         
         logger.info(f"Upload completed - {len(created_resources)} resources created, {len(failed_files)} failed")

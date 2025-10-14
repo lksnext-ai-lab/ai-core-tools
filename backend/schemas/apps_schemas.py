@@ -28,6 +28,7 @@ class AppListItemSchema(BaseModel):
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
     agent_rate_limit: int
+    max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
     # Entity counts for table display
     agent_count: int = 0
@@ -50,6 +51,7 @@ class AppDetailSchema(BaseModel):
     created_at: Optional[datetime]
     owner_id: int
     agent_rate_limit: int
+    max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
     # Entity counts for dashboard display
      
@@ -67,6 +69,7 @@ class CreateAppSchema(BaseModel):
     name: str
     langsmith_api_key: Optional[str] = ""
     agent_rate_limit: Optional[int] = 0
+    max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
 
 
@@ -75,6 +78,7 @@ class UpdateAppSchema(BaseModel):
     name: str
     langsmith_api_key: Optional[str] = ""
     agent_rate_limit: Optional[int] = 0
+    max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
 
 
