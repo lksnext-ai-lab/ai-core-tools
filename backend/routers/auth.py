@@ -8,6 +8,7 @@ import httpx
 from datetime import datetime, timedelta
 import jwt
 from urllib.parse import urlencode
+import msal
 
 # Import models and services
 from models.user import User
@@ -23,11 +24,7 @@ auth_router = APIRouter()
 # Import authentication configuration
 from utils.auth_config import AuthConfig
 
-# Use configuration from AuthConfig
-GOOGLE_CLIENT_ID = AuthConfig.GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET = AuthConfig.GOOGLE_CLIENT_SECRET
-GOOGLE_DISCOVERY_URL = AuthConfig.GOOGLE_DISCOVERY_URL
-GOOGLE_REDIRECT_URI = AuthConfig.GOOGLE_REDIRECT_URI
+# Use configuration from AuthConfig - Common
 FRONTEND_URL = AuthConfig.FRONTEND_URL
 
 # JWT Configuration for session tokens
@@ -72,7 +69,7 @@ async def get_google_oauth_config():
     """Get Google OAuth configuration from discovery URL"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(GOOGLE_DISCOVERY_URL)
+            response = await client.get(AuthConfig.GOOGLE_DISCOVERY_URL)
             response.raise_for_status()
             return response.json()
     except Exception as e:
@@ -80,6 +77,21 @@ async def get_google_oauth_config():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to configure OAuth"
+        )
+
+def get_entraid_msal_app():
+    """Get MSAL Confidential Client Application for EntraID"""
+    try:
+        return msal.ConfidentialClientApplication(
+            AuthConfig.ENTRAID_CLIENT_ID,
+            authority=AuthConfig.ENTRAID_AUTHORITY,
+            client_credential=AuthConfig.ENTRAID_CLIENT_SECRET,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create MSAL app: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to configure EntraID OAuth"
         )
 
 def create_jwt_token(user_data: dict, expires_delta: timedelta = None) -> str:
@@ -147,11 +159,24 @@ async def login():
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
-                    "message": "Google OAuth not configured",
-                    "instructions": "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables, or set DEVELOPMENT_MODE=true for testing"
+                    "message": f"{AuthConfig.OAUTH_PROVIDER} OAuth not configured",
+                    "instructions": f"Configure {AuthConfig.OAUTH_PROVIDER} OAuth credentials, or set DEVELOPMENT_MODE=true for testing"
                 }
             )
     
+    # Route to appropriate OAuth provider
+    if AuthConfig.OAUTH_PROVIDER == 'GOOGLE':
+        return await login_google()
+    elif AuthConfig.OAUTH_PROVIDER == 'ENTRAID':
+        return await login_entraid()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unsupported OAuth provider: {AuthConfig.OAUTH_PROVIDER}"
+        )
+
+async def login_google():
+    """Handle Google OAuth login"""
     try:
         # Get Google OAuth configuration
         oauth_config = await get_google_oauth_config()
@@ -168,8 +193,8 @@ async def login():
         
         # Build authorization URL
         params = {
-            'client_id': GOOGLE_CLIENT_ID,
-            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'client_id': AuthConfig.GOOGLE_CLIENT_ID,
+            'redirect_uri': AuthConfig.GOOGLE_REDIRECT_URI,
             'scope': 'openid email profile',
             'response_type': 'code',
             'state': state,
@@ -186,7 +211,38 @@ async def login():
         )
         
     except Exception as e:
-        logger.error(f"Error generating login URL: {str(e)}")
+        logger.error(f"Error generating Google login URL: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate login URL"
+        )
+
+async def login_entraid():
+    """Handle EntraID (Azure AD) OAuth login"""
+    try:
+        # Get MSAL app
+        msal_app = get_entraid_msal_app()
+        
+        # Generate state parameter for security
+        state = str(uuid.uuid4())
+        
+        # Build authorization URL
+        # Note: openid, profile, offline_access are added automatically by MSAL
+        # Only include Microsoft Graph API scopes here
+        auth_url = msal_app.get_authorization_request_url(
+            scopes=["User.Read"],  # Microsoft Graph scope for reading user profile
+            state=state,
+            redirect_uri=AuthConfig.ENTRAID_REDIRECT_URI
+        )
+        
+        return LoginModeResponse(
+            mode="OIDC",
+            login_url=auth_url,
+            state=state
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating EntraID login URL: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate login URL"
@@ -253,7 +309,7 @@ async def fake_login(request: FakeLoginRequest):
 @auth_router.get("/callback")
 async def auth_callback(request: Request):
     """
-    Handle Google OAuth callback
+    Handle OAuth callback (Google or EntraID)
     """
     # Get authorization code and state from query parameters
     code = request.query_params.get('code')
@@ -269,6 +325,17 @@ async def auth_callback(request: Request):
         logger.error("Missing code or state in OAuth callback")
         return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=missing_parameters")
     
+    # Route to appropriate OAuth provider
+    if AuthConfig.OAUTH_PROVIDER == 'GOOGLE':
+        return await callback_google(code, state)
+    elif AuthConfig.OAUTH_PROVIDER == 'ENTRAID':
+        return await callback_entraid(code, state)
+    else:
+        logger.error(f"Unsupported OAuth provider: {AuthConfig.OAUTH_PROVIDER}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=unsupported_provider")
+
+async def callback_google(code: str, state: str):
+    """Handle Google OAuth callback"""
     try:
         # Get Google OAuth configuration
         oauth_config = await get_google_oauth_config()
@@ -280,11 +347,11 @@ async def auth_callback(request: Request):
             token_response = await client.post(
                 token_endpoint,
                 data={
-                    'client_id': GOOGLE_CLIENT_ID,
-                    'client_secret': GOOGLE_CLIENT_SECRET,
+                    'client_id': AuthConfig.GOOGLE_CLIENT_ID,
+                    'client_secret': AuthConfig.GOOGLE_CLIENT_SECRET,
                     'code': code,
                     'grant_type': 'authorization_code',
-                    'redirect_uri': GOOGLE_REDIRECT_URI
+                    'redirect_uri': AuthConfig.GOOGLE_REDIRECT_URI
                 },
                 headers={'Content-Type': 'application/x-www-form-urlencoded'}
             )
@@ -333,7 +400,73 @@ async def auth_callback(request: Request):
             session.close()
             
     except Exception as e:
-        logger.error(f"Error in OAuth callback: {str(e)}")
+        logger.error(f"Error in Google OAuth callback: {str(e)}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=callback_failed")
+
+async def callback_entraid(code: str, state: str):
+    """Handle EntraID (Azure AD) OAuth callback"""
+    try:
+        # Get MSAL app
+        msal_app = get_entraid_msal_app()
+        
+        # Exchange authorization code for tokens
+        # Note: openid, profile, offline_access are added automatically by MSAL
+        result = msal_app.acquire_token_by_authorization_code(
+            code,
+            scopes=["User.Read"],  # Microsoft Graph scope for reading user profile
+            redirect_uri=AuthConfig.ENTRAID_REDIRECT_URI
+        )
+        
+        if "error" in result:
+            logger.error(f"EntraID token error: {result.get('error')}: {result.get('error_description')}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=token_exchange_failed")
+        
+        # Extract user information from ID token claims
+        id_token_claims = result.get("id_token_claims", {})
+        
+        # Get email and name from claims
+        email = id_token_claims.get("preferred_username") or id_token_claims.get("email") or id_token_claims.get("upn")
+        name = id_token_claims.get("name")
+        oid = id_token_claims.get("oid")  # Object ID in Azure AD
+        
+        if not email:
+            logger.error("No email found in EntraID token claims")
+            return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=no_email")
+        
+        # Create or get user in database
+        session = SessionLocal()
+        try:
+            user, created = UserService.get_or_create_user(
+                db=session,
+                email=email,
+                name=name
+            )
+            
+            if created:
+                logger.info(f"Created new user: {user.email}")
+            else:
+                logger.info(f"User logged in: {user.email}")
+            
+            # Create JWT token for session
+            user_data = {
+                'user_id': user.user_id,
+                'email': user.email,
+                'name': user.name,
+                'entraid_id': oid
+            }
+            
+            jwt_token = create_jwt_token(user_data)
+            expires_at = (datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
+            
+            # Redirect to frontend with token (use /login/success to avoid /auth prefix that goes to backend)
+            redirect_url = f"{FRONTEND_URL}/login/success?token={jwt_token}&expires={expires_at}"
+            return RedirectResponse(url=redirect_url)
+            
+        finally:
+            session.close()
+            
+    except Exception as e:
+        logger.error(f"Error in EntraID OAuth callback: {str(e)}")
         return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=callback_failed")
 
 @auth_router.post("/verify")
@@ -392,6 +525,7 @@ async def get_auth_config():
     return {
         "auth_config": AuthConfig.get_config_summary(),
         "login_mode": AuthConfig.LOGIN_MODE,
+        "oauth_provider": AuthConfig.OAUTH_PROVIDER,
         "oauth_configured": AuthConfig.is_oauth_configured(),
         "development_mode": AuthConfig.is_development_mode(),
         "fake_login_enabled": AuthConfig.is_fake_login_mode(),
