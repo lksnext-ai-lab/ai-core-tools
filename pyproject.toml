@@ -114,7 +114,7 @@ keystoneauth1 = ">=5.11.1,<6.0.0"
 keystonemiddleware = ">=10.11.0,<11.0.0"
 kombu = ">=5.5.4,<6.0.0"
 langchain-text-splitters = ">=0.3.9,<0.4.0"
-langgraph-checkpoint = "==2.1.1"
+langgraph-checkpoint = ">=2.1.2"
 langgraph-prebuilt = "==0.6.3"
 langgraph-sdk = "==0.2.0"
 langsmith = ">=0.4.13,<1.0.0"
@@ -216,6 +216,7 @@ yaql = ">=3.1.0,<4.0.0"
 yarl = ">=1.20.1,<2.0.0"
 zipp = ">=3.23.0,<4.0.0"
 zstandard = ">=0.23.0,<1.0.0"
+langgraph-checkpoint-postgres = ">=2.0.25"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
