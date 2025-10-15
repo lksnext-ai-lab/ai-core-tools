@@ -21,3 +21,16 @@ class ResetResponseSchema(BaseModel):
     """Schema for reset response"""
     success: bool
     message: str
+
+
+class ConversationMessageSchema(BaseModel):
+    """Schema for a single conversation message"""
+    role: str  # 'user' or 'agent'
+    content: str
+
+
+class ConversationHistorySchema(BaseModel):
+    """Schema for conversation history response"""
+    messages: List[ConversationMessageSchema]
+    agent_id: int
+    has_memory: bool

@@ -12,6 +12,7 @@ interface Agent {
   description?: string;
   status: string;
   type: string;
+  has_memory?: boolean;
   system_prompt?: string;
   prompt_template?: string;
   silo?: {
@@ -221,7 +222,7 @@ function AgentPlaygroundPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="flex-1 p-6 overflow-y-auto">
           {activeTab === 'playground' && (
             <>
               {/* Playground Interface */}

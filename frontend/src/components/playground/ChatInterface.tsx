@@ -25,6 +25,7 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
@@ -37,6 +38,40 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load conversation history on mount
+  useEffect(() => {
+    const loadConversationHistory = async () => {
+      try {
+        setIsLoadingHistory(true);
+        const response = await apiService.getConversationHistory(appId, agentId);
+        
+        if (response.messages && response.messages.length > 0) {
+          // Convert backend messages to frontend Message format
+          const loadedMessages: Message[] = response.messages.map((msg: any, index: number) => ({
+            id: `history-${index}`,
+            type: msg.role === 'user' ? 'user' : 'agent',
+            content: msg.content,
+            timestamp: new Date(), // We don't have timestamp in backend, use current time
+          }));
+          
+          setMessages(loadedMessages);
+          console.log(`Loaded ${loadedMessages.length} messages from conversation history`);
+        } else {
+          // No history, start fresh
+          setMessages([]);
+        }
+      } catch (error) {
+        console.error('Error loading conversation history:', error);
+        // Don't show error to user, just start with empty conversation
+        setMessages([]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    loadConversationHistory();
+  }, [appId, agentId]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && attachedFiles.length === 0) return;
@@ -224,46 +259,57 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
 
         {/* Messages Container */}
         <div className="h-96 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                  message.type === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : message.type === 'error'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-200 text-gray-900'
-                }`}
-              >
-                <div className="text-sm font-medium mb-1">
-                  {message.type === 'user' ? 'You' : message.type === 'error' ? 'Error' : agentName}
-                </div>
-                <div>
-                  <MessageContent content={message.content} />
-                </div>
-                {message.files && message.files.length > 0 && (
-                  <div className="mt-2 text-xs opacity-75">
-                    📎 {message.files.join(', ')}
+          {isLoadingHistory ? (
+            <div className="flex justify-center items-center h-full">
+              <div className="text-gray-500">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 mx-auto mb-2"></div>
+                Loading conversation...
+              </div>
+            </div>
+          ) : (
+            <>
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                      message.type === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : message.type === 'error'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-200 text-gray-900'
+                    }`}
+                  >
+                    <div className="text-sm font-medium mb-1">
+                      {message.type === 'user' ? 'You' : message.type === 'error' ? 'Error' : agentName}
+                    </div>
+                    <div>
+                      <MessageContent content={message.content} />
+                    </div>
+                    {message.files && message.files.length > 0 && (
+                      <div className="mt-2 text-xs opacity-75">
+                        📎 {message.files.join(', ')}
+                      </div>
+                    )}
+                    <div className="text-xs opacity-75 mt-1">
+                      {message.timestamp.toLocaleTimeString()}
+                    </div>
                   </div>
-                )}
-                <div className="text-xs opacity-75 mt-1">
-                  {message.timestamp.toLocaleTimeString()}
                 </div>
-              </div>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg">
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                  Thinking...
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg">
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                      Thinking...
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+            </>
           )}
           <div ref={messagesEndRef} />
         </div>

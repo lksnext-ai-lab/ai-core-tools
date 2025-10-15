@@ -6,7 +6,7 @@ import json
 from services.agent_service import AgentService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
-from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetResponseSchema
+from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService
 from routers.internal.auth_utils import get_current_user_oauth
@@ -367,6 +367,55 @@ async def reset_conversation(
         raise
     except Exception as e:
         logger.error(f"Error in reset endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@agents_router.get("/{agent_id}/conversation-history",
+                  summary="Get conversation history",
+                  tags=["Agents"],
+                  response_model=ConversationHistorySchema)
+async def get_conversation_history(
+    app_id: int,
+    agent_id: int,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+    agent_service: AgentService = Depends(get_agent_service)
+):
+    """
+    Internal API: Get conversation history for playground (OAuth authentication)
+    """
+    try:
+        # Get agent to check if it has memory
+        agent = agent_service.get_agent(db, agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Create user context for OAuth user
+        user_context = {
+            "user_id": current_user["user_id"],
+            "oauth": True,
+            "app_id": app_id
+        }
+        
+        # Use unified service layer
+        execution_service = AgentExecutionService(db)
+        messages = await execution_service.get_conversation_history(
+            agent_id=agent_id,
+            user_context=user_context,
+            db=db
+        )
+        
+        logger.info(f"Retrieved {len(messages)} messages for agent {agent_id} by user {current_user['user_id']}")
+        return ConversationHistorySchema(
+            messages=messages,
+            agent_id=agent_id,
+            has_memory=agent.has_memory
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in conversation history endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

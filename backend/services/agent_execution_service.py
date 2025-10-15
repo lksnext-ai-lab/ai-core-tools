@@ -46,7 +46,6 @@ class AgentExecutionService:
         files: List[UploadFile] = None,
         search_params: Dict = None,
         user_context: Dict = None,
-        conversation_id: str = None,
         db: Session = None
     ) -> Dict[str, Any]:
         """
@@ -79,7 +78,7 @@ class AgentExecutionService:
             # Get user session for memory-enabled agents
             session = None
             if agent.has_memory:
-                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
+                session = await self.session_service.get_user_session(agent_id, user_context)
             
             # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
             # This prevents blocking the event loop and allows other requests to be processed
@@ -236,6 +235,48 @@ class AgentExecutionService:
         except Exception as e:
             logger.error(f"Error resetting agent conversation: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+    
+    async def get_conversation_history(
+        self,
+        agent_id: int,
+        user_context: Dict = None,
+        db: Session = None
+    ) -> List[Dict[str, str]]:
+        """
+        Get conversation history - used by playground to load existing conversation
+        
+        Args:
+            agent_id: ID of the agent
+            user_context: User context (api_key, user_id, etc.)
+            
+        Returns:
+            List of messages with role and content
+        """
+        try:
+            # Get agent
+            agent = self.agent_service.get_agent(db, agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            
+            # Validate user has access to this agent
+            await self._validate_agent_access(agent, user_context)
+            
+            # Get conversation history if memory enabled
+            if agent.has_memory:
+                # Get the session to find the session_id
+                session = await self.session_service.get_user_session(agent_id, user_context)
+                if session:
+                    # Get history from checkpointer
+                    from services.agent_cache_service import CheckpointerCacheService
+                    history = await CheckpointerCacheService.get_conversation_history_async(agent_id, session.id)
+                    logger.info(f"Retrieved {len(history)} messages for agent {agent_id}, session {session.id}")
+                    return history
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error getting conversation history: {str(e)}")
+            return []
     
     async def _validate_agent_access(self, agent: Agent, user_context: Dict):
         """Validate user has access to the agent"""

@@ -141,6 +141,12 @@ class ApiService {
     });
   }
 
+  async getConversationHistory(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/conversation-history`, {
+      method: 'GET',
+    });
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);

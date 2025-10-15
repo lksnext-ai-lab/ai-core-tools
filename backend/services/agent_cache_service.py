@@ -173,4 +173,72 @@ class CheckpointerCacheService:
         try:
             asyncio.run(cls.invalidate_session_checkpointers_async(agent_id, session_id))
         except Exception as e:
-            logger.error(f"Error invalidating session checkpointers: {str(e)}") 
+            logger.error(f"Error invalidating session checkpointers: {str(e)}")
+
+    @classmethod
+    async def get_conversation_history_async(cls, agent_id: int, session_id: str = "default"):
+        """
+        Retrieve conversation history from PostgreSQL checkpointer.
+        
+        Args:
+            agent_id: Agent ID
+            session_id: Session ID
+            
+        Returns:
+            List of message dicts with role and content
+        """
+        try:
+            # Create a temporary checkpointer to read the thread
+            checkpointer, checkpointer_cm = await cls.get_async_checkpointer()
+            
+            try:
+                # Generate thread_id that matches the one used in agent_execution_service.py
+                thread_id = f"thread_{agent_id}_{session_id}"
+                
+                # Get the latest state for this thread
+                config = {"configurable": {"thread_id": thread_id}}
+                
+                # Get the state tuple
+                state_tuple = await checkpointer.aget_tuple(config)
+                
+                if state_tuple and state_tuple.checkpoint:
+                    # Extract messages from checkpoint
+                    channel_values = state_tuple.checkpoint.get("channel_values", {})
+                    messages = channel_values.get("messages", [])
+                    
+                    # Convert LangChain messages to simple dicts
+                    history = []
+                    for msg in messages:
+                        # Handle different message types
+                        if hasattr(msg, 'type'):
+                            msg_type = msg.type
+                            if msg_type in ['human', 'user']:
+                                role = 'user'
+                            elif msg_type in ['ai', 'assistant']:
+                                role = 'agent'
+                            elif msg_type == 'system':
+                                # Skip system messages in UI
+                                continue
+                            else:
+                                role = msg_type
+                            
+                            content = msg.content if hasattr(msg, 'content') else str(msg)
+                            
+                            history.append({
+                                "role": role,
+                                "content": content
+                            })
+                    
+                    logger.info(f"Retrieved {len(history)} messages from thread {thread_id}")
+                    return history
+                else:
+                    logger.info(f"No conversation history found for thread {thread_id}")
+                    return []
+                    
+            finally:
+                # Clean up the checkpointer
+                await checkpointer_cm.__aexit__(None, None, None)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving conversation history: {str(e)}")
+            return [] 
