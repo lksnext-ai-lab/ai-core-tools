@@ -534,6 +534,7 @@ class ApiService {
     });
   }
 
+  // ==================== FILE MANAGEMENT API ====================
   async uploadFileForChat(appId: number, agentId: number, file: File) {
     const formData = new FormData();
     formData.append('file', file);

@@ -39,6 +39,87 @@ class AgentExecutionService:
         self.agent_execution_repo = AgentExecutionRepository()
         self.db = db
     
+    async def execute_agent_chat_with_file_refs(
+        self, 
+        agent_id: int, 
+        message: str, 
+        file_references: List = None,
+        search_params: Dict = None,
+        user_context: Dict = None,
+        db: Session = None
+    ) -> Dict[str, Any]:
+        """
+        Execute agent chat with persistent file references
+        
+        Args:
+            agent_id: ID of the agent to execute
+            message: User message
+            file_references: List of FileReference objects from FileManagementService
+            search_params: Optional search parameters for silo-based agents
+            user_context: User context (api_key, user_id, etc.)
+            
+        Returns:
+            Dict containing agent response and metadata
+        """
+        try:
+            # Get agent
+            agent = self.agent_service.get_agent(db, agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            
+            # Validate user has access to this agent
+            await self._validate_agent_access(agent, user_context)
+            
+            # Process file references to extract content
+            processed_files = []
+            if file_references:
+                for file_ref in file_references:
+                    processed_files.append({
+                        "filename": file_ref.filename,
+                        "content": file_ref.content,
+                        "type": file_ref.file_type
+                    })
+            
+            # Get user session for memory-enabled agents
+            session = None
+            if agent.has_memory:
+                session = await self.session_service.get_user_session(agent_id, user_context)
+            
+            # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
+            # This prevents blocking the event loop and allows other requests to be processed
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                self._executor,
+                self._execute_langchain_agent,
+                agent, message, processed_files, search_params, session, db
+            )
+            
+            # Parse response based on agent's output parser
+            from tools.agentTools import parse_agent_response
+            parsed_response = parse_agent_response(response, agent)
+            
+            # Update request count
+            self._update_request_count(agent, db)
+            
+            # Update session timestamp to keep it alive
+            if session:
+                await self.session_service.touch_session(session.id)
+            
+            return {
+                "response": parsed_response,
+                "agent_id": agent_id,
+                "metadata": {
+                    "agent_name": agent.name,
+                    "agent_type": agent.type,
+                    "files_processed": len(processed_files),
+                    "has_memory": agent.has_memory
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error executing agent chat: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+
     async def execute_agent_chat(
         self, 
         agent_id: int, 
@@ -230,6 +311,26 @@ class AgentExecutionService:
                     await CheckpointerCacheService.invalidate_checkpointer_async(agent_id, session.id)
                     logger.info(f"Invalidated checkpointer for agent {agent_id}, session {session.id}")
             
+            # Clear all attached files for this user/agent session
+            from services.file_management_service import FileManagementService
+            file_service = FileManagementService()
+            
+            # Get all attached files for this session
+            attached_files = await file_service.list_attached_files(agent_id, user_context)
+            
+            # Remove each file
+            for file_data in attached_files:
+                try:
+                    await file_service.remove_file(
+                        file_id=file_data['file_id'],
+                        agent_id=agent_id,
+                        user_context=user_context
+                    )
+                    logger.info(f"Removed file {file_data['filename']} during conversation reset")
+                except Exception as e:
+                    logger.error(f"Error removing file {file_data['file_id']} during reset: {str(e)}")
+            
+            logger.info(f"Conversation reset for agent {agent_id} - cleared {len(attached_files)} files")
             return True
             
         except Exception as e:
@@ -425,7 +526,9 @@ class AgentExecutionService:
                 }
             else:
                 # Convert to images and process with vision
-                images_dir = os.getenv("IMAGES_PATH", "data/temp/images/")
+                from utils.config import get_app_config
+                app_config = get_app_config()
+                images_dir = app_config['IMAGES_PATH']
                 os.makedirs(images_dir, exist_ok=True)
                 
                 image_paths = convert_pdf_to_images(pdf_path, images_dir)
@@ -530,10 +633,17 @@ class AgentExecutionService:
             if not fresh_agent:
                 raise Exception("Agent not found in database")
             
+            # Enhance message with file contents if files were uploaded
+            enhanced_message = message
+            if processed_files:
+                enhanced_message += "\n\n[Attached files:]"
+                for file_data in processed_files:
+                    enhanced_message += f"\n\n--- File: {file_data['filename']} ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+            
             # Wrap all async operations in a single event loop to avoid conflicts
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
             result_text = asyncio.run(self._execute_agent_async(
-                fresh_agent, message, search_params, session_id_for_cache
+                fresh_agent, enhanced_message, search_params, session_id_for_cache
             ))
             
             return result_text
@@ -618,9 +728,16 @@ class AgentExecutionService:
         """Save uploaded file to temporary location"""
         import tempfile
         
-        # Create temporary file
+        # Get TMP_BASE_FOLDER from config
+        from utils.config import get_app_config
+        app_config = get_app_config()
+        tmp_base_folder = app_config['TMP_BASE_FOLDER']
+        uploads_dir = os.path.join(tmp_base_folder, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=uploads_dir)
         
         try:
             # Write file content

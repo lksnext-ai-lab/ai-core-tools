@@ -8,7 +8,7 @@ from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
 from services.agent_execution_service import AgentExecutionService
-from services.file_management_service import FileManagementService
+from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
 
 from utils.logger import get_logger
@@ -257,9 +257,16 @@ async def _save_uploaded_file(upload_file: UploadFile) -> str:
     import tempfile
     import os
     
-    # Create temporary file
+    # Get TMP_BASE_FOLDER from config
+    from utils.config import get_app_config
+    app_config = get_app_config()
+    tmp_base_folder = app_config['TMP_BASE_FOLDER']
+    uploads_dir = os.path.join(tmp_base_folder, "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    # Create temporary file in TMP_BASE_FOLDER/uploads
     suffix = os.path.splitext(upload_file.filename)[1] if upload_file.filename else ''
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=uploads_dir) as temp_file:
         content = await upload_file.read()
         temp_file.write(content)
         temp_file_path = temp_file.name
@@ -299,20 +306,43 @@ async def chat_with_agent(
             "app_id": app_id
         }
         
-        # Convert UploadFile objects to File objects for the service
-        file_objects = []
+        # Process files using FileManagementService for persistence
+        file_service = FileManagementService()
+        file_references = []
+        
+        # Add any new files uploaded with this message
         if files:
             for upload_file in files:
-                # Save the uploaded file temporarily
-                temp_file = await _save_uploaded_file(upload_file)
-                file_objects.append(temp_file)
+                # Upload file to persistent storage
+                file_ref = await file_service.upload_file(
+                    file=upload_file,
+                    agent_id=agent_id,
+                    user_context=user_context
+                )
+                file_references.append(file_ref)
         
-        # Use unified service layer
+        # Always include previously uploaded files for this session
+        existing_files = await file_service.list_attached_files(
+            agent_id=agent_id,
+            user_context=user_context
+        )
+        
+        # Convert existing files to FileReference objects
+        for file_data in existing_files:
+            file_ref = FileReference(
+                file_id=file_data['file_id'],
+                filename=file_data['filename'],
+                file_type=file_data['file_type'],
+                content=file_data['content']
+            )
+            file_references.append(file_ref)
+        
+        # Use unified service layer with file references
         execution_service = AgentExecutionService(db)
-        result = await execution_service.execute_agent_chat(
+        result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent_id,
             message=message,
-            files=file_objects if file_objects else None,
+            file_references=file_references,
             search_params=parsed_search_params,
             user_context=user_context,
             db=db
@@ -522,6 +552,7 @@ async def remove_attached_file(
         file_service = FileManagementService()
         success = await file_service.remove_file(
             file_id=file_id,
+            agent_id=agent_id,
             user_context=user_context
         )
         
