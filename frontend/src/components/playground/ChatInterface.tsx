@@ -27,6 +27,9 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [persistentFiles, setPersistentFiles] = useState<any[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -39,7 +42,7 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
     scrollToBottom();
   }, [messages]);
 
-  // Load conversation history on mount
+  // Load conversation history and persistent files on mount
   useEffect(() => {
     const loadConversationHistory = async () => {
       try {
@@ -70,18 +73,31 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
       }
     };
 
+    const loadPersistentFiles = async () => {
+      try {
+        const response = await apiService.listAttachedFiles(appId, agentId);
+        console.log('Persistent files response:', response);
+        setPersistentFiles(response.files || []);
+        console.log(`Loaded ${response.files?.length || 0} persistent files:`, response.files);
+      } catch (error) {
+        console.error('Error loading persistent files:', error);
+        setPersistentFiles([]);
+      }
+    };
+
     loadConversationHistory();
+    loadPersistentFiles();
   }, [appId, agentId]);
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() && attachedFiles.length === 0) return;
+    if (!inputMessage.trim() && selectedFiles.length === 0 && persistentFiles.length === 0) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
       content: inputMessage,
       timestamp: new Date(),
-      files: attachedFiles.map(f => f.name)
+      files: selectedFiles.map(f => f.name)
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -115,11 +131,12 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
 
       const searchParams = Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined;
 
+      // Send message with selected files (new files + persistent files)
       const response = await apiService.chatWithAgent(
         appId,
         agentId,
         inputMessage,
-        attachedFiles,
+        selectedFiles, // Send selected files with the message
         searchParams
       );
 
@@ -139,7 +156,15 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
       };
 
       setMessages(prev => [...prev, agentMessage]);
-      setAttachedFiles([]); // Clear files after sending
+      setSelectedFiles([]); // Clear selected files after sending
+      
+      // Reload persistent files to show any new files that were uploaded
+      try {
+        const response = await apiService.listAttachedFiles(appId, agentId);
+        setPersistentFiles(response.files || []);
+      } catch (error) {
+        console.error('Error reloading persistent files:', error);
+      }
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -158,19 +183,70 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
       await apiService.resetAgentConversation(appId, agentId);
       setMessages([]);
       setAttachedFiles([]);
+      setSelectedFiles([]);
+      setPersistentFiles([]);
       setMetadataFilters({});
     } catch (error) {
       console.error('Error resetting conversation:', error);
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    setAttachedFiles(prev => [...prev, ...files]);
+    console.log('Uploading files:', files.map(f => f.name));
+    
+    setIsLoadingFiles(true);
+    
+    // Upload files to persistent storage
+    for (const file of files) {
+      try {
+        const uploadResponse = await apiService.uploadFileForChat(appId, agentId, file);
+        console.log(`Uploaded file: ${file.name}`, uploadResponse);
+      } catch (error) {
+        console.error(`Error uploading file ${file.name}:`, error);
+      }
+    }
+    
+    // Reload persistent files
+    try {
+      const response = await apiService.listAttachedFiles(appId, agentId);
+      console.log('Reloaded persistent files:', response);
+      setPersistentFiles(response.files || []);
+    } catch (error) {
+      console.error('Error reloading persistent files:', error);
+    } finally {
+      setIsLoadingFiles(false);
+    }
+    
+    // Clear the file input
+    event.target.value = '';
   };
 
   const handleRemoveFile = (index: number) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    setSelectedFiles(files);
+    console.log('Selected files for message:', files.map(f => f.name));
+  };
+
+  const handleRemoveSelectedFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemovePersistentFile = async (fileId: string) => {
+    try {
+      await apiService.removeAttachedFile(appId, agentId, fileId);
+      console.log(`Removed persistent file: ${fileId}`);
+      
+      // Reload persistent files
+      const response = await apiService.listAttachedFiles(appId, agentId);
+      setPersistentFiles(response.files || []);
+    } catch (error) {
+      console.error(`Error removing file ${fileId}:`, error);
+    }
   };
 
   const handleFilterChange = (fieldName: string, value: string) => {
@@ -316,28 +392,91 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
 
         {/* Input Area */}
         <div className="p-4 border-t bg-gray-50">
-          {/* File Upload */}
-          <div className="mb-3">
+          {/* File Upload Options */}
+          <div className="mb-3 flex space-x-2">
+            {/* Upload to persistent storage */}
             <input
               type="file"
               multiple
               onChange={handleFileUpload}
               className="hidden"
-              id="file-upload"
+              id="file-upload-persistent"
               accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
             />
             <label
-              htmlFor="file-upload"
+              htmlFor="file-upload-persistent"
               className="cursor-pointer inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
-              📎 Attach Files
+              📎 Upload & Store
+            </label>
+            
+            {/* Select files for this message */}
+            <input
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              id="file-upload-message"
+              accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
+            />
+            <label
+              htmlFor="file-upload-message"
+              className="cursor-pointer inline-flex items-center px-3 py-2 border border-blue-300 rounded-lg text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+            >
+              📤 Attach to Message
             </label>
           </div>
 
-          {/* Attached Files */}
-          {attachedFiles.length > 0 && (
+          {/* Persistent Files */}
+          {(persistentFiles.length > 0 || isLoadingFiles) && (
             <div className="mb-3">
               <div className="text-sm font-medium text-gray-700 mb-2">Attached Files:</div>
+              {isLoadingFiles && (
+                <div className="flex items-center justify-center py-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  <span className="text-sm text-gray-500">Uploading files...</span>
+                </div>
+              )}
+              <div className="space-y-1">
+                {persistentFiles.map((file) => (
+                  <div key={file.file_id} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
+                    <span className="text-sm text-gray-600">{file.filename}</span>
+                    <button
+                      onClick={() => handleRemovePersistentFile(file.file_id)}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Selected Files for This Message */}
+          {selectedFiles.length > 0 && (
+            <div className="mb-3">
+              <div className="text-sm font-medium text-blue-700 mb-2">Files for this message:</div>
+              <div className="space-y-1">
+                {selectedFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-blue-50 px-3 py-2 rounded border border-blue-200">
+                    <span className="text-sm text-blue-800">{file.name}</span>
+                    <button
+                      onClick={() => handleRemoveSelectedFile(index)}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Temporary Files (for backward compatibility) */}
+          {attachedFiles.length > 0 && (
+            <div className="mb-3">
+              <div className="text-sm font-medium text-gray-700 mb-2">Temporary Files:</div>
               <div className="space-y-1">
                 {attachedFiles.map((file, index) => (
                   <div key={index} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
@@ -366,7 +505,7 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
             />
             <button
               onClick={handleSendMessage}
-              disabled={isLoading || (!inputMessage.trim() && attachedFiles.length === 0)}
+              disabled={isLoading || (!inputMessage.trim() && selectedFiles.length === 0 && persistentFiles.length === 0)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Send
