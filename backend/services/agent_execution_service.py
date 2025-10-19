@@ -22,6 +22,7 @@ from services.agent_service import AgentService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
+from utils.config import get_app_config
 
 logger = get_logger(__name__)
 
@@ -77,7 +78,9 @@ class AgentExecutionService:
                     processed_files.append({
                         "filename": file_ref.filename,
                         "content": file_ref.content,
-                        "type": file_ref.file_type
+                        "type": file_ref.file_type,
+                        "file_id": file_ref.file_id,
+                        "file_path": file_ref.file_path
                     })
             
             # Get user session for memory-enabled agents
@@ -526,7 +529,6 @@ class AgentExecutionService:
                 }
             else:
                 # Convert to images and process with vision
-                from utils.config import get_app_config
                 app_config = get_app_config()
                 images_dir = app_config['IMAGES_PATH']
                 os.makedirs(images_dir, exist_ok=True)
@@ -636,9 +638,14 @@ class AgentExecutionService:
             # Enhance message with file contents if files were uploaded
             enhanced_message = message
             if processed_files:
+                #TODO: we should move this to class initialization? It is repeated in many places.
+                # Get TMP_BASE_FOLDER from config
+                app_config = get_app_config()
+                tmp_base_folder = app_config['TMP_BASE_FOLDER']
+                enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
                 enhanced_message += "\n\n[Attached files:]"
                 for file_data in processed_files:
-                    enhanced_message += f"\n\n--- File: {file_data['filename']} ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+                    enhanced_message += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
             
             # Wrap all async operations in a single event loop to avoid conflicts
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
@@ -728,8 +735,8 @@ class AgentExecutionService:
         """Save uploaded file to temporary location"""
         import tempfile
         
+        #TODO: we should move this to class initialization? It is repeated in many places.
         # Get TMP_BASE_FOLDER from config
-        from utils.config import get_app_config
         app_config = get_app_config()
         tmp_base_folder = app_config['TMP_BASE_FOLDER']
         uploads_dir = os.path.join(tmp_base_folder, "uploads")

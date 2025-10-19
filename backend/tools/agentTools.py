@@ -2,7 +2,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
 from langgraph.prebuilt import create_react_agent
 from models.agent import Agent
 from models.silo import Silo
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from typing import Any
@@ -15,6 +15,8 @@ from services.agent_cache_service import CheckpointerCacheService
 from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
 import json
+import base64
+from datetime import datetime
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -119,6 +121,10 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
     for tool in agent.tool_associations:
         sub_agent = tool.tool
         tools.append(IACTTool(sub_agent))
+
+    #add base useful tools
+    tools.append(get_current_date)
+    tools.append(fetch_file_in_base64)
 
     if agent.silo_id is not None:
         
@@ -324,3 +330,14 @@ def get_retriever_tool(silo: Silo, search_params=None):
 
         return  create_retriever_tool(retriever=retriever, name=name, description=description)
     return None
+
+@tool
+def get_current_date():
+    """This tool is useful to get the current date."""
+    return datetime.now().strftime("%Y-%m-%d")
+
+@tool
+def fetch_file_in_base64(file_path: str):
+    """This tool is useful to get the file in base64 format."""
+    with open(file_path, "rb") as file:
+        return base64.b64encode(file.read()).decode("utf-8")

@@ -15,11 +15,12 @@ logger = get_logger(__name__)
 class FileReference:
     """Represents a file reference for agent consumption"""
     
-    def __init__(self, file_id: str, filename: str, file_type: str, content: str):
+    def __init__(self, file_id: str, filename: str, file_type: str, content: str, file_path: str = None):
         self.file_id = file_id
         self.filename = filename
         self.file_type = file_type
         self.content = content
+        self.file_path = file_path  # Relative path to TMP_BASE_FOLDER
         self.uploaded_at = datetime.utcnow()
     
     def to_dict(self) -> Dict[str, Any]:
@@ -29,6 +30,7 @@ class FileReference:
             "filename": self.filename,
             "file_type": self.file_type,
             "content": self.content,
+            "file_path": self.file_path,
             "uploaded_at": self.uploaded_at.isoformat()
         }
 
@@ -88,7 +90,7 @@ class FileManagementService:
             # Process file based on type
             content, temp_path = await self._process_file_content(file, file_type)
             
-            # Create file reference
+            # Create file reference (file_path will be set later)
             file_ref = FileReference(file_id, file.filename, file_type, content)
             
             # Create session key for this agent and user
@@ -98,11 +100,11 @@ class FileManagementService:
             if session_key not in self._files:
                 self._files[session_key] = {}
             
-            # Store file reference in session
-            self._files[session_key][file_id] = file_ref
-            
             # Save file to disk for persistence (including original file)
             await self._save_file_to_disk(session_key, file_id, file_ref, temp_path)
+            
+            # Store file reference in session (after file_path is set)
+            self._files[session_key][file_id] = file_ref
             
             # Clean up temporary file after saving to persistent storage
             if temp_path and os.path.exists(temp_path):
@@ -182,7 +184,11 @@ class FileManagementService:
             
             # Return files for this session
             if session_key in self._files:
-                return [file_ref.to_dict() for file_ref in self._files[session_key].values()]
+                files_list = [file_ref.to_dict() for file_ref in self._files[session_key].values()]
+                logger.info(f"Returning {len(files_list)} files for session {session_key}")
+                for file_data in files_list:
+                    logger.info(f"File: {file_data['filename']}, Path: {file_data.get('file_path', 'None')}")
+                return files_list
             else:
                 return []
             
@@ -357,7 +363,13 @@ class FileManagementService:
                 
                 import shutil
                 shutil.copy2(original_file_path, original_file)
-                logger.info(f"Saved original file {original_filename} to {original_file}")
+                
+                # Calculate relative path from TMP_BASE_FOLDER
+                relative_path = os.path.relpath(original_file, self._tmp_base_folder)
+                file_ref.file_path = relative_path
+                
+                logger.info(f"Saved original file {original_filename} to {original_file} (relative: {relative_path})")
+                logger.info(f"FileReference file_path set to: {file_ref.file_path}")
                 
             logger.info(f"Saved file {file_id} to disk: {session_dir}")
             
@@ -398,11 +410,34 @@ class FileManagementService:
                                     metadata['file_id'],
                                     metadata['filename'],
                                     metadata['file_type'],
-                                    content
+                                    content,
+                                    metadata.get('file_path')  # Load file path from metadata
                                 )
+                                
+                                # If file_path is missing, try to regenerate it
+                                if not file_ref.file_path:
+                                    # Look for the original file in the session directory
+                                    session_dir = os.path.join(self._persistent_dir, session_key)
+                                    for filename in os.listdir(session_dir):
+                                        if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
+                                            original_file = os.path.join(session_dir, filename)
+                                            if os.path.exists(original_file):
+                                                # Calculate relative path
+                                                relative_path = os.path.relpath(original_file, self._tmp_base_folder)
+                                                file_ref.file_path = relative_path
+                                                
+                                                # Update metadata file with the new path
+                                                metadata['file_path'] = relative_path
+                                                with open(metadata_file, 'w') as f:
+                                                    import json
+                                                    json.dump(metadata, f, indent=2)
+                                                
+                                                logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
+                                                break
                                 
                                 self._files[session_key][file_id] = file_ref
                                 logger.info(f"Loaded persistent file {file_id} for session {session_key}")
+                                logger.info(f"Loaded file_path: {file_ref.file_path}")
                                 
                             except Exception as e:
                                 logger.error(f"Error loading file {file_id}: {str(e)}")
