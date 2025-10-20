@@ -510,13 +510,14 @@ function AgentFormPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="ai_service" className="block text-sm font-medium text-gray-700 mb-2">
-                    AI Service
+                    AI Service *
                   </label>
                   <select
                     id="ai_service"
                     value={formData.service_id || ''}
                     onChange={(e) => handleInputChange('service_id', e.target.value ? parseInt(e.target.value) : undefined)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    required
                   >
                     <option value="">Select AI Service</option>
                     {agent.ai_services.map((service) => (
@@ -742,34 +743,32 @@ function AgentFormPage() {
             </div>
           )}
 
+          {/* Form Actions */}
+          <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={() => navigate(`/apps/${appId}/agents`)}
+              className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-medium transition-all duration-200"
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
+              disabled={saving}
+            >
+              {saving ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Saving...
+                </div>
+              ) : (
+                isNewAgent ? 'Create Agent' : 'Save Changes'
+              )}
+            </button>
+          </div>
         </form>
-
-        {/* Form Actions */}
-        <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={() => navigate(`/apps/${appId}/agents`)}
-            className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-medium transition-all duration-200"
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            onClick={handleSubmit}
-            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-            disabled={saving}
-          >
-            {saving ? (
-              <div className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Saving...
-              </div>
-            ) : (
-              isNewAgent ? 'Create Agent' : 'Save Changes'
-            )}
-          </button>
-        </div>
       </div>
     </div>
   );
