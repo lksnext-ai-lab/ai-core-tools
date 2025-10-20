@@ -2,6 +2,7 @@ from models.resource import Resource
 from repositories.resource_repository import ResourceRepository
 from repositories.app_repository import AppRepository
 from services.folder_service import FolderService
+from services.file_size_limit_service import file_size_limit_service
 from typing import List, Tuple, Optional
 import os
 from services.silo_service import SiloService
@@ -20,7 +21,8 @@ class ResourceService:
     @staticmethod
     def _validate_file_size(file: UploadFile, max_size_mb: int, app_id: int) -> Optional[str]:
         """
-        Validate file size against app configuration
+        Validate file size against app configuration.
+        Delegates to file_size_limit_service for centralized validation.
         
         Args:
             file: The uploaded file
@@ -30,32 +32,10 @@ class ResourceService:
         Returns:
             Error message if file is too large, None if valid
         """
-        if max_size_mb <= 0:
-            # No limit configured
-            return None
-            
-        # Get file size
-        if hasattr(file, 'size') and file.size is not None:
-            file_size_bytes = file.size
-        else:
-            # For files without size attribute, read content to get size
-            if hasattr(file, 'file'):
-                current_pos = file.file.tell()
-                file.file.seek(0, 2)  # Seek to end
-                file_size_bytes = file.file.tell()
-                file.file.seek(current_pos)  # Reset position
-            else:
-                # Can't determine size, allow upload
-                logger.warning(f"Could not determine size for file {file.filename} in app {app_id}")
-                return None
-        
-        file_size_mb = file_size_bytes / (1024 * 1024)
-        
-        if file_size_mb > max_size_mb:
-            logger.warning(f"File {file.filename} ({file_size_mb:.2f}MB) exceeds limit of {max_size_mb}MB for app {app_id}")
-            return f"File size ({file_size_mb:.2f}MB) exceeds the maximum allowed size of {max_size_mb}MB"
-            
-        return None
+        is_valid, error_msg = file_size_limit_service.validate_file_size(
+            file, max_size_mb, app_id
+        )
+        return error_msg if not is_valid else None
 
     @staticmethod
     def get_resources_by_repo_id(repository_id: int, db: Session) -> List[Resource]:
