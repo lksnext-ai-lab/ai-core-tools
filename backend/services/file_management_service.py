@@ -56,8 +56,7 @@ class FileManagementService:
         os.makedirs(os.path.join(self._tmp_base_folder, "downloads"), exist_ok=True)
         os.makedirs(os.path.join(self._tmp_base_folder, "images"), exist_ok=True)
         
-        # Load existing files from disk
-        self._load_persistent_files()
+        # Files will be loaded on-demand per session
     
     async def upload_file(
         self, 
@@ -182,6 +181,10 @@ class FileManagementService:
             # Get session key for this agent and user
             session_key = self._get_session_key(agent_id, user_context)
             
+            # Load files for this session if not already loaded
+            if session_key not in self._files:
+                self._load_session_files(session_key)
+            
             # Return files for this session
             if session_key in self._files:
                 files_list = [file_ref.to_dict() for file_ref in self._files[session_key].values()]
@@ -216,6 +219,10 @@ class FileManagementService:
         try:
             # Get session key for this agent and user
             session_key = self._get_session_key(agent_id, user_context)
+            
+            # Load files for this session if not already loaded
+            if session_key not in self._files:
+                self._load_session_files(session_key)
             
             if session_key in self._files and file_id in self._files[session_key]:
                 del self._files[session_key][file_id]
@@ -376,76 +383,76 @@ class FileManagementService:
         except Exception as e:
             logger.error(f"Error saving file to disk: {str(e)}")
 
-    def _load_persistent_files(self):
-        """Load existing files from disk on startup"""
+    def _load_session_files(self, session_key: str):
+        """Load existing files from disk for a specific session"""
         try:
             if not os.path.exists(self._persistent_dir):
                 return
                 
-            for session_key in os.listdir(self._persistent_dir):
-                session_path = os.path.join(self._persistent_dir, session_key)
-                if not os.path.isdir(session_path):
-                    continue
-                    
-                self._files[session_key] = {}
+            session_path = os.path.join(self._persistent_dir, session_key)
+            if not os.path.exists(session_path) or not os.path.isdir(session_path):
+                return
                 
-                # Load files for this session
-                for filename in os.listdir(session_path):
-                    if filename.endswith('.json'):
-                        file_id = filename[:-5]  # Remove .json extension
-                        metadata_file = os.path.join(session_path, filename)
-                        content_file = os.path.join(session_path, f"{file_id}.content")
-                        
-                        if os.path.exists(content_file):
-                            try:
-                                with open(metadata_file, 'r') as f:
-                                    import json
-                                    metadata = json.load(f)
-                                
-                                with open(content_file, 'r', encoding='utf-8') as f:
-                                    content = f.read()
-                                
-                                # Recreate FileReference
-                                file_ref = FileReference(
-                                    metadata['file_id'],
-                                    metadata['filename'],
-                                    metadata['file_type'],
-                                    content,
-                                    metadata.get('file_path')  # Load file path from metadata
-                                )
-                                
-                                # If file_path is missing, try to regenerate it
-                                if not file_ref.file_path:
-                                    # Look for the original file in the session directory
-                                    session_dir = os.path.join(self._persistent_dir, session_key)
-                                    for filename in os.listdir(session_dir):
-                                        if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
-                                            original_file = os.path.join(session_dir, filename)
-                                            if os.path.exists(original_file):
-                                                # Calculate relative path
-                                                relative_path = os.path.relpath(original_file, self._tmp_base_folder)
-                                                file_ref.file_path = relative_path
-                                                
-                                                # Update metadata file with the new path
-                                                metadata['file_path'] = relative_path
-                                                with open(metadata_file, 'w') as f:
-                                                    import json
-                                                    json.dump(metadata, f, indent=2)
-                                                
-                                                logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
-                                                break
-                                
-                                self._files[session_key][file_id] = file_ref
-                                logger.info(f"Loaded persistent file {file_id} for session {session_key}")
-                                logger.info(f"Loaded file_path: {file_ref.file_path}")
-                                
-                            except Exception as e:
-                                logger.error(f"Error loading file {file_id}: {str(e)}")
-                                
-            logger.info(f"Loaded {sum(len(files) for files in self._files.values())} persistent files from disk")
+            # Initialize session if not exists
+            if session_key not in self._files:
+                self._files[session_key] = {}
+            
+            # Load files for this session
+            for filename in os.listdir(session_path):
+                if filename.endswith('.json'):
+                    file_id = filename[:-5]  # Remove .json extension
+                    metadata_file = os.path.join(session_path, filename)
+                    content_file = os.path.join(session_path, f"{file_id}.content")
+                    
+                    if os.path.exists(content_file):
+                        try:
+                            with open(metadata_file, 'r') as f:
+                                import json
+                                metadata = json.load(f)
+                            
+                            with open(content_file, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            
+                            # Recreate FileReference
+                            file_ref = FileReference(
+                                metadata['file_id'],
+                                metadata['filename'],
+                                metadata['file_type'],
+                                content,
+                                metadata.get('file_path')  # Load file path from metadata
+                            )
+                            
+                            # If file_path is missing, try to regenerate it
+                            if not file_ref.file_path:
+                                # Look for the original file in the session directory
+                                for filename in os.listdir(session_path):
+                                    if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
+                                        original_file = os.path.join(session_path, filename)
+                                        if os.path.exists(original_file):
+                                            # Calculate relative path
+                                            relative_path = os.path.relpath(original_file, self._tmp_base_folder)
+                                            file_ref.file_path = relative_path
+                                            
+                                            # Update metadata file with the new path
+                                            metadata['file_path'] = relative_path
+                                            with open(metadata_file, 'w') as f:
+                                                import json
+                                                json.dump(metadata, f, indent=2)
+                                            
+                                            logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
+                                            break
+                            
+                            self._files[session_key][file_id] = file_ref
+                            logger.info(f"Loaded persistent file {file_id} for session {session_key}")
+                            logger.info(f"Loaded file_path: {file_ref.file_path}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error loading file {file_id}: {str(e)}")
+                            
+            logger.info(f"Loaded {len(self._files.get(session_key, {}))} persistent files for session {session_key}")
             
         except Exception as e:
-            logger.error(f"Error loading persistent files: {str(e)}")
+            logger.error(f"Error loading persistent files for session {session_key}: {str(e)}")
 
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
