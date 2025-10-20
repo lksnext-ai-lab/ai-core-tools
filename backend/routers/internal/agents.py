@@ -333,7 +333,8 @@ async def chat_with_agent(
                 file_id=file_data['file_id'],
                 filename=file_data['filename'],
                 file_type=file_data['file_type'],
-                content=file_data['content']
+                content=file_data['content'],
+                file_path=file_data.get('file_path')
             )
             file_references.append(file_ref)
         
