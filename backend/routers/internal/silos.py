@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 
 from services.silo_service import SiloService
@@ -236,4 +236,55 @@ async def search_silo_documents(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error searching silo: {str(e)}"
+        )
+
+
+@silos_router.delete("/{silo_id}/documents",
+                     summary="Delete documents from silo by IDs",
+                     tags=["Silos"])
+async def delete_silo_documents(
+    app_id: int,
+    silo_id: int,
+    document_ids: List[str] = Body(..., embed=True),
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete documents from a silo by their IDs.
+    Example request body: {"document_ids": ["uuid-1", "uuid-2"]}
+    """
+    user_id = current_user["user_id"]
+    
+    # TODO: Add app access validation
+    
+    try:
+        # Validate silo exists and belongs to app
+        silo = SiloService.get_silo(silo_id, db)
+        if not silo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Silo not found"
+            )
+        
+        if silo.app_id != app_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Silo does not belong to this app"
+            )
+        
+        # Delete documents using existing service method
+        SiloService.delete_docs_in_collection(silo_id, document_ids, db)
+        
+        return {
+            "message": f"Successfully deleted {len(document_ids)} document(s)",
+            "deleted_count": len(document_ids)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting silo documents: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting documents: {str(e)}"
         ) 

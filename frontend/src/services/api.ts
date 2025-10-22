@@ -141,6 +141,12 @@ class ApiService {
     });
   }
 
+  async getConversationHistory(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/conversation-history`, {
+      method: 'GET',
+    });
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);
@@ -370,6 +376,13 @@ class ApiService {
         limit,
         filter_metadata: filterMetadata
       }),
+    });
+  }
+
+  async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/documents`, {
+      method: 'DELETE',
+      body: JSON.stringify({ document_ids: documentIds }),
     });
   }
 

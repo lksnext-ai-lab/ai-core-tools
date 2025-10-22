@@ -116,24 +116,7 @@ class PGVectorTools:
         )
         vector_store.delete_collection()
         
-    @deprecation.deprecated(
-        deprecated_in="0.1.0",
-        current_version="0.1.0",
-        details="This method is deprecated and will be removed in a future version. Use the 'search_similar_documents' method instead."
-    )
-    def search_similar_resources(self, repository : str, embed, RESULTS=5):
-        """Searches for similar resources in the pgvector table using langchain vector store."""
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(None),
-            collection_name=COLLECTION_PREFIX + str(repository.silo_id),
-            connection=self.db.engine,
-            use_jsonb=True,
-        )
-        results = vector_store.similarity_search_by_vector(
-            embedding=embed,
-            k=RESULTS
-        )
-        return results
+    
     
     def search_similar_documents(self, collection_name: str, query: str, embedding_service=None, filter_metadata: Optional[dict] = None, RESULTS=5):
         """Searches for similar documents using the configured embedding service"""
@@ -167,13 +150,13 @@ class PGVectorTools:
                 filter=filter_metadata
             )
         
-        # Convert the results to include score in metadata
+        # Convert the results to include score and id in metadata
         results = []
         for doc, score in results_with_scores:
-            # Create a new Document with score in metadata instead of as attribute
+            # Create a new Document with score AND id in metadata
             new_doc = Document(
                 page_content=doc.page_content,
-                metadata={**doc.metadata, '_score': score}
+                metadata={**doc.metadata, '_score': score, '_id': doc.id}
             )
             results.append(new_doc)
             

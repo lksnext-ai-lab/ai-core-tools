@@ -11,45 +11,27 @@ logger = get_logger(__name__)
 
 
 class Session:
-    """Represents a user session for an agent"""
+    """
+    Lightweight session tracking for agent conversations.
+    
+    The actual conversation history is stored in PostgreSQL via LangGraph's checkpointer.
+    This class only tracks session metadata for timeout management and thread_id generation.
+    """
     
     def __init__(self, session_id: str, agent_id: int, user_context: Dict):
-        self.id = session_id
-        self.agent_id = agent_id
-        self.user_context = user_context
-        self.messages: List[Dict] = []
-        self.created_at = datetime.utcnow()
-        self.last_accessed = datetime.utcnow()
-        self.memory = None  # Initialize memory attribute
+        self.id = session_id                    # Used to generate thread_id for PostgreSQL
+        self.agent_id = agent_id                # Agent identifier
+        self.user_context = user_context        # User context for validation
+        self.created_at = datetime.utcnow()     # Session creation timestamp
+        self.last_accessed = datetime.utcnow()  # Last interaction timestamp (for timeout)
     
-    def add_message(self, user_message: str, agent_response: str):
-        """Add a message pair to the session"""
-        self.messages.append({
-            "timestamp": datetime.utcnow().isoformat(),
-            "user_message": user_message,
-            "agent_response": agent_response
-        })
+    def touch(self):
+        """Update last accessed timestamp to keep session alive"""
         self.last_accessed = datetime.utcnow()
     
-    def get_conversation_history(self) -> List[Dict]:
-        """Get conversation history"""
-        return self.messages.copy()
-    
-    def clear_history(self):
-        """Clear conversation history"""
-        self.messages = []
-        self.last_accessed = datetime.utcnow()
-    
-    def set_memory(self, memory):
-        """Set the LangChain memory object for this session"""
-        self.memory = memory
-    
-    def get_memory(self):
-        """Get the LangChain memory object for this session"""
-        # Handle existing sessions that might not have the memory attribute
-        if not hasattr(self, 'memory'):
-            self.memory = None
-        return self.memory
+    def is_expired(self, timeout: timedelta) -> bool:
+        """Check if session has exceeded the timeout period"""
+        return datetime.utcnow() - self.last_accessed > timeout
 
 
 class SessionManagementService:
@@ -120,33 +102,23 @@ class SessionManagementService:
             logger.error(f"Error getting user session: {str(e)}")
             return None
     
-    async def add_message_to_session(
-        self, 
-        session_id: str, 
-        user_message: str, 
-        agent_response: str
-    ):
+    async def touch_session(self, session_id: str):
         """
-        Add message to session history
+        Update session last accessed timestamp to keep it alive
         
         Args:
             session_id: Session ID
-            user_message: User's message
-            agent_response: Agent's response
         """
         try:
-            logger.info(f"Adding message to session {session_id}, total sessions: {len(self.__class__._sessions)}")
-            logger.info(f"Available sessions: {list(self.__class__._sessions.keys())}")
-            
             if session_id in self.__class__._sessions:
                 session = self.__class__._sessions[session_id]
-                session.add_message(user_message, agent_response)
-                logger.info(f"Added message to session {session_id}, messages count: {len(session.messages)}")
+                session.touch()
+                logger.debug(f"Updated last accessed time for session {session_id}")
             else:
-                logger.warning(f"Session {session_id} not found for message addition")
+                logger.warning(f"Session {session_id} not found for touch update")
                 
         except Exception as e:
-            logger.error(f"Error adding message to session: {str(e)}")
+            logger.error(f"Error touching session: {str(e)}")
     
     async def reset_user_session(
         self, 
@@ -154,23 +126,23 @@ class SessionManagementService:
         user_context: Dict
     ) -> bool:
         """
-        Reset user session (clear conversation history)
+        Reset user session by removing it from memory.
+        The PostgreSQL checkpointer must be cleared separately via CheckpointerCacheService.
         
         Args:
             agent_id: ID of the agent
             user_context: User context
             
         Returns:
-            True if reset successful
+            True if reset successful, False if session not found
         """
         try:
             session_id = self._generate_session_id(agent_id, user_context, user_context.get("conversation_id"))
             
             if session_id in self.__class__._sessions:
-                session = self.__class__._sessions[session_id]
-                session.clear_history()
-                session.set_memory(None)
-                logger.info(f"Reset session {session_id} for agent {agent_id}")
+                # Remove session from memory
+                del self.__class__._sessions[session_id]
+                logger.info(f"Deleted session {session_id} for agent {agent_id}")
                 return True
             else:
                 logger.warning(f"Session {session_id} not found for reset")
@@ -180,33 +152,6 @@ class SessionManagementService:
             logger.error(f"Error resetting user session: {str(e)}")
             return False
     
-    async def get_conversation_history(
-        self, 
-        agent_id: int, 
-        user_context: Dict
-    ) -> List[Dict]:
-        """
-        Get conversation history for a user session
-        
-        Args:
-            agent_id: ID of the agent
-            user_context: User context
-            
-        Returns:
-            List of conversation messages
-        """
-        try:
-            session_id = self._generate_session_id(agent_id, user_context, user_context.get("conversation_id"))
-            
-            if session_id in self.__class__._sessions:
-                session = self.__class__._sessions[session_id]
-                return session.get_conversation_history()
-            else:
-                return []
-                
-        except Exception as e:
-            logger.error(f"Error getting conversation history: {str(e)}")
-            return []
     
     def _generate_session_id(self, agent_id: int, user_context: Dict, conversation_id: str = None) -> str:
         """
