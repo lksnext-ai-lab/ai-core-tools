@@ -18,10 +18,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - iacoretoolstest.lksnext.com
+        - aict-desa.lksnext.com
       secretName: lksnext-tls-secret
   rules:
-    - host: iacoretoolstest.lksnext.com
+    - host: aict-desa.lksnext.com
       http:
         paths:
           # Backend API routes

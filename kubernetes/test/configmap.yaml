@@ -5,7 +5,7 @@ metadata:
   namespace: test
 data:
   # Backend API URL for frontend
-  VITE_API_BASE_URL: "aict-desa.lksnext.com"
+  VITE_API_BASE_URL: "https://aict-desa.lksnext.com"
   
   # Application Configuration
   APP_TITLE: "IA Core Tools API"
