@@ -47,10 +47,10 @@ class AuthConfig:
     def load_config(cls):
         """Load configuration from environment variables"""
         # OAuth Provider Selection
-        cls.OAUTH_PROVIDER = os.getenv('OAUTH_PROVIDER', 'GOOGLE').upper()
+        cls.OAUTH_PROVIDER = os.getenv('OAUTH_PROVIDER', 'ENTRAID').upper()
         if cls.OAUTH_PROVIDER not in ['GOOGLE', 'ENTRAID']:
-            logger.warning(f"Invalid OAUTH_PROVIDER value '{cls.OAUTH_PROVIDER}', defaulting to GOOGLE")
-            cls.OAUTH_PROVIDER = 'GOOGLE'
+            logger.warning(f"Invalid OAUTH_PROVIDER value '{cls.OAUTH_PROVIDER}', defaulting to ENTRAID")
+            cls.OAUTH_PROVIDER = 'ENTRAID'
         
         # Google OAuth Configuration
         cls.GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
