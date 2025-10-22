@@ -1,6 +1,6 @@
 // API Service - Think of this like your backend services!
 class ApiService {
-  private baseURL = import.meta.env.VITE_API_BASE_URL || 'aict-desa.lksnext.com';
+  private baseURL = import.meta.env.VITE_API_BASE_URL || 'https://aict-desa.lksnext.com';
 
   private getAuthToken(): string | null {
     // Get token from localStorage (same as auth service)

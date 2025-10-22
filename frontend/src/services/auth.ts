@@ -1,5 +1,5 @@
 class AuthService {
-  private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'aict-desa.lksnext.com';
+  private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'https://aict-desa.lksnext.com';
   private readonly TOKEN_KEY = 'auth_token';
   private readonly EXPIRES_KEY = 'auth_expires';
 
