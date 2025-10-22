@@ -9,7 +9,7 @@ RUN npm ci
 COPY frontend .
 
 # Build-time API base URL - using build argument instead of .env files
-ARG VITE_API_BASE_URL=aict-desa.lksnext.com
+ARG VITE_API_BASE_URL=https://aict-desa.lksnext.com
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # Set environment variables for Vite build
