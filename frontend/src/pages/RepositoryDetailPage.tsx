@@ -66,12 +66,14 @@ const RepositoryDetailPage: React.FC = () => {
     }
   }, [appId, repositoryId]);
 
-  const loadRepository = async () => {
+  const loadRepository = async (clearError: boolean = true) => {
     try {
       setLoading(true);
       const data = await apiService.getRepository(parseInt(appId!), parseInt(repositoryId!));
       setRepository(data);
-      setError(null);
+      if (clearError) {
+        setError(null);
+      }
     } catch (err) {
       console.error('Error loading repository:', err);
       setError('Failed to load repository');
@@ -93,10 +95,34 @@ const RepositoryDetailPage: React.FC = () => {
         formData.append('files', file);
       });
 
-      await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files), selectedFolderId ?? undefined);
+      console.log('Uploading files with folder_id:', selectedFolderId);
+      const result = await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files), selectedFolderId || undefined);
       
-      // Reload repository to get updated file list
-      await loadRepository();
+      console.log('Upload result:', result);
+      
+      // Check if there are any failed files
+      if (result.failed_files && result.failed_files.length > 0) {
+        console.log('Failed files detected:', result.failed_files);
+        const failedMessages = result.failed_files.map((failed: any) => 
+          `${failed.filename}: ${failed.error}`
+        ).join('\n');
+        
+        console.log('Failed messages:', failedMessages);
+        
+        if (result.created_resources && result.created_resources.length > 0) {
+          // Some files succeeded, some failed
+          setError(`Some files failed to upload:\n${failedMessages}`);
+        } else {
+          // All files failed
+          setError(`Upload failed:\n${failedMessages}`);
+        }
+      } else {
+        console.log('No failed files detected');
+      }
+      
+      // Reload repository to get updated file list (even if some files failed)
+      // Don't clear error if we just set one for failed files
+      await loadRepository(false);
       
       // Clear file input
       if (fileInputRef.current) {
@@ -436,7 +462,7 @@ const RepositoryDetailPage: React.FC = () => {
       {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
+          <div className="whitespace-pre-line">{error}</div>
         </div>
       )}
 

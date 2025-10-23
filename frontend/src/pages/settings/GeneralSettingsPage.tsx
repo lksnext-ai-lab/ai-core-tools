@@ -9,6 +9,7 @@ function GeneralSettingsPage() {
     name: '',
     langsmith_api_key: '',
     agent_rate_limit: 0,
+    max_file_size_mb: 0,
     agent_cors_origins: ''
   });
   const [userRole, setUserRole] = useState<string>('');
@@ -38,6 +39,7 @@ function GeneralSettingsPage() {
         name: app.name || '',
         langsmith_api_key: app.langsmith_api_key || '',
         agent_rate_limit: app.agent_rate_limit || 0,
+        max_file_size_mb: app.max_file_size_mb || 0,
         agent_cors_origins: app.agent_cors_origins || ''
       });
       setUserRole(app.user_role || '');
@@ -61,6 +63,7 @@ function GeneralSettingsPage() {
         name: formData.name,
         langsmith_api_key: formData.langsmith_api_key,
         agent_rate_limit: formData.agent_rate_limit,
+        max_file_size_mb: formData.max_file_size_mb,
         agent_cors_origins: formData.agent_cors_origins
       });
       setSaved(true);
@@ -74,7 +77,9 @@ function GeneralSettingsPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.name === 'agent_rate_limit' ? parseInt(e.target.value) || 0 : e.target.value;
+    const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb') 
+      ? parseInt(e.target.value) || 0 
+      : e.target.value;
     
     setFormData(prev => ({
       ...prev,
@@ -205,6 +210,27 @@ function GeneralSettingsPage() {
                     />
                   <p className="mt-1 text-sm text-gray-500">
                     This will limit the number of calls your agents can make per minute in your application.
+                  </p>
+                </div>
+
+                {/* Maximum File Size */}
+                <div>
+                    <label htmlFor="max_file_size_mb" className="block text-sm font-medium text-gray-700 mb-2">
+                    Maximum File Size (MB)
+                    </label>
+                    <input
+                    type="number"
+                    id="max_file_size_mb"
+                    name="max_file_size_mb"
+                    value={formData.max_file_size_mb}
+                    onChange={handleChange}
+                    min="0"
+                    disabled={!isOwner}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter maximum file size in MB (0 = no limit)"
+                    />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Maximum size in megabytes for files uploaded to repositories. Set to 0 for no limit.
                   </p>
                 </div>
 

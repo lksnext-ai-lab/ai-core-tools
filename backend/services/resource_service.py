@@ -16,6 +16,7 @@ class ResourceService:
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
 
+
     @staticmethod
     def get_resources_by_repo_id(repository_id: int, db: Session) -> List[Resource]:
         """
@@ -273,6 +274,7 @@ class ResourceService:
         if not file or not hasattr(file, 'filename') or file.filename == '':
             return {'filename': 'Unknown', 'error': 'Empty filename'}
             
+            
         file_extension = os.path.splitext(file.filename)[1].lower()
         if file_extension not in ResourceService.SUPPORTED_EXTENSIONS:
             supported = ', '.join(ResourceService.SUPPORTED_EXTENSIONS)
@@ -377,7 +379,8 @@ class ResourceService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No files provided"
             )
-        
+
+
         # Validate repository exists
         repo = ResourceRepository.get_repository_by_id(db, repository_id)
         if not repo:

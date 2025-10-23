@@ -10,6 +10,7 @@ from services.resource_service import ResourceService
 
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, RepositorySearchSchema
 from routers.internal.auth_utils import get_current_user_oauth
+from routers.controls import enforce_file_size_limit
 
 # Import database dependency
 from db.database import get_db
@@ -117,7 +118,8 @@ async def upload_resources(
     request: Request,
     files: List[UploadFile] = File(...),
     folder_id: Optional[int] = Form(default=None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(enforce_file_size_limit)
 ):
     """
     Upload multiple resources to a repository.
