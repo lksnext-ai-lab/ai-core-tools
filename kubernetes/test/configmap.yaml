@@ -29,14 +29,14 @@ data:
   PUBLIC_DOCS_PATH: "/docs/public"
   
   # CORS Configuration
-  CORS_ORIGIN_DEV_SERVER: "aict-desa.lksnext.com"
-  CORS_ORIGIN_DEV_SERVER_ALT: "aict-desa.lksnext.com"
-  CORS_ORIGIN_DOCKER: "aict-desa.lksnext.com"
-  CORS_ORIGIN_DOCKER_ALT: "aict-desa.lksnext.com"
-  CORS_ORIGIN_DEV_8080: "aict-desa.lksnext.com"
-  CORS_ORIGIN_DEV_8080_ALT: "aict-desa.lksnext.com"
-  CORS_ORIGIN_VITE_PREVIEW: "aict-desa.lksnext.com"
-  CORS_ORIGIN_VITE_PREVIEW_ALT: "aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_SERVER: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_SERVER_ALT: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DOCKER: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DOCKER_ALT: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_8080: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_8080_ALT: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_VITE_PREVIEW: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_VITE_PREVIEW_ALT: "https://aict-desa.lksnext.com"
   
   # Database configuration
   DATABASE_HOST: "ia-core-tools-postgresql-service-test"
@@ -47,9 +47,9 @@ data:
   DEVELOPMENT_MODE: "false"
   JWT_ALGORITHM: "HS256"
   JWT_EXPIRATION_HOURS: "24"
-  FRONTEND_URL: "aict-desa.lksnext.com"
+  FRONTEND_URL: "https://aict-desa.lksnext.com"
   GOOGLE_DISCOVERY_URL: "https://accounts.google.com/.well-known/openid-configuration"
-  GOOGLE_REDIRECT_URI: "aict-desa.lksnext.com/auth/callback"
+  GOOGLE_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/callback"
   
   # EntraID OAuth Configuration
   AICT_LOGIN: "OIDC"
