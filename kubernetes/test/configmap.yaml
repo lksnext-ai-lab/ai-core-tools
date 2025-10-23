@@ -47,9 +47,9 @@ data:
   DEVELOPMENT_MODE: "false"
   JWT_ALGORITHM: "HS256"
   JWT_EXPIRATION_HOURS: "24"
-  FRONTEND_URL: "aict-desa.lksnext.com"
+  FRONTEND_URL: "https://aict-desa.lksnext.com"
   GOOGLE_DISCOVERY_URL: "https://accounts.google.com/.well-known/openid-configuration"
-  GOOGLE_REDIRECT_URI: "aict-desa.lksnext.com/auth/callback"
+  GOOGLE_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/callback"
   
   # EntraID OAuth Configuration
   AICT_LOGIN: "OIDC"
