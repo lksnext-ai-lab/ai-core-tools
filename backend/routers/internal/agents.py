@@ -10,6 +10,7 @@ from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetRes
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
+from routers.controls.file_size_limit import enforce_file_size_limit
 
 from utils.logger import get_logger
 
@@ -285,7 +286,8 @@ async def chat_with_agent(
     files: List[UploadFile] = File(None),
     search_params: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(enforce_file_size_limit)
 ):
     """
     Internal API: Chat with agent for playground (OAuth authentication)
@@ -458,7 +460,8 @@ async def upload_file_for_chat(
     agent_id: int,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(enforce_file_size_limit)
 ):
     """
     Internal API: Upload file for chat (OAuth authentication)
@@ -470,6 +473,8 @@ async def upload_file_for_chat(
             "oauth": True,
             "app_id": app_id
         }
+        
+        # File size validation already handled by enforce_file_size_limit dependency
         
         # Use unified service layer
         file_service = FileManagementService()
