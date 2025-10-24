@@ -474,8 +474,6 @@ async def upload_file_for_chat(
             "app_id": app_id
         }
         
-        # File size validation already handled by enforce_file_size_limit dependency
-        
         # Use unified service layer
         file_service = FileManagementService()
         file_ref = await file_service.upload_file(

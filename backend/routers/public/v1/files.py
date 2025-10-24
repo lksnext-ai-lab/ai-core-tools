@@ -42,9 +42,7 @@ async def attach_file(
     # Validate API key for this app
     auth = validate_api_key_for_app(app_id, api_key)
     
-    # File size validation already handled by enforce_file_size_limit dependency
-    
-    # TODO: Implement file attachment logic
+   # TODO: Implement file attachment logic
     # For now, return a mock response
     file_reference = f"file_{agent_id}_{file.filename}"
     
