@@ -78,7 +78,20 @@ function AppLayout({ children }: AppLayoutProps) {
   // Get navigation configuration
   const getNavigationConfig = (): NavigationConfig => {
     const clientConfig = configService.getClientConfig();
-    return clientConfig?.navigation || defaultNavigation;
+    const clientNavigation = clientConfig?.navigation;
+    
+    if (!clientNavigation) {
+      return defaultNavigation;
+    }
+    
+    // Merge client navigation with default navigation
+    return {
+      mainFeatures: clientNavigation.mainFeatures || defaultNavigation.mainFeatures,
+      appNavigation: clientNavigation.appNavigation || defaultNavigation.appNavigation,
+      settings: clientNavigation.settings || defaultNavigation.settings,
+      admin: clientNavigation.admin || defaultNavigation.admin,
+      custom: clientNavigation.custom || defaultNavigation.custom
+    };
   };
 
   // Render navigation items
@@ -138,136 +151,41 @@ function AppLayout({ children }: AppLayoutProps) {
           </Link>
         </div>
 
-        {/* App Context Section */}
-        {appId && (
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-gray-900">
-                  {loadingApp ? 'Loading...' : currentApp?.name || 'App'}
-                </h3>
-                <p className="text-xs text-gray-600">
-                  {location.pathname.includes('/settings') ? 'Settings' : 'Dashboard'}
-                </p>
-              </div>
-              <Link 
-                to="/apps" 
-                className="text-xs text-blue-600 hover:text-blue-800"
-              >
-                Change
-              </Link>
-            </div>
-          </div>
-        )}
 
-        {/* Navigation */}
+        {/* Sidebar Navigation */}
         <nav className="flex-1 p-6">
-          {appId ? (
-            // App-specific navigation (when inside an app)
-            (() => {
-              const navigation = getNavigationConfig();
-              return (
-                <div className="space-y-6">
-                  {/* Main Features */}
-                  {navigation.mainFeatures && navigation.mainFeatures.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                        Main Features
-                      </h4>
-                      <ul className="space-y-2">
-                        {renderNavigationItems(navigation.mainFeatures, 'mainFeatures')}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Settings */}
-                  {navigation.settings && navigation.settings.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                        Settings
-                      </h4>
-                      <ul className="space-y-2">
-                        {renderNavigationItems(navigation.settings, 'settings')}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Admin Section */}
-                  {navigation.admin && navigation.admin.length > 0 && user?.is_admin && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                        Administrator
-                      </h4>
-                      <ul className="space-y-2">
-                        {renderNavigationItems(navigation.admin, 'admin')}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Custom Section */}
-                  {navigation.custom && navigation.custom.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                        Custom
-                      </h4>
-                      <ul className="space-y-2">
-                        {renderNavigationItems(navigation.custom, 'custom')}
-                      </ul>
-                    </div>
-                  )}
+          {(() => {
+            const navigation = getNavigationConfig();
+            return (
+              <div className="space-y-6">
+                {/* Main Features - Home + Custom items */}
+                <div>
+                  <ul className="space-y-2">
+                    {/* Home */}
+                    {navigation.mainFeatures && navigation.mainFeatures.length > 0 && 
+                      renderNavigationItems(navigation.mainFeatures, 'mainFeatures')
+                    }
+                    {/* Custom items (extensions) */}
+                    {navigation.custom && navigation.custom.length > 0 && 
+                      renderNavigationItems(navigation.custom, 'custom')
+                    }
+                  </ul>
                 </div>
-              );
-            })()
-          ) : (
-            // Global navigation (when not in an app)
-            <ul className="space-y-2">
-              <li>
-                <Link
-                  to="/apps"
-                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/apps')}`}
-                >
-                  <span className="mr-3">📱</span>
-                  My Apps
-                </Link>
-              </li>
-              {user?.is_admin && (
-                <>
-                  <li>
-                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-6">
-                      Administrator
+
+                {/* Administration */}
+                {navigation.admin && navigation.admin.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                      Administration
                     </h4>
-                  </li>
-                  <li>
-                    <Link
-                      to="/admin/users"
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/users')}`}
-                    >
-                      <span className="mr-3">👥</span>
-                      Users
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/admin/stats"
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/stats')}`}
-                    >
-                      <span className="mr-3">📊</span>
-                      Stats
-                    </Link>
-                  </li>
-                </>
-              )}
-              <li>
-                <Link
-                  to="/about"
-                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/about')}`}
-                >
-                  <span className="mr-3">ℹ️</span>
-                  About
-                </Link>
-              </li>
-            </ul>
-          )}
+                    <ul className="space-y-2">
+                      {renderNavigationItems(navigation.admin, 'admin')}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </nav>
       </div>
 
@@ -276,8 +194,61 @@ function AppLayout({ children }: AppLayoutProps) {
         {/* Top Bar */}
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {/* Left side empty for now */}
+            <div className="flex items-center space-x-6">
+              {/* App Context and Change App */}
+              {appId && (
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900">
+                        {loadingApp ? 'Loading...' : currentApp?.name || 'App'}
+                      </h3>
+                      <p className="text-xs text-gray-600">
+                        {location.pathname.includes('/settings') ? 'Settings' : 'Dashboard'}
+                      </p>
+                    </div>
+                    <Link 
+                      to="/apps" 
+                      className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
+                    >
+                      Change App
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* App-specific horizontal navigation */}
+              {appId && (() => {
+                const navigation = getNavigationConfig();
+                return navigation.appNavigation && navigation.appNavigation.length > 0 ? (
+                  <nav className="flex space-x-1">
+                    {navigation.appNavigation.map((item, index) => {
+                      // Skip admin items if user is not admin
+                      if (item.adminOnly && !user?.is_admin) {
+                        return null;
+                      }
+
+                      // Replace :appId placeholder with actual appId
+                      const path = item.path.replace(':appId', appId);
+                      
+                      return (
+                        <Link
+                          key={`app-nav-${index}`}
+                          to={path}
+                          className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                            isActive(path) 
+                              ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                              : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          {item.icon && <span className="mr-2">{item.icon}</span>}
+                          {item.name}
+                        </Link>
+                      );
+                    }).filter(Boolean)}
+                  </nav>
+                ) : null;
+              })()}
             </div>
             
             {/* Top Right Actions */}

@@ -5,11 +5,13 @@ import { OIDCProvider } from '../auth/OIDCProvider';
 import { UserProvider } from '../contexts/UserContext';
 import { SettingsCacheProvider } from '../contexts/SettingsCacheContext';
 import AppLayout from '../components/layout/AppLayout';
+import SettingsLayout from '../components/layout/SettingsLayout';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { configService } from './ConfigService';
 import type { ClientConfig, ExtraRoute } from './types';
 
 // Import base pages
+import HomePage from '../pages/HomePage';
 import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
 import AgentsPage from '../pages/AgentsPage';
@@ -65,6 +67,14 @@ export const BaseApp: React.FC<BaseAppProps> = ({
                 <Route path="/login/success" element={<AuthSuccessPage />} />
 
                 {/* Protected routes */}
+                <Route path="/" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      {clientConfig.homePage ? <clientConfig.homePage /> : <HomePage />}
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
                 <Route path="/apps" element={
                   <ProtectedRoute>
                     <AppLayout>
@@ -186,7 +196,88 @@ export const BaseApp: React.FC<BaseAppProps> = ({
                   </ProtectedRoute>
                 } />
 
-                {/* Settings routes */}
+                {/* App-specific settings routes */}
+                <Route path="/apps/:appId/settings" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <GeneralSettingsPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/general" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <GeneralSettingsPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/ai-services" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <AIServicesPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/embedding-services" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <EmbeddingServicesPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/mcp-configs" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <MCPConfigsPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/api-keys" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <APIKeysPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/data-structures" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <DataStructuresPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/collaboration" element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsLayout>
+                        <CollaborationPage />
+                      </SettingsLayout>
+                    </AppLayout>
+                  </ProtectedRoute>
+                } />
+
+                {/* Global settings routes */}
                 <Route path="/settings/ai-services" element={
                   <ProtectedRoute>
                     <AppLayout>

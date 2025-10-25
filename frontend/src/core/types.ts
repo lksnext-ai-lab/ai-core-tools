@@ -7,6 +7,7 @@ export interface ClientConfig {
   api?: ApiConfig;
   navigation?: NavigationConfig;
   features?: FeatureConfig;
+  homePage?: React.ComponentType; // Allow client to override home page
 }
 
 export interface ThemeConfig {
@@ -79,6 +80,7 @@ export interface NavigationItem {
 
 export interface NavigationConfig {
   mainFeatures?: NavigationItem[];
+  appNavigation?: NavigationItem[];
   settings?: NavigationItem[];
   admin?: NavigationItem[];
   custom?: NavigationItem[];

@@ -1,47 +1,62 @@
 import type { NavigationConfig } from './types';
 
 export const defaultNavigation: NavigationConfig = {
+  // Sidebar navigation
   mainFeatures: [
+    {
+      path: '/',
+      name: 'Home',
+      icon: '🏠',
+      section: 'mainFeatures'
+    }
+  ],
+  // App-specific horizontal navigation (when inside an app)
+  appNavigation: [
     {
       path: '/apps/:appId',
       name: 'Dashboard',
-      icon: '🏠',
-      section: 'mainFeatures'
+      icon: '📊',
+      section: 'appNavigation'
     },
     {
       path: '/apps/:appId/agents',
       name: 'Agents',
       icon: '🤖',
-      section: 'mainFeatures'
+      section: 'appNavigation'
     },
     {
       path: '/apps/:appId/silos',
       name: 'Silos',
       icon: '🗄️',
-      section: 'mainFeatures'
+      section: 'appNavigation'
     },
     {
       path: '/apps/:appId/repositories',
       name: 'Repositories',
       icon: '📁',
-      section: 'mainFeatures'
+      section: 'appNavigation'
     },
     {
       path: '/apps/:appId/domains',
       name: 'Domains',
       icon: '🌐',
-      section: 'mainFeatures'
-    }
-  ],
-  settings: [
+      section: 'appNavigation'
+    },
     {
       path: '/apps/:appId/settings',
       name: 'App Settings',
       icon: '⚙️',
-      section: 'settings'
+      section: 'appNavigation'
     }
   ],
+  // Administration section
   admin: [
+    {
+      path: '/apps',
+      name: 'My Apps',
+      icon: '📱',
+      section: 'admin'
+    },
     {
       path: '/admin/users',
       name: 'Users',
@@ -55,6 +70,12 @@ export const defaultNavigation: NavigationConfig = {
       icon: '📊',
       section: 'admin',
       adminOnly: true
+    },
+    {
+      path: '/about',
+      name: 'About',
+      icon: 'ℹ️',
+      section: 'admin'
     }
   ]
 };

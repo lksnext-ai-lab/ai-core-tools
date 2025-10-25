@@ -1,5 +1,6 @@
 import type { ClientConfig } from '@lksnext/ai-core-tools-base';
 import { customTheme } from '../themes/customTheme';
+import CustomHomePage from '../pages/CustomHomePage';
 
 export const clientConfig: ClientConfig = {
   clientId: 'CLIENT_ID_HERE',
@@ -21,6 +22,7 @@ export const clientConfig: ClientConfig = {
     favicon: '/client-favicon.ico',
     headerTitle: 'CLIENT_HEADER_TITLE'
   },
+  homePage: CustomHomePage, // Override the default home page
   api: {
     baseUrl: 'http://localhost:8000', // Backend API URL
     timeout: 30000,
@@ -30,7 +32,13 @@ export const clientConfig: ClientConfig = {
     // Add custom navigation items
     custom: [
       {
-        path: '/apps/:appId/custom-feature',
+        path: '/custom-page',
+        name: 'Custom Page',
+        icon: '📄',
+        section: 'custom'
+      },
+      {
+        path: '/custom-feature',
         name: 'Custom Feature',
         icon: '⭐',
         section: 'custom'
