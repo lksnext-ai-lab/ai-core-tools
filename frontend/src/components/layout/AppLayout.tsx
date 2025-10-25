@@ -1,9 +1,13 @@
 import { type ReactNode, useState, useRef, useEffect } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
+import { useTheme } from '../../themes/ThemeContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
 import VersionFooter from '../ui/VersionFooter';
 import { apiService } from '../../services/api';
+import { configService } from '../../core/ConfigService';
+import { defaultNavigation } from '../../core/defaultNavigation';
+import type { NavigationConfig, NavigationItem } from '../../core/types';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -25,6 +29,7 @@ function AppLayout({ children }: AppLayoutProps) {
   const { appId } = useParams();
   const location = useLocation();
   const { user, logout } = useUser();
+  const { theme } = useTheme();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [currentApp, setCurrentApp] = useState<App | null>(null);
   const [loadingApp, setLoadingApp] = useState(false);
@@ -70,6 +75,37 @@ function AppLayout({ children }: AppLayoutProps) {
     return 'U';
   };
 
+  // Get navigation configuration
+  const getNavigationConfig = (): NavigationConfig => {
+    const clientConfig = configService.getClientConfig();
+    return clientConfig?.navigation || defaultNavigation;
+  };
+
+  // Render navigation items
+  const renderNavigationItems = (items: NavigationItem[], section: string) => {
+    return items.map((item, index) => {
+      // Skip admin items if user is not admin
+      if (item.adminOnly && !user?.is_admin) {
+        return null;
+      }
+
+      // Replace :appId placeholder with actual appId
+      const path = item.path.replace(':appId', appId || '');
+      
+      return (
+        <li key={`${section}-${index}`}>
+          <Link
+            to={path}
+            className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(path)}`}
+          >
+            {item.icon && <span className="mr-3">{item.icon}</span>}
+            {item.name}
+          </Link>
+        </li>
+      );
+    }).filter(Boolean);
+  };
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -92,11 +128,13 @@ function AppLayout({ children }: AppLayoutProps) {
         <div className="p-6 border-b border-gray-200">
           <Link to="/apps" className="flex items-center">
             <img 
-              src="/mattin-small.png" 
-              alt="Mattin AI" 
+              src={theme.logo || "/mattin-small.png"} 
+              alt={theme.name || "Mattin AI"} 
               className="w-8 h-8 mr-3"
             />
-            <span className="text-xl font-bold text-gray-900">Mattin AI</span>
+            <span className="text-xl font-bold text-gray-900">
+              {theme.name || "Mattin AI"}
+            </span>
           </Link>
         </div>
 
@@ -126,110 +164,60 @@ function AppLayout({ children }: AppLayoutProps) {
         <nav className="flex-1 p-6">
           {appId ? (
             // App-specific navigation (when inside an app)
-            <div className="space-y-6">
-              {/* Main Features */}
-              <div>
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  Main Features
-                </h4>
-                <ul className="space-y-2">
-                  <li>
-                    <Link
-                      to={`/apps/${appId}`}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        location.pathname === `/apps/${appId}` ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="mr-3">🏠</span>
-                      Dashboard
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to={`/apps/${appId}/agents`}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/agents`)}`}
-                    >
-                      <span className="mr-3">🤖</span>
-                      Agents
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to={`/apps/${appId}/silos`}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/silos`)}`}
-                    >
-                      <span className="mr-3">🗄️</span>
-                      Silos
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to={`/apps/${appId}/repositories`}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/repositories`)}`}
-                    >
-                      <span className="mr-3">📁</span>
-                      Repositories
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to={`/apps/${appId}/domains`}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/domains`)}`}
-                    >
-                      <span className="mr-3">🌐</span>
-                      Domains
-                    </Link>
-                  </li>
-                </ul>
-              </div>
+            (() => {
+              const navigation = getNavigationConfig();
+              return (
+                <div className="space-y-6">
+                  {/* Main Features */}
+                  {navigation.mainFeatures && navigation.mainFeatures.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                        Main Features
+                      </h4>
+                      <ul className="space-y-2">
+                        {renderNavigationItems(navigation.mainFeatures, 'mainFeatures')}
+                      </ul>
+                    </div>
+                  )}
 
-              {/* Settings */}
-              <div>
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  Settings
-                </h4>
-                <ul className="space-y-2">
-                  <li>
-                    <Link
-                      to={`/apps/${appId}/settings`}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(`/apps/${appId}/settings`)}`}
-                    >
-                      <span className="mr-3">⚙️</span>
-                      App Settings
-                    </Link>
-                  </li>
-                </ul>
-              </div>
+                  {/* Settings */}
+                  {navigation.settings && navigation.settings.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                        Settings
+                      </h4>
+                      <ul className="space-y-2">
+                        {renderNavigationItems(navigation.settings, 'settings')}
+                      </ul>
+                    </div>
+                  )}
 
-              {/* Admin Section */}
-              {user?.is_admin && (
-                <div>
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Administrator
-                  </h4>
-                  <ul className="space-y-2">
-                    <li>
-                      <Link
-                        to="/admin/users"
-                        className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/users')}`}
-                      >
-                        <span className="mr-3">👥</span>
-                        Users
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="/admin/stats"
-                        className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/admin/stats')}`}
-                      >
-                        <span className="mr-3">📊</span>
-                        Stats
-                      </Link>
-                    </li>
-                  </ul>
+                  {/* Admin Section */}
+                  {navigation.admin && navigation.admin.length > 0 && user?.is_admin && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                        Administrator
+                      </h4>
+                      <ul className="space-y-2">
+                        {renderNavigationItems(navigation.admin, 'admin')}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Custom Section */}
+                  {navigation.custom && navigation.custom.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                        Custom
+                      </h4>
+                      <ul className="space-y-2">
+                        {renderNavigationItems(navigation.custom, 'custom')}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()
           ) : (
             // Global navigation (when not in an app)
             <ul className="space-y-2">

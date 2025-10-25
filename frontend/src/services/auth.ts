@@ -1,5 +1,9 @@
+import { configService } from '../core/ConfigService';
+
 class AuthService {
-  private readonly baseURL = import.meta.env.VITE_API_BASE_URL || 'https://aict-desa.lksnext.com';
+  private get baseURL(): string {
+    return configService.getApiBaseUrl();
+  }
   private readonly TOKEN_KEY = 'auth_token';
   private readonly EXPIRES_KEY = 'auth_expires';
 

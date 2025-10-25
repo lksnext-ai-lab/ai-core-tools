@@ -1,6 +1,10 @@
 // API Service - Think of this like your backend services!
+import { configService } from '../core/ConfigService';
+
 class ApiService {
-  private baseURL = import.meta.env.VITE_API_BASE_URL || 'https://aict-desa.lksnext.com';
+  private get baseURL(): string {
+    return configService.getApiBaseUrl();
+  }
 
   private getAuthToken(): string | null {
     // Get token from localStorage (same as auth service)
