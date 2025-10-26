@@ -1,4 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useFormState } from '../../hooks/useFormState';
+import { FormField } from '../ui/FormField';
+import { FormCheckbox } from '../ui/FormField';
+import { FormError } from '../ui/FormError';
+import { FormActions } from '../ui/FormActions';
 
 interface APIKeyFormData {
   name: string;
@@ -15,107 +20,76 @@ interface APIKey {
 }
 
 interface APIKeyFormProps {
-  apiKey?: APIKey | null;
-  onSubmit: (data: APIKeyFormData) => Promise<void>;
-  onCancel: () => void;
-  loading?: boolean;
+  readonly apiKey?: APIKey | null;
+  readonly onSubmit: (data: APIKeyFormData) => Promise<void>;
+  readonly onCancel: () => void;
+  readonly loading?: boolean;
 }
 
 function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
-  const [formData, setFormData] = useState<APIKeyFormData>({
+  const isEditing = !!apiKey && apiKey.key_id !== 0;
+
+  // Use shared form state hook
+  const { formData, updateField, updateFields, isSubmitting, error, setError, handleSubmit } = useFormState<APIKeyFormData>({
     name: '',
     is_active: true
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const isEditing = !!apiKey && apiKey.key_id !== 0;
 
   // Initialize form with existing key data
   useEffect(() => {
     if (apiKey) {
-      setFormData({
+      updateFields({
         name: apiKey.name || '',
         is_active: apiKey.is_active !== undefined ? apiKey.is_active : true
       });
     }
   }, [apiKey]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Basic validation
+  // Validation
+  const validate = () => {
     if (!formData.name.trim()) {
       setError('API key name is required');
-      return;
+      return false;
     }
+    return true;
+  };
 
-    try {
-      setIsSubmitting(true);
-      setError(null);
+  // Submit handler with validation
+  const onFormSubmit = async (e: React.FormEvent) => {
+    if (!validate()) return;
+    
+    await handleSubmit(e, async () => {
       await onSubmit(formData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save API key');
-    } finally {
-      setIsSubmitting(false);
-    }
+    }, 'Failed to save API key');
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      )}
+    <form onSubmit={onFormSubmit} className="space-y-6">
+      {/* Error Message */}
+      <FormError error={error} />
 
       {/* API Key Name */}
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-          API Key Name *
-        </label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          placeholder="e.g., Production API, Mobile App Key"
-          required
-        />
-        <p className="mt-1 text-xs text-gray-500">
-          Choose a descriptive name to help identify this key's purpose
-        </p>
-      </div>
+      <FormField
+        label="API Key Name"
+        id="name"
+        type="text"
+        value={formData.name}
+        onChange={(e) => updateField('name', e.target.value)}
+        placeholder="e.g., Production API, Mobile App Key"
+        disabled={isSubmitting}
+        required
+        helpText="Choose a descriptive name to help identify this key's purpose"
+      />
 
       {/* Active Status */}
-      <div>
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="is_active"
-            name="is_active"
-            checked={formData.is_active}
-            onChange={handleChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700">
-            Active
-          </label>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">
-          Inactive keys cannot be used to access the API
-        </p>
-      </div>
+      <FormCheckbox
+        label="Active"
+        id="is_active"
+        checked={formData.is_active}
+        onChange={(e) => updateField('is_active', e.target.checked)}
+        disabled={isSubmitting}
+        helpText="Inactive keys cannot be used to access the API"
+      />
 
       {/* Info Box */}
       {!isEditing && (
@@ -140,26 +114,11 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
       )}
 
       {/* Form Actions */}
-      <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          disabled={isSubmitting}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg flex items-center transition-colors"
-        >
-          {isSubmitting && (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-          )}
-          {isSubmitting ? 'Saving...' : (isEditing ? 'Update API Key' : 'Create API Key')}
-        </button>
-      </div>
+      <FormActions
+        onCancel={onCancel}
+        isSubmitting={isSubmitting}
+        submitLabel={isEditing ? 'Update API Key' : 'Create API Key'}
+      />
     </form>
   );
 }
