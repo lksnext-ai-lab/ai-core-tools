@@ -3,8 +3,16 @@ import './index.css';
 
 // Export core components
 export { BaseApp } from './core/BaseApp';
+export { ExtensibleBaseApp } from './core/ExtensibleBaseApp';
 export { default as AppLayout } from './components/layout/AppLayout';
 export { configService } from './core/ConfigService';
+
+// Export modular components
+export { Header } from './components/Header/Header';
+export { Sidebar } from './components/Sidebar/Sidebar';
+export { Footer } from './components/Footer/Footer';
+export { Layout } from './components/Layout/Layout';
+export { ThemeSelector } from './components/Theme/ThemeSelector';
 
 // Export contexts
 export { UserProvider, useUser } from './contexts/UserContext';
@@ -16,6 +24,7 @@ export { useTheme } from './themes/ThemeContext';
 
 // Export auth
 export { OIDCProvider } from './auth/OIDCProvider';
+export { AuthProvider } from './auth/AuthConfig';
 export { useAuth } from './auth/AuthContext';
 
 // Export services
@@ -31,8 +40,10 @@ export type {
   ApiConfig,
   ExtraRoute,
   FeatureConfig,
-  CustomPage
+  CustomPage,
+  LibraryConfig
 } from './core/types';
+export type { AuthProps } from './auth/AuthConfig';
 
 // Export base pages (clients can reuse or override)
 export { default as AppsPage } from './pages/AppsPage';

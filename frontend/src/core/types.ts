@@ -93,3 +93,6 @@ export interface NavigationConfig {
   admin?: NavigationItem[];
   custom?: NavigationItem[];
 }
+
+// Re-export LibraryConfig from LibraryConfig.ts
+export type { LibraryConfig } from './LibraryConfig';
