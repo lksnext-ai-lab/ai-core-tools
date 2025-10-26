@@ -8,13 +8,7 @@ import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
-
-interface MCPConfig {
-  config_id: number;
-  name: string;
-  description: string;
-  created_at: string;
-}
+import type { MCPConfig } from '../../core/types';
 
 function MCPConfigsPage() {
   const { appId } = useParams();

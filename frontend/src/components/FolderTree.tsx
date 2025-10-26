@@ -112,11 +112,10 @@ const FolderNode: React.FC<FolderNodeProps> = ({
         {/* Dropdown Menu */}
         {openDropdown === folder.folder_id && (
           <div
-            ref={(el) => (dropdownRefs.current[folder.folder_id] = el)}
+            ref={(el) => { dropdownRefs.current[folder.folder_id] = el; }}
             className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
             style={{ top: '100%' }}
           >
-            {console.log('Rendering dropdown for folder:', folder.folder_id)}
             <div className="py-1">
               <button
                 onClick={() => onAction('create', folder)}
@@ -332,11 +331,10 @@ const FolderTree: React.FC<FolderTreeProps> = ({
           {/* Dropdown Menu for Root */}
           {openDropdown === 0 && (
             <div
-              ref={(el) => (dropdownRefs.current[0] = el)}
+              ref={(el) => { dropdownRefs.current[0] = el; }}
               className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
               style={{ top: '100%' }}
             >
-              {console.log('Rendering root dropdown')}
               <div className="py-1">
                 <button
                   onClick={() => handleAction('create', { folder_id: 0, name: 'Root', parent_folder_id: null } as any)}

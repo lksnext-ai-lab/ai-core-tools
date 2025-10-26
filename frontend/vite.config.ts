@@ -10,16 +10,26 @@ export default defineConfig(({ mode }) => {
         lib: {
           entry: path.resolve(__dirname, 'src/index.ts'),
           name: 'AICoreToolsBase',
-          formats: ['es'],
-          fileName: () => 'index.js'
+          formats: ['es', 'cjs'],
+          fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`
         },
         rollupOptions: {
-          external: ['react', 'react-dom', 'react-router-dom'],
+          external: [
+            'react', 
+            'react-dom', 
+            'react-router-dom',
+            'axios',
+            'oidc-client-ts',
+            'react-markdown'
+          ],
           output: {
             globals: {
               react: 'React',
               'react-dom': 'ReactDOM',
-              'react-router-dom': 'ReactRouterDOM'
+              'react-router-dom': 'ReactRouterDOM',
+              'axios': 'axios',
+              'oidc-client-ts': 'oidc-client-ts',
+              'react-markdown': 'ReactMarkdown'
             },
             assetFileNames: (assetInfo) => {
               if (assetInfo.name?.endsWith('.css')) {
@@ -29,7 +39,10 @@ export default defineConfig(({ mode }) => {
             }
           }
         },
-        cssCodeSplit: false
+        cssCodeSplit: false,
+        minify: 'terser',
+        sourcemap: true,
+        target: 'es2020'
       }
     };
   }

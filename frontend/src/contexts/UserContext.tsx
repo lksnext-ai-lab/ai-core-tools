@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { authService } from '../services/auth';
 
-interface User {
+export interface User {
   user_id: number;
   email: string;
   name?: string;

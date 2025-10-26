@@ -69,6 +69,14 @@ export interface CustomPage {
   protected?: boolean;
 }
 
+export interface MCPConfig {
+  config_id: number;
+  name: string;
+  description?: string;
+  transport_type?: string;
+  created_at: string;
+}
+
 export interface NavigationItem {
   path: string;
   name: string;

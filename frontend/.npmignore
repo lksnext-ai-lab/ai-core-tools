@@ -1,0 +1,27 @@
+# Include dist directory for npm package
+!dist/
+
+# Exclude source files
+src/
+public/
+*.config.js
+*.config.ts
+vite.config.ts
+tsconfig*.json
+eslint.config.js
+tailwind.config.js
+postcss.config.js
+
+# Exclude development files
+.env*
+*.local
+node_modules/
+.git/
+.gitignore
+.npmignore
+
+# Exclude build artifacts that aren't needed
+*.log
+.DS_Store
+.vscode/
+.idea/
