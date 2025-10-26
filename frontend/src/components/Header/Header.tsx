@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
@@ -42,20 +42,14 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, logout } = useUser();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [currentApp, setCurrentApp] = useState<App | null>(null);
+  const [isLoadingApp, setIsLoadingApp] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Fetch app data when appId changes
-  useEffect(() => {
-    if (appId) {
-      loadAppData();
-    } else {
-      setCurrentApp(null);
-    }
-  }, [appId]);
-
-  async function loadAppData() {
+  const loadAppData = useCallback(async () => {
     if (!appId) return;
     
+    setIsLoadingApp(true);
     try {
       const apps = await apiService.getApps();
       const app = apps.find((a: App) => a.app_id === parseInt(appId));
@@ -63,11 +57,42 @@ export const Header: React.FC<HeaderProps> = ({
     } catch (error) {
       console.error('Failed to load app data:', error);
       setCurrentApp(null);
+    } finally {
+      setIsLoadingApp(false);
     }
-  }
+  }, [appId]);
+
+  useEffect(() => {
+    if (appId) {
+      loadAppData();
+    } else {
+      setCurrentApp(null);
+    }
+  }, [appId, loadAppData]);
+
+  // Calculate the most specific matching path once
+  const currentPath = location.pathname;
+  const mostSpecificMatch = React.useMemo(() => {
+    if (!navigationConfig?.appNavigation || !appId) return '';
+    
+    const allNavPaths = navigationConfig.appNavigation.map(item => 
+      item.path.replace(':appId', appId)
+    );
+    
+    // Find all paths that match the current path
+    const matchingPaths = allNavPaths.filter(navPath => 
+      currentPath === navPath || currentPath.startsWith(navPath + '/')
+    );
+    
+    // Return the longest (most specific) matching path
+    return matchingPaths.reduce((longest, current) => 
+      current.length > longest.length ? current : longest, ''
+    );
+  }, [currentPath, navigationConfig?.appNavigation, appId]);
 
   const isActive = (path: string) => {
-    return location.pathname.startsWith(path) ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50';
+    // Only highlight if this path is the most specific match
+    return mostSpecificMatch === path;
   };
 
   // Get user initials for avatar
@@ -119,7 +144,11 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center space-x-3">
                 <div>
                   <h3 className="text-sm font-medium text-gray-900">
-                    {currentApp ? currentApp.name : 'Loading...'}
+                    {(() => {
+                      if (isLoadingApp) return 'Loading...';
+                      if (currentApp) return currentApp.name;
+                      return 'App not found';
+                    })()}
                   </h3>
                   <Link 
                   to="/apps" 
@@ -136,7 +165,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* App-specific horizontal navigation */}
           {appId && navigationConfig?.appNavigation && (
             <nav className="flex space-x-6 border-l border-gray-200 pl-6">
-              {navigationConfig.appNavigation.map((item, index) => {
+              {navigationConfig.appNavigation.map((item) => {
                 // Skip admin items if user is not admin
                 if (item.adminOnly && !user?.is_admin) {
                   return null;
