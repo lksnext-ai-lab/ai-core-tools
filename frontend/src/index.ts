@@ -13,6 +13,22 @@ export { Footer } from './components/Footer/Footer';
 export { Layout } from './components/Layout/Layout';
 export { ThemeSelector } from './components/Theme/ThemeSelector';
 
+// Export shared form components and hooks
+export { useFormState } from './hooks/useFormState';
+export { FormField, FormTextArea, FormSelect, FormCheckbox } from './components/ui/FormField';
+export { FormError } from './components/ui/FormError';
+export { FormActions } from './components/ui/FormActions';
+
+// Export shared settings hooks and components
+export { useSettingsData } from './hooks/useSettingsData';
+export { useSettingsModal } from './hooks/useSettingsModal';
+export { LoadingState } from './components/ui/LoadingState';
+export { ErrorState } from './components/ui/ErrorState';
+export { SettingsPageWrapper } from './components/settings/SettingsPageWrapper';
+
+// Export badge components
+export { Badge, ProviderBadge, StatusBadge } from './components/ui/Badge';
+
 // Export contexts
 export { UserProvider, useUser } from './contexts/UserContext';
 export { SettingsCacheProvider } from './contexts/SettingsCacheContext';

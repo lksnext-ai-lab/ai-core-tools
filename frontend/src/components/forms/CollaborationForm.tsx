@@ -1,69 +1,63 @@
-import { useState } from 'react';
+import { useFormState } from '../../hooks/useFormState';
+import { FormField } from '../ui/FormField';
+import { FormError } from '../ui/FormError';
 
 interface CollaborationFormProps {
-  onSubmit: (email: string, role: string) => Promise<void>;
-  loading?: boolean;
+  readonly onSubmit: (email: string, role: string) => Promise<void>;
+  readonly loading?: boolean;
 }
 
 function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps) {
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Use shared form state hook
+  const { formData, updateField, isSubmitting, error, setError, handleSubmit, reset } = useFormState({
+    email: ''
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!email.trim()) {
+  // Email validation
+  const validate = () => {
+    if (!formData.email.trim()) {
       setError('Email is required');
-      return;
+      return false;
     }
 
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email)) {
+    if (!emailPattern.test(formData.email)) {
       setError('Please enter a valid email address');
-      return;
+      return false;
     }
 
-    try {
-      setIsSubmitting(true);
-      setError(null);
+    return true;
+  };
+
+  // Submit handler with validation
+  const onFormSubmit = async (e: React.FormEvent) => {
+    if (!validate()) return;
+    
+    await handleSubmit(e, async () => {
       // Always invite as editor (as per requirements)
-      await onSubmit(email.trim(), 'editor');
-      
+      await onSubmit(formData.email.trim(), 'editor');
       // Reset form on success
-      setEmail('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send invitation');
-    } finally {
-      setIsSubmitting(false);
-    }
+      reset();
+    }, 'Failed to send invitation');
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      )}
+    <form onSubmit={onFormSubmit} className="space-y-4">
+      {/* Error Message */}
+      <FormError error={error} />
 
       <div className="space-y-4">
         {/* Email Input */}
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-            Email Address *
-          </label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            placeholder="user@example.com"
-            required
-            disabled={isSubmitting}
-          />
-        </div>
+        <FormField
+          label="Email Address"
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => updateField('email', e.target.value)}
+          placeholder="user@example.com"
+          disabled={isSubmitting || loading}
+          required
+        />
 
         {/* Role Info (Read-only) */}
         <div className="bg-gray-50 rounded-lg p-4">
