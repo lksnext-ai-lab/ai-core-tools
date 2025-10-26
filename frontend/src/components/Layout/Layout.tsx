@@ -52,36 +52,39 @@ export const Layout: React.FC<LayoutProps> = ({
   showFooter = true
 }) => {
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      {showSidebar && (
-        <Sidebar 
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Full-width Header */}
+      {showHeader && (
+        <Header 
           navigationConfig={navigationConfig}
           title={sidebarProps?.title || headerProps?.title}
           logoUrl={sidebarProps?.logoUrl || headerProps?.logoUrl}
-          {...sidebarProps}
+          {...headerProps}
         />
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        {showHeader && (
-          <Header 
+      {/* Main Content Row */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        {showSidebar && (
+          <Sidebar 
             navigationConfig={navigationConfig}
-            {...headerProps}
+            {...sidebarProps}
           />
         )}
 
-        {/* Page Content */}
-        <main className={`flex-1 overflow-x-auto overflow-y-visible p-6 ${mainProps.className || ''}`}>
-          {children}
-        </main>
-        
-        {/* Footer */}
-        {showFooter && (
-          <Footer {...footerProps} />
-        )}
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Page Content */}
+          <main className={`flex-1 overflow-x-auto overflow-y-visible p-6 ${mainProps.className || ''}`}>
+            {children}
+          </main>
+          
+          {/* Footer */}
+          {showFooter && (
+            <Footer {...footerProps} />
+          )}
+        </div>
       </div>
     </div>
   );

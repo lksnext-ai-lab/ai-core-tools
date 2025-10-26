@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
-import { useTheme } from '../../themes/ThemeContext';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
 interface SidebarProps {
@@ -21,7 +20,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const { user } = useUser();
-  const { theme } = useTheme();
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path) ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50';
@@ -51,20 +49,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className={`w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col ${className}`}>
-      {/* Logo/Brand */}
-      <div className="p-6 border-b border-gray-200">
-        <Link to="/apps" className="flex items-center">
-          <img 
-            src={logoUrl || theme.logo || "/mattin-small.png"} 
-            alt={title || theme.name || "AI Core Tools"} 
-            className="w-8 h-8 mr-3"
-          />
-          <span className="text-xl font-bold text-gray-900">
-            {title || theme.name || "AI Core Tools"}
-          </span>
-        </Link>
-      </div>
-
       {/* Sidebar Navigation */}
       <nav className="flex-1 p-6">
         {navigationConfig && (

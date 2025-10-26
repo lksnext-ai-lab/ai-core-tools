@@ -99,6 +99,19 @@ export const Header: React.FC<HeaderProps> = ({
     <header className={`bg-white shadow-sm border-b border-gray-200 px-6 py-4 ${className}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
+          {/* Logo/Brand Section */}
+          <div className="flex items-center">
+            <Link to="/apps" className="flex items-center">
+              <img 
+                src={logoUrl || "/mattin-small.png"} 
+                alt={title || "AI Core Tools"} 
+                className="w-8 h-8 mr-3"
+              />
+              <span className="text-xl font-bold text-gray-900">
+                {title || "AI Core Tools"}
+              </span>
+            </Link>
+          </div>
 
           {/* App Context and Change App */}
           {appId && (
@@ -255,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
             )}
-          </div>
+          </div>                                        
         </div>
       </div>
     </header>
