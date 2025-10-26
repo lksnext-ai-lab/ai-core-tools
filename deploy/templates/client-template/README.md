@@ -1,59 +1,217 @@
-# Client Frontend Project
+# AI-Core-Tools Client Template
 
-This is a client-specific frontend project that extends the AI Core Tools base application.
+This template demonstrates how to create a client project using the **new extensible AI-Core-Tools library**.
 
-## Project Structure
+## 🚀 What's New in the Extensible Library
+
+### Modular Components
+- **Header**: Customizable header with logo, title, and user menu
+- **Sidebar**: Navigation sidebar with configurable menu items
+- **Footer**: Configurable footer with version info and custom content
+- **Layout**: Orchestrates all layout components
+- **ThemeSelector**: Theme switching component
+
+### Simplified Configuration
+- **LibraryConfig**: Much easier configuration interface
+- **Theme System**: Multiple themes, custom CSS, easy switching
+- **Route Management**: Add custom routes with `ExtraRoute`
+- **Component Props**: Deep customization options for all components
+
+### Enhanced Features
+- **Authentication**: OIDC and session auth support
+- **Responsive Design**: Mobile-first responsive layout
+- **TypeScript**: Full TypeScript support with type definitions
+- **Custom CSS**: Support for custom CSS variables and styles
+
+## 📁 Template Structure
 
 ```
-src/
-├── components/          # Reusable UI components
-│   └── ui/             # UI components (buttons, cards, etc.)
-├── pages/              # Page components (routes)
-├── config/             # Client configuration
-├── themes/             # Custom theme overrides
-├── App.tsx             # Main app with routing
-└── main.tsx            # Entry point
+client-template/
+├── frontend/
+│   ├── src/
+│   │   ├── config/
+│   │   │   └── libraryConfig.ts      # Main configuration file
+│   │   ├── pages/
+│   │   │   ├── ExtensibilityDemo.tsx # Demo page showcasing features
+│   │   │   ├── CustomPage.tsx        # Example custom page
+│   │   │   ├── CustomFeature.tsx     # Example custom feature
+│   │   │   └── CustomHomePage.tsx    # Custom home page
+│   │   ├── themes/
+│   │   │   └── customTheme.ts        # Custom theme definition
+│   │   ├── components/
+│   │   │   └── ui/
+│   │   │       └── ClientCard.tsx    # Example custom component
+│   │   └── App.tsx                   # Main app using ExtensibleBaseApp
+│   ├── public/
+│   │   ├── client-logo.png           # Your client logo
+│   │   └── client-favicon.ico        # Your client favicon
+│   ├── package.json                  # Dependencies
+│   ├── vite.config.ts               # Build configuration
+│   └── CLIENT_SETUP_GUIDE.md        # Detailed setup guide
+└── README.md                        # This file
 ```
 
-## Getting Started
+## 🎯 Key Features Demonstrated
 
-1. Install dependencies:
+### 1. ExtensibleBaseApp Usage
+```typescript
+import { ExtensibleBaseApp } from '@lksnext/ai-core-tools-base';
+import { libraryConfig } from './config/libraryConfig';
+
+function App() {
+  return (
+    <ExtensibleBaseApp 
+      config={libraryConfig}
+      extraRoutes={extraRoutes}
+    />
+  );
+}
+```
+
+### 2. Modular Component Usage
+```typescript
+import { 
+  Header, 
+  Sidebar, 
+  Footer, 
+  Layout, 
+  ThemeSelector,
+  useTheme 
+} from '@lksnext/ai-core-tools-base';
+
+// Use individual components in your custom layouts
+```
+
+### 3. Theme System
+```typescript
+// Multiple themes with easy switching
+themeProps: {
+  defaultTheme: 'client-custom',
+  customThemes: {
+    'client-custom': customTheme,
+    'corporate': corporateTheme
+  },
+  showThemeSelector: true
+}
+```
+
+### 4. Route Extensibility
+```typescript
+const extraRoutes: ExtraRoute[] = [
+  {
+    path: '/extensibility-demo',
+    element: <ExtensibilityDemo />,
+    name: 'Extensibility Demo',
+    protected: true
+  }
+];
+```
+
+## 🛠️ Getting Started
+
+1. **Create a new client project:**
+   ```bash
+   ./deploy/scripts/create-client-project.sh my-client
+   ```
+
+2. **Navigate to your client directory:**
+   ```bash
+   cd clients/my-client
+   ```
+
+3. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. Configure your client settings:
-   - Edit `src/config/clientConfig.ts` for client configuration
-   - Edit `src/themes/customTheme.ts` for custom theming
-   - Add your logo to `public/` directory
+4. **Configure your client:**
+   - Update `src/config/libraryConfig.ts` with your details
+   - Add your logo to `public/client-logo.png`
+   - Add your favicon to `public/client-favicon.ico`
 
-3. Start development server:
+5. **Start development:**
    ```bash
    npm run dev
    ```
 
-## Customization
+6. **Visit the extensibility demo:**
+   - Go to `http://localhost:3000/extensibility-demo`
+   - See all the new features in action!
 
-### Overriding the Home Page
-1. Create a custom home page component in `src/pages/`
-2. Import it in `src/config/clientConfig.ts`
-3. Add it to the `homePage` property in `clientConfig`
+## 📚 Documentation
 
-### Adding New Pages
-1. Create a new page component in `src/pages/`
-2. Add the route to `src/App.tsx` in the `extraRoutes` array
-3. Add navigation item to `src/config/clientConfig.ts` in the `navigation.custom` array
+- **CLIENT_SETUP_GUIDE.md**: Comprehensive setup and customization guide
+- **ExtensibilityDemo.tsx**: Interactive demo of all new features
+- **libraryConfig.ts**: Example configuration with all options
 
-### Adding New Components
-1. Create reusable components in `src/components/`
-2. Use the `useTheme()` hook to integrate with the theme system
-3. Import and use in your pages
+## 🎨 Customization Examples
 
-### Theme Integration
-- Use `useTheme()` hook to access theme colors and settings
-- Components automatically adapt to client's theme configuration
-- Override theme in `src/themes/customTheme.ts`
+### Custom Theme
+```typescript
+export const customTheme: ThemeConfig = {
+  name: 'client-custom',
+  colors: {
+    primary: '#10b981',    // Your brand colors
+    secondary: '#8b5cf6',
+    accent: '#f59e0b',
+    background: '#f9fafb',
+    surface: '#ffffff',
+    text: '#111827'
+  },
+  customStyles: `
+    .client-button {
+      background: var(--client-primary);
+      transition: all 0.2s ease;
+    }
+  `
+};
+```
 
-## Backend
+### Custom Layout
+```typescript
+import { Header, Sidebar, Footer, useTheme } from '@lksnext/ai-core-tools-base';
 
-This frontend connects to the AI Core Tools backend API. Make sure the backend is running and accessible at the configured API URL.
+const CustomLayout = () => {
+  const { theme } = useTheme();
+  
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header title="My App" />
+      <div className="flex flex-1">
+        <Sidebar />
+        <main className="flex-1 p-6">
+          {/* Your content */}
+        </main>
+      </div>
+      <Footer />
+    </div>
+  );
+};
+```
+
+## 🔧 Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+- `npm run lint:fix` - Fix ESLint issues
+
+## 🚀 Next Steps
+
+1. **Explore the ExtensibilityDemo page** to see all features
+2. **Customize your theme** in `src/themes/customTheme.ts`
+3. **Add your custom pages** in `src/pages/`
+4. **Configure navigation** in `libraryConfig.ts`
+5. **Deploy your client** using your preferred hosting service
+
+## 📞 Support
+
+For questions or issues:
+- Check the CLIENT_SETUP_GUIDE.md for detailed instructions
+- Review the ExtensibilityDemo.tsx for code examples
+- Refer to the main AI-Core-Tools documentation
+
+---
+
+**Happy coding! 🎉**

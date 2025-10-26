@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SettingsLayout from '../../components/layout/SettingsLayout';
 import { apiService } from '../../services/api';
 
 function GeneralSettingsPage() {
@@ -89,18 +88,18 @@ function GeneralSettingsPage() {
 
   if (loading) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading app settings...</p>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   if (error) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex">
@@ -126,12 +125,12 @@ function GeneralSettingsPage() {
             </div>
           </div>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   return (
-    <SettingsLayout>
+    
       <div className="p-6">
         <div className="max-w-2xl">
           {/* Header */}
@@ -345,7 +344,7 @@ function GeneralSettingsPage() {
           </div>
         </div>
       </div>
-    </SettingsLayout>
+    
   );
 }
 

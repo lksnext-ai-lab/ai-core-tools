@@ -94,5 +94,33 @@ export interface NavigationConfig {
   custom?: NavigationItem[];
 }
 
+// New extensible navigation types
+export interface NavigationOverride {
+  path: string;
+  name?: string;
+  icon?: string;
+  section?: string;
+  protected?: boolean;
+  adminOnly?: boolean;
+  hidden?: boolean; // Hide this navigation item
+}
+
+export interface NavigationAdditions {
+  mainFeatures?: NavigationItem[];
+  appNavigation?: NavigationItem[];
+  settings?: NavigationItem[];
+  admin?: NavigationItem[];
+  custom?: NavigationItem[];
+}
+
+export interface ExtensibleNavigationConfig {
+  // Add new navigation items
+  add?: NavigationAdditions;
+  // Override existing navigation items
+  override?: NavigationOverride[];
+  // Remove navigation items by path
+  remove?: string[];
+}
+
 // Re-export LibraryConfig from LibraryConfig.ts
 export type { LibraryConfig } from './LibraryConfig';

@@ -5,8 +5,11 @@ import { AuthProvider } from '../auth/AuthConfig';
 import { UserProvider } from '../contexts/UserContext';
 import { SettingsCacheProvider } from '../contexts/SettingsCacheContext';
 import { Layout } from '../components/Layout/Layout';
+import SettingsLayout from '../components/layout/SettingsLayout';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { configService } from './ConfigService';
+import { mergeNavigationConfig } from './NavigationMerger';
+import { defaultNavigation } from './defaultNavigation';
 import type { LibraryConfig, ExtraRoute } from './types';
 import { baseTheme } from '../themes/baseTheme';
 
@@ -14,6 +17,28 @@ import { baseTheme } from '../themes/baseTheme';
 import HomePage from '../pages/HomePage';
 import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
+import AgentsPage from '../pages/AgentsPage';
+import AgentFormPage from '../pages/AgentFormPage';
+import SilosPage from '../pages/SilosPage';
+import SiloFormPage from '../pages/SiloFormPage';
+import SiloPlaygroundPage from '../pages/SiloPlaygroundPage';
+import RepositoriesPage from '../pages/RepositoriesPage';
+import RepositoryFormPage from '../pages/RepositoryFormPage';
+import RepositoryDetailPage from '../pages/RepositoryDetailPage';
+import RepositoryPlaygroundPage from '../pages/RepositoryPlaygroundPage';
+import DomainsPage from '../pages/DomainsPage';
+import DomainFormPage from '../pages/DomainFormPage';
+import DomainDetailPage from '../pages/DomainDetailPage';
+import AgentPlaygroundPage from '../pages/AgentPlaygroundPage';
+import AIServicesPage from '../pages/settings/AIServicesPage';
+import APIKeysPage from '../pages/settings/APIKeysPage';
+import CollaborationPage from '../pages/settings/CollaborationPage';
+import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
+import GeneralSettingsPage from '../pages/settings/GeneralSettingsPage';
+import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
+import DataStructuresPage from '../pages/settings/DataStructuresPage';
+import UsersPage from '../pages/admin/UsersPage';
+import StatsPage from '../pages/admin/StatsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
 
@@ -63,6 +88,11 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   }, [clientConfig]);
 
   const features = config.features || {};
+  
+  // Merge navigation configuration
+  const mergedNavigationConfig = config.navigation 
+    ? mergeNavigationConfig(config.navigation)
+    : (config.navigationConfig || defaultNavigation);
 
   return (
     <ThemeProvider theme={clientConfig.theme}>
@@ -79,8 +109,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/" element={
                   <ProtectedRoute>
                     <Layout
-                      navigationConfig={config.navigationConfig}
-                      headerProps={config.headerProps}
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
                       footerProps={config.footerProps}
                       layoutProps={config.layoutProps}
                       navigationProps={config.navigationProps}
@@ -96,8 +130,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps" element={
                   <ProtectedRoute>
                     <Layout
-                      navigationConfig={config.navigationConfig}
-                      headerProps={config.headerProps}
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
                       footerProps={config.footerProps}
                       layoutProps={config.layoutProps}
                       navigationProps={config.navigationProps}
@@ -114,8 +152,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId" element={
                   <ProtectedRoute>
                     <Layout
-                      navigationConfig={config.navigationConfig}
-                      headerProps={config.headerProps}
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
                       footerProps={config.footerProps}
                       layoutProps={config.layoutProps}
                       navigationProps={config.navigationProps}
@@ -128,8 +170,668 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </ProtectedRoute>
                 } />
 
-                {/* All other existing routes... */}
-                {/* (Keeping the same structure as original BaseApp for now) */}
+                {/* App-specific routes */}
+                <Route path="/apps/:appId/agents" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <AgentsPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/agents/:agentId" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <AgentFormPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/agents/:agentId/playground" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <AgentPlaygroundPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/silos" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SilosPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/silos/:siloId" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SiloFormPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/silos/:siloId/playground" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SiloPlaygroundPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/repositories" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <RepositoriesPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/repositories/:repositoryId" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <RepositoryFormPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/repositories/:repositoryId/detail" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <RepositoryDetailPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/repositories/:repositoryId/playground" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <RepositoryPlaygroundPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/domains" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <DomainsPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/domains/:domainId" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <DomainFormPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/domains/:domainId/detail" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <DomainDetailPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                {/* App-specific settings routes */}
+                <Route path="/apps/:appId/settings" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/general" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/ai-services" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><AIServicesPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/embedding-services" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/mcp-configs" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><MCPConfigsPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/api-keys" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><APIKeysPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/data-structures" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><DataStructuresPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/collaboration" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><CollaborationPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                {/* Global settings routes */}
+                <Route path="/settings/ai-services" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><AIServicesPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings/api-keys" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><APIKeysPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings/collaboration" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><CollaborationPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings/embedding-services" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings/general" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings/mcp-configs" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><MCPConfigsPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings/data-structures" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <SettingsLayout><DataStructuresPage /></SettingsLayout>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                {/* Admin routes */}
+                <Route path="/admin/users" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <UsersPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/admin/stats" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <StatsPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/about" element={
+                  <ProtectedRoute>
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      <div className="p-8">
+                        <h1 className="text-3xl font-bold mb-4">About AI-Core-Tools</h1>
+                        <p className="text-lg mb-4">
+                          AI-Core-Tools is a comprehensive platform for building and managing AI applications.
+                        </p>
+                        <p className="text-lg">
+                          This client project is built using the extensible AI-Core-Tools library.
+                        </p>
+                      </div>
+                    </Layout>
+                  </ProtectedRoute>
+                } />
 
                 {/* Client-specific extra routes */}
                 {extraRoutes.map(route => (
@@ -140,8 +842,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       route.protected ? (
                         <ProtectedRoute>
                           <Layout
-                            navigationConfig={config.navigationConfig}
-                            headerProps={config.headerProps}
+                            navigationConfig={mergedNavigationConfig}
+                            headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
                             footerProps={config.footerProps}
                             layoutProps={config.layoutProps}
                             navigationProps={config.navigationProps}
@@ -154,8 +860,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                         </ProtectedRoute>
                       ) : (
                         <Layout
-                          navigationConfig={config.navigationConfig}
-                          headerProps={config.headerProps}
+                          navigationConfig={mergedNavigationConfig}
+                          headerProps={{
+                        ...config.headerProps,
+                        title: config.headerProps?.title || config.name,
+                        logoUrl: config.headerProps?.logoUrl || config.logo
+                      }}
                           footerProps={config.footerProps}
                           layoutProps={config.layoutProps}
                           navigationProps={config.navigationProps}

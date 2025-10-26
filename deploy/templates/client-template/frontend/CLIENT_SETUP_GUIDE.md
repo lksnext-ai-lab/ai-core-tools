@@ -1,10 +1,18 @@
-# Client Project Setup Guide for AI-Core-Tools Base Application
+# Client Project Setup Guide for AI-Core-Tools Extensible Library
 
-This guide provides instructions on how to set up, customize, and deploy a new client project based on the `ai-core-tools` extensible base application.
+This guide provides instructions on how to set up, customize, and deploy a new client project based on the **new extensible** `ai-core-tools` library.
 
 ## 1. Overview
 
-The `ai-core-tools` project is designed as a core, extensible platform. Each client will have its own separate frontend project, which consumes the `ai-core-tools` base frontend as a library and connects to the shared `ai-core-tools` backend. This allows for client-specific branding, features, and authentication while maintaining a common, maintainable core.
+The `ai-core-tools` project is now designed as a **fully modular and extensible platform**. Each client will have its own separate frontend project, which consumes the `ai-core-tools` base frontend as a **reusable React library** and connects to the shared `ai-core-tools` backend. This allows for client-specific branding, features, and authentication while maintaining a common, maintainable core.
+
+**🚀 New Extensible Features:**
+- **Modular Components**: Import individual components (Header, Sidebar, Footer, Layout, etc.)
+- **Simplified Configuration**: Easy-to-use `LibraryConfig` interface
+- **Advanced Theme System**: Multiple themes, custom CSS, theme switching
+- **Route Extensibility**: Add custom routes and pages easily
+- **Component Customization**: Deep customization options for all major components
+- **Authentication Integration**: OIDC and session auth support
 
 **Key Principles:**
 - **Frontend-Only Projects**: Each client gets its own frontend repository/folder.
@@ -61,45 +69,78 @@ This script will:
 
 The client frontend is a standard React/Vite application that consumes the `@lksnext/ai-core-tools-base` library.
 
-### 4.1. `src/config/clientConfig.ts`
+### 4.1. `src/config/libraryConfig.ts`
 
-This is the primary file for configuring your client's frontend.
+This is the primary file for configuring your client's frontend using the new **simplified LibraryConfig**.
 
 ```typescript
-// clients/my-client/src/config/clientConfig.ts
-import type { ClientConfig } from '@lksnext/ai-core-tools-base';
+// clients/my-client/src/config/libraryConfig.ts
+import type { LibraryConfig } from '@lksnext/ai-core-tools-base';
 import { customTheme } from '../themes/customTheme';
 
-export const clientConfig: ClientConfig = {
-  clientId: 'my-client',
+export const libraryConfig: LibraryConfig = {
+  // Basic configuration
   name: 'My Awesome Client AI',
-  theme: customTheme,
-  auth: {
-    type: 'session'  // Use session auth for testing, or 'oidc' for OIDC
+  logo: '/my-client-logo.png',
+  favicon: '/my-client-favicon.ico',
+  
+  // Theme configuration
+  themeProps: {
+    defaultTheme: 'client-custom',
+    customThemes: {
+      'client-custom': customTheme,
+      'corporate': { /* corporate theme */ }
+    },
+    showThemeSelector: true
   },
-  branding: {
-    companyName: 'My Awesome Client AI',
-    logo: '/my-client-logo.png', // Place this in public/
-    favicon: '/my-client-favicon.ico',
-    headerTitle: 'My Awesome Client AI'
+  
+  // Header configuration
+  headerProps: {
+    title: 'My Awesome Client AI',
+    logoUrl: '/my-client-logo.png'
   },
-  api: {
-    baseUrl: 'http://localhost:8000', // Backend API URL
+  
+  // Footer configuration
+  footerProps: {
+    copyright: '© 2024 My Company. All rights reserved.',
+    showVersion: true
+  },
+  
+  // Authentication configuration
+  authProps: {
+    enabled: true,
+    oidc: {
+      authority: 'https://your-oidc-provider.com',
+      client_id: 'my-client',
+      callbackPath: '/callback'
+    }
+  },
+  
+  // API configuration
+  apiConfig: {
+    baseUrl: 'http://localhost:8000',
     timeout: 30000,
     retries: 3
+  },
+  
+  // Feature configuration
+  features: {
+    showSidebar: true,
+    showHeader: true,
+    showFooter: true,
+    showThemeSelector: true
   }
 };
 ```
 
-- **`clientId`**: A unique identifier for your client.
+**Key Configuration Options:**
 - **`name`**: The display name for your client.
-- **`theme`**: Customize branding elements through the theme system.
-- **`auth`**: Configure authentication (session-based or OIDC).
-- **`branding`**: Configure company name, logo, favicon, and header title.
-- **`api`**: Configure backend API connection:
-  - `baseUrl`: The URL of your AI Core Tools backend (e.g., `http://localhost:8000`)
-  - `timeout`: Request timeout in milliseconds (default: 30000)
-  - `retries`: Number of retry attempts for failed requests (default: 3)
+- **`themeProps`**: Configure multiple themes and theme switching.
+- **`headerProps`**: Customize header appearance and content.
+- **`footerProps`**: Configure footer content and visibility.
+- **`authProps`**: Configure authentication (OIDC or session-based).
+- **`apiConfig`**: Configure backend API connection.
+- **`features`**: Toggle various UI features on/off.
 
 ### 4.2. `src/themes/customTheme.ts`
 
@@ -126,61 +167,226 @@ export const customTheme: ThemeConfig = {
 
 ### 4.3. `src/App.tsx`
 
-This file is minimal and simply renders the `BaseApp` with your `clientConfig`:
+This file uses the new **ExtensibleBaseApp** with your `libraryConfig` and custom routes:
 
 ```typescript
 // clients/my-client/src/App.tsx
-import { BaseApp } from '@lksnext/ai-core-tools-base';
-import { clientConfig } from './config/clientConfig';
+import { ExtensibleBaseApp } from '@lksnext/ai-core-tools-base';
+import type { ExtraRoute } from '@lksnext/ai-core-tools-base';
+import { libraryConfig } from './config/libraryConfig';
+import CustomPage from './pages/CustomPage';
+import ExtensibilityDemo from './pages/ExtensibilityDemo';
 
 function App() {
+  const extraRoutes: ExtraRoute[] = [
+    {
+      path: '/extensibility-demo',
+      element: <ExtensibilityDemo />,
+      name: 'Extensibility Demo',
+      protected: true
+    },
+    {
+      path: '/custom-page',
+      element: <CustomPage />,
+      name: 'Custom Page',
+      protected: true
+    }
+  ];
+
   return (
-    <BaseApp clientConfig={clientConfig} />
+    <ExtensibleBaseApp 
+      config={libraryConfig}
+      extraRoutes={extraRoutes}
+    />
   );
 }
 
 export default App;
 ```
 
-### 4.4. Adding Custom Components and Pages
+### 4.4. Extensible Navigation System
+
+The new library features a powerful extensible navigation system that allows you to add, override, or remove navigation items without redefining the entire navigation structure.
+
+#### 4.4.1. Simple Navigation Configuration
+
+Instead of defining the entire navigation, you can now just specify additions and overrides:
+
+```typescript
+// Old way (verbose)
+navigationConfig: {
+  mainFeatures: [/* all main features */],
+  admin: [/* all admin features */],
+  // ... hundreds of lines
+}
+
+// New way (simple)
+navigation: {
+  add: {
+    custom: [
+      {
+        path: '/my-feature',
+        name: 'My Feature',
+        icon: '⭐',
+        section: 'custom'
+      }
+    ]
+  },
+  override: [
+    {
+      path: '/about',
+      name: 'About My Company',
+      icon: '🏢'
+    }
+  ],
+  remove: ['/admin/stats'] // Hide statistics
+}
+```
+
+#### 4.4.2. Navigation Configuration Options
+
+**Add New Navigation Items:**
+```typescript
+navigation: {
+  add: {
+    mainFeatures: [
+      {
+        path: '/dashboard',
+        name: 'Dashboard',
+        icon: '📊',
+        section: 'mainFeatures'
+      }
+    ],
+    custom: [
+      {
+        path: '/reports',
+        name: 'Reports',
+        icon: '📋',
+        section: 'custom'
+      }
+    ],
+    admin: [
+      {
+        path: '/admin/audit',
+        name: 'Audit Logs',
+        icon: '📝',
+        section: 'admin',
+        adminOnly: true
+      }
+    ]
+  }
+}
+```
+
+**Override Existing Items:**
+```typescript
+navigation: {
+  override: [
+    {
+      path: '/apps',
+      name: 'My Projects',  // Change name
+      icon: '📱'            // Change icon
+    },
+    {
+      path: '/admin/users',
+      name: 'Team Management',
+      adminOnly: true
+    }
+  ]
+}
+```
+
+**Remove Navigation Items:**
+```typescript
+navigation: {
+  remove: [
+    '/admin/stats',  // Hide statistics
+    '/about'         // Hide about page
+  ]
+}
+```
+
+#### 4.4.3. Using Modular Components
+
+The new library allows you to import and use individual components:
+
+```typescript
+// Import individual components
+import { 
+  Header, 
+  Sidebar, 
+  Footer, 
+  Layout, 
+  ThemeSelector,
+  useTheme 
+} from '@lksnext/ai-core-tools-base';
+
+// Create a custom layout
+const CustomLayout: React.FC = () => {
+  const { theme } = useTheme();
+  
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header 
+        title="My Custom App"
+        logoUrl="/my-logo.png"
+        className="bg-blue-600 text-white"
+      />
+      <div className="flex flex-1">
+        <Sidebar 
+          navigationConfig={myNavigationConfig}
+          className="w-64 bg-gray-100"
+        />
+        <main className="flex-1 p-6">
+          <ThemeSelector />
+          {/* Your content */}
+        </main>
+      </div>
+      <Footer 
+        copyright="© 2024 My Company"
+        showVersion={true}
+      />
+    </div>
+  );
+};
+```
+
+### 4.5. Adding Custom Components and Pages
 
 You can create new React components and pages within `src/components` or `src/pages` (or any other structure you prefer).
 
-**Example (`src/components/CustomPage.tsx`):**
+**Example (`src/pages/ExtensibilityDemo.tsx`):**
 ```typescript
-import React from 'react';
-import { useTheme } from '@lksnext/ai-core-tools-base';
+import React, { useState } from 'react';
+import { useTheme, ThemeSelector } from '@lksnext/ai-core-tools-base';
 
-const CustomPage: React.FC = () => {
-  const { theme } = useTheme();
+const ExtensibilityDemo: React.FC = () => {
+  const { theme, switchTheme } = useTheme();
+  const [selectedTheme, setSelectedTheme] = useState('client-custom');
 
   return (
-    <div style={{ 
-      backgroundColor: theme.colors?.background, 
-      color: theme.colors?.text, 
-      padding: '20px', 
-      borderRadius: '8px' 
-    }}>
-      <h1 style={{ color: theme.colors?.primary }}>
-        Welcome to Your Custom Client Page!
+    <div className="max-w-6xl mx-auto p-6">
+      <h1 className="text-4xl font-bold mb-4" style={{ color: theme.colors?.primary }}>
+        🚀 Extensibility Demo
       </h1>
-      <p>This page is specific to your client project ({theme.name}).</p>
-      <p>You can implement unique features and UI here.</p>
-      <button style={{ 
-        backgroundColor: theme.colors?.secondary, 
-        color: '#ffffff', 
-        padding: '10px 15px', 
-        borderRadius: '5px', 
-        border: 'none', 
-        cursor: 'pointer' 
-      }}>
-        Client Action
-      </button>
+      
+      {/* Theme switching demo */}
+      <div className="mb-8">
+        <ThemeSelector />
+        <button 
+          onClick={() => switchTheme('corporate')}
+          className="client-button px-4 py-2 rounded-lg"
+        >
+          Switch to Corporate Theme
+        </button>
+      </div>
+      
+      {/* Your custom content */}
     </div>
   );
 };
 
-export default CustomPage;
+export default ExtensibilityDemo;
 ```
 
 ## 5. Backend Configuration

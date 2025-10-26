@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SettingsLayout from '../../components/layout/SettingsLayout';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
@@ -170,18 +169,18 @@ function CollaborationPage() {
 
   if (loading) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading collaboration settings...</p>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   if (error) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600">Error: {error}</p>
@@ -193,12 +192,12 @@ function CollaborationPage() {
             </button>
           </div>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   return (
-    <SettingsLayout>
+    
       <div className="p-6 space-y-8">
         {/* Header */}
         <div>
@@ -409,7 +408,7 @@ function CollaborationPage() {
           </div>
         </div>
       </div>
-    </SettingsLayout>
+    
   );
 }
 

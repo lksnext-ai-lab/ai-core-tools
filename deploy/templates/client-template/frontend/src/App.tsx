@@ -1,12 +1,18 @@
-import { BaseApp } from '@lksnext/ai-core-tools-base';
+import { ExtensibleBaseApp } from '@lksnext/ai-core-tools-base';
 import type { ExtraRoute } from '@lksnext/ai-core-tools-base';
-import { clientConfig } from './config/clientConfig';
+import { libraryConfig } from './config/libraryConfig';
 import CustomPage from './pages/CustomPage';
 import CustomFeature from './pages/CustomFeature';
-import CustomHomePage from './pages/CustomHomePage';
+import ExtensibilityDemo from './pages/ExtensibilityDemo';
 
 function App() {
   const extraRoutes: ExtraRoute[] = [
+    {
+      path: '/extensibility-demo',
+      element: <ExtensibilityDemo />,
+      name: 'Extensibility Demo',
+      protected: true
+    },
     {
       path: '/custom-page',
       element: <CustomPage />,
@@ -22,8 +28,8 @@ function App() {
   ];
 
   return (
-    <BaseApp 
-      clientConfig={clientConfig}
+    <ExtensibleBaseApp 
+      config={libraryConfig}
       extraRoutes={extraRoutes}
     />
   );

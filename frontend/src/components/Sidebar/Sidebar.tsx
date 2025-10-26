@@ -8,12 +8,16 @@ interface SidebarProps {
   navigationConfig?: NavigationConfig;
   className?: string;
   children?: React.ReactNode;
+  title?: string;
+  logoUrl?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   navigationConfig, 
   className = "",
-  children 
+  children,
+  title,
+  logoUrl
 }) => {
   const location = useLocation();
   const { user } = useUser();
@@ -51,12 +55,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-6 border-b border-gray-200">
         <Link to="/apps" className="flex items-center">
           <img 
-            src={theme.logo || "/mattin-small.png"} 
-            alt={theme.name || "Mattin AI"} 
+            src={logoUrl || theme.logo || "/mattin-small.png"} 
+            alt={title || theme.name || "AI Core Tools"} 
             className="w-8 h-8 mr-3"
           />
           <span className="text-xl font-bold text-gray-900">
-            {theme.name || "Mattin AI"}
+            {title || theme.name || "AI Core Tools"}
           </span>
         </Link>
       </div>

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SettingsLayout from '../../components/layout/SettingsLayout';
 import Modal from '../../components/ui/Modal';
 import EmbeddingServiceForm from '../../components/forms/EmbeddingServiceForm';
 import { apiService } from '../../services/api';
@@ -160,18 +159,18 @@ function EmbeddingServicesPage() {
 
   if (loading) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading embedding services...</p>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   if (error) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600">Error: {error}</p>
@@ -183,12 +182,12 @@ function EmbeddingServicesPage() {
             </button>
           </div>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   return (
-    <SettingsLayout>
+    
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -333,7 +332,7 @@ function EmbeddingServicesPage() {
           />
         </Modal>
       </div>
-    </SettingsLayout>
+    
   );
 }
 

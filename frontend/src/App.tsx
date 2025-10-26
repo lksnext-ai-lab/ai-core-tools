@@ -16,35 +16,54 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { BaseApp } from './core/BaseApp';
+import { ExtensibleBaseApp } from './core/ExtensibleBaseApp';
 import { baseTheme } from './themes/baseTheme';
-import type { ClientConfig } from './core/types';
+import type { LibraryConfig } from './core/types';
 
 // Demo configuration for the base application
-const demoConfig: ClientConfig = {
-  clientId: 'mattin-demo',
+const demoConfig: LibraryConfig = {
   name: 'Mattin AI - Core Tools',
-  theme: baseTheme,
-  auth: {
-    type: 'session' // Use existing session-based auth for demo
+  logo: '/mattin-small.png',
+  favicon: '/favicon.ico',
+  
+  themeProps: {
+    defaultTheme: 'base',
+    customThemes: {
+      'base': baseTheme
+    },
+    showThemeSelector: false
   },
-  branding: {
-    companyName: 'Mattin AI',
-    logo: '/mattin-small.png',
-    favicon: '/favicon.ico',
-    headerTitle: 'Mattin AI - Core Tools'
+  
+  headerProps: {
+    title: 'Mattin AI - Core Tools'
   },
-  api: {
+  
+  footerProps: {
+    copyright: '© 2024 Mattin AI',
+    showVersion: true
+  },
+  
+  authProps: {
+    enabled: false // Use existing session-based auth
+  },
+  
+  apiConfig: {
     baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
     timeout: 30000,
     retries: 3
+  },
+  
+  features: {
+    showSidebar: true,
+    showHeader: true,
+    showFooter: true
   }
 };
 
 function App() {
   return (
-    <BaseApp 
-      clientConfig={demoConfig}
+    <ExtensibleBaseApp 
+      config={demoConfig}
       extraRoutes={[]}
     />
   );

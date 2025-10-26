@@ -1,4 +1,4 @@
-import type { ThemeConfig, NavigationConfig } from './types';
+import type { ThemeConfig, NavigationConfig, ExtensibleNavigationConfig } from './types';
 import type { AuthProps } from '../auth/AuthConfig';
 
 export interface LibraryConfig {
@@ -40,8 +40,19 @@ export interface LibraryConfig {
     showIcons?: boolean;
   };
   
-  // Navigation configuration
+  // Sidebar configuration
+  sidebarProps?: {
+    className?: string;
+    children?: React.ReactNode;
+    title?: string;
+    logoUrl?: string;
+  };
+  
+  // Navigation configuration (legacy - use navigation for new projects)
   navigationConfig?: NavigationConfig;
+  
+  // Extensible navigation configuration (preferred)
+  navigation?: ExtensibleNavigationConfig;
   
   // Authentication configuration
   authProps?: AuthProps;

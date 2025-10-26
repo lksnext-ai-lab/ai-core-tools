@@ -2,9 +2,8 @@
 import './index.css';
 
 // Export core components
-export { BaseApp } from './core/BaseApp';
 export { ExtensibleBaseApp } from './core/ExtensibleBaseApp';
-export { default as AppLayout } from './components/layout/AppLayout';
+// BaseApp and AppLayout have been deprecated - use ExtensibleBaseApp with Layout instead
 export { configService } from './core/ConfigService';
 
 // Export modular components

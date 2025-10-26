@@ -10,10 +10,14 @@ interface LayoutProps {
   headerProps?: {
     className?: string;
     children?: React.ReactNode;
+    title?: string;
+    logoUrl?: string;
   };
   sidebarProps?: {
     className?: string;
     children?: React.ReactNode;
+    title?: string;
+    logoUrl?: string;
   };
   footerProps?: {
     className?: string;
@@ -53,6 +57,8 @@ export const Layout: React.FC<LayoutProps> = ({
       {showSidebar && (
         <Sidebar 
           navigationConfig={navigationConfig}
+          title={sidebarProps?.title || headerProps?.title}
+          logoUrl={sidebarProps?.logoUrl || headerProps?.logoUrl}
           {...sidebarProps}
         />
       )}

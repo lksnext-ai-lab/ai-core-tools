@@ -1,12 +1,14 @@
 {
-  "name": "client-project-name",
+  "name": "CLIENT_NAME_HERE",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@lksnext/ai-core-tools-base": "file:../../../ai-core-tools/frontend",

@@ -1,27 +1,70 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
-import { useTheme } from '../../themes/ThemeContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
+import { apiService } from '../../services/api';
 import type { NavigationConfig } from '../../core/types';
+
+interface App {
+  app_id: number;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  owner_id: number;
+  is_public: boolean;
+  agent_count: number;
+  repository_count: number;
+  silo_count: number;
+  domain_count: number;
+  collaborator_count: number;
+  langsmith_configured: boolean;
+  agent_rate_limit: number;
+}
 
 interface HeaderProps {
   navigationConfig?: NavigationConfig;
   className?: string;
   children?: React.ReactNode;
+  title?: string;
+  logoUrl?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   navigationConfig, 
   className = "",
-  children 
+  children,
+  title,
+  logoUrl
 }) => {
   const { appId } = useParams();
   const location = useLocation();
   const { user, logout } = useUser();
-  const { theme: currentTheme } = useTheme();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [currentApp, setCurrentApp] = useState<App | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Fetch app data when appId changes
+  useEffect(() => {
+    if (appId) {
+      loadAppData();
+    } else {
+      setCurrentApp(null);
+    }
+  }, [appId]);
+
+  async function loadAppData() {
+    if (!appId) return;
+    
+    try {
+      const apps = await apiService.getApps();
+      const app = apps.find((a: App) => a.app_id === parseInt(appId));
+      setCurrentApp(app || null);
+    } catch (error) {
+      console.error('Failed to load app data:', error);
+      setCurrentApp(null);
+    }
+  }
 
   const isActive = (path: string) => {
     return location.pathname.startsWith(path) ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50';
@@ -56,31 +99,30 @@ export const Header: React.FC<HeaderProps> = ({
     <header className={`bg-white shadow-sm border-b border-gray-200 px-6 py-4 ${className}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
+
           {/* App Context and Change App */}
           {appId && (
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
                 <div>
                   <h3 className="text-sm font-medium text-gray-900">
-                    App Context
+                    {currentApp ? currentApp.name : 'Loading...'}
                   </h3>
-                  <p className="text-xs text-gray-600">
-                    {location.pathname.includes('/settings') ? 'Settings' : 'Dashboard'}
-                  </p>
-                </div>
-                <Link 
+                  <Link 
                   to="/apps" 
                   className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
                 >
                   Change App
                 </Link>
+                </div>
+                
               </div>
             </div>
           )}
 
           {/* App-specific horizontal navigation */}
           {appId && navigationConfig?.appNavigation && (
-            <nav className="flex space-x-1">
+            <nav className="flex space-x-6 border-l border-gray-200 pl-6">
               {navigationConfig.appNavigation.map((item, index) => {
                 // Skip admin items if user is not admin
                 if (item.adminOnly && !user?.is_admin) {
@@ -89,19 +131,26 @@ export const Header: React.FC<HeaderProps> = ({
 
                 // Replace :appId placeholder with actual appId
                 const path = item.path.replace(':appId', appId);
+                const active = isActive(path);
                 
                 return (
                   <Link
                     key={`app-nav-${item.path}`}
                     to={path}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive(path) 
-                        ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                    className={`relative px-1 py-2 text-sm font-medium transition-all duration-200 ${
+                      active
+                        ? 'text-blue-600' 
+                        : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    {item.icon && <span className="mr-2">{item.icon}</span>}
-                    {item.name}
+                    <span className="flex items-center">
+                      {item.icon && <span className="mr-2 text-base">{item.icon}</span>}
+                      {item.name}
+                    </span>
+                    {/* Active indicator - bottom border */}
+                    {active && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
+                    )}
                   </Link>
                 );
               }).filter(Boolean)}
