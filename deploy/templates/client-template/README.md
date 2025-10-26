@@ -43,8 +43,9 @@ client-template/
 │   │   │       └── ClientCard.tsx    # Example custom component
 │   │   └── App.tsx                   # Main app using ExtensibleBaseApp
 │   ├── public/
-│   │   ├── client-logo.png           # Your client logo
-│   │   └── client-favicon.ico        # Your client favicon
+│   │   ├── mattin-small.png          # Default Mattin logo (can be replaced)
+│   │   ├── favicon.ico               # Default favicon (can be replaced)
+│   │   └── README.md                 # Assets documentation
 │   ├── package.json                  # Dependencies
 │   ├── vite.config.ts               # Build configuration
 │   └── CLIENT_SETUP_GUIDE.md        # Detailed setup guide
@@ -126,8 +127,8 @@ const extraRoutes: ExtraRoute[] = [
 
 4. **Configure your client:**
    - Update `src/config/libraryConfig.ts` with your details
-   - Add your logo to `public/client-logo.png`
-   - Add your favicon to `public/client-favicon.ico`
+   - Replace `public/mattin-small.png` with your logo (optional)
+   - Replace `public/favicon.ico` with your favicon (optional)
 
 5. **Start development:**
    ```bash

@@ -19,8 +19,8 @@ import {
 const MyApp: React.FC = () => {
   const config: LibraryConfig = {
     name: "My Custom AI App",
-    logo: "/my-logo.png",
-    favicon: "/my-favicon.ico",
+  logo: "/mattin-small.png",
+  favicon: "/favicon.ico",
     
     // Theme configuration
     themeProps: {
@@ -36,8 +36,8 @@ const MyApp: React.FC = () => {
             surface: '#FFFFFF',
             text: '#111827'
           },
-          logo: '/my-logo.png',
-          favicon: '/my-favicon.ico'
+          logo: '/mattin-small.png',
+          favicon: '/favicon.ico'
         }
       },
       showThemeSelector: true

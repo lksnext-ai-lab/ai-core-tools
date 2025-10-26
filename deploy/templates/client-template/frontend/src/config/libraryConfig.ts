@@ -5,8 +5,8 @@ import CustomHomePage from '../pages/CustomHomePage';
 export const libraryConfig: LibraryConfig = {
   // Basic configuration
   name: 'CLIENT_NAME_HERE',
-  logo: '/client-logo.png',
-  favicon: '/client-favicon.ico',
+  logo: '/mattin-small.png',
+  favicon: '/favicon.ico',
   homePage: CustomHomePage,
   
   // Theme configuration
@@ -32,14 +32,14 @@ export const libraryConfig: LibraryConfig = {
   // Header configuration
   headerProps: {
     title: 'CLIENT_HEADER_TITLE',  // This will show in the header
-    logoUrl: '/client-logo.png',   // This will show as logo in header
+    // logoUrl: '/mattin-small.png',  // Uses main logo by default
     className: 'bg-white shadow-sm border-b'
   },
   
   // Sidebar configuration (optional - will use headerProps if not specified)
   sidebarProps: {
     title: 'CLIENT_HEADER_TITLE',  // This will show in the sidebar top-left
-    logoUrl: '/client-logo.png',   // This will show as logo in sidebar
+    // logoUrl: '/mattin-small.png',  // Uses main logo by default
     className: 'bg-white shadow-sm'
   },
   
@@ -71,6 +71,24 @@ export const libraryConfig: LibraryConfig = {
           path: '/extensibility-demo',
           name: 'Extensibility Demo',
           icon: '🚀',
+          section: 'demo'
+        },
+        {
+          path: '/theme-customization',
+          name: 'Theme Customization',
+          icon: '🎨',
+          section: 'demo'
+        },
+        {
+          path: '/component-usage',
+          name: 'Component Usage',
+          icon: '🧩',
+          section: 'demo'
+        },
+        {
+          path: '/interactive-demo',
+          name: 'Interactive Builder',
+          icon: '🛠️',
           section: 'demo'
         },
         {

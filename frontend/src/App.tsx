@@ -22,7 +22,7 @@ import type { LibraryConfig } from './core/types';
 
 // Demo configuration for the base application
 const demoConfig: LibraryConfig = {
-  name: 'Mattin AI - Core Tools',
+  name: 'Mattin AI',
   logo: '/mattin-small.png',
   favicon: '/favicon.ico',
   
@@ -35,7 +35,7 @@ const demoConfig: LibraryConfig = {
   },
   
   headerProps: {
-    title: 'Mattin AI - Core Tools'
+    title: 'Mattin AI'
   },
   
   footerProps: {

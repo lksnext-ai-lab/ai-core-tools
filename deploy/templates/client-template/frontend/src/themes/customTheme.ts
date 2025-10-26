@@ -10,8 +10,8 @@ export const customTheme: ThemeConfig = {
     surface: '#ffffff',    // white
     text: '#111827'        // gray-900
   },
-  logo: '/client-logo.png',
-  favicon: '/client-favicon.ico',
+  logo: '/mattin-small.png',
+  favicon: '/favicon.ico',
   customStyles: `
     /* Custom CSS variables for advanced theming */
     :root {

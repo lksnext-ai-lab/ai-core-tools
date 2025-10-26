@@ -81,8 +81,8 @@ import { customTheme } from '../themes/customTheme';
 export const libraryConfig: LibraryConfig = {
   // Basic configuration
   name: 'My Awesome Client AI',
-  logo: '/my-client-logo.png',
-  favicon: '/my-client-favicon.ico',
+  logo: '/mattin-small.png',
+  favicon: '/favicon.ico',
   
   // Theme configuration
   themeProps: {
@@ -97,7 +97,7 @@ export const libraryConfig: LibraryConfig = {
   // Header configuration
   headerProps: {
     title: 'My Awesome Client AI',
-    logoUrl: '/my-client-logo.png'
+    logoUrl: '/mattin-small.png'
   },
   
   // Footer configuration
