@@ -143,7 +143,6 @@ async def deactivate_user(
     except Exception as e:
         logger.error(f"Error deactivating user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deactivating user: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
 
 @router.get("/stats", response_model=SystemStatsResponse)
@@ -173,8 +172,9 @@ async def get_system_stats(
             total_api_keys=total_api_keys,
             active_api_keys=active_api_keys,
             inactive_api_keys=total_api_keys - active_api_keys,
-            recent_users=user_stats['recent_users'],
+            recent_users=user_stats['recent_users_list'],
             users_with_apps=user_stats['users_with_apps']
         )
     except Exception as e:
+        logger.error(f"Error retrieving system stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error retrieving system stats: {str(e)}") 
