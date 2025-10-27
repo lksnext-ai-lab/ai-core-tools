@@ -19,7 +19,7 @@ interface AIService {
 function AIServicesPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, userRole } = useAppRole(appId);
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [services, setServices] = useState<AIService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -186,7 +186,7 @@ function AIServicesPage() {
             <h2 className="text-xl font-semibold text-gray-900">AI Services</h2>
             <p className="text-gray-600">Manage language models and AI providers for your agents</p>
           </div>
-          {isOwner && (
+          {isAdmin && (
             <button 
               onClick={handleCreateService}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -197,8 +197,8 @@ function AIServicesPage() {
           )}
         </div>
         
-        {/* Read-only banner for non-owners */}
-        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Services Table */}
         {services.length > 0 ? (
@@ -242,7 +242,7 @@ function AIServicesPage() {
                         {service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        {isOwner ? (
+                        {isAdmin ? (
                           <ActionDropdown
                             actions={[
                               {
@@ -277,7 +277,7 @@ function AIServicesPage() {
             <p className="text-gray-600 mb-6">
               Add your first AI service to start using language models in your agents.
             </p>
-            {isOwner && (
+            {isAdmin && (
               <button 
                 onClick={handleCreateService}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"

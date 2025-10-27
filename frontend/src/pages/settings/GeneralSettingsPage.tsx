@@ -17,8 +17,8 @@ function GeneralSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Check if user is owner (can edit) or just a collaborator (read-only)
-  const isOwner = userRole === 'owner';
+  // Check if user is owner or administrator (can edit) or just an editor (read-only)
+  const isAdmin = userRole === 'owner' || userRole === 'administrator';
 
   // Load app data on mount
   useEffect(() => {
@@ -137,12 +137,12 @@ function GeneralSettingsPage() {
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-gray-900">General Settings</h2>
             <p className="text-gray-600">Configure basic app settings and integrations</p>
-            {!isOwner && (
+            {!isAdmin && (
               <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <div className="flex items-center">
                   <span className="text-amber-500 text-lg mr-2">🔒</span>
                   <p className="text-sm text-amber-700">
-                    <strong>Read-only mode:</strong> Only app owners can modify these settings. You have {userRole} access.
+                    <strong>Read-only mode:</strong> Only app owners and administrators can modify these settings. You have {userRole} access.
                   </p>
                 </div>
               </div>
@@ -165,7 +165,7 @@ function GeneralSettingsPage() {
                     value={formData.name}
                     onChange={handleChange}
                     required
-                    disabled={!isOwner}
+                    disabled={!isAdmin}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter app name"
                   />
@@ -182,7 +182,7 @@ function GeneralSettingsPage() {
                     name="langsmith_api_key"
                     value={formData.langsmith_api_key}
                     onChange={handleChange}
-                    disabled={!isOwner}
+                    disabled={!isAdmin}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter Langsmith API key"
                   />
@@ -203,7 +203,7 @@ function GeneralSettingsPage() {
                     value={formData.agent_rate_limit}
                     onChange={handleChange}
                     min="0"
-                    disabled={!isOwner}
+                    disabled={!isAdmin}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter agent rate limit"
                     />
@@ -244,7 +244,7 @@ function GeneralSettingsPage() {
                     name="agent_cors_origins"
                     value={formData.agent_cors_origins}
                     onChange={handleChange}
-                    disabled={!isOwner}
+                    disabled={!isAdmin}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
                     />
@@ -273,8 +273,8 @@ function GeneralSettingsPage() {
                 </div>
               )}
 
-              {/* Submit Button - Only show for owners */}
-              {isOwner && (
+              {/* Submit Button - Only show for admins */}
+              {isAdmin && (
                 <div className="mt-6 flex items-center justify-between">
                   <div className="flex items-center">
                     {saved && (

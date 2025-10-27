@@ -32,6 +32,7 @@ export function useAppRole(appId: string | undefined) {
 
   return {
     isOwner: userRole === 'owner',
+    isAdmin: userRole === 'owner' || userRole === 'administrator',
     userRole,
     loading
   };

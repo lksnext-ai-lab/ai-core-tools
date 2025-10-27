@@ -19,7 +19,7 @@ interface EmbeddingService {
 function EmbeddingServicesPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, userRole } = useAppRole(appId);
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [services, setServices] = useState<EmbeddingService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,7 +195,7 @@ function EmbeddingServicesPage() {
             <h2 className="text-xl font-semibold text-gray-900">Embedding Services</h2>
             <p className="text-gray-600">Manage vector embedding models for document processing and search</p>
           </div>
-          {isOwner && (
+          {isAdmin && (
             <button 
               onClick={handleCreateService}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -206,8 +206,8 @@ function EmbeddingServicesPage() {
           )}
         </div>
         
-        {/* Read-only banner for non-owners */}
-        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Services Table */}
         {services.length > 0 ? (
@@ -251,7 +251,7 @@ function EmbeddingServicesPage() {
                         {service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        {isOwner ? (
+                        {isAdmin ? (
                           <ActionDropdown
                             actions={[
                               {
@@ -286,7 +286,7 @@ function EmbeddingServicesPage() {
             <p className="text-gray-600 mb-6">
               Add your first embedding service to enable vector search and document processing.
             </p>
-            {isOwner && (
+            {isAdmin && (
               <button 
                 onClick={handleCreateService}
                 className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg"

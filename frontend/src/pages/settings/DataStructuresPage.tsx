@@ -19,7 +19,7 @@ interface DataStructure {
 function DataStructuresPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, userRole } = useAppRole(appId);
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -199,7 +199,7 @@ function DataStructuresPage() {
             <h2 className="text-xl font-semibold text-gray-900">Data Structures</h2>
             <p className="text-gray-600">Define schemas for structured data extraction and validation</p>
           </div>
-          {isOwner && (
+          {isAdmin && (
             <button 
               onClick={handleCreateStructure}
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -210,8 +210,8 @@ function DataStructuresPage() {
           )}
         </div>
         
-        {/* Read-only banner for non-owners */}
-        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Data Structures Table */}
         {dataStructures.length > 0 ? (
@@ -262,7 +262,7 @@ function DataStructuresPage() {
                       {structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {isOwner ? (
+                      {isAdmin ? (
                         <ActionDropdown
                           actions={[
                             {

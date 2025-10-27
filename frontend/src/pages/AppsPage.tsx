@@ -354,6 +354,11 @@ Type the app name to confirm: "${app.name}"`;
                           <span className="mr-1">👑</span>
                           Owner
                         </span>
+                      ) : app.role === 'administrator' ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          <span className="mr-1">⚙️</span>
+                          Administrator
+                        </span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                           Editor

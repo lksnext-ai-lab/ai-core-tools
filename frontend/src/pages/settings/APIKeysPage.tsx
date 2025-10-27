@@ -21,7 +21,7 @@ interface APIKey {
 function APIKeysPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, userRole } = useAppRole(appId);
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +219,7 @@ function APIKeysPage() {
             <h2 className="text-xl font-semibold text-gray-900">API Keys</h2>
             <p className="text-gray-600">Manage API keys for external application access</p>
           </div>
-          {isOwner && (
+          {isAdmin && (
             <button 
               onClick={handleCreateKey}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -230,8 +230,8 @@ function APIKeysPage() {
           )}
         </div>
         
-        {/* Read-only banner for non-owners */}
-        {!isOwner && <ReadOnlyBanner userRole={userRole} />}
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* API Keys Table */}
         {apiKeys.length > 0 ? (
@@ -293,7 +293,7 @@ function APIKeysPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        {isOwner ? (
+                        {isAdmin ? (
                           <ActionDropdown
                             actions={[
                               {

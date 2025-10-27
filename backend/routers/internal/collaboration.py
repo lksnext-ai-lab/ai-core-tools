@@ -103,7 +103,7 @@ async def invite_collaborator(
     try:
         _, collaboration_service = get_services(db)
         
-        # Check if user can manage this app (owner only)
+        # Check if user can manage collaborators (owner only)
         if not collaboration_service.can_user_manage_app(user_id, app_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

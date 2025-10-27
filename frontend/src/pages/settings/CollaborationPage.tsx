@@ -86,7 +86,14 @@ function CollaborationPage() {
       if (app.owner_id === user?.user_id) {
         setCurrentUserRole('owner');
       } else {
-        setCurrentUserRole('editor');
+        // Check if user is administrator by getting collaborators
+        const response = await apiService.getCollaborators(parseInt(appId));
+        const myCollaboration = response.find((c: Collaborator) => c.user_id === user?.user_id);
+        if (myCollaboration && myCollaboration.role === 'administrator') {
+          setCurrentUserRole('administrator');
+        } else {
+          setCurrentUserRole('editor');
+        }
       }
     } catch (err) {
       console.error('Error checking user role:', err);
@@ -158,6 +165,8 @@ function CollaborationPage() {
     switch (role.toLowerCase()) {
       case 'owner':
         return 'bg-purple-100 text-purple-800';
+      case 'administrator':
+        return 'bg-indigo-100 text-indigo-800';
       case 'editor':
         return 'bg-blue-100 text-blue-800';
       default:
@@ -166,6 +175,7 @@ function CollaborationPage() {
   };
 
   const isOwner = currentUserRole === 'owner';
+  const isAdmin = currentUserRole === 'administrator';
 
   if (loading) {
     return (
@@ -219,6 +229,24 @@ function CollaborationPage() {
             </div>
             <div className="p-6">
               <CollaborationForm onSubmit={handleInviteUser} />
+            </div>
+          </div>
+        ) : isAdmin ? (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-purple-400 text-xl">ℹ️</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-purple-800">
+                  Administrator Access
+                </h3>
+                <div className="mt-2 text-sm text-purple-700">
+                  <p>
+                    You have administrator access to this app. Only the app owner can manage collaborators.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -329,6 +357,7 @@ function CollaborationPage() {
                                 className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               >
                                 <option value="editor">Editor</option>
+                                <option value="administrator">Administrator</option>
                               </select>
                             )}
                             {collaborator.role !== 'owner' && (
@@ -397,9 +426,10 @@ function CollaborationPage() {
                 <div className="mt-2 text-sm text-yellow-700">
                   <ul className="list-disc list-inside space-y-1">
                     <li>Only app owners can invite new collaborators</li>
-                    <li>All new collaborators are invited as editors</li>
-                    <li>Editors can modify app content but cannot manage collaborators</li>
-                    <li>Owners have full control and can remove collaborators</li>
+                    <li>Collaborators can be invited as editors or administrators</li>
+                    <li>Administrators have the same permissions as owners except managing collaborators</li>
+                    <li>Editors can modify app content but cannot manage collaborators or settings</li>
+                    <li>Owners have full control and can manage all collaborators</li>
                     {!isOwner && <li>You can leave this collaboration from the main apps list</li>}
                   </ul>
                 </div>

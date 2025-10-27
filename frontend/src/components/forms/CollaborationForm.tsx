@@ -1,4 +1,4 @@
-import { useFormState } from '../../hooks/useFormState';
+import { useState } from "react";
 import { FormField } from '../ui/FormField';
 import { FormError } from '../ui/FormError';
 
@@ -7,42 +7,50 @@ interface CollaborationFormProps {
   readonly loading?: boolean;
 }
 
-function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps) {
-  // Use shared form state hook
-  const { formData, updateField, isSubmitting, error, setError, handleSubmit, reset } = useFormState({
-    email: ''
-  });
+function CollaborationForm({
+  onSubmit,
+  loading = false,
+}: CollaborationFormProps) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("editor");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Email validation
-  const validate = () => {
-    if (!formData.email.trim()) {
-      setError('Email is required');
-      return false;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email.trim()) {
+      setError("Email is required");
+      return;
     }
 
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(formData.email)) {
-      setError('Please enter a valid email address');
-      return false;
+    if (!emailPattern.test(email)) {
+      setError("Please enter a valid email address");
+      return;
     }
 
-    return true;
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await onSubmit(email.trim(), role);
+
+      // Reset form on success
+      setEmail("");
+      setRole("editor");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to send invitation"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Submit handler with validation
-  const onFormSubmit = async (e: React.FormEvent) => {
-    if (!validate()) return;
-    
-    await handleSubmit(e, async () => {
-      // Always invite as editor (as per requirements)
-      await onSubmit(formData.email.trim(), 'editor');
-      // Reset form on success
-      reset();
-    }, 'Failed to send invitation');
-  };
 
   return (
-    <form onSubmit={onFormSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* Error Message */}
       <FormError error={error} />
 
@@ -52,25 +60,37 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
           label="Email Address"
           id="email"
           type="email"
-          value={formData.email}
-          onChange={(e) => updateField('email', e.target.value)}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="user@example.com"
           disabled={isSubmitting || loading}
           required
         />
 
-        {/* Role Info (Read-only) */}
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h4 className="text-sm font-medium text-gray-900 mb-2">
-            Invitation Role: <span className="text-indigo-600">Editor</span>
-          </h4>
-          <div className="text-sm text-gray-600">
-            <p>
-              <strong>Editors</strong> can view and edit app content, agents, and settings. 
-              They cannot invite other users or manage collaborations.
-            </p>
+        <div>
+          <label
+            htmlFor="role"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Invitation Role
+          </label>
+          <select
+            id="type"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+          >
+            <option value="editor">Editor</option>
+            <option value="administrator">Administrador</option>
+          </select>
+          <div className="text-sm text-gray-600 mt-2">
+            {role === "editor"
+              ? "Editors can view and edit app content, agents, and settings. They cannot invite other users or manage collaborators."
+              : "Administrators have same benefits as owners but can change the role of other collaborators."}
           </div>
         </div>
+
+
       </div>
 
       {/* Submit Button */}
@@ -83,11 +103,11 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
           {isSubmitting && (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
           )}
-          {isSubmitting ? 'Sending...' : 'Send Invitation'}
+          {isSubmitting ? "Sending..." : "Send Invitation"}
         </button>
       </div>
     </form>
   );
 }
 
-export default CollaborationForm; 
+export default CollaborationForm;
