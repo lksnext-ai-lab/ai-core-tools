@@ -1,7 +1,7 @@
 import type { ThemeConfig } from '../core/types';
 
 export const baseTheme: ThemeConfig = {
-  name: 'mattin-default',
+  name: 'Mattin AI',
   colors: {
     primary: '#3b82f6',
     secondary: '#8b5cf6',

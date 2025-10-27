@@ -30,6 +30,7 @@ import DomainsPage from '../pages/DomainsPage';
 import DomainFormPage from '../pages/DomainFormPage';
 import DomainDetailPage from '../pages/DomainDetailPage';
 import AgentPlaygroundPage from '../pages/AgentPlaygroundPage';
+import AboutPage from '../pages/AboutPage';
 import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
@@ -820,15 +821,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       showHeader={features.showHeader !== false}
                       showFooter={features.showFooter !== false}
                     >
-                      <div className="p-8">
-                        <h1 className="text-3xl font-bold mb-4">About AI-Core-Tools</h1>
-                        <p className="text-lg mb-4">
-                          AI-Core-Tools is a comprehensive platform for building and managing AI applications.
-                        </p>
-                        <p className="text-lg">
-                          This client project is built using the extensible AI-Core-Tools library.
-                        </p>
-                      </div>
+                      <AboutPage />
                     </Layout>
                   </ProtectedRoute>
                 } />
