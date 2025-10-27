@@ -215,6 +215,13 @@ async def get_app(
     
     counts = calculate_app_entity_counts(app_id, db, collaboration_service)
     
+    # Get owner information
+    owner_email = None
+    owner_name = None
+    if app.owner:
+        owner_email = app.owner.email
+        owner_name = app.owner.name
+    
     return AppDetailSchema(
         app_id=app.app_id,
         name=app.name,
@@ -222,6 +229,8 @@ async def get_app(
         user_role=user_role,
         created_at=app.create_date,
         owner_id=app.owner_id,
+        owner_email=owner_email,
+        owner_name=owner_name,
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=app.agent_cors_origins,
@@ -257,6 +266,13 @@ async def create_app(
     
     app = app_service.create_or_update_app(app_dict)
     
+    # Get owner information
+    owner_email = None
+    owner_name = None
+    if app.owner:
+        owner_email = app.owner.email
+        owner_name = app.owner.name
+    
     return AppDetailSchema(
         app_id=app.app_id,
         name=app.name,
@@ -264,6 +280,8 @@ async def create_app(
         user_role="owner",
         created_at=app.create_date,
         owner_id=app.owner_id,
+        owner_email=owner_email,
+        owner_name=owner_name,
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=app.agent_cors_origins
@@ -312,6 +330,13 @@ async def update_app(
     # Update app using service
     updated_app = app_service.create_or_update_app(update_dict)
     
+    # Get owner information
+    owner_email = None
+    owner_name = None
+    if updated_app.owner:
+        owner_email = updated_app.owner.email
+        owner_name = updated_app.owner.name
+    
     return AppDetailSchema(
         app_id=updated_app.app_id,
         name=updated_app.name,
@@ -319,6 +344,8 @@ async def update_app(
         user_role="owner",
         created_at=updated_app.create_date,
         owner_id=updated_app.owner_id,
+        owner_email=owner_email,
+        owner_name=owner_name,
         agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=updated_app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=updated_app.agent_cors_origins

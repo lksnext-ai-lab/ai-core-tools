@@ -50,6 +50,8 @@ class AppDetailSchema(BaseModel):
     user_role: str
     created_at: Optional[datetime]
     owner_id: int
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
     agent_rate_limit: int
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None

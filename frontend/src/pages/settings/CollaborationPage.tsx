@@ -17,20 +17,101 @@ interface Collaborator {
   invited_by_name?: string;
 }
 
+interface AppOwner {
+  id: number;
+  email: string;
+  name?: string;
+}
+
 function CollaborationPage() {
   const { appId } = useParams();
   const { user } = useUser();
   const settingsCache = useSettingsCache();
+
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [allMembers, setAllMembers] = useState<Collaborator[]>([]); // Owner + Collaborators
+  const [appOwner, setAppOwner] = useState<AppOwner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
-  // Load collaborators from cache or API
+  // Load collaborators and app info from cache or API
   useEffect(() => {
-    loadCollaborators();
+    const loadData = async () => {
+      await loadCollaborators(); // This will also load owner info
+    };
+    loadData();
     checkUserRole();
   }, [appId]);
+
+  // Combine owner and collaborators whenever they change
+  useEffect(() => {
+    const members: Collaborator[] = [];
+    
+    // Add owner as first member if exists
+    if (appOwner && appOwner.email) { // Only add if we have email (complete data)
+      members.push({
+        id: -1, // Special ID for owner
+        user_id: appOwner.id,
+        user_email: appOwner.email,
+        user_name: appOwner.name,
+        role: 'owner',
+        status: 'accepted',
+        invited_at: '', // Owner doesn't have invited_at
+        invited_by_name: undefined
+      });
+    }
+    
+    // Add all collaborators
+    members.push(...collaborators);
+    
+    setAllMembers(members);
+  }, [appOwner, collaborators]);
+
+  async function loadOwnerInfo(collaboratorsList: Collaborator[]) {
+    if (!appId) return;
+    
+    try {
+      // Get app data to find owner info
+      const appData = await apiService.getApp(parseInt(appId));
+      const ownerId = appData.owner_id;
+      const ownerEmail = appData.owner_email;
+      const ownerName = appData.owner_name;
+      
+      // Use the owner info from app data
+      if (ownerId && ownerEmail) {
+        setAppOwner({
+          id: ownerId,
+          email: ownerEmail,
+          name: ownerName
+        });
+        return;
+      }
+      
+      // Fallback: Check if owner is current user
+      if (user?.user_id === ownerId && user) {
+        setAppOwner({
+          id: ownerId,
+          email: user.email,
+          name: user.name
+        });
+        return;
+      }
+      
+      // Fallback: Try to find owner in collaborators list
+      const ownerInCollabs = collaboratorsList.find(c => c.user_id === ownerId);
+      if (ownerInCollabs) {
+        setAppOwner({
+          id: ownerId,
+          email: ownerInCollabs.user_email,
+          name: ownerInCollabs.user_name
+        });
+        return;
+      }
+    } catch (err) {
+      console.error('Error loading owner info:', err);
+    }
+  }
 
   async function loadCollaborators() {
     if (!appId) return;
@@ -39,6 +120,10 @@ function CollaborationPage() {
     const cachedData = settingsCache.getCollaborators(appId);
     if (cachedData) {
       setCollaborators(cachedData);
+      
+      // Also try to extract owner info from collaborators
+      await loadOwnerInfo(cachedData);
+      
       setLoading(false);
       return;
     }
@@ -49,6 +134,10 @@ function CollaborationPage() {
       setError(null);
       const response = await apiService.getCollaborators(parseInt(appId));
       setCollaborators(response);
+      
+      // Also enrich owner info
+      await loadOwnerInfo(response);
+      
       // Cache the response
       settingsCache.setCollaborators(appId, response);
     } catch (err) {
@@ -67,6 +156,10 @@ function CollaborationPage() {
       setError(null);
       const response = await apiService.getCollaborators(parseInt(appId));
       setCollaborators(response);
+      
+      // Also enrich owner info
+      await loadOwnerInfo(response);
+      
       // Cache the response
       settingsCache.setCollaborators(appId, response);
     } catch (err) {
@@ -274,14 +367,14 @@ function CollaborationPage() {
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900 flex items-center">
               <span className="text-indigo-400 text-xl mr-2">🤝</span>
-              Current Collaborators ({collaborators.length})
+              Team Members ({allMembers.length})
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              {isOwner ? 'Manage existing collaborators and their permissions' : 'View current collaborators'}
+              {isOwner ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
             </p>
           </div>
           
-          {collaborators.length > 0 ? (
+          {allMembers.length > 0 ? (
             <div className="overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -296,7 +389,7 @@ function CollaborationPage() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Invited
+                      Since
                     </th>
                     {isOwner && (
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -306,73 +399,120 @@ function CollaborationPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {collaborators.map((collaborator) => (
-                    <tr key={collaborator.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-8 w-8">
-                            <div className="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center">
-                              <span className="text-sm font-medium text-white">
-                                {collaborator.user_email.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="ml-3">
-                            <div className="text-sm font-medium text-gray-900">
-                              {collaborator.user_name || collaborator.user_email}
-                            </div>
-                            {collaborator.user_name && (
-                              <div className="text-sm text-gray-500">
-                                {collaborator.user_email}
+                  {allMembers.map((member) => {
+                    const isOwnerRow = member.role === 'owner';
+                    const isCurrentUser = user?.user_id === member.user_id;
+                    
+                    return (
+                      <tr 
+                        key={member.id} 
+                        className={isOwnerRow ? "bg-blue-50" : "hover:bg-gray-50"}
+                      >
+                        {/* User Info */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-8 w-8">
+                              <div className={`h-8 w-8 rounded-full ${isOwnerRow ? 'bg-blue-600' : 'bg-indigo-500'} flex items-center justify-center`}>
+                                <span className="text-sm font-medium text-white">
+                                  {member.user_email.charAt(0).toUpperCase()}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(collaborator.role)}`}>
-                          {collaborator.role.charAt(0).toUpperCase() + collaborator.role.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(collaborator.status)}`}>
-                          {collaborator.status.charAt(0).toUpperCase() + collaborator.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div>
-                          {new Date(collaborator.invited_at).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs">
-                          by {collaborator.invited_by_name || 'Unknown'}
-                        </div>
-                      </td>
-                      {isOwner && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            {collaborator.status === 'accepted' && collaborator.role !== 'owner' && (
-                              <select
-                                value={collaborator.role}
-                                onChange={(e) => handleUpdateRole(collaborator.user_id, e.target.value)}
-                                className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              >
-                                <option value="editor">Editor</option>
-                                <option value="administrator">Administrator</option>
-                              </select>
-                            )}
-                            {collaborator.role !== 'owner' && (
-                              <button 
-                                onClick={() => handleRemoveCollaborator(collaborator.user_id)}
-                                className="text-red-600 hover:text-red-900 transition-colors"
-                              >
-                                Remove
-                              </button>
-                            )}
+                            </div>
+                            <div className="ml-3">
+                              <div className="text-sm font-medium text-gray-900 flex items-center">
+                                {member.user_name || member.user_email}
+                                {isCurrentUser && (
+                                  <span className={`ml-2 text-xs font-semibold ${isOwnerRow ? 'text-blue-600' : 'text-indigo-600'}`}>
+                                    (You)
+                                  </span>
+                                )}
+                              </div>
+                              {member.user_name && (
+                                <div className="text-sm text-gray-500">
+                                  {member.user_email}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        
+                        {/* Role */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isOwnerRow ? (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                              <span className="mr-1">👑</span>
+                              Owner
+                            </span>
+                          ) : (
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
+                              {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                            </span>
+                          )}
+                        </td>
+                        
+                        {/* Status */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {isOwnerRow ? (
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                              Active
+                            </span>
+                          ) : (
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(member.status)}`}>
+                              {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                            </span>
+                          )}
+                        </td>
+                        
+                        {/* Since/Invited */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {isOwnerRow ? (
+                            <div className="text-xs text-gray-400">
+                              App creator
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                {new Date(member.invited_at).toLocaleDateString()}
+                              </div>
+                              <div className="text-xs">
+                                by {member.invited_by_name || 'Unknown'}
+                              </div>
+                            </>
+                          )}
+                        </td>
+                        
+                        {/* Actions */}
+                        {isOwner && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {isOwnerRow ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <div className="flex space-x-2">
+                                {member.status === 'accepted' && member.role !== 'owner' && (
+                                  <select
+                                    value={member.role}
+                                    onChange={(e) => handleUpdateRole(member.user_id, e.target.value)}
+                                    className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  >
+                                    <option value="editor">Editor</option>
+                                    <option value="administrator">Administrator</option>
+                                  </select>
+                                )}
+                                {member.role !== 'owner' && (
+                                  <button 
+                                    onClick={() => handleRemoveCollaborator(member.user_id)}
+                                    className="text-red-600 hover:text-red-900 transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
