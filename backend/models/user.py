@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -10,6 +10,7 @@ class User(Base):
     email = Column(String(255))
     name = Column(String(255))
     create_date = Column(DateTime, default=datetime.now)
+    is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships
     owned_apps = relationship('App', foreign_keys='App.owner_id', back_populates='owner', lazy=True)

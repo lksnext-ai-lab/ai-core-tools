@@ -6,6 +6,7 @@ from datetime import datetime
 
 from models.api_key import APIKey
 from models.app import App
+from models.user import User
 from db.database import SessionLocal
 
 # API Key authentication using header
@@ -55,6 +56,15 @@ def create_api_key_dependency(app_id: int) -> Callable:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid or inactive API key"
                 )
+            
+            # Check if the app owner is active
+            app = session.query(App).filter(App.app_id == app_id).first()
+            if app and app.owner:
+                if hasattr(app.owner, 'is_active') and not app.owner.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="This API key belongs to a deactivated account"
+                    )
             
             # Update last used timestamp
             api_key_obj.last_used_at = datetime.now()
@@ -112,6 +122,15 @@ def validate_api_key_for_app(app_id: int, api_key: str) -> APIKeyAuth:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or inactive API key for this app"
             )
+        
+        # Check if the app owner is active
+        app = session.query(App).filter(App.app_id == app_id).first()
+        if app and app.owner:
+            if hasattr(app.owner, 'is_active') and not app.owner.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This API key belongs to a deactivated account"
+                )
         
         # Update last used timestamp
         api_key_obj.last_used_at = datetime.now()

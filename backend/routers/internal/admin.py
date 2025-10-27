@@ -101,6 +101,51 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
 
+@router.post("/users/{user_id}/activate")
+async def activate_user(
+    user_id: int,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Activate a user account"""
+    try:
+        user = UserService.activate_user(db, user_id, current_user.get('email'))
+        logger.info(f"User {user.email} activated by admin {current_user.get('email')}")
+        return {
+            "message": f"User {user.email} has been activated successfully",
+            "user_id": user.user_id,
+            "is_active": user.is_active
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error activating user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error activating user: {str(e)}")
+
+
+@router.post("/users/{user_id}/deactivate")
+async def deactivate_user(
+    user_id: int,
+    current_user: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Deactivate a user account"""
+    try:
+        user = UserService.deactivate_user(db, user_id, current_user.get('email'))
+        logger.info(f"User {user.email} deactivated by admin {current_user.get('email')}")
+        return {
+            "message": f"User {user.email} has been deactivated successfully",
+            "user_id": user.user_id,
+            "is_active": user.is_active
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error deactivating user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deactivating user: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+
+
 @router.get("/stats", response_model=SystemStatsResponse)
 async def get_system_stats(
     current_user: dict = Depends(require_admin),
@@ -110,6 +155,8 @@ async def get_system_stats(
     try:
         # Get user stats
         user_stats = UserService.get_user_stats(db)
+        active_users = UserService.get_active_users_count(db)
+        inactive_users = UserService.get_inactive_users_count(db)
         
         # Get other counts using the same db session
         total_apps = db.query(App).count()
@@ -119,6 +166,8 @@ async def get_system_stats(
         
         return SystemStatsResponse(
             total_users=user_stats['total_users'],
+            active_users=active_users,
+            inactive_users=inactive_users,
             total_apps=total_apps,
             total_agents=total_agents,
             total_api_keys=total_api_keys,

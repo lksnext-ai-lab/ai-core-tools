@@ -1,10 +1,13 @@
-from fastapi import HTTPException, status, Request
+from fastapi import HTTPException, status, Request, Depends
+from sqlalchemy.orm import Session
 from routers.auth import verify_jwt_token
+from db.database import get_db
+from services.user_service import UserService
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-async def get_current_user_oauth(request: Request):
+async def get_current_user_oauth(request: Request, db: Session = Depends(get_db)):
     """
     Get current authenticated user using Google OAuth JWT tokens.
     Compatible with the frontend auth system.
@@ -36,6 +39,17 @@ async def get_current_user_oauth(request: Request):
                 detail="Invalid or expired token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        
+        # Check if user is active
+        user_email = payload.get('email')
+        if user_email:
+            user = UserService.get_user_by_email(db, user_email)
+            if user and hasattr(user, 'is_active') and not user.is_active:
+                logger.warning(f"Inactive user attempted to access: {user_email}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account has been deactivated. Please contact support for assistance.",
+                )
         
         logger.debug(f"Token verified successfully for user: {payload.get('user_id')}")
         return payload

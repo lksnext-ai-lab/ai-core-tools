@@ -7,6 +7,8 @@ export interface User {
   created_at: string;
   owned_apps_count: number;
   api_keys_count: number;
+  is_active: boolean;
+  is_omniadmin?: boolean;
 }
 
 export interface UserListResponse {
@@ -19,6 +21,8 @@ export interface UserListResponse {
 
 export interface SystemStats {
   total_users: number;
+  active_users: number;
+  inactive_users: number;
   total_apps: number;
   total_agents: number;
   total_api_keys: number;
@@ -61,6 +65,18 @@ class AdminService {
 
   async getSystemStats(): Promise<SystemStats> {
     return await apiService.request(`${this.baseUrl}/stats`);
+  }
+
+  async activateUser(userId: number): Promise<{ message: string; user_id: number; is_active: boolean }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/activate`, {
+      method: 'POST',
+    });
+  }
+
+  async deactivateUser(userId: number): Promise<{ message: string; user_id: number; is_active: boolean }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/deactivate`, {
+      method: 'POST',
+    });
   }
 }
 

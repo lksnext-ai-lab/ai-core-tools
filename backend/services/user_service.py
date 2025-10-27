@@ -94,6 +94,7 @@ class UserService:
         users, total = user_repo.get_all_paginated(page, per_page)
         
         # Convert to dict format
+        from utils.config import is_omniadmin
         users_list = []
         for user in users:
             users_list.append({
@@ -102,7 +103,9 @@ class UserService:
                 'name': user.name,
                 'created_at': user.create_date.isoformat() if user.create_date else None,
                 'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                'api_keys_count': len(user.api_keys) if user.api_keys else 0
+                'api_keys_count': len(user.api_keys) if user.api_keys else 0,
+                'is_active': user.is_active if hasattr(user, 'is_active') else True,
+                'is_omniadmin': is_omniadmin(user.email)
             })
         
         return users_list, total
@@ -140,6 +143,7 @@ class UserService:
         users, total = user_repo.search_users(query, page, per_page)
         
         # Convert to dict format
+        from utils.config import is_omniadmin
         users_list = []
         for user in users:
             users_list.append({
@@ -148,7 +152,9 @@ class UserService:
                 'name': user.name,
                 'created_at': user.create_date.isoformat() if user.create_date else None,
                 'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                'api_keys_count': len(user.api_keys) if user.api_keys else 0
+                'api_keys_count': len(user.api_keys) if user.api_keys else 0,
+                'is_active': user.is_active if hasattr(user, 'is_active') else True,
+                'is_omniadmin': is_omniadmin(user.email)
             })
         
         return users_list, total
@@ -207,4 +213,114 @@ class UserService:
             'recent_users': recent_users,
             'users_with_apps': users_with_apps,
             'recent_users_list': recent_users_data
-        } 
+        }
+    
+    @staticmethod
+    def activate_user(db: Session, user_id: int, admin_email: str) -> User:
+        """
+        Activate a user account
+        
+        Args:
+            db: Database session
+            user_id: ID of the user to activate
+            admin_email: Email of the admin performing the action
+            
+        Returns:
+            Updated User instance
+            
+        Raises:
+            ValueError: If user cannot be activated
+        """
+        from utils.config import is_omniadmin
+        from utils.logger import get_logger
+        
+        logger = get_logger(__name__)
+        user_repo = UserRepository(db)
+        user = user_repo.get_by_id(user_id)
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        if user.is_active:
+            raise ValueError("User is already active")
+        
+        # Activate the user
+        user.is_active = True
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"User activated - Admin: {admin_email}, Target User: {user.email} (ID: {user_id})")
+        
+        return user
+    
+    @staticmethod
+    def deactivate_user(db: Session, user_id: int, admin_email: str) -> User:
+        """
+        Deactivate a user account
+        
+        Args:
+            db: Database session
+            user_id: ID of the user to deactivate
+            admin_email: Email of the admin performing the action
+            
+        Returns:
+            Updated User instance
+            
+        Raises:
+            ValueError: If user cannot be deactivated
+        """
+        from utils.config import is_omniadmin
+        from utils.logger import get_logger
+        
+        logger = get_logger(__name__)
+        user_repo = UserRepository(db)
+        user = user_repo.get_by_id(user_id)
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        if not user.is_active:
+            raise ValueError("User is already inactive")
+        
+        # Prevent deactivating admin users
+        if is_omniadmin(user.email):
+            raise ValueError("Cannot deactivate admin users")
+        
+        # Prevent self-deactivation
+        if user.email == admin_email:
+            raise ValueError("Cannot deactivate your own account")
+        
+        # Deactivate the user
+        user.is_active = False
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"User deactivated - Admin: {admin_email}, Target User: {user.email} (ID: {user_id})")
+        
+        return user
+    
+    @staticmethod
+    def get_active_users_count(db: Session) -> int:
+        """
+        Get count of active users
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Count of active users
+        """
+        return db.query(User).filter(User.is_active == True).count()
+    
+    @staticmethod
+    def get_inactive_users_count(db: Session) -> int:
+        """
+        Get count of inactive users
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Count of inactive users
+        """
+        return db.query(User).filter(User.is_active == False).count() 
