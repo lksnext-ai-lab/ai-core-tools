@@ -80,7 +80,7 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
     """
     List all domains for a specific app.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -117,7 +117,7 @@ async def get_domain(app_id: int, domain_id: int, request: Request, db: Session 
     """
     Get detailed information about a specific domain.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -166,7 +166,7 @@ async def create_or_update_domain(
     """
     Create a new domain or update an existing one.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -205,7 +205,7 @@ async def delete_domain(app_id: int, domain_id: int, request: Request, db: Sessi
     """
     Delete a domain and its associated silo and URLs.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -248,7 +248,7 @@ async def list_domain_urls(
     """
     List URLs for a specific domain with pagination.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -291,7 +291,7 @@ async def add_url_to_domain(
     """
     Add a new URL to a domain and scrape its content.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -344,7 +344,7 @@ async def delete_url_from_domain(
     """
     Delete a URL from a domain and remove its indexed content.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -381,7 +381,7 @@ async def reindex_url(
     """
     Re-index content for a specific URL.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -440,7 +440,7 @@ async def unindex_url(
     """
     Remove URL content from index and mark as unindexed.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -492,7 +492,7 @@ async def reject_url(
     """
     Mark URL as rejected (content not suitable for indexing).
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -543,7 +543,7 @@ async def reindex_domain(
     """
     Re-index content for all URLs in a domain.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -586,7 +586,7 @@ async def get_url_content(
     """
     Get the scraped content for a specific URL.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation

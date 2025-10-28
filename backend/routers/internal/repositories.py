@@ -35,7 +35,7 @@ async def list_repositories(app_id: int, request: Request, db: Session = Depends
     """
     List all repositories for a specific app.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"List repositories called for app_id: {app_id}, user_id: {user_id}")
@@ -54,7 +54,7 @@ async def get_repository(app_id: int, repository_id: int, request: Request, db: 
     """
     Get detailed information about a specific repository including its resources.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -77,7 +77,7 @@ async def create_or_update_repository(
     """
     Create a new repository or update an existing one.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -96,7 +96,7 @@ async def delete_repository(app_id: int, repository_id: int, request: Request, d
     """
     Delete a repository and all its resources.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     # TODO: Add app access validation
@@ -125,7 +125,7 @@ async def upload_resources(
     Upload multiple resources to a repository.
     Optionally specify a folder_id to upload files to a specific folder.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, folder_id: {folder_id} (type: {type(folder_id)}), user_id: {user_id}")
@@ -158,7 +158,7 @@ async def move_resource(
     """
     Move a resource to a different folder within the same repository.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Move resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
@@ -189,7 +189,7 @@ async def delete_resource(
     """
     Delete a specific resource from a repository.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Delete resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
@@ -220,7 +220,7 @@ async def download_resource(
     """
     Download a specific resource from a repository.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Download resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
@@ -261,7 +261,7 @@ async def search_repository_documents(
     Search for documents in a repository using semantic search with optional metadata filtering.
     This leverages the repository's associated silo for searching.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Repository search request - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")

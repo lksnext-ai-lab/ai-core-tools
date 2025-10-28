@@ -37,7 +37,7 @@ async def get_root_folders(
     """
     Get all root folders (parent_folder_id is None) for a repository.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Get root folders - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
@@ -91,7 +91,7 @@ async def get_folder_tree(
     """
     Get the complete folder tree structure for a repository.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Get folder tree - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
@@ -152,7 +152,7 @@ async def get_folder_details(
     """
     Get detailed information about a specific folder.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Get folder details - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, user_id: {user_id}")
@@ -205,7 +205,7 @@ async def create_folder(
     """
     Create a new folder in the repository.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Create folder - app_id: {app_id}, repository_id: {repository_id}, name: {folder_data.name}, parent: {folder_data.parent_folder_id}, user_id: {user_id}")
@@ -259,7 +259,7 @@ async def update_folder(
     """
     Update a folder's name.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Update folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, name: {folder_data.name}, user_id: {user_id}")
@@ -318,7 +318,7 @@ async def delete_folder(
     """
     Delete a folder and all its contents (subfolders and resources).
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Delete folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, user_id: {user_id}")
@@ -363,7 +363,7 @@ async def move_folder(
     """
     Move a folder to a new parent folder.
     """
-    current_user = await get_current_user_oauth(request)
+    current_user = await get_current_user_oauth(request, db)
     user_id = current_user["user_id"]
     
     logger.info(f"Move folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, new_parent: {move_data.new_parent_folder_id}, user_id: {user_id}")
