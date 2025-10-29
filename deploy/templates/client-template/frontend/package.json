@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@lksnext/ai-core-tools-base": "file:../../../ai-core-tools/frontend",
+    "@lksnext/ai-core-tools-base": "file:../../../../ai-core-tools/frontend",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^6.30.1"

@@ -1,0 +1,40 @@
+{
+  "name": "@lksnext/hello-world-plugin",
+  "version": "1.0.0",
+  "description": "A sample Hello World plugin demonstrating the AI-Core-Tools plugin architecture",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "hello-world",
+    "sample",
+    "plugin",
+    "ai-core-tools",
+    "react",
+    "demo"
+  ],
+  "author": "AI-Core-Tools Team",
+  "license": "MIT",
+  "peerDependencies": {
+    "@lksnext/ai-core-tools-base": "*",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@lksnext/ai-core-tools-base": "file:../../../../ai-core-tools/frontend"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "typescript": "~5.8.3"
+  }
+}

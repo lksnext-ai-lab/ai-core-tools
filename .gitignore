@@ -43,3 +43,4 @@ data/
 *.code-workspace
 logs/
 local/
+clients/

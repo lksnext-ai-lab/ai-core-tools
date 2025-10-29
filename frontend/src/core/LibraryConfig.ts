@@ -1,4 +1,4 @@
-import type { ThemeConfig, NavigationConfig, ExtensibleNavigationConfig } from './types';
+import type { ThemeConfig, NavigationConfig, ExtensibleNavigationConfig, ExtraRoute } from './types';
 import type { AuthProps } from '../auth/AuthConfig';
 
 export interface LibraryConfig {
@@ -53,6 +53,9 @@ export interface LibraryConfig {
   
   // Extensible navigation configuration (preferred)
   navigation?: ExtensibleNavigationConfig;
+  
+  // Routes configuration - add custom routes
+  routes?: ExtraRoute[];
   
   // Authentication configuration
   authProps?: AuthProps;

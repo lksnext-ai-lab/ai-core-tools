@@ -54,6 +54,8 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   extraRoutes = [],
   children
 }) => {
+  // Merge routes from config and extraRoutes prop
+  const allExtraRoutes = [...(config.routes || []), ...extraRoutes];
   // Convert LibraryConfig to ClientConfig for backward compatibility
   const clientConfig = {
     clientId: 'library-client',
@@ -827,7 +829,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 {/* Client-specific extra routes */}
-                {extraRoutes.map(route => (
+                {allExtraRoutes.map(route => (
                   <Route 
                     key={route.path} 
                     path={route.path} 

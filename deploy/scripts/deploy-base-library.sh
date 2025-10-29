@@ -4,19 +4,36 @@
 
 set -e
 
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+
 echo "🚀 Deploying AI Core Tools Base Library..."
 
 # Navigate to base frontend directory
-cd /home/aritz/data/proiektuak/LKS/IA-Core-Tools/ai-core-tools/frontend
+cd "$FRONTEND_DIR"
 
 echo "📦 Building base library..."
 npm run build:lib
 
 echo "✅ Base library built successfully!"
-echo "📁 Library location: /home/aritz/data/proiektuak/LKS/IA-Core-Tools/ai-core-tools/frontend/dist/"
+echo "📁 Library location: $FRONTEND_DIR/dist/"
 
 echo ""
-echo "🔄 To update client projects, run:"
+echo "📤 To publish to npm registry (OSS):"
+echo "   cd $FRONTEND_DIR"
+echo "   npm login  # First time only"
+echo "   npm run publish:npm"
+echo ""
+echo "   Or test with dry-run:"
+echo "   npm run publish:npm:dry-run"
+echo ""
+echo "🔄 To update client projects from npm:"
+echo "   cd /path/to/client/frontend"
+echo "   npm install @lksnext/ai-core-tools-base@latest"
+echo ""
+echo "🔄 To update client projects locally:"
 echo "   cd /path/to/client/frontend"
 echo "   rm -rf node_modules package-lock.json"
 echo "   npm install"

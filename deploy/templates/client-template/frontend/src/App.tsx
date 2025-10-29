@@ -9,6 +9,7 @@ import ComponentUsageDemo from './pages/ComponentUsageDemo';
 import InteractiveDemo from './pages/InteractiveDemo';
 
 function App() {
+  // Additional routes (plugin routes are in libraryConfig.routes)
   const extraRoutes: ExtraRoute[] = [
     {
       path: '/extensibility-demo',

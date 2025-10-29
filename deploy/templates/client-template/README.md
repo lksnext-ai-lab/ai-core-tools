@@ -49,6 +49,18 @@ client-template/
 │   ├── package.json                  # Dependencies
 │   ├── vite.config.ts               # Build configuration
 │   └── CLIENT_SETUP_GUIDE.md        # Detailed setup guide
+├── hello-world-plugin/              # 🔌 Sample plugin demonstrating plugin architecture
+│   ├── src/
+│   │   ├── config/
+│   │   │   └── pluginConfig.ts      # Plugin configuration and factory
+│   │   ├── pages/
+│   │   │   ├── HelloWorldPage.tsx   # Custom page component
+│   │   │   └── HelloWorldAdminPage.tsx # Admin page component
+│   │   └── index.ts                 # Main exports
+│   ├── package.json                  # Plugin dependencies
+│   ├── tsconfig.json                # TypeScript configuration
+│   └── README.md                    # Plugin documentation
+├── PLUGIN_EXAMPLES.md               # 📖 Guide for creating and using plugins
 └── README.md                        # This file
 ```
 
@@ -106,6 +118,33 @@ const extraRoutes: ExtraRoute[] = [
     protected: true
   }
 ];
+```
+
+### 5. Plugin Architecture
+```typescript
+// In config/libraryConfig.ts
+import { createHelloWorldPlugin } from '../hello-world-plugin';
+
+// Create plugin instance with custom configuration
+const helloWorldPlugin = createHelloWorldPlugin({
+  pageTitle: 'Hello World Demo',
+  navigationIcon: '👋',
+  navigationSection: 'custom',
+  requiresAuth: false
+});
+
+// Add plugin navigation and routes to your config - all in one place!
+export const libraryConfig: LibraryConfig = {
+  navigation: {
+    add: {
+      custom: [...helloWorldPlugin.navigation],
+      admin: [...helloWorldPlugin.navigation.filter(item => item.section === 'admin')]
+    }
+  },
+  routes: [
+    ...helloWorldPlugin.routes  // Plugin routes are added here
+  ]
+};
 ```
 
 ## 🛠️ Getting Started

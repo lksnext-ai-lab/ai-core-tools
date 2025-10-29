@@ -1,6 +1,17 @@
 import type { LibraryConfig } from '@lksnext/ai-core-tools-base';
 import { customTheme } from '../themes/customTheme';
 import CustomHomePage from '../pages/CustomHomePage';
+import { createHelloWorldPlugin } from '../../../hello-world-plugin';
+
+// Create the hello world plugin (sample plugin)
+// Export it so App.tsx can use the routes
+export const helloWorldPlugin = createHelloWorldPlugin({
+  pageTitle: 'Hello World Demo',
+  navigationIcon: '👋',
+  navigationSection: 'custom',
+  requiresAuth: false,
+  welcomeMessage: 'Welcome to the Hello World Plugin Demo!'
+});
 
 export const libraryConfig: LibraryConfig = {
   // Basic configuration
@@ -67,6 +78,8 @@ export const libraryConfig: LibraryConfig = {
     // Add custom navigation items
     add: {
       custom: [
+        // Sample plugin navigation (Hello World Plugin)
+        ...helloWorldPlugin.navigation.filter((item: { section: string }) => item.section === 'custom'),
         {
           path: '/extensibility-demo',
           name: 'Extensibility Demo',
@@ -103,6 +116,10 @@ export const libraryConfig: LibraryConfig = {
           icon: '⭐',
           section: 'custom'
         }
+      ],
+      admin: [
+        // Sample plugin admin navigation (Hello World Plugin)
+        ...helloWorldPlugin.navigation.filter(item => item.section === 'admin')
       ]
     },
     // Override existing navigation items (optional)
@@ -121,6 +138,12 @@ export const libraryConfig: LibraryConfig = {
     // Remove navigation items (optional)
     // remove: ['/admin/stats'] // Hide statistics if not needed
   },
+  
+  // Routes configuration (add plugin routes)
+  routes: [
+    // Sample plugin routes (Hello World Plugin)
+    ...helloWorldPlugin.routes
+  ],
   
   // Authentication configuration
   authProps: {

@@ -1,7 +1,24 @@
 {
   "name": "@lksnext/ai-core-tools-base",
-  "private": false,
   "version": "0.3.0",
+  "description": "Base React components and utilities for AI Core Tools - an extensible AI toolbox platform",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lksnext-ai-lab/ai-core-tools.git",
+    "directory": "frontend"
+  },
+  "homepage": "https://github.com/lksnext-ai-lab/ai-core-tools#readme",
+  "keywords": [
+    "react",
+    "ai",
+    "llm",
+    "rag",
+    "vector-search",
+    "components",
+    "ui-library",
+    "typescript"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,6 +42,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "pack:local": "npm run build:lib && npm pack",
+    "publish:npm": "npm run build:lib && npm publish --access public",
+    "publish:npm:dry-run": "npm run build:lib && npm publish --access public --dry-run",
     "prepare": "npm run build:lib"
   },
   "dependencies": {

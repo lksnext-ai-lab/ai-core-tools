@@ -12,7 +12,7 @@ if [ -z "$CLIENT_NAME" ]; then
     exit 1
 fi
 
-CLIENT_DIR="/home/aritz/data/proiektuak/LKS/IA-Core-Tools/clients/${CLIENT_NAME}"
+CLIENT_DIR="/home/aritz/data/proiektuak/LKS/IA-Core-Tools/ai-core-tools/clients/${CLIENT_NAME}"
 
 if [ ! -d "$CLIENT_DIR" ]; then
     echo "❌ Client project not found: $CLIENT_DIR"
