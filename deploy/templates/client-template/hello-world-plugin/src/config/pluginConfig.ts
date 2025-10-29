@@ -64,6 +64,7 @@ export interface HelloWorldPluginModule {
     name: string;
     icon: string;
     section: string;
+    adminOnly?: boolean;  // Set to true to restrict to admin users only
   }>;
   
   /**
@@ -123,7 +124,8 @@ export function createHelloWorldPlugin(config: HelloWorldPluginConfig = {}): Hel
       path: adminPath,
       name: adminPageTitle,
       icon: adminNavigationIcon,
-      section: 'admin'
+      section: 'admin',
+      adminOnly: true  // Only visible to admin users
     });
 
     routes.push({
