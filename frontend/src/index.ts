@@ -29,6 +29,10 @@ export { SettingsPageWrapper } from './components/settings/SettingsPageWrapper';
 // Export badge components
 export { Badge, ProviderBadge, StatusBadge } from './components/ui/Badge';
 
+// Export route protection components
+export { default as ProtectedRoute } from './components/ProtectedRoute';
+export { default as AdminRoute } from './components/AdminRoute';
+
 // Export contexts
 export { UserProvider, useUser } from './contexts/UserContext';
 export { SettingsCacheProvider } from './contexts/SettingsCacheContext';

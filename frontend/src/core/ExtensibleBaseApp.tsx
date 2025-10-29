@@ -7,6 +7,7 @@ import { SettingsCacheProvider } from '../contexts/SettingsCacheContext';
 import { Layout } from '../components/Layout/Layout';
 import SettingsLayout from '../components/layout/SettingsLayout';
 import ProtectedRoute from '../components/ProtectedRoute';
+import AdminRoute from '../components/AdminRoute';
 import { configService } from './ConfigService';
 import { mergeNavigationConfig } from './NavigationMerger';
 import { defaultNavigation } from './defaultNavigation';
@@ -766,7 +767,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 {/* Admin routes */}
                 <Route path="/admin/users" element={
-                  <ProtectedRoute>
+                  <AdminRoute>
                     <Layout
                       navigationConfig={mergedNavigationConfig}
                       headerProps={{
@@ -783,11 +784,11 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     >
                       <UsersPage />
                     </Layout>
-                  </ProtectedRoute>
+                  </AdminRoute>
                 } />
 
                 <Route path="/admin/stats" element={
-                  <ProtectedRoute>
+                  <AdminRoute>
                     <Layout
                       navigationConfig={mergedNavigationConfig}
                       headerProps={{
@@ -804,7 +805,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     >
                       <StatsPage />
                     </Layout>
-                  </ProtectedRoute>
+                  </AdminRoute>
                 } />
 
                 <Route path="/about" element={
@@ -829,51 +830,47 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 {/* Client-specific extra routes */}
-                {allExtraRoutes.map(route => (
-                  <Route 
-                    key={route.path} 
-                    path={route.path} 
-                    element={
-                      route.protected ? (
-                        <ProtectedRoute>
-                          <Layout
-                            navigationConfig={mergedNavigationConfig}
-                            headerProps={{
+                {allExtraRoutes.map(route => {
+                  const layoutContent = (
+                    <Layout
+                      navigationConfig={mergedNavigationConfig}
+                      headerProps={{
                         ...config.headerProps,
                         title: config.headerProps?.title || config.name,
                         logoUrl: config.headerProps?.logoUrl || config.logo
                       }}
-                            footerProps={config.footerProps}
-                            layoutProps={config.layoutProps}
-                            navigationProps={config.navigationProps}
-                            showSidebar={features.showSidebar !== false}
-                            showHeader={features.showHeader !== false}
-                            showFooter={features.showFooter !== false}
-                          >
-                            {route.element}
-                          </Layout>
-                        </ProtectedRoute>
-                      ) : (
-                        <Layout
-                          navigationConfig={mergedNavigationConfig}
-                          headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                          footerProps={config.footerProps}
-                          layoutProps={config.layoutProps}
-                          navigationProps={config.navigationProps}
-                          showSidebar={features.showSidebar !== false}
-                          showHeader={features.showHeader !== false}
-                          showFooter={features.showFooter !== false}
-                        >
-                          {route.element}
-                        </Layout>
-                      )
-                    } 
-                  />
-                ))}
+                      footerProps={config.footerProps}
+                      layoutProps={config.layoutProps}
+                      navigationProps={config.navigationProps}
+                      showSidebar={features.showSidebar !== false}
+                      showHeader={features.showHeader !== false}
+                      showFooter={features.showFooter !== false}
+                    >
+                      {route.element}
+                    </Layout>
+                  );
+
+                  // Determine which route protection to use
+                  let element;
+                  if (route.adminOnly) {
+                    // Admin-only route (requires authentication AND admin privileges)
+                    element = <AdminRoute>{layoutContent}</AdminRoute>;
+                  } else if (route.protected) {
+                    // Protected route (requires authentication only)
+                    element = <ProtectedRoute>{layoutContent}</ProtectedRoute>;
+                  } else {
+                    // Public route
+                    element = layoutContent;
+                  }
+
+                  return (
+                    <Route 
+                      key={route.path} 
+                      path={route.path} 
+                      element={element}
+                    />
+                  );
+                })}
 
                 {/* Default redirect */}
                 <Route path="/" element={<Navigate to="/apps" replace />} />

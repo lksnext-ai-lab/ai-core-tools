@@ -105,7 +105,8 @@ export function createHelloWorldPlugin(config: HelloWorldPluginConfig = {}): Hel
       path: customPath,
       name: pageTitle,
       icon: navigationIcon,
-      section: navigationSection
+      section: navigationSection,
+      adminOnly: false
     }
   ];
 
@@ -114,7 +115,9 @@ export function createHelloWorldPlugin(config: HelloWorldPluginConfig = {}): Hel
       path: customPath,
       element: React.createElement(HelloWorldPage, { welcomeMessage }),
       name: pageTitle,
-      protected: requiresAuth
+      protected: requiresAuth,
+      adminOnly: false
+      // No adminOnly - accessible to all (authenticated if protected: true)
     }
   ];
 
@@ -132,7 +135,8 @@ export function createHelloWorldPlugin(config: HelloWorldPluginConfig = {}): Hel
       path: adminPath,
       element: React.createElement(HelloWorldAdminPage, { welcomeMessage }),
       name: adminPageTitle,
-      protected: true // Admin pages always require auth
+      protected: true, // Requires authentication
+      adminOnly: true  // Requires admin privileges
     });
   }
 

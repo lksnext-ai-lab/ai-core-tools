@@ -54,6 +54,7 @@ export interface ExtraRoute {
   element: React.ReactNode;
   name?: string;
   protected?: boolean;
+  adminOnly?: boolean;  // Requires admin privileges (is_admin === true)
 }
 
 export interface FeatureConfig {
