@@ -4,7 +4,7 @@ import { ThemeProvider } from '../themes/ThemeProvider';
 import { AuthProvider } from '../auth/AuthConfig';
 import { UserProvider } from '../contexts/UserContext';
 import { SettingsCacheProvider } from '../contexts/SettingsCacheContext';
-import { Layout } from '../components/Layout/Layout';
+import { Layout } from '../components/layout/Layout';
 import SettingsLayout from '../components/layout/SettingsLayout';
 import ProtectedRoute from '../components/ProtectedRoute';
 import AdminRoute from '../components/AdminRoute';

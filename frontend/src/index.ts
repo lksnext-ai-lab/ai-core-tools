@@ -10,7 +10,7 @@ export { configService } from './core/ConfigService';
 export { Header } from './components/Header/Header';
 export { Sidebar } from './components/Sidebar/Sidebar';
 export { Footer } from './components/Footer/Footer';
-export { Layout } from './components/Layout/Layout';
+export { Layout } from './components/layout/Layout';
 export { ThemeSelector } from './components/Theme/ThemeSelector';
 
 // Export shared form components and hooks

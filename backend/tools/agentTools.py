@@ -5,7 +5,7 @@ from models.silo import Silo
 from langchain_core.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
-from typing import Any
+from typing import Any, Optional, Dict
 from langchain.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -18,6 +18,7 @@ import json
 import base64
 from datetime import datetime
 from utils.logger import get_logger
+from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 
 logger = get_logger(__name__)
 
@@ -30,7 +31,16 @@ class MCPClientManager:
             cls._instance = super(MCPClientManager, cls).__new__(cls)
         return cls._instance
 
-    async def get_client(self, agent: Agent = None):
+    async def get_client(self, agent: Agent = None, user_context: Optional[Dict] = None):
+        """Get or create an MCP client for the given agent with authentication support.
+        
+        Args:
+            agent: The agent to create the client for
+            user_context: Optional user context containing authentication tokens
+            
+        Returns:
+            MultiServerMCPClient or None
+        """
         # Always create a new client for each agent execution to avoid ClosedResourceError
         # Don't use singleton pattern as the client lifecycle is tied to the agent execution
         if agent is not None:
@@ -41,6 +51,23 @@ class MCPClientManager:
                     # Get the config from the database
                     connection_config = mcp_config.to_connection_dict()
                     if connection_config:
+                        # Add authentication headers if user context is provided
+                        if user_context:
+                            auth_token = get_user_token_from_context(user_context)
+                            if auth_token:
+                                # Prepare headers for MCP server authentication
+                                headers = prepare_mcp_headers(auth_token)
+                                
+                                # Add headers to each connection in the config
+                                for server_name, server_config in connection_config.items():
+                                    if isinstance(server_config, dict):
+                                        # If it's an SSE connection with a URL
+                                        if 'url' in server_config:
+                                            if 'headers' not in server_config:
+                                                server_config['headers'] = {}
+                                            server_config['headers'].update(headers)
+                                            logger.info(f"Added auth headers to MCP server: {server_name}")
+                        
                         connections.update(connection_config)
                 except ValueError as e:
                     logger.error(f"Error configuring MCP {mcp_config.name}: {e}")
@@ -63,13 +90,14 @@ class MCPClientManager:
             await self._client.__aexit__(None, None, None)
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None):
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
         agent: The agent to create
         search_params: Optional search parameters for silo-based retrieval
         session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
+        user_context: Optional user context containing authentication tokens for MCP
     """
     llm = get_llm(agent)
     if llm is None:
@@ -135,7 +163,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None):
     mcp_client = None
     try:
         logger.info("Starting MCP tools loading...")
-        mcp_client = await MCPClientManager().get_client(agent)
+        mcp_client = await MCPClientManager().get_client(agent, user_context)
         if (mcp_client):
             mcp_tools = mcp_client.get_tools()
             logger.info(f"MCP tools loaded successfully: {mcp_tools}")

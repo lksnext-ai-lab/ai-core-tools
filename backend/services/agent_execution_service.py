@@ -94,7 +94,7 @@ class AgentExecutionService:
             response = await loop.run_in_executor(
                 self._executor,
                 self._execute_langchain_agent,
-                agent, message, processed_files, search_params, session, db
+                agent, message, processed_files, search_params, session, user_context, db
             )
             
             # Parse response based on agent's output parser
@@ -170,7 +170,7 @@ class AgentExecutionService:
             response = await loop.run_in_executor(
                 self._executor,
                 self._execute_langchain_agent,
-                agent, message, processed_files, search_params, session, db
+                agent, message, processed_files, search_params, session, user_context, db
             )
             
             # Parse response based on agent's output parser
@@ -622,6 +622,7 @@ class AgentExecutionService:
         processed_files: List[Dict], 
         search_params: Dict = None,
         session = None,
+        user_context: Dict = None,
         db: Session = None
     ) -> str:
         """Execute agent using the new create_agent approach with full tool support"""
@@ -650,7 +651,7 @@ class AgentExecutionService:
             # Wrap all async operations in a single event loop to avoid conflicts
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
             result_text = asyncio.run(self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context
             ))
             
             return result_text
@@ -667,7 +668,8 @@ class AgentExecutionService:
         fresh_agent: Agent,
         message: str,
         search_params: Dict = None,
-        session_id_for_cache: str = None
+        session_id_for_cache: str = None,
+        user_context: Dict = None
     ) -> str:
         """Async helper to execute agent with MCP client in same event loop"""
         from tools.agentTools import create_agent, prepare_agent_config
@@ -678,7 +680,9 @@ class AgentExecutionService:
         try:
             # Create the agent chain with all tools and capabilities
             # All async operations happen in the SAME event loop
-            agent_chain, tracer, mcp_client, checkpointer_cm = await create_agent(fresh_agent, search_params, session_id_for_cache)
+            agent_chain, tracer, mcp_client, checkpointer_cm = await create_agent(
+                fresh_agent, search_params, session_id_for_cache, user_context
+            )
             
             # Prepare configuration with tracer
             config = prepare_agent_config(fresh_agent, tracer)

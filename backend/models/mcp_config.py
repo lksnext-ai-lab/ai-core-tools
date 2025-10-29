@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, JSON, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -12,6 +12,8 @@ class MCPConfig(Base):
     name = Column(String(100), nullable=False)
     description = Column(String(1000))
     config = Column(JSON, nullable=False)  # Full MCP server config as JSON
+    requires_auth = Column(Boolean, default=False)  # Whether this MCP requires authentication
+    auth_type = Column(String, default='bearer')  # Type of authentication: 'bearer', 'jwt', 'none'
     
     # Timestamps
     create_date = Column(DateTime, default=datetime.now)

@@ -282,6 +282,7 @@ async def _save_uploaded_file(upload_file: UploadFile) -> str:
 async def chat_with_agent(
     app_id: int,
     agent_id: int,
+    request: Request,
     message: str = Form(...),
     files: List[UploadFile] = File(None),
     search_params: Optional[str] = Form(None),
@@ -301,11 +302,19 @@ async def chat_with_agent(
             except json.JSONDecodeError:
                 logger.warning(f"Invalid search_params JSON: {search_params}")
         
+        # Extract JWT token from Authorization header for MCP authentication
+        auth_header = request.headers.get('Authorization', '')
+        jwt_token = None
+        if auth_header.startswith('Bearer '):
+            jwt_token = auth_header.split(' ')[1]
+            logger.debug(f"Extracted JWT token for MCP auth (length: {len(jwt_token)})")
+        
         # Create user context for OAuth user
         user_context = {
             "user_id": current_user["user_id"],
             "oauth": True,
-            "app_id": app_id
+            "app_id": app_id,
+            "token": jwt_token  # Add JWT token for MCP authentication
         }
         
         # Process files using FileManagementService for persistence

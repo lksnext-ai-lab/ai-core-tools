@@ -41,12 +41,20 @@ from models.url import Url
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
 from routers.auth import auth_router
+from utils.logger import get_logger
+from utils.auth_config import AuthConfig
+
+logger = get_logger(__name__)
 
 app = FastAPI(
     title=os.getenv('APP_TITLE', f'{CLIENT_CONFIG.client_name} API'),
     description=os.getenv('APP_DESCRIPTION', 'AI Core Tools API'),
     version=os.getenv('APP_VERSION', '0.2.37')
 )
+
+# Log JWT configuration on startup
+logger.info(f"🔐 JWT Secret (first 20 chars): {AuthConfig.JWT_SECRET}...")
+logger.info(f"🔐 JWT Algorithm: {AuthConfig.JWT_ALGORITHM}")
 
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'true').lower() == 'true'  # Default to true for development
