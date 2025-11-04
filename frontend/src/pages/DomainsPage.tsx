@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -181,7 +181,12 @@ function DomainsPage() {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {domain.name}
+                            <Link
+                              to={`/apps/${appId}/domains/${domain.domain_id}`}
+                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                            >
+                              {domain.name}
+                            </Link>
                           </div>
                           <div className="text-sm text-gray-500">{domain.description}</div>
                         </div>
