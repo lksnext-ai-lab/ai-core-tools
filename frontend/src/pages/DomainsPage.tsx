@@ -206,13 +206,13 @@ function DomainsPage() {
                         actions={[
                           {
                             label: 'URLs',
-                            onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
+                            onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/detail`),
                             icon: '🔗',
                             variant: 'warning'
                           },
                           {
                             label: 'Edit',
-                            onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/edit`),
+                            onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
                             icon: '✏️',
                             variant: 'primary'
                           },
