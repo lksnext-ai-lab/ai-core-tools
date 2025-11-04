@@ -266,7 +266,12 @@ function APIKeysPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <span className="text-blue-400 text-xl mr-3">🔑</span>
-                          <div className="text-sm font-medium text-gray-900">{apiKey.name}</div>
+                            <div 
+                              className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => handleEditKey(apiKey.key_id)}
+                            >
+                              {apiKey.name}
+                            </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

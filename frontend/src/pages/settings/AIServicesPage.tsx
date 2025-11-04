@@ -228,7 +228,12 @@ function AIServicesPage() {
                   {services.map((service) => (
                     <tr key={service.service_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{service.name}</div>
+                        <div 
+                          className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                          onClick={() => handleEditService(service.service_id)}
+                        >
+                          {service.name}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">{service.model_name}</div>
