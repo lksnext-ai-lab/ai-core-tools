@@ -5,7 +5,7 @@ from typing import Optional
 import os
 import uuid
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 from urllib.parse import urlencode
 import msal
@@ -31,6 +31,11 @@ FRONTEND_URL = AuthConfig.FRONTEND_URL
 JWT_SECRET = AuthConfig.JWT_SECRET
 JWT_ALGORITHM = AuthConfig.JWT_ALGORITHM
 JWT_EXPIRATION_HOURS = AuthConfig.JWT_EXPIRATION_HOURS
+
+# Constants for repeated strings
+BEARER_PREFIX = "Bearer "
+INVALID_TOKEN_MSG = "Invalid or expired token"
+AUTH_REQUIRED_MSG = "Authentication required"
 
 # Schemas
 class LoginURLResponse(BaseModel):
@@ -97,9 +102,9 @@ def get_entraid_msal_app():
 def create_jwt_token(user_data: dict, expires_delta: timedelta = None) -> str:
     """Create JWT token for user session"""
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+        expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
     
     to_encode = user_data.copy()
     to_encode.update({"exp": expire})
@@ -125,6 +130,25 @@ def verify_jwt_token(token: str) -> Optional[dict]:
         return None
     except Exception:
         return None
+
+def get_authenticated_user_id(request: Request) -> int:
+    """Extract and verify token from request, return user_id"""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith(BEARER_PREFIX):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=AUTH_REQUIRED_MSG
+        )
+    
+    token = auth_header.split(' ')[1]
+    payload = verify_jwt_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=INVALID_TOKEN_MSG
+        )
+    
+    return payload.get('user_id')
 
 # ==================== AUTHENTICATION ENDPOINTS ====================
 
@@ -290,7 +314,7 @@ async def fake_login(request: FakeLoginRequest):
         }
         
         jwt_token = create_jwt_token(user_data)
-        expires_at = (datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
         
         return FakeLoginResponse(
             access_token=jwt_token,
@@ -335,7 +359,9 @@ async def auth_callback(request: Request):
         return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=unsupported_provider")
 
 async def callback_google(code: str, state: str):
-    """Handle Google OAuth callback"""
+    """Handle Google OAuth callback
+    Note: state parameter is kept for future validation/CSRF protection
+    """
     try:
         # Get Google OAuth configuration
         oauth_config = await get_google_oauth_config()
@@ -390,7 +416,7 @@ async def callback_google(code: str, state: str):
             }
             
             jwt_token = create_jwt_token(user_data)
-            expires_at = (datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
             
             # Redirect to frontend with token (use /login/success to avoid /auth prefix that goes to backend)
             redirect_url = f"{FRONTEND_URL}/login/success?token={jwt_token}&expires={expires_at}"
@@ -404,7 +430,9 @@ async def callback_google(code: str, state: str):
         return RedirectResponse(url=f"{FRONTEND_URL}/auth/error?error=callback_failed")
 
 async def callback_entraid(code: str, state: str):
-    """Handle EntraID (Azure AD) OAuth callback"""
+    """Handle EntraID (Azure AD) OAuth callback
+    Note: state parameter is kept for future validation/CSRF protection
+    """
     try:
         # Get MSAL app
         msal_app = get_entraid_msal_app()
@@ -456,7 +484,7 @@ async def callback_entraid(code: str, state: str):
             }
             
             jwt_token = create_jwt_token(user_data)
-            expires_at = (datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)).isoformat()
             
             # Redirect to frontend with token (use /login/success to avoid /auth prefix that goes to backend)
             redirect_url = f"{FRONTEND_URL}/login/success?token={jwt_token}&expires={expires_at}"
@@ -477,7 +505,7 @@ async def verify_token(request: Request):
     try:
         # Get token from Authorization header
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        if not auth_header or not auth_header.startswith(BEARER_PREFIX):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Missing or invalid authorization header"
@@ -490,7 +518,7 @@ async def verify_token(request: Request):
         if not payload:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=INVALID_TOKEN_MSG
             )
         
         # Return user info
@@ -540,10 +568,10 @@ async def get_current_user_info(request: Request):
     try:
         # Get token from Authorization header
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        if not auth_header or not auth_header.startswith(BEARER_PREFIX):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
+                detail=AUTH_REQUIRED_MSG
             )
         
         token = auth_header.split(' ')[1]
@@ -553,7 +581,7 @@ async def get_current_user_info(request: Request):
         if not payload:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=INVALID_TOKEN_MSG
             )
         
         # Get fresh user data from database
@@ -592,25 +620,7 @@ async def get_pending_invitations(request: Request):
     Get pending collaboration invitations for the current user
     """
     try:
-        # Get token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
-            )
-        
-        token = auth_header.split(' ')[1]
-        
-        # Verify token
-        payload = verify_jwt_token(token)
-        if not payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
-            )
-        
-        user_id = payload.get('user_id')
+        user_id = get_authenticated_user_id(request)
         
         # Get pending invitations using the collaboration service
         from services.app_collaboration_service import AppCollaborationService
@@ -651,25 +661,7 @@ async def respond_to_invitation(invitation_id: int, action: dict, request: Reque
     Accept or decline a collaboration invitation
     """
     try:
-        # Get token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
-            )
-        
-        token = auth_header.split(' ')[1]
-        
-        # Verify token
-        payload = verify_jwt_token(token)
-        if not payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
-            )
-        
-        user_id = payload.get('user_id')
+        user_id = get_authenticated_user_id(request)
         action_value = action.get('action')
         
         if action_value not in ['accept', 'decline']:
