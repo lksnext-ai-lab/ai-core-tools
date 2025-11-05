@@ -76,17 +76,17 @@ def get_llm(agent, is_vision=False):
     temperature = getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE)
     
     if ai_service.provider == ProviderEnum.OpenAI.value:
-        return ChatOpenAI(model=ai_service.name, temperature=temperature, api_key=ai_service.api_key, base_url=ai_service.endpoint if ai_service.endpoint else None)
+        return ChatOpenAI(model=ai_service.description, temperature=temperature, api_key=ai_service.api_key, base_url=ai_service.endpoint if ai_service.endpoint else None)
     if ai_service.provider == ProviderEnum.Anthropic.value:
-        return ChatAnthropic(model=ai_service.name, temperature=temperature, api_key=ai_service.api_key)
+        return ChatAnthropic(model=ai_service.description, temperature=temperature, api_key=ai_service.api_key)
     if ai_service.provider == ProviderEnum.MistralAI.value:
         if is_vision:
             mistral_client = Mistral(api_key=ai_service.api_key)
-            return MistralWrapper(client=mistral_client, model_name=ai_service.name)
-        return ChatMistralAI(model=ai_service.name, temperature=temperature, api_key=ai_service.api_key)
+            return MistralWrapper(client=mistral_client, model_name=ai_service.description)
+        return ChatMistralAI(model=ai_service.description, temperature=temperature, api_key=ai_service.api_key)
     if ai_service.provider == ProviderEnum.Custom.value:
         service = ChatOllama(
-            model=ai_service.name, 
+            model=ai_service.description, 
             temperature=temperature,
             base_url=ai_service.endpoint,
             client_kwargs={
@@ -100,7 +100,7 @@ def get_llm(agent, is_vision=False):
         return service
     if ai_service.provider == ProviderEnum.Azure.value:
         return AzureAIChatCompletionsModel(
-            model=ai_service.name,
+            model=ai_service.description,
             temperature=temperature,
             credential=ai_service.api_key,
             endpoint=ai_service.endpoint,

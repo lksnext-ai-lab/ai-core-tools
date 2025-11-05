@@ -213,7 +213,12 @@ function MCPConfigsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <span className="text-purple-400 text-xl mr-3">🔌</span>
-                        <div className="text-sm font-medium text-gray-900">{config.name}</div>
+                        <div 
+                          className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                          onClick={() => handleEditConfig(config.config_id)}
+                          >
+                            {config.name}
+                          </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">

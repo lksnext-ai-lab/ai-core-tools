@@ -175,7 +175,12 @@ function SilosPage() {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {silo.name}
+                            <Link
+                              to={`/apps/${appId}/silos/${silo.silo_id}`}
+                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                            >
+                                {silo.name}
+                            </Link>
                           </div>
                         </div>
                       </div>

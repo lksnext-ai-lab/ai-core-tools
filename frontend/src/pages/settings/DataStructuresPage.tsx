@@ -244,7 +244,12 @@ function DataStructuresPage() {
                       <div className="flex items-center">
                         <span className="text-purple-400 text-xl mr-3">📊</span>
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{structure.name}</div>
+                            <div 
+                              className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => handleEditStructure(structure.parser_id)}
+                            >
+                              {structure.name}
+                            </div>
                         </div>
                       </div>
                     </td>
