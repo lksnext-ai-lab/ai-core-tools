@@ -7,11 +7,11 @@ export { ExtensibleBaseApp } from './core/ExtensibleBaseApp';
 export { configService } from './core/ConfigService';
 
 // Export modular components
-export { Header } from './components/Header/Header';
-export { Sidebar } from './components/Sidebar/Sidebar';
-export { Footer } from './components/Footer/Footer';
+export { Header } from './components/header/Header';
+export { Sidebar } from './components/sidebar/Sidebar';
+export { Footer } from './components/footer/Footer';
 export { Layout } from './components/layout/Layout';
-export { ThemeSelector } from './components/Theme/ThemeSelector';
+export { ThemeSelector } from './components/theme/ThemeSelector';
 
 // Export shared form components and hooks
 export { useFormState } from './hooks/useFormState';

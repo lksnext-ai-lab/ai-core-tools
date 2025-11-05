@@ -1,7 +1,7 @@
 import React from 'react';
-import { Header } from '../Header/Header';
-import { Sidebar } from '../Sidebar/Sidebar';
-import { Footer } from '../Footer/Footer';
+import { Header } from '../header/Header';
+import { Sidebar } from '../sidebar/Sidebar';
+import { Footer } from '../footer/Footer';
 import type { NavigationConfig } from '../../core/types';
 
 interface LayoutProps {
