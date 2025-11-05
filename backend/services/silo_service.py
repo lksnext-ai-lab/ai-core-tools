@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from utils.logger import get_logger
 from langchain_core.documents import Document
-from tools.pgVectorTools import PGVectorTools
+from tools.vector_store import VectorStore
 from models.silo import SiloType
 from services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
@@ -66,7 +66,7 @@ class SiloService:
             logger.debug(f"Getting retriever for silo {silo_id} with embedding service: {silo.embedding_service.name}")
             
             from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
+            pg_vector_tools = VectorStore(db_obj)
             collection_name = COLLECTION_PREFIX + str(silo_id)
             
             # Merge search_params with default k value
@@ -104,7 +104,7 @@ class SiloService:
             
             # Use async engine with psycopg (not asyncpg) for async operations
             # psycopg supports async natively and handles multiple SQL statements properly
-            return pg_vector_tools.get_pgvector_retriever(
+            return pg_vector_tools.get_retriever(
                 collection_name, 
                 silo.embedding_service, 
                 merged_search_kwargs,
@@ -337,7 +337,7 @@ class SiloService:
         logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
         
         from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools = VectorStore(db_obj)
         docs = SiloService._create_documents_for_indexing(silo_id, documents)
         pg_vector_tools.index_documents(
             collection_name,
@@ -529,7 +529,7 @@ class SiloService:
             docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 
             from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
+            pg_vector_tools = VectorStore(db_obj)
             embedding_service = resource_with_relations.repository.silo.embedding_service
             
             if not embedding_service:
@@ -567,7 +567,7 @@ class SiloService:
                 return
 
             from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
+            pg_vector_tools = VectorStore(db_obj)
             pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
         except Exception as e:
             logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
@@ -590,7 +590,7 @@ class SiloService:
             return
 
         from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools = VectorStore(db_obj)
         
         # Get embedding service within the same session
         embedding_service = None
@@ -617,7 +617,7 @@ class SiloService:
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
         from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools = VectorStore(db_obj)
         pg_vector_tools.delete_documents(
             collection_name, 
             filter_metadata={"id": {"$eq": content_id}},
@@ -638,7 +638,7 @@ class SiloService:
             
         collection_name = COLLECTION_PREFIX + str(silo_id)
         from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools = VectorStore(db_obj)
         pg_vector_tools.delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
@@ -660,7 +660,7 @@ class SiloService:
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
         from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools = VectorStore(db_obj)
         pg_vector_tools.delete_documents(
             collection_name, 
             ids=ids,
@@ -677,7 +677,7 @@ class SiloService:
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
         from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools = VectorStore(db_obj)
         
         # Get embedding service within the same session
         embedding_service = None

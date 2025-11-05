@@ -1,0 +1,10 @@
+# Optional dependencies for Qdrant vector database support
+# Install with: pip install -r requirements-qdrant.txt
+
+# Qdrant client and LangChain integration
+qdrant-client>=1.7.0
+langchain-qdrant>=0.1.0
+
+# Note: These are only required if you set VECTOR_DB_TYPE=QDRANT
+# in your environment variables. The default PGVector backend
+# does not require these packages.

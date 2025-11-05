@@ -6,15 +6,13 @@ from langchain_core.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from typing import Any, Optional, Dict, List
-from langchain.tools.retriever import create_retriever_tool
+from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from services.agent_cache_service import CheckpointerCacheService
 from services.memory_management_service import MemoryManagementService
-from langchain.callbacks.tracers import LangChainTracer
-from langsmith import Client
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 import json
@@ -272,12 +270,18 @@ def parse_agent_response(response_text, agent):
 
 
 def setup_tracer(agent):
-    """Setup tracer if configured."""
-    tracer = None
-    if agent.app.langsmith_api_key:
-        client = Client(api_key=agent.app.langsmith_api_key)
-        tracer = LangChainTracer(client=client, project_name=agent.app.name)
-    return tracer
+    """
+    Setup tracer if configured.
+    
+    Note: LangChainTracer is deprecated. LangSmith now automatically traces
+    when LANGSMITH_API_KEY is set in environment. This function is kept for
+    backward compatibility but may not be needed.
+    """
+    # LangSmith tracing is now automatic when environment variables are set:
+    # - LANGSMITH_API_KEY
+    # - LANGSMITH_PROJECT (optional, defaults to "default")
+    # No need to explicitly create tracer anymore
+    return None
 
 
 class IACTTool(BaseTool):

@@ -1,12 +1,13 @@
 import os
-import warnings, deprecation
+import warnings
+import deprecation
 
 import numpy as np
 from sqlalchemy.orm import sessionmaker
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders.pdf import PyPDFLoader
-from langchain.text_splitter import CharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter
 from langchain_postgres.vectorstores import PGVector
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from models.embedding_service import EmbeddingProvider
@@ -14,29 +15,68 @@ from tools.embeddingTools import get_embeddings_model
 
 from models.resource import Resource
 from typing import Optional
-from langchain.schema import Document
+from langchain_core.documents import Document
 from typing import List
-# from extensions import async_engine  # TODO: Fix async engine import
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
-#TODO: pgVector should not know abot silos
+#TODO: pgVector should not know about silos
 COLLECTION_PREFIX = 'silo_'
 
+@deprecation.deprecated(
+    deprecated_in="1.0.0",
+    current_version="1.0.0",
+    details="PGVectorTools is deprecated. Use tools.vector_store.VectorStore instead, "
+            "which provides abstraction over multiple vector database backends."
+)
 class PGVectorTools:
+    """
+    DEPRECATED: Use tools.vector_store.VectorStore instead.
+    
+    This class is maintained for backward compatibility only.
+    It internally delegates to VectorStore, which provides
+    abstraction over multiple vector database backends.
+    
+    Migration guide:
+        Old: from tools.pgVectorTools import PGVectorTools
+             pg_vector_tools = PGVectorTools(db)
+        
+        New: from tools.vector_store import VectorStore
+             vector_store = VectorStore(db)
+    """
+    
     def __init__(self, db):
-        """Initializes the PGVectorTools with a SQLAlchemy engine."""
+        """
+        DEPRECATED: Initialize PGVectorTools with a SQLAlchemy engine.
+        
+        Use VectorStore instead:
+            from tools.vector_store import VectorStore
+            vector_store = VectorStore(db)
+        """
+        warnings.warn(
+            "PGVectorTools is deprecated. Use tools.vector_store.VectorStore instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
+        # Delegate to VectorStore
+        from tools.vector_store import VectorStore
+        self._vector_store = VectorStore(db)
+        
+        # Keep these for backward compatibility
         self.Session = db.session
         self.db = db
-        # Use async engine for vector operations (required for async retriever in LangGraph)
         self._async_engine = getattr(db, '_async_engine', None)    
 
     @deprecation.deprecated(
         deprecated_in="0.1.0",
-        current_version="0.1.0",
+        current_version="1.0.0",
         details="This method is deprecated and will be removed in a future version. Use the 'index_documents' method instead."
     )
     def index_resource(self, resource):
-        """Indexes a resource by loading its content, splitting it into chunks, and adding it to the pgvector table."""
+        """
+        DEPRECATED: Indexes a resource by loading its content, splitting it into chunks, and adding it to the vector store.
+        Use index_documents() method instead.
+        """
         
         loader = PyPDFLoader(os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri), extract_images=False)
         pages = loader.load()
@@ -48,122 +88,65 @@ class PGVectorTools:
             doc.metadata["resource_id"] = resource.resource_id
             doc.metadata["silo_id"] = resource.repository.silo_id
 
-
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(resource.embedding_service),
-            collection_name=COLLECTION_PREFIX + str(resource.repository.silo_id),
-            connection=self.db.engine,
-            use_jsonb=True,
-        )
-        vector_store.add_documents(docs)
+        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
+        self._vector_store.index_documents(collection_name, docs, resource.embedding_service)
 
     def index_documents(self, collection_name: str, documents: list[Document], embedding_service=None):
-        """Indexes a list of documents in the pgvector collection using langchain vector store."""
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(embedding_service),
-            collection_name=collection_name,
-            connection=self.db.engine,
-            use_jsonb=True,
-        )
-        vector_store.add_documents(documents)
+        """
+        Indexes a list of documents in the vector collection.
+        Delegates to VectorStore implementation.
+        """
+        return self._vector_store.index_documents(collection_name, documents, embedding_service)
 
     @deprecation.deprecated(
         deprecated_in="0.1.0",
-        current_version="0.1.0",
+        current_version="1.0.0",
         details="This method is deprecated and will be removed in a future version. Use the 'delete_documents' method instead."
     )
     def delete_resource(self, resource):
-        """Deletes a resource from the pgvector table using langchain vector store."""
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(resource.embedding_service),
-            collection_name=COLLECTION_PREFIX + str(resource.repository.silo_id),
-            connection=self.db.engine,
-            use_jsonb=True,
+        """
+        DEPRECATED: Deletes a resource from the vector store.
+        Use delete_documents() method instead.
+        """
+        collection_name = COLLECTION_PREFIX + str(resource.repository.silo_id)
+        self._vector_store.delete_documents(
+            collection_name, 
+            {"resource_id": {"$eq": resource.resource_id}},
+            resource.embedding_service
         )
-        results = vector_store.similarity_search(
-            "", k=1000, filter={"resource_id": {"$eq": resource.resource_id}}
-        )
-        print(results)
-        ids_array = [doc.id for doc in results]
-        print(ids_array)
-        
-        vector_store.delete(ids=ids_array)
 
     def delete_documents(self, collection_name: str, ids, embedding_service=None):
-        """Deletes documents from the pgvector collection using langchain vector store."""
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(embedding_service),
-            collection_name=collection_name,
-            connection=self.db.engine,
-            use_jsonb=True,
-        )
-        if isinstance(ids, list):
-            vector_store.delete(ids=ids)
-        else:
-            #TODO: for deleting docs embedding_service should not be needed. In fact, if api key  fails we can not delete docs.
-            results = vector_store.similarity_search(
-                "", k=1000, filter=ids
-            )
-            ids_array = [doc.id for doc in results]
-            vector_store.delete(ids=ids_array)
+        """
+        Deletes documents from the vector collection.
+        Delegates to VectorStore implementation.
+        """
+        return self._vector_store.delete_documents(collection_name, ids, embedding_service)
 
-    def delete_collection(self, collection_name : str, embedding_service):
-        """Deletes a collection from the pgvector database."""
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(embedding_service),
-            collection_name=collection_name,
-            connection=self.db.engine,
-        )
-        vector_store.delete_collection()
+    def delete_collection(self, collection_name: str, embedding_service):
+        """
+        Deletes a collection from the vector database.
+        Delegates to VectorStore implementation.
+        """
+        return self._vector_store.delete_collection(collection_name, embedding_service)
         
-    
     
     def search_similar_documents(self, collection_name: str, query: str, embedding_service=None, filter_metadata: Optional[dict] = None, RESULTS=5):
-        """Searches for similar documents using the configured embedding service"""
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(embedding_service),
-            collection_name=collection_name,
-            connection=self.db.engine,
-            use_jsonb=True,
+        """
+        Searches for similar documents using the configured embedding service.
+        Delegates to VectorStore implementation.
+        """
+        return self._vector_store.search_similar_documents(
+            collection_name, 
+            query, 
+            embedding_service, 
+            filter_metadata, 
+            RESULTS
         )
-        
-        # Handle empty queries by returning documents with just metadata filtering
-        if not query or (isinstance(query, str) and not query.strip()):
-            # For empty queries, use similarity_search without query to get documents with metadata filtering
-            results_with_scores = vector_store.similarity_search_with_score(
-                " ",  # Use a space as minimal query
-                k=RESULTS,
-                filter=filter_metadata
-            )
-        elif isinstance(query, (list, np.ndarray)):
-            # Si recibimos directamente el embedding, lo usamos
-            results_with_scores = vector_store.similarity_search_with_score_by_vector(
-                embedding=query,
-                k=RESULTS,
-                filter=filter_metadata
-            )
-        else:
-            # Si recibimos texto, hacemos la búsqueda normal con scores
-            results_with_scores = vector_store.similarity_search_with_score(
-                query,
-                k=RESULTS,
-                filter=filter_metadata
-            )
-        
-        # Convert the results to include score and id in metadata
-        results = []
-        for doc, score in results_with_scores:
-            # Create a new Document with score AND id in metadata
-            new_doc = Document(
-                page_content=doc.page_content,
-                metadata={**doc.metadata, '_score': score, '_id': doc.id}
-            )
-            results.append(new_doc)
-            
-        return results
     
     def get_pgvector_retriever(self, collection_name: str, embedding_service=None, search_params=None, use_async=False, **kwargs):
-        """Returns a retriever object for the pgvector collection.
+        """
+        Returns a retriever object for the vector collection.
+        Delegates to VectorStore implementation.
         
         Args:
             collection_name: Name of the collection
@@ -172,18 +155,12 @@ class PGVectorTools:
             use_async: If True, uses async engine for async operations (e.g., in LangGraph with ainvoke)
             **kwargs: Additional arguments to pass to as_retriever
         """
-        # Use async engine if requested and available, otherwise fall back to sync engine
-        connection = self._async_engine if (use_async and self._async_engine) else self.db.engine
-        
-        vector_store = PGVector(
-            embeddings=get_embeddings_model(embedding_service),
-            collection_name=collection_name,
-            connection=connection,
-            use_jsonb=True,
+        return self._vector_store.get_retriever(
+            collection_name,
+            embedding_service,
+            search_params,
+            use_async,
+            **kwargs
         )
-        
-        if search_params is not None:
-            return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
-        return vector_store.as_retriever(**kwargs)
 
 

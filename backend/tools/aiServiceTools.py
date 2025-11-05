@@ -10,7 +10,6 @@ from mistralai import Mistral
 from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
 
 from models.ai_service import ProviderEnum
-from tools.pgVectorTools import PGVectorTools
 from tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
@@ -24,16 +23,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize pgVectorTools lazily when needed
-_pgVectorTools = None
+# Initialize VectorStore lazily when needed
+_vector_store = None
 
-def get_pgVectorTools():
-    """Get or create PGVectorTools instance"""
-    global _pgVectorTools
-    if _pgVectorTools is None:
+def get_vector_store():
+    """Get or create VectorStore instance"""
+    global _vector_store
+    if _vector_store is None:
         from db.database import db
-        _pgVectorTools = PGVectorTools(db)
-    return _pgVectorTools
+        from tools.vector_store import VectorStore
+        _vector_store = VectorStore(db)
+    return _vector_store
+
+# Deprecated function for backward compatibility
+def get_pgVectorTools():
+    """
+    Deprecated: Use get_vector_store() instead.
+    This function is maintained for backward compatibility.
+    """
+    return get_vector_store()
 
 def get_embedding(text, embedding_service=None):
     """Get embeddings using the configured service"""
