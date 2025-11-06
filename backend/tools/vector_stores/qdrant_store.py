@@ -27,23 +27,30 @@ class QdrantStore(VectorStoreBase):
     to Qdrant Cloud or a self-hosted Qdrant instance.
     
     Attributes:
+        db: Database object (kept for API consistency, may not be used)
         url: Qdrant server URL
         api_key: Optional API key for Qdrant Cloud
         prefer_grpc: Whether to use gRPC protocol (faster)
         client: Qdrant client instance
     """
     
-    def __init__(self, url: str, api_key: Optional[str] = None, prefer_grpc: bool = False):
+    def __init__(self, db, url: str, api_key: Optional[str] = None, prefer_grpc: bool = False):
         """
         Initialize Qdrant store with connection details.
         
         Args:
+            db: Database object (kept for API consistency with PGVectorStore)
             url: Qdrant server URL (e.g., 'http://localhost:6333' or Qdrant Cloud URL)
             api_key: Optional API key for authentication (required for Qdrant Cloud)
             prefer_grpc: Whether to use gRPC protocol instead of REST
             
         Raises:
             ImportError: If qdrant-client package is not installed
+            
+        Note:
+            Unlike PGVectorStore, Qdrant is a separate service and doesn't use
+            the PostgreSQL connection. The db parameter is accepted for API
+            consistency but may not be actively used.
         """
         try:
             from qdrant_client import QdrantClient
@@ -54,6 +61,7 @@ class QdrantStore(VectorStoreBase):
                 "Install it with: pip install qdrant-client langchain-qdrant"
             )
         
+        self.db = db  # Store for potential future use (metadata queries, etc.)
         self.url = url
         self.api_key = api_key
         self.prefer_grpc = prefer_grpc

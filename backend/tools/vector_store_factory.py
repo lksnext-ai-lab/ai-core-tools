@@ -108,7 +108,7 @@ class VectorStoreFactory:
         Create Qdrant store instance.
         
         Args:
-            db: Database object (may not be used, but kept for consistency)
+            db: Database object (passed for API consistency)
             
         Returns:
             QdrantStore instance
@@ -125,6 +125,7 @@ class VectorStoreFactory:
         
         logger.debug(f"Creating Qdrant store with URL: {config.QDRANT_URL}")
         return QdrantStore(
+            db=db,  # Pass db for API consistency
             url=config.QDRANT_URL,
             api_key=config.QDRANT_API_KEY,
             prefer_grpc=config.QDRANT_PREFER_GRPC
