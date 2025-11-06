@@ -18,6 +18,7 @@ pipeline {
         SONARENTERPRISE_URL = "https://sonarqubeenterprise.devops.lksnext.com/"
         SONARENTERPRISE_TOKEN = credentials('sonarenterprise-analysis-token')
         SONAR_BRANCH = "develop"
+        IMAGE_SONARSCANNER = 'registry.lksnext.com/devsecops/custom-sonarscanner-cli:1.0'
         IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
         GIT_CREDENTIAL = credentials('814b38ca-a572-4188-9c47-ee75ca443903')
     }
@@ -114,6 +115,28 @@ pipeline {
             }
         }
 
+        stage('Sonar') {
+            when {
+                environment name: 'JOB_ACTION', value: 'sonar'
+            }
+            steps {
+                script {
+                    sh '''
+                        docker run --rm \
+                        -v ./:/app \
+                        -e SONAR_HOST_URL=$SONARENTERPRISE_URL \
+                        -e SONAR_TOKEN=$SONARENTERPRISE_TOKEN \
+                        $IMAGE_SONARSCANNER \
+                        -Dsonar.projectKey=IA-Core-Tools \
+                        -Dsonar.projectBaseDir=/app \
+                        -Dsonar.sources=/app \
+                        -Dsonar.branch.name=$SONAR_BRANCH \
+                        -Dsonar.python.version=3.12
+                    '''
+                }
+            }
+        }
+        
         stage('Push Backend Docker Image') {
             steps {
                 script {
