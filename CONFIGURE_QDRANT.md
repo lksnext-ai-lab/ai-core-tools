@@ -22,8 +22,8 @@ Actualmente, al cambiar de un tipo de base de datos vectorial a otra, los datos 
    docker-compose -f docker-compose-qdrant.yaml up -d
    ```
 2. Verifica que el servicio esté funcionando correctamente accediendo a `http://localhost:6333/healthz`. Deberías obtener la respuesta:
-   ```json
-   {"status":"ok"}
+   ```
+   healthz check passed
    ```
 ## Uso
 1. Crea un silo asignándole un servicio de embeddings.
