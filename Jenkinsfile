@@ -116,9 +116,6 @@ pipeline {
         }
 
         stage('Sonar') {
-            when {
-                environment name: 'JOB_ACTION', value: 'sonar'
-            }
             steps {
                 script {
                     sh '''
