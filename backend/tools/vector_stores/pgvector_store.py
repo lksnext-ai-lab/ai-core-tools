@@ -7,6 +7,7 @@ wrapping LangChain's PGVector functionality while conforming to our abstract int
 
 import numpy as np
 from typing import List, Optional, Dict, Any
+from sqlalchemy import text
 from langchain_core.documents import Document
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_postgres.vectorstores import PGVector
@@ -207,3 +208,28 @@ class PGVectorStore(VectorStoreBase):
         if search_params is not None:
             return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
         return vector_store.as_retriever(**kwargs)
+
+    def collection_exists(self, collection_name: str) -> bool:
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT 1 FROM langchain_pg_collection WHERE name = :name LIMIT 1"),
+                {"name": collection_name}
+            )
+            return result.scalar() is not None
+
+    def count_documents(self, collection_name: str) -> int:
+        with self.engine.connect() as connection:
+            collection_uuid = connection.execute(
+                text("SELECT uuid FROM langchain_pg_collection WHERE name = :name"),
+                {"name": collection_name}
+            ).scalar()
+
+            if not collection_uuid:
+                return 0
+
+            count = connection.execute(
+                text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = :uuid"),
+                {"uuid": collection_uuid}
+            ).scalar()
+
+            return int(count or 0)

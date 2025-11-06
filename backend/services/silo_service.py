@@ -278,18 +278,25 @@ class SiloService:
 
     @staticmethod
     def check_silo_collection_exists(silo_id: int, db: Session) -> bool:
-        return SiloRepository.check_collection_exists(silo_id, db)
-    
-    @staticmethod
-    def get_silo_collection_uuid(silo_id: int, db: Session) -> str:
-        return SiloRepository.get_collection_uuid(silo_id, db)
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        from db.database import db as db_obj  # Lazy import to avoid cycles
+        vector_store = VectorStore(db_obj)
+        try:
+            return vector_store.collection_exists(collection_name)
+        except Exception as exc:
+            logger.error(f"Error checking collection for silo {silo_id}: {exc}")
+            return False
     
     @staticmethod
     def count_docs_in_silo(silo_id: int, db: Session) -> int:
-        if not SiloService.check_silo_collection_exists(silo_id, db):
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        from db.database import db as db_obj  # Lazy import to avoid cycles
+        vector_store = VectorStore(db_obj)
+        try:
+            return vector_store.count_documents(collection_name)
+        except Exception as exc:
+            logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
-        collection_uuid = SiloService.get_silo_collection_uuid(silo_id, db)
-        return SiloRepository.count_documents_in_collection(collection_uuid, db)
     
     @staticmethod
     def _get_silo_for_indexing(silo_id: int, db: Session):

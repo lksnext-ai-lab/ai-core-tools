@@ -314,3 +314,19 @@ class QdrantStore(VectorStoreBase):
         if search_params is not None:
             return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
         return vector_store.as_retriever(**kwargs)
+
+    def collection_exists(self, collection_name: str) -> bool:
+        try:
+            self.client.get_collection(collection_name)
+            return True
+        except Exception as exc:
+            logger.debug(f"Qdrant collection %s not found: %s", collection_name, exc)
+            return False
+
+    def count_documents(self, collection_name: str) -> int:
+        try:
+            response = self.client.count(collection_name)
+            return int(response.count)
+        except Exception as exc:
+            logger.debug(f"Failed to count documents for collection %s: %s", collection_name, exc)
+            return 0

@@ -211,3 +211,11 @@ class VectorStore:
             use_async,
             **kwargs
         )
+
+    def collection_exists(self, collection_name: str) -> bool:
+        """Check if a collection exists in the configured vector store."""
+        return self._backend.collection_exists(collection_name)
+
+    def count_documents(self, collection_name: str) -> int:
+        """Return the number of documents stored in a collection."""
+        return self._backend.count_documents(collection_name)

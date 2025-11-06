@@ -132,3 +132,29 @@ class VectorStoreBase(ABC):
             Exception: If retriever creation fails
         """
         pass
+
+    @abstractmethod
+    def collection_exists(self, collection_name: str) -> bool:
+        """
+        Check if a collection/index exists in the vector store.
+
+        Args:
+            collection_name: Name of the collection/index to check
+
+        Returns:
+            True if the collection exists, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def count_documents(self, collection_name: str) -> int:
+        """
+        Count the number of documents stored in a collection/index.
+
+        Args:
+            collection_name: Name of the collection/index
+
+        Returns:
+            Number of documents stored in the collection
+        """
+        pass
