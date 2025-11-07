@@ -12,3 +12,4 @@ export type {
 } from './config/pluginConfig';
 export type { HelloWorldPageProps } from './pages/HelloWorldPage';
 export type { HelloWorldAdminPageProps } from './pages/HelloWorldAdminPage';
+

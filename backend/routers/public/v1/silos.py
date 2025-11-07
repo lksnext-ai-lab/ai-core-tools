@@ -244,14 +244,24 @@ async def index_single_document(
     app_id: int,
     silo_id: int,
     request: SingleDocumentIndexSchema,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Index a single document in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
     
-    # TODO: Implement document indexing
-    return MessageResponseSchema(message="Document indexed successfully")
+    try:
+        SiloService.index_single_content(
+            silo_id=silo_id,
+            content=request.content,
+            metadata=request.metadata or {},
+            db=db
+        )
+        return MessageResponseSchema(message="Document indexed successfully")
+    except Exception as e:
+        logger.error(f"Error indexing document: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error indexing document: {str(e)}")
 
 @silos_router.post("/silos/{silo_id}/docs/multiple-index",
                    summary="Index multiple documents",
@@ -278,14 +288,19 @@ async def delete_docs_in_collection(
     app_id: int,
     silo_id: int,
     request: DeleteDocsRequestSchema,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Delete documents in a silo collection."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
     
-    # TODO: Implement document deletion
-    return MessageResponseSchema(message="Documents deleted successfully")
+    try:
+        SiloService.delete_docs_in_collection(silo_id, request.ids, db)
+        return MessageResponseSchema(message=f"Successfully deleted {len(request.ids)} document(s)")
+    except Exception as e:
+        logger.error(f"Error deleting documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting documents: {str(e)}")
 
 @silos_router.delete("/silos/{silo_id}/docs/delete/all",
                      summary="Delete all docs in collection",
@@ -311,14 +326,35 @@ async def find_docs_in_collection(
     app_id: int,
     silo_id: int,
     request: SiloSearchSchema,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Find documents in a silo collection."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
     
-    # TODO: Implement document search
-    return DocsResponseSchema(docs=[])
+    try:
+        query = request.query if request.query else " "
+        docs = SiloService.find_docs_in_collection(
+            silo_id=silo_id,
+            query=query,
+            filter_metadata=request.filter_metadata,
+            db=db
+        )
+        
+        doc_schemas = []
+        for doc in docs:
+            # Try to get ID from document object first, then from metadata
+            doc_id = getattr(doc, 'id', None) or doc.metadata.get("_id") or doc.metadata.get("id") or ""
+            doc_schemas.append({
+                "page_content": doc.page_content,
+                "metadata": {**doc.metadata, "id": str(doc_id) if doc_id else ""}
+            })
+        
+        return DocsResponseSchema(docs=doc_schemas)
+    except Exception as e:
+        logger.error(f"Error finding documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error finding documents: {str(e)}")
 
 @silos_router.post("/silos/{silo_id}/docs/index-file",
                    summary="Index file content",
@@ -329,14 +365,85 @@ async def index_file_document(
     silo_id: int,
     file: UploadFile = File(...),
     metadata: Optional[str] = Form(None),
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Index file content in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
     
-    # TODO: Implement file indexing
-    return FileIndexResponseSchema(
-        message="File indexed successfully",
-        num_documents=1
-    ) 
+    import tempfile
+    import os
+    from services.silo_service import SiloService
+    from repositories.silo_repository import SiloRepository
+    from db.database import db as db_obj
+    from tools.pgVectorTools import PGVectorTools
+    from services.silo_service import COLLECTION_PREFIX
+    
+    temp_file_path = None
+    try:
+        # Get silo to verify it exists and get embedding service
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo:
+            raise HTTPException(status_code=404, detail=f"Silo {silo_id} not found")
+        
+        if not silo.embedding_service:
+            raise HTTPException(status_code=400, detail=f"Silo {silo_id} has no embedding service configured")
+        
+        # Parse metadata if provided
+        metadata_dict = {}
+        if metadata:
+            try:
+                import json
+                metadata_dict = json.loads(metadata)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON metadata: {metadata}, using empty dict")
+        
+        # Save uploaded file to temporary location
+        file_extension = os.path.splitext(file.filename or "")[1].lower()
+        if not file_extension:
+            # Try to determine from content type
+            if file.content_type:
+                content_type_map = {
+                    'application/pdf': '.pdf',
+                    'application/msword': '.doc',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                    'text/plain': '.txt'
+                }
+                file_extension = content_type_map.get(file.content_type, '.txt')
+            else:
+                file_extension = '.txt'
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
+            temp_file_path = temp_file.name
+            # Read file content
+            content = await file.read()
+            temp_file.write(content)
+        
+        # Extract documents from file
+        docs = SiloService.extract_documents_from_file(temp_file_path, file_extension, metadata_dict)
+        
+        # Index documents using PGVector
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        pg_vector_tools = PGVectorTools(db_obj)
+        pg_vector_tools.index_documents(collection_name, docs, silo.embedding_service)
+        
+        logger.info(f"Successfully indexed file {file.filename} in silo {silo_id}, {len(docs)} documents")
+        
+        return FileIndexResponseSchema(
+            message="File indexed successfully",
+            num_documents=len(docs)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error indexing file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error indexing file: {str(e)}")
+    finally:
+        # Clean up temporary file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete temp file {temp_file_path}: {str(e)}") 

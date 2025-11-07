@@ -86,7 +86,9 @@ class AgentExecutionService:
             # Get user session for memory-enabled agents
             session = None
             if agent.has_memory:
-                session = await self.session_service.get_user_session(agent_id, user_context)
+                # Extract conversation_id from user_context to ensure correct session identification
+                conversation_id = user_context.get("conversation_id") if user_context else None
+                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
             
             # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
             # This prevents blocking the event loop and allows other requests to be processed
@@ -162,7 +164,9 @@ class AgentExecutionService:
             # Get user session for memory-enabled agents
             session = None
             if agent.has_memory:
-                session = await self.session_service.get_user_session(agent_id, user_context)
+                # Extract conversation_id from user_context to ensure correct session identification
+                conversation_id = user_context.get("conversation_id") if user_context else None
+                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
             
             # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
             # This prevents blocking the event loop and allows other requests to be processed
@@ -301,18 +305,23 @@ class AgentExecutionService:
             
             # Reset session if memory enabled
             if agent.has_memory:
-                # Reset the session object (clears messages and memory)
-                await self.session_service.reset_user_session(agent_id, user_context)
+                # Extract conversation_id from user_context if present
+                conversation_id = user_context.get("conversation_id")
                 
-                # IMPORTANT: Also invalidate the checkpointer to clear LangGraph's conversation history
+                # IMPORTANT: First get the session to find the session_id before resetting
+                # This ensures we can invalidate the checkpointer for the correct session
                 from services.agent_cache_service import CheckpointerCacheService
                 
-                # Get the session to find the session_id
-                session = await self.session_service.get_user_session(agent_id, user_context)
+                # Get the session to find the session_id (pass conversation_id explicitly)
+                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
                 if session:
                     # Invalidate the checkpointer for this specific session (use async version)
                     await CheckpointerCacheService.invalidate_checkpointer_async(agent_id, session.id)
                     logger.info(f"Invalidated checkpointer for agent {agent_id}, session {session.id}")
+                
+                # Reset the session object (clears messages and memory)
+                # This should be done after invalidating checkpointer to ensure we have the session ID
+                await self.session_service.reset_user_session(agent_id, user_context)
             
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService

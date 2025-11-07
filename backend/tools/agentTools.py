@@ -1,11 +1,11 @@
 from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
 from langgraph.prebuilt import create_react_agent
 from models.agent import Agent
-from models.silo import Silo
+from models.silo import Silo, SiloType
 from langchain_core.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, List
 from langchain.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -14,6 +14,8 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 from services.agent_cache_service import CheckpointerCacheService
 from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
 import json
 import base64
 from datetime import datetime
@@ -152,7 +154,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     #add base useful tools
     tools.append(get_current_date)
-    tools.append(fetch_file_in_base64)
+    #tools.append(fetch_file_in_base64)
 
     if agent.silo_id is not None:
         
@@ -348,15 +350,58 @@ def get_retriever_tool(silo: Silo, search_params=None):
         retriever = SiloService.get_silo_retriever(silo.silo_id, search_params)
         name = "silo_retriever"
         description = "Use this tool to search for documents in the pgvector collection."
-        if silo.repository is not None:
+        if silo.silo_type == SiloType.REPO:
             #todo: add description to repository model to compose description
             description = "Use this tool to search for relevant documents in the repository."
-        elif silo.domain is not None:
+        elif silo.silo_type == SiloType.DOMAIN:
             description = f"Use this tool to search for documents. This tool stores information about a web site and this is its description: {silo.domain.description}"
         else:
-            description = f"Use this tool to search for documents in a repository about {silo.description}"
+            description = f"Use this tool to search for documents and information about {silo.description}"
 
-        return  create_retriever_tool(retriever=retriever, name=name, description=description)
+        # Create a wrapper retriever that includes metadata in page_content
+        # This ensures the agent can see metadata like holiday_item_id, type, etc.
+        # We'll use a closure to capture the retriever instead of storing it as an attribute
+        original_retriever = retriever
+        
+        def format_docs_with_metadata(docs: List[Document]) -> List[Document]:
+            """Format documents to include metadata in page_content"""
+            formatted_docs = []
+            for doc in docs:
+                metadata_str = json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else "{}"
+                # Include metadata in the page_content so the agent can see it
+                formatted_content = f"Content: {doc.page_content}\nMetadata: {metadata_str}"
+                formatted_doc = Document(
+                    page_content=formatted_content,
+                    metadata=doc.metadata  # Keep original metadata for filtering
+                )
+                formatted_docs.append(formatted_doc)
+            return formatted_docs
+        
+        class MetadataRetrieverWrapper(BaseRetriever):
+            """Wrapper retriever that includes metadata in document content"""
+            
+            def _get_relevant_documents(self, query: str) -> List[Document]:
+                docs = original_retriever.invoke(query)
+                return format_docs_with_metadata(docs)
+            
+            async def _aget_relevant_documents(self, query: str) -> List[Document]:
+                docs = await original_retriever.ainvoke(query)
+                return format_docs_with_metadata(docs)
+        
+        # Wrap the retriever to include metadata in content
+        wrapped_retriever = MetadataRetrieverWrapper()
+        
+        # Use default document prompt since metadata is now in page_content
+        from langchain_core.prompts import PromptTemplate
+        document_prompt = PromptTemplate.from_template("{page_content}")
+
+        return create_retriever_tool(
+            retriever=wrapped_retriever, 
+            name=name, 
+            description=description, 
+            response_format="content_and_artifact",
+            document_prompt=document_prompt
+        )
     return None
 
 @tool

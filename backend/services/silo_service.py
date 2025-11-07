@@ -682,11 +682,15 @@ class SiloService:
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
+        # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
+        results_limit = 1000 if filter_metadata else 5
+        
         return pg_vector_tools.search_similar_documents(
             collection_name, 
             query, 
             embedding_service=embedding_service,
-            filter_metadata=filter_metadata or {}
+            filter_metadata=filter_metadata or {},
+            RESULTS=results_limit
         )
 
     @staticmethod

@@ -48,3 +48,4 @@ echo ""
 echo "📥 Users can now install with:"
 echo "   npm install @lksnext/ai-core-tools-base"
 
+
