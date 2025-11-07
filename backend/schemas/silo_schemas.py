@@ -7,6 +7,7 @@ class SiloListItemSchema(BaseModel):
     """Schema for silo list items"""
     silo_id: int
     name: str
+    description: Optional[str] = None
     type: Optional[str]
     created_at: Optional[datetime]
     docs_count: int
@@ -18,6 +19,7 @@ class SiloDetailSchema(BaseModel):
     """Schema for detailed silo information"""
     silo_id: int
     name: str
+    description: Optional[str] = None
     type: Optional[str]
     created_at: Optional[datetime]
     docs_count: int
@@ -36,6 +38,7 @@ class SiloDetailSchema(BaseModel):
 class CreateUpdateSiloSchema(BaseModel):
     """Schema for creating or updating a silo"""
     name: str
+    description: Optional[str] = None
     type: Optional[str] = None
     output_parser_id: Optional[int] = None
     embedding_service_id: Optional[int] = None

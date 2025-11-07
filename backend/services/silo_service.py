@@ -772,6 +772,7 @@ class SiloService:
             result.append(SiloListItemSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
+                description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count
@@ -792,6 +793,7 @@ class SiloService:
             return SiloDetailSchema(
                 silo_id=0,
                 name="",
+                description=None,
                 type=None,
                 created_at=None,
                 docs_count=0,
@@ -854,6 +856,7 @@ class SiloService:
             return SiloDetailSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
+                description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count,
@@ -884,6 +887,7 @@ class SiloService:
         form_data = {
             'silo_id': silo_id,
             'name': silo_data.name,
+            'description': silo_data.description,
             'app_id': app_id,
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,

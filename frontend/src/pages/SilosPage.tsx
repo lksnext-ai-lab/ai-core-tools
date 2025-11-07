@@ -8,6 +8,7 @@ import type { ActionItem } from '../components/ui/ActionDropdown';
 interface Silo {
   silo_id: number;
   name: string;
+  description?: string;
   type?: string;
   created_at?: string;
   docs_count: number;
@@ -150,6 +151,9 @@ function SilosPage() {
                     Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -184,6 +188,10 @@ function SilosPage() {
                           </div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {silo.description
+                      }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
