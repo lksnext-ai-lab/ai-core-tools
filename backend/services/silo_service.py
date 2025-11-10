@@ -272,6 +272,87 @@ class SiloService:
                 output_parser_service = OutputParserService()
                 output_parser_service.delete_parser(db, metadata_definition_id)
 
+    @staticmethod
+    def copy_silo(silo_id: int, db: Session) -> SiloDetailSchema:
+        """
+        Copy an existing silo and its documents to create a new silo.
+        """
+        original = SiloService.get_silo(silo_id, db)
+        if not original:
+            raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
+
+        existing = {s.name for s in SiloService.get_silos_by_app_id(original.app_id, db)}
+        base_name = original.name.strip() if original.name else "Silo"
+        new_name = f"{base_name} Copy"
+        counter = 2
+        while new_name in existing:
+            new_name = f"{base_name} Copy {counter}"
+            counter += 1
+
+        payload = {
+            'name': new_name,
+            'description': original.description or '',
+            'app_id': original.app_id,
+            'type': original.silo_type,
+            'output_parser_id': original.metadata_definition_id,
+            'embedding_service_id': original.embedding_service_id,
+            'status': original.status,
+            'fixed_metadata': original.fixed_metadata,
+        }
+
+        new_silo = SiloService.create_or_update_silo(payload, db=db)
+        new_silo = SiloService.get_silo(new_silo.silo_id, db)
+
+        if not SiloService.check_silo_collection_exists(silo_id, db):
+            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
+
+        if not new_silo.embedding_service_id:
+            logger.warning(f"Silo {new_silo.silo_id} has no embedding service, skipping document copy.")
+            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
+
+        collection_uuid = SiloService.get_silo_collection_uuid(silo_id, db)
+        rows = db.execute(
+            text("""
+            SELECT document, cmetadata
+            FROM langchain_pg_embedding
+            WHERE collection_id = :collection_id
+            """),
+            {"collection_id": collection_uuid}
+        ).mappings().all()
+
+        if not rows:
+            logger.info(f"No documents found in silo {silo_id} to copy.")
+            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
+
+        embedding_service = SiloRepository.get_embedding_service_by_id(new_silo.embedding_service_id, db)
+        if not embedding_service:
+            logger.warning(f"Embedding service {new_silo.embedding_service_id} not found, skipping document copy.")
+            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
+
+        documents_payload = []
+        for row in rows:
+            metadata = dict(row["cmetadata"] or {})
+            metadata["silo_id"] = new_silo.silo_id
+            documents_payload.append({"content": row["document"], "metadata": metadata})
+
+        docs = SiloService._create_documents_for_indexing(new_silo.silo_id, documents_payload)
+
+        try:
+            from db.database import db as db_obj  # Import the database object
+            pg_vector_tools = PGVectorTools(db_obj)
+            pg_vector_tools.index_documents(
+                f"{COLLECTION_PREFIX}{new_silo.silo_id}",
+                docs,
+                embedding_service=embedding_service
+            )
+            logger.info(f"Copied {len(docs)} documents from silo {silo_id} to silo {new_silo.silo_id}.")
+        except Exception as e:
+            logger.error(f"Error copying documents to silo {new_silo.silo_id}: {str(e)}")
+            raise
+
+        return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
+
+
     '''SILO and DATA Operations'''
 
     @staticmethod
@@ -907,82 +988,11 @@ class SiloService:
     
     @staticmethod
     def copy_silo_router(silo_id: int, db: Session) -> SiloDetailSchema:
-        original = SiloService.get_silo(silo_id, db)
-        if not original:
-            raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
-
-        existing = {s.name for s in SiloService.get_silos_by_app_id(original.app_id, db)}
-        base_name = original.name.strip() if original.name else "Silo"
-        new_name = f"{base_name} Copy"
-        counter = 2
-        while new_name in existing:
-            new_name = f"{base_name} Copy {counter}"
-            counter += 1
-
-        payload = {
-            'name': new_name,
-            'description': original.description or '',
-            'app_id': original.app_id,
-            'type': original.silo_type,
-            'output_parser_id': original.metadata_definition_id,
-            'embedding_service_id': original.embedding_service_id,
-            'status': original.status,
-            'fixed_metadata': original.fixed_metadata,
-        }
-
-        new_silo = SiloService.create_or_update_silo(payload, db=db)
-        new_silo = SiloService.get_silo(new_silo.silo_id, db)
-
-        if not SiloService.check_silo_collection_exists(silo_id, db):
-            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
-
-        if not new_silo.embedding_service_id:
-            logger.warning(f"Silo {new_silo.silo_id} has no embedding service, skipping document copy.")
-            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
-
-        collection_uuid = SiloService.get_silo_collection_uuid(silo_id, db)
-        rows = db.execute(
-            text("""
-            SELECT document, cmetadata
-            FROM langchain_pg_embedding
-            WHERE collection_id = :collection_id
-            """),
-            {"collection_id": collection_uuid}
-        ).mappings().all()
-
-        if not rows:
-            logger.info(f"No documents found in silo {silo_id} to copy.")
-            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
-
-        embedding_service = SiloRepository.get_embedding_service_by_id(new_silo.embedding_service_id, db)
-        if not embedding_service:
-            logger.warning(f"Embedding service {new_silo.embedding_service_id} not found, skipping document copy.")
-            return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
-
-        documents_payload = []
-        for row in rows:
-            metadata = dict(row["cmetadata"] or {})
-            metadata["silo_id"] = new_silo.silo_id
-            documents_payload.append({"content": row["document"], "metadata": metadata})
-
-        docs = SiloService._create_documents_for_indexing(new_silo.silo_id, documents_payload)
-
-        try:
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
-            pg_vector_tools.index_documents(
-                f"{COLLECTION_PREFIX}{new_silo.silo_id}",
-                docs,
-                embedding_service=embedding_service
-            )
-            logger.info(f"Copied {len(docs)} documents from silo {silo_id} to silo {new_silo.silo_id}.")
-        except Exception as e:
-            logger.error(f"Error copying documents to silo {new_silo.silo_id}: {str(e)}")
-            raise
-
-        # Return properly formatted detail schema
-        return SiloService.get_silo_detail(original.app_id, new_silo.silo_id, db)
-
+        """
+        Router method to copy a silo, delegates to copy_silo.
+        """
+        return SiloService.copy_silo(silo_id, db)
+    
     @staticmethod
     def get_silo_playground_info(silo_id: int, db: Session) -> Optional[Dict[str, Any]]:
         """
@@ -1041,4 +1051,4 @@ class SiloService:
             "results": response_results,
             "total_results": len(response_results),
             "filter_metadata": filter_metadata
-        } 
+        }
