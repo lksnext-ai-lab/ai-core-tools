@@ -149,6 +149,35 @@ async def delete_silo(
             detail=f"Error deleting silo: {str(e)}"
         )
 
+@silos_router.post("/{silo_id}/copy",
+                   summary="Create a copy of a silo",
+                   tags=["Silos"],
+                   response_model=SiloDetailSchema)
+async def create_copy_of_silo(
+    app_id: int,
+    silo_id: int,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a copy of an existing silo.
+    """
+
+    try:
+        result = SiloService.copy_silo_router(silo_id, db)
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Silo not found"
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error copying silo: {str(e)}"
+        )
 
 # ==================== SILO PLAYGROUND ====================
 

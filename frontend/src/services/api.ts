@@ -372,6 +372,12 @@ class ApiService {
     });
   }
 
+  async copySilo(appId: number, siloId: number) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/copy`, {
+      method: 'POST',
+    });
+  }
+
   async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',

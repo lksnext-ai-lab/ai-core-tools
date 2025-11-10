@@ -59,6 +59,16 @@ function SilosPage() {
     }
   }
 
+  async function handleCopy(siloId: number) {
+    try {
+      const copiedSilo = await apiService.copySilo(parseInt(appId!), siloId);
+      setSilos([...silos, copiedSilo]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy silo');
+      console.error('Error copying silo:', err);
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -218,6 +228,12 @@ function SilosPage() {
                             onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
                             icon: '✏️',
                             variant: 'primary'
+                          },
+                                                    {
+                            label: 'Copy',
+                            onClick: () => handleCopy(silo.silo_id),
+                            icon: '📋',
+                            variant: 'secondary'
                           },
                           {
                             label: 'Delete',
