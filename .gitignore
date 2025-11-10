@@ -44,3 +44,4 @@ data/
 logs/
 local/
 clients/
+qdrant_storage/
