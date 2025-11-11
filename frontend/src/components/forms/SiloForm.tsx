@@ -6,6 +6,7 @@ import { apiService } from '../../services/api';
 interface Silo {
   silo_id: number;
   name: string;
+  description?: string;
   type?: string;
   created_at?: string;
   docs_count: number;
@@ -14,6 +15,7 @@ interface Silo {
 // Define the form data type
 interface SiloFormData {
   name: string;
+  description?: string;
   type?: string;
   output_parser_id?: number;
   embedding_service_id?: number;
@@ -31,6 +33,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
   const { appId } = useParams();
   const [formData, setFormData] = useState<SiloFormData>({
     name: '',
+    description: '',
     type: 'CUSTOM', // Always CUSTOM for this interface
     output_parser_id: undefined,
     embedding_service_id: undefined
@@ -53,6 +56,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
     if (silo) {
       setFormData({
         name: silo.name || '',
+        description: silo.description || '',
         type: 'CUSTOM', // Always CUSTOM for this interface
         output_parser_id: undefined, // Will be loaded from API
         embedding_service_id: undefined // Will be loaded from API
@@ -166,7 +170,22 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
                 disabled={isSubmitting}
               />
             </div>
-
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                Silo Description
+              </label>
+              <input
+                type="text"
+                id="description"
+                name="description"
+                value={formData.description || ''}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                placeholder="Enter silo description"
+                disabled={isSubmitting}
+              />
+            </div>
             {/* Metadata Definition (Output Parser) */}
             <div>
               <label htmlFor="output_parser_id" className="block text-sm font-medium text-gray-700 mb-2">
