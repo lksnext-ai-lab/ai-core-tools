@@ -43,36 +43,6 @@ class UserService:
         # TODO: Implement this method
         pass
     
-    @staticmethod
-    def get_user_subscription(user_id: int):
-        """Get user's current active subscription"""
-        # TODO: Implement this method
-        pass
-    
-    @staticmethod
-    def get_user_current_plan(user_id: int):
-        """Get user's current active plan"""
-        # TODO: Implement this method
-        pass
-    
-    @staticmethod
-    def can_user_create_agent(user_id: int) -> bool:
-        """Check if user can create more agents"""
-        # TODO: Implement this method
-        return True  # For now, allow all users
-    
-    @staticmethod
-    def can_user_create_domain(user_id: int) -> bool:
-        """Check if user can create more domains"""
-        # TODO: Implement this method
-        return True  # For now, allow all users
-    
-    @staticmethod
-    def user_has_feature(user_id: int, feature_name: str) -> bool:
-        """Check if user has access to a specific feature"""
-        # TODO: Implement this method
-        return True  # For now, allow all features
-    
     # ============================================================================
     # ADMIN METHODS
     # ============================================================================

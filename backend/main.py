@@ -33,8 +33,6 @@ from models.repository import Repository
 from models.ai_service import AIService
 from models.embedding_service import EmbeddingService
 from models.output_parser import OutputParser
-from models.subscription import Subscription
-from models.api_usage import APIUsage
 from models.resource import Resource
 from models.url import Url
 

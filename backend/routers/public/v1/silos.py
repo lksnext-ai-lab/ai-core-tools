@@ -406,7 +406,7 @@ async def index_file_document(
                 import json
                 metadata_dict = json.loads(metadata)
             except json.JSONDecodeError:
-                logger.warning(f"Invalid JSON metadata: {metadata}, using empty dict")
+                logger.warning("Invalid JSON metadata: Will use empty dict!")
         
         # Save uploaded file to temporary location
         file_extension = os.path.splitext(file.filename or "")[1].lower()

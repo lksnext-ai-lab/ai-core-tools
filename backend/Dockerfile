@@ -9,11 +9,11 @@ ENV PYTHONUNBUFFERED=1 \
 # Instalar dependencias de compilación
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    pkg-config \
+    gcc \
     libmariadb-dev \
     libpq-dev \
+    pkg-config \
     python3-dev \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Poetry con la versión que funciona
