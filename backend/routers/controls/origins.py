@@ -46,7 +46,7 @@ async def enforce_allowed_origins(
         )
         
         if not validation_result.is_allowed:
-            logger.warning(f"Origin '{origin}' not allowed for app {app_id}. Allowed origins: {app.agent_cors_origins}")
+            logger.warning(f"Origin not allowed for app {app_id}. Allowed origins: {app.agent_cors_origins}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=validation_result.error_message or f"Origin '{origin}' is not allowed. Contact the application administrator to add your domain to the allowed origins list.",
@@ -57,10 +57,6 @@ async def enforce_allowed_origins(
                 }
             )
         
-        if validation_result.matched_pattern:
-            logger.debug(f"Origin '{origin}' allowed for app {app_id} (matched pattern: {validation_result.matched_pattern})")
-        else:
-            logger.debug(f"Origin '{origin}' allowed for app {app_id} (open CORS or no origin header)")
         
     except HTTPException:
         # Re-raise HTTP exceptions (like 403)
