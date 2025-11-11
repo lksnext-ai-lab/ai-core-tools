@@ -14,6 +14,9 @@ interface ChatInterfaceProps {
   appId: number;
   agentId: number;
   agentName: string;
+  conversationId?: number | null;
+  onConversationCreated?: (conversationId: number) => void;
+  onMessageSent?: () => void;
   metadataFields?: Array<{
     name: string;
     type: string;
@@ -21,7 +24,7 @@ interface ChatInterfaceProps {
   }>;
 }
 
-function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterfaceProps) {
+function ChatInterface({ appId, agentId, agentName, conversationId, onConversationCreated, onMessageSent, metadataFields }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +35,7 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [currentConversationId, setCurrentConversationId] = useState<number | null>(conversationId || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -42,31 +46,54 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
     scrollToBottom();
   }, [messages]);
 
-  // Load conversation history and persistent files on mount
+  // Update current conversation ID when prop changes
+  useEffect(() => {
+    setCurrentConversationId(conversationId || null);
+  }, [conversationId]);
+
+  // Load conversation history and persistent files on mount or when conversation changes
   useEffect(() => {
     const loadConversationHistory = async () => {
       try {
         setIsLoadingHistory(true);
-        const response = await apiService.getConversationHistory(appId, agentId);
         
-        if (response.messages && response.messages.length > 0) {
-          // Convert backend messages to frontend Message format
-          const loadedMessages: Message[] = response.messages.map((msg: any, index: number) => ({
-            id: `history-${index}`,
-            type: msg.role === 'user' ? 'user' : 'agent',
-            content: msg.content,
-            timestamp: new Date(), // We don't have timestamp in backend, use current time
-          }));
+        // If we have a specific conversation ID, load from that conversation
+        if (currentConversationId) {
+          const response = await apiService.getConversationWithHistory(currentConversationId);
           
-          setMessages(loadedMessages);
-          console.log(`Loaded ${loadedMessages.length} messages from conversation history`);
+          if (response.messages && response.messages.length > 0) {
+            const loadedMessages: Message[] = response.messages.map((msg: any, index: number) => ({
+              id: `history-${index}`,
+              type: msg.role === 'user' ? 'user' : 'agent',
+              content: msg.content,
+              timestamp: new Date(),
+            }));
+            
+            setMessages(loadedMessages);
+            console.log(`Loaded ${loadedMessages.length} messages from conversation ${currentConversationId}`);
+          } else {
+            setMessages([]);
+          }
         } else {
-          // No history, start fresh
-          setMessages([]);
+          // Fallback to old method for backward compatibility
+          const response = await apiService.getConversationHistory(appId, agentId);
+          
+          if (response.messages && response.messages.length > 0) {
+            const loadedMessages: Message[] = response.messages.map((msg: any, index: number) => ({
+              id: `history-${index}`,
+              type: msg.role === 'user' ? 'user' : 'agent',
+              content: msg.content,
+              timestamp: new Date(),
+            }));
+            
+            setMessages(loadedMessages);
+            console.log(`Loaded ${loadedMessages.length} messages from conversation history`);
+          } else {
+            setMessages([]);
+          }
         }
       } catch (error) {
         console.error('Error loading conversation history:', error);
-        // Don't show error to user, just start with empty conversation
         setMessages([]);
       } finally {
         setIsLoadingHistory(false);
@@ -87,7 +114,7 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
 
     loadConversationHistory();
     loadPersistentFiles();
-  }, [appId, agentId]);
+  }, [appId, agentId, currentConversationId]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && selectedFiles.length === 0 && persistentFiles.length === 0) return;
@@ -131,13 +158,14 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
 
       const searchParams = Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined;
 
-      // Send message with selected files (new files + persistent files)
+      // Send message with selected files (new files + persistent files) and conversation_id
       const response = await apiService.chatWithAgent(
         appId,
         agentId,
         inputMessage,
         selectedFiles, // Send selected files with the message
-        searchParams
+        searchParams,
+        currentConversationId
       );
 
       // Handle both string and JSON responses
@@ -157,6 +185,19 @@ function ChatInterface({ appId, agentId, agentName, metadataFields }: ChatInterf
 
       setMessages(prev => [...prev, agentMessage]);
       setSelectedFiles([]); // Clear selected files after sending
+      
+      // If backend returned a conversation_id and we don't have one yet, use it
+      if (response.conversation_id && !currentConversationId) {
+        setCurrentConversationId(response.conversation_id);
+        if (onConversationCreated) {
+          onConversationCreated(response.conversation_id);
+        }
+      }
+      
+      // Notify parent component that a message was sent (to reload conversation list)
+      if (onMessageSent) {
+        onMessageSent();
+      }
       
       // Reload persistent files to show any new files that were uploaded
       try {

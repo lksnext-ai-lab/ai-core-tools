@@ -526,12 +526,16 @@ class ApiService {
   }
 
   // ==================== PLAYGROUND API ====================
-  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any) {
+  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null) {
     const formData = new FormData();
     formData.append('message', message);
     
     if (searchParams) {
       formData.append('search_params', JSON.stringify(searchParams));
+    }
+    
+    if (conversationId) {
+      formData.append('conversation_id', conversationId.toString());
     }
     
     if (files && files.length > 0) {
@@ -706,6 +710,38 @@ class ApiService {
 
   async uploadResourcesToFolder(appId: number, repositoryId: number, folderId: number, files: File[]) {
     return this.uploadResources(appId, repositoryId, files, folderId);
+  }
+
+  // ==================== CONVERSATION METHODS ====================
+  async createConversation(agentId: number, title?: string) {
+    return this.request(`/internal/conversations?agent_id=${agentId}${title ? `&title=${encodeURIComponent(title)}` : ''}`, {
+      method: 'POST',
+    });
+  }
+
+  async listConversations(agentId: number, limit = 50, offset = 0) {
+    return this.request(`/internal/conversations?agent_id=${agentId}&limit=${limit}&offset=${offset}`);
+  }
+
+  async getConversation(conversationId: number) {
+    return this.request(`/internal/conversations/${conversationId}`);
+  }
+
+  async getConversationWithHistory(conversationId: number) {
+    return this.request(`/internal/conversations/${conversationId}/history`);
+  }
+
+  async updateConversation(conversationId: number, data: { title?: string }) {
+    return this.request(`/internal/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteConversation(conversationId: number) {
+    return this.request(`/internal/conversations/${conversationId}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== UTILITY METHODS ====================

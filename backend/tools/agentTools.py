@@ -12,12 +12,14 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from services.agent_cache_service import CheckpointerCacheService
+from services.memory_management_service import MemoryManagementService
 from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 import json
 import base64
+import asyncio
 from datetime import datetime
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
@@ -78,8 +80,8 @@ class MCPClientManager:
             if connections:
                 logger.info(f"Creating new MCP client with connections: {connections}")
                 # Create a new client each time - don't reuse the singleton
+                # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
                 client = MultiServerMCPClient(connections=connections)
-                await client.__aenter__()
                 return client
             else:
                 logger.warning("No valid MCP configurations found for agent")
@@ -88,8 +90,9 @@ class MCPClientManager:
         return None
 
     async def close(self):
+        # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient doesn't need manual cleanup
+        # The client is managed internally by the library
         if self._client is not None:
-            await self._client.__aexit__(None, None, None)
             self._client = None
 
 async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None):
@@ -133,6 +136,34 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
+        """
+        Prepare messages for the agent, applying hybrid memory management strategy.
+        
+        When has_memory=True, automatically applies:
+        1. Remove tool messages (reduce noise)
+        2. Trim to max_messages
+        3. Enforce max_tokens limit if specified
+        """
+        # Get conversation history
+        history = state.get("messages", [])
+        
+        # Apply hybrid memory management if agent has memory enabled
+        if agent.has_memory:
+            try:
+                history = MemoryManagementService.apply_hybrid_strategy(
+                    messages=history,
+                    max_messages=agent.memory_max_messages or 20,
+                    max_tokens=agent.memory_max_tokens
+                )
+                
+                # Log memory statistics
+                stats = MemoryManagementService.get_memory_stats(history)
+                logger.info(f"Memory stats for agent {agent.agent_id}: {stats}")
+                
+            except Exception as e:
+                logger.error(f"Error applying memory management: {e}. Using unmodified history.")
+        
+        # Build final message list
         messages = []
         
         # Add system messages for every turn
@@ -141,8 +172,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
         ])
         
-        # Add conversation history (this already includes the new user message passed in invoke)
-        history = state.get("messages", [])
+        # Add processed conversation history
         messages.extend(history)
         
         return messages
@@ -167,19 +197,14 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         logger.info("Starting MCP tools loading...")
         mcp_client = await MCPClientManager().get_client(agent, user_context)
         if (mcp_client):
-            mcp_tools = mcp_client.get_tools()
-            logger.info(f"MCP tools loaded successfully: {mcp_tools}")
+            mcp_tools = await mcp_client.get_tools()
+            logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
             if (mcp_tools):
                 tools.extend(mcp_tools)
     except Exception as e:
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)
-        # Close the client if there was an error
-        if mcp_client:
-            try:
-                await mcp_client.__aexit__(None, None, None)
-            except Exception:
-                pass
-            mcp_client = None
+        # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
+        mcp_client = None
     
     if pydantic_model:
         # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
@@ -267,33 +292,116 @@ class IACTTool(BaseTool):
         
         self.agent = agent  
         self.name = agent.name.replace(" ", "_")
-        self.description = agent.description
+        self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
         if self.llm is None:
             raise ValueError("No LLM found for agent")
         
         tools = []
+        # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
             tools.append(IACTTool(sub_agent))
-        state_modifier = SystemMessage(content=agent.system_prompt)
-
+        
+        # Add base useful tools
+        tools.append(get_current_date)
+        tools.append(fetch_file_in_base64)
+        
+        # Add silo retriever if configured
         if agent.silo_id is not None:
             retriever_tool = get_retriever_tool(agent.silo)
             if retriever_tool is not None:
                 tools.append(retriever_tool)
+        
+        # Use system_prompt as state_modifier
+        state_modifier = SystemMessage(content=agent.system_prompt) if agent.system_prompt else None
 
         self.react_agent = create_react_agent(
             self.llm, 
             tools, 
-            debug=False,  # Set debug to False
+            debug=False,
             state_modifier=state_modifier
         )
 
     def _run(self, query: str, *args, **kwargs) -> str:
-        formatted_prompt = self.agent.prompt_template.format(question=query)
-        messages = [HumanMessage(content=formatted_prompt)]
-        return self.react_agent.invoke({"messages": messages})
+        """Synchronous execution of the agent tool"""
+        try:
+            # Format the message using prompt_template if available, otherwise use query directly
+            if self.agent.prompt_template:
+                try:
+                    formatted_prompt = self.agent.prompt_template.format(question=query)
+                except KeyError:
+                    # If 'question' is not in template, try other common placeholders
+                    try:
+                        formatted_prompt = self.agent.prompt_template.format(query=query)
+                    except KeyError:
+                        # If no placeholder works, just use the query
+                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
+                        formatted_prompt = query
+            else:
+                formatted_prompt = query
+            
+            messages = [HumanMessage(content=formatted_prompt)]
+            result = self.react_agent.invoke({"messages": messages})
+            
+            # Extract the content from the last AI message
+            if isinstance(result, dict) and "messages" in result:
+                messages_list = result["messages"]
+                # Find the last AI message with content
+                for msg in reversed(messages_list):
+                    if hasattr(msg, 'content') and msg.content:
+                        return str(msg.content)
+                # Fallback: return the last message content
+                if messages_list:
+                    last_msg = messages_list[-1]
+                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+            
+            # If result is a string, return it directly
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error executing agent tool {self.name}: {str(e)}")
+            return f"Error executing agent tool: {str(e)}"
+    
+    async def _arun(self, query: str, *args, **kwargs) -> str:
+        """Asynchronous execution of the agent tool"""
+        try:
+            # Format the message using prompt_template if available, otherwise use query directly
+            if self.agent.prompt_template:
+                try:
+                    formatted_prompt = self.agent.prompt_template.format(question=query)
+                except KeyError:
+                    # If 'question' is not in template, try other common placeholders
+                    try:
+                        formatted_prompt = self.agent.prompt_template.format(query=query)
+                    except KeyError:
+                        # If no placeholder works, just use the query
+                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
+                        formatted_prompt = query
+            else:
+                formatted_prompt = query
+            
+            messages = [HumanMessage(content=formatted_prompt)]
+            result = await self.react_agent.ainvoke({"messages": messages})
+            
+            # Extract the content from the last AI message
+            if isinstance(result, dict) and "messages" in result:
+                messages_list = result["messages"]
+                # Find the last AI message with content
+                for msg in reversed(messages_list):
+                    if hasattr(msg, 'content') and msg.content:
+                        return str(msg.content)
+                # Fallback: return the last message content
+                if messages_list:
+                    last_msg = messages_list[-1]
+                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+            
+            # If result is a string, return it directly
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")
+            return f"Error executing agent tool: {str(e)}"
 
 def convert_search_params_to_types(search_params: dict, metadata_definition) -> dict:
     """

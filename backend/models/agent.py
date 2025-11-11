@@ -50,6 +50,12 @@ class Agent(Base):
                         nullable=True)
 
     has_memory = Column(Boolean)
+    
+    # Memory management configuration (hybrid strategy applied when has_memory=True)
+    memory_max_messages = Column(Integer, default=20, nullable=False)  # Maximum number of messages to keep
+    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # Maximum tokens for history (optional)
+    memory_summarize_threshold = Column(Integer, default=10, nullable=False)  # When to start summarizing
+    
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
                         nullable=True)
