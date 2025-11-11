@@ -4,23 +4,35 @@ Unified VectorStore facade that replaces PGVectorTools.
 This module provides a unified interface for vector database operations,
 abstracting away the underlying implementation (PGVector, Qdrant, etc.).
 It serves as a drop-in replacement for the deprecated PGVectorTools class.
+
+Includes factory logic for creating vector store instances based on configuration.
 """
 
+import config
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.vectorstores.base import VectorStoreRetriever
 
-from tools.vector_store_factory import get_vector_store
 from tools.vector_store_base import VectorStoreBase
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+# Singleton instance for the backend
+_backend_instance: Optional[VectorStoreBase] = None
 
 
 class VectorStore:
     """
-    Unified vector store facade.
+    Unified vector store facade with integrated factory logic.
     
     This class provides a simple interface for vector database operations,
     delegating to the appropriate backend (PGVector, Qdrant, etc.) based
     on configuration. It's designed as a drop-in replacement for PGVectorTools.
+    
+    The class automatically creates the appropriate backend implementation based
+    on the VECTOR_DB_TYPE environment variable, implementing a singleton pattern
+    for the backend to ensure efficiency.
     
     Usage:
         >>> from tools.vector_store import VectorStore
@@ -31,21 +43,155 @@ class VectorStore:
         >>> results = vector_store.search_similar_documents('my_collection', 'query')
     
     Attributes:
-        _backend: The underlying VectorStoreBase implementation
+        _backend: The underlying VectorStoreBase implementation (shared across instances)
     """
+    
+    # Supported vector database types
+    SUPPORTED_TYPES = {
+        'PGVECTOR': 'PGVector (PostgreSQL with pgvector extension)',
+        'QDRANT': 'Qdrant vector database',
+        'PINECONE': 'Pinecone vector database (future support)',
+        'WEAVIATE': 'Weaviate vector database (future support)',
+        'CHROMA': 'Chroma vector database (future support)',
+    }
     
     def __init__(self, db):
         """
         Initialize VectorStore with database connection.
         
         The actual vector database backend is determined by the VECTOR_DB_TYPE
-        environment variable and instantiated via the factory.
+        environment variable and instantiated on first use (singleton pattern).
         
         Args:
             db: Database object with engine and optional _async_engine
         """
         self.db = db
-        self._backend: VectorStoreBase = get_vector_store(db)
+        self._backend: VectorStoreBase = self._get_or_create_backend(db)
+    
+    @staticmethod
+    def _get_or_create_backend(db) -> VectorStoreBase:
+        """
+        Get or create the singleton backend instance.
+        
+        Args:
+            db: Database object
+            
+        Returns:
+            VectorStoreBase implementation instance
+            
+        Raises:
+            ValueError: If VECTOR_DB_TYPE is not supported or required config is missing
+        """
+        global _backend_instance
+        
+        # Return existing instance if available
+        if _backend_instance is not None:
+            return _backend_instance
+        
+        vector_db_type = config.VECTOR_DB_TYPE
+        
+        logger.info(f"Initializing vector store backend: {vector_db_type}")
+        
+        # Validate that the type is supported
+        if vector_db_type not in VectorStore.SUPPORTED_TYPES:
+            supported = ', '.join(VectorStore.SUPPORTED_TYPES.keys())
+            raise ValueError(
+                f"Unsupported VECTOR_DB_TYPE: {vector_db_type}. "
+                f"Supported types: {supported}"
+            )
+        
+        # Create the appropriate vector store instance
+        if vector_db_type == 'PGVECTOR':
+            _backend_instance = VectorStore._create_pgvector_backend(db)
+            
+        elif vector_db_type == 'QDRANT':
+            _backend_instance = VectorStore._create_qdrant_backend(db)
+            
+        elif vector_db_type in ['PINECONE', 'WEAVIATE', 'CHROMA']:
+            raise NotImplementedError(
+                f"{vector_db_type} support is planned but not yet implemented. "
+                f"Currently supported: PGVECTOR, QDRANT"
+            )
+        
+        logger.info(f"Vector store backend initialized: {vector_db_type}")
+        return _backend_instance
+    
+    @staticmethod
+    def _create_pgvector_backend(db) -> VectorStoreBase:
+        """
+        Create PGVector backend instance.
+        
+        Args:
+            db: Database object
+            
+        Returns:
+            PGVectorStore instance
+        """
+        from tools.vector_stores.pgvector_store import PGVectorStore
+        
+        logger.debug("Creating PGVector store with existing database connection")
+        return PGVectorStore(db)
+    
+    @staticmethod
+    def _create_qdrant_backend(db) -> VectorStoreBase:
+        """
+        Create Qdrant backend instance.
+        
+        Args:
+            db: Database object (passed for API consistency)
+            
+        Returns:
+            QdrantStore instance
+            
+        Raises:
+            ValueError: If required Qdrant configuration is missing
+        """
+        from tools.vector_stores.qdrant_store import QdrantStore
+        
+        if not config.QDRANT_URL:
+            raise ValueError(
+                "QDRANT_URL environment variable is required when VECTOR_DB_TYPE=QDRANT"
+            )
+        
+        logger.debug(f"Creating Qdrant store with URL: {config.QDRANT_URL}")
+        return QdrantStore(
+            db=db,
+            url=config.QDRANT_URL,
+            api_key=config.QDRANT_API_KEY,
+            prefer_grpc=config.QDRANT_PREFER_GRPC
+        )
+    
+    @classmethod
+    def reset_backend(cls):
+        """
+        Reset the singleton backend instance.
+        
+        This is useful for testing or when you need to reinitialize
+        the vector store with different configuration.
+        """
+        global _backend_instance
+        _backend_instance = None
+        logger.info("Vector store backend instance reset")
+    
+    @staticmethod
+    def get_current_type() -> str:
+        """
+        Get the currently configured vector database type.
+        
+        Returns:
+            String indicating the vector DB type (e.g., 'PGVECTOR', 'QDRANT')
+        """
+        return config.VECTOR_DB_TYPE
+    
+    @classmethod
+    def get_supported_types(cls) -> dict:
+        """
+        Get dictionary of supported vector database types.
+        
+        Returns:
+            Dictionary mapping type codes to descriptions
+        """
+        return cls.SUPPORTED_TYPES.copy()
     
     def index_documents(
         self, 
