@@ -114,6 +114,19 @@ function AIServicesPage() {
     }
   }
 
+  async function handleCopyService(serviceId: number) {
+    if (!appId) return;
+    try {
+      await apiService.copyAIService(parseInt(appId), serviceId);
+      // Invalidate cache and force reload
+      settingsCache.invalidateAIServices(appId);
+      await forceReloadAIServices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy service');
+      console.error('Error copying AI service:', err);
+    }
+  }
+
   async function handleSaveService(data: any) {
     if (!appId) return;
 
@@ -254,6 +267,12 @@ function AIServicesPage() {
                                 label: 'Edit',
                                 onClick: () => handleEditService(service.service_id),
                                 icon: '✏️',
+                                variant: 'primary'
+                              },
+                              {
+                                label: 'Copy',
+                                onClick: () => handleCopyService(service.service_id),
+                                icon: '📋',
                                 variant: 'primary'
                               },
                               {
