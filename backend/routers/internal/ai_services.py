@@ -114,6 +114,36 @@ async def create_or_update_ai_service(
             detail=f"Error creating/updating AI service: {str(e)}"
         )
 
+@ai_services_router.post("/{service_id}/copy",
+                         summary="Copy AI service",
+                         tags=["AI Services"],
+                         response_model=AIServiceDetailSchema)
+async def copy_ai_service(
+    app_id: int,
+    service_id: int,
+    current_user: dict = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Copy an existing AI service.
+    """
+    user_id = current_user["user_id"]
+    try:
+        result = AIServiceService.copy_ai_service(db, app_id, service_id)
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="AI service not found"
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error copying AI service: {str(e)}"
+        )
+    
 
 @ai_services_router.delete("/{service_id}",
                            summary="Delete AI service",
