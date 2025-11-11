@@ -72,7 +72,7 @@ async def chat_with_agent(
             try:
                 parsed_search_params = json.loads(search_params)
             except json.JSONDecodeError:
-                logger.warning(f"Invalid search_params JSON: {search_params}")
+                logger.warning("Invalid search_params JSON")
         
         # Create user context for OAuth user
         user_context = {

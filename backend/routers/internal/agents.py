@@ -308,7 +308,7 @@ async def chat_with_agent(
             try:
                 parsed_search_params = json.loads(search_params)
             except json.JSONDecodeError:
-                logger.warning(f"Invalid search_params JSON: {search_params}")
+                logger.warning("Invalid search_params JSON")
         
         # Extract JWT token from Authorization header for MCP authentication
         auth_header = request.headers.get('Authorization', '')

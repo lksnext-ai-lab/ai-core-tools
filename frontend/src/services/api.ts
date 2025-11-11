@@ -174,6 +174,12 @@ class ApiService {
     });
   }
 
+  async copyAIService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/ai-services/${serviceId}/copy`, {
+      method: 'POST',
+    });
+  }
+  
   async deleteAIService(appId: number, serviceId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
       method: 'DELETE',

@@ -272,6 +272,8 @@ class SiloService:
                 output_parser_service = OutputParserService()
                 output_parser_service.delete_parser(db, metadata_definition_id)
 
+
+
     '''SILO and DATA Operations'''
 
     @staticmethod
@@ -682,11 +684,15 @@ class SiloService:
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
+        # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
+        results_limit = 1000 if filter_metadata else 5
+        
         return pg_vector_tools.search_similar_documents(
             collection_name, 
             query, 
             embedding_service=embedding_service,
-            filter_metadata=filter_metadata or {}
+            filter_metadata=filter_metadata or {},
+            RESULTS=results_limit
         )
 
     @staticmethod
@@ -772,6 +778,7 @@ class SiloService:
             result.append(SiloListItemSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
+                description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count
@@ -792,6 +799,7 @@ class SiloService:
             return SiloDetailSchema(
                 silo_id=0,
                 name="",
+                description=None,
                 type=None,
                 created_at=None,
                 docs_count=0,
@@ -854,6 +862,7 @@ class SiloService:
             return SiloDetailSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
+                description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count,
@@ -884,6 +893,7 @@ class SiloService:
         form_data = {
             'silo_id': silo_id,
             'name': silo_data.name,
+            'description': silo_data.description,
             'app_id': app_id,
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,
@@ -959,4 +969,4 @@ class SiloService:
             "results": response_results,
             "total_results": len(response_results),
             "filter_metadata": filter_metadata
-        } 
+        }

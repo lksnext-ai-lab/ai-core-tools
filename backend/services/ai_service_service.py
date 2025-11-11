@@ -96,6 +96,37 @@ class AIServiceService:
         return AIServiceService.get_ai_service_detail(db, app_id, service.service_id)
     
     @staticmethod
+    def copy_ai_service(db: Session, app_id: int, service_id: int) -> AIServiceDetailSchema:
+        """Copy an existing AI service"""
+        service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        
+        if not service:
+            return None
+
+        existing = {s.name for s in AIServiceService.get_ai_services_by_app_id(db, app_id)}
+        base_name = service.name.strip() if service.name else "AI Service"
+        new_name = f"{base_name} Copy"
+        counter = 2
+        while new_name in existing:
+            new_name = f"{base_name} Copy {counter}"
+            counter += 1
+
+        # Create a new service with the same data
+        new_service = AIService(
+            app_id=app_id,
+            name=new_name,
+            provider=service.provider,
+            description=service.description,
+            api_key=service.api_key,
+            endpoint=service.endpoint,
+            create_date=datetime.now()
+        )
+        
+        new_service = AIServiceRepository.create(db, new_service)
+        
+        return AIServiceService.get_ai_service_detail(db, app_id, new_service.service_id)
+
+    @staticmethod
     def delete_ai_service(db: Session, app_id: int, service_id: int) -> bool:
         """Delete an AI service"""
         service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)

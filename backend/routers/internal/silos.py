@@ -149,7 +149,6 @@ async def delete_silo(
             detail=f"Error deleting silo: {str(e)}"
         )
 
-
 # ==================== SILO PLAYGROUND ====================
 
 @silos_router.get("/{silo_id}/playground",
