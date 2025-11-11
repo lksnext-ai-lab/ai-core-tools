@@ -13,7 +13,16 @@ from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
 
 # Import Pydantic models and auth
-from .schemas import *
+from .schemas import (
+    MessageResponseSchema,
+    CountResponseSchema,
+    SingleDocumentIndexSchema,
+    MultipleDocumentIndexSchema,
+    DeleteDocsRequestSchema,
+    DocsResponseSchema,
+    SiloSearchSchema,
+    FileIndexResponseSchema
+)
 from .auth import get_api_key_auth, validate_api_key_for_app, APIKeyAuth
 from db.database import get_db
 
