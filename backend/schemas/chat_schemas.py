@@ -14,6 +14,7 @@ class ChatResponseSchema(BaseModel):
     """Schema for chat response"""
     response: Union[str, dict]  # Can be string or JSON object
     agent_id: int
+    conversation_id: Optional[int] = None  # ID of the conversation if using multi-conversation system
     metadata: dict
 
 

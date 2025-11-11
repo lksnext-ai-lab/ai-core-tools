@@ -13,6 +13,9 @@ interface Agent {
   type: string;
   is_tool: boolean;
   has_memory: boolean;
+  memory_max_messages: number;
+  memory_max_tokens: number;
+  memory_summarize_threshold: number;
   service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
@@ -40,6 +43,9 @@ interface AgentFormData {
   type: string;
   is_tool: boolean;
   has_memory: boolean;
+  memory_max_messages: number;
+  memory_max_tokens: number;
+  memory_summarize_threshold: number;
   service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
@@ -67,6 +73,9 @@ function AgentFormPage() {
     type: 'agent',
     is_tool: false,
     has_memory: false,
+    memory_max_messages: 20,
+    memory_max_tokens: 4000,
+    memory_summarize_threshold: 10,
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: []
@@ -100,6 +109,9 @@ function AgentFormPage() {
         type: response.type || 'agent',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
+        memory_max_messages: response.memory_max_messages || 20,
+        memory_max_tokens: response.memory_max_tokens || 4000,
+        memory_summarize_threshold: response.memory_summarize_threshold || 10,
         service_id: response.service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
@@ -164,6 +176,9 @@ function AgentFormPage() {
         type: formData.type,
         is_tool: formData.is_tool,
         has_memory: formData.has_memory,
+        memory_max_messages: formData.memory_max_messages,
+        memory_max_tokens: formData.memory_max_tokens,
+        memory_summarize_threshold: formData.memory_summarize_threshold,
         service_id: formData.service_id,
         silo_id: formData.silo_id,
         output_parser_id: formData.output_parser_id,
@@ -335,6 +350,109 @@ function AgentFormPage() {
                   <div className="ml-3">
                     <label className="text-sm font-medium text-gray-900">Conversational</label>
                     <p className="text-xs text-gray-500">Maintains conversation memory</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Memory Management Card - Only when has_memory is enabled */}
+          {formData.type !== 'ocr_agent' && formData.has_memory && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
+                  <span className="text-indigo-600 text-lg">🧠</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold text-gray-900">Memory Management</h3>
+                  <p className="text-sm text-gray-600 mt-1">Configura la estrategia de gestión de memoria del agente</p>
+                </div>
+              </div>
+
+              <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
+                <div className="flex items-start">
+                  <span className="text-indigo-500 text-lg mr-3">ℹ️</span>
+                  <div>
+                    <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
+                    <p className="text-xs text-indigo-700 mt-1">
+                      El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, 
+                      recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
+                    Máximo de Mensajes
+                  </label>
+                  <input
+                    type="number"
+                    id="memory_max_messages"
+                    min="1"
+                    max="100"
+                    value={formData.memory_max_messages}
+                    onChange={(e) => handleInputChange('memory_max_messages', parseInt(e.target.value))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
+                    Límite de Tokens
+                  </label>
+                  <input
+                    type="number"
+                    id="memory_max_tokens"
+                    min="100"
+                    max="32000"
+                    step="100"
+                    value={formData.memory_max_tokens}
+                    onChange={(e) => handleInputChange('memory_max_tokens', parseInt(e.target.value))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Número máximo de tokens para el historial de conversación (recomendado: 4000)
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
+                    Umbral de Resumen
+                  </label>
+                  <input
+                    type="number"
+                    id="memory_summarize_threshold"
+                    min="1"
+                    max="50"
+                    value={formData.memory_summarize_threshold}
+                    onChange={(e) => handleInputChange('memory_summarize_threshold', parseInt(e.target.value))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">📊 Configuración Actual:</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Mensajes:</span>
+                    <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Tokens:</span>
+                    <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Umbral:</span>
+                    <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
                   </div>
                 </div>
               </div>

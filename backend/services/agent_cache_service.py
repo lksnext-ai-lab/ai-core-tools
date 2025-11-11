@@ -216,17 +216,51 @@ class CheckpointerCacheService:
                                 role = 'user'
                             elif msg_type in ['ai', 'assistant']:
                                 role = 'agent'
+                                
+                                # Filter out AI messages that only contain tool calls without content
+                                # These are internal coordination messages between agents
+                                content = msg.content if hasattr(msg, 'content') else str(msg)
+                                
+                                # Handle content that might be a list or other non-string type
+                                if isinstance(content, list):
+                                    # If content is a list, convert to string for processing
+                                    content_str = str(content)
+                                else:
+                                    content_str = str(content) if content else ""
+                                
+                                # Skip AI messages with tool_calls but no actual content for the user
+                                if hasattr(msg, 'tool_calls') and msg.tool_calls and not content_str.strip():
+                                    continue
+                                    
+                                # Also skip AI messages that contain only tool call arrays in content
+                                if content_str.strip().startswith('[') and 'tool_use' in content_str:
+                                    continue
+                                    
                             elif msg_type == 'system':
                                 # Skip system messages in UI
+                                continue
+                            elif msg_type == 'tool':
+                                # Skip tool messages (tool_use and tool_result) in UI
                                 continue
                             else:
                                 role = msg_type
                             
                             content = msg.content if hasattr(msg, 'content') else str(msg)
                             
+                            # Handle content that might be a list or other non-string type
+                            if isinstance(content, list):
+                                # If content is a list, convert to string for processing
+                                content_str = str(content)
+                            else:
+                                content_str = str(content) if content else ""
+                            
+                            # Skip empty messages
+                            if not content_str or not content_str.strip():
+                                continue
+                            
                             history.append({
                                 "role": role,
-                                "content": content
+                                "content": content_str
                             })
                     
                     logger.info(f"Retrieved {len(history)} messages from thread {thread_id}")

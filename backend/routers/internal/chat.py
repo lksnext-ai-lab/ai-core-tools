@@ -50,12 +50,20 @@ async def chat_with_agent(
     message: str = Form(...),
     files: List[UploadFile] = File(None),
     search_params: Optional[str] = Form(None),
+    conversation_id: Optional[int] = Form(None),
     current_user: dict = Depends(get_current_user_oauth),
     db: Session = Depends(get_db),
     _: None = Depends(enforce_file_size_limit)
 ):
     """
     Internal API: Chat with agent for playground (OAuth authentication)
+    
+    Args:
+        agent_id: ID of the agent
+        message: User message
+        files: Optional uploaded files
+        search_params: Optional search parameters
+        conversation_id: Optional conversation ID to continue existing conversation
     """
     try:
         # Parse search params if provided
@@ -113,6 +121,7 @@ async def chat_with_agent(
             file_references=file_references,
             search_params=parsed_search_params,
             user_context=user_context,
+            conversation_id=conversation_id,
             db=db
         )
         

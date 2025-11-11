@@ -47,6 +47,7 @@ class AgentExecutionService:
         file_references: List = None,
         search_params: Dict = None,
         user_context: Dict = None,
+        conversation_id: int = None,
         db: Session = None
     ) -> Dict[str, Any]:
         """
@@ -58,6 +59,7 @@ class AgentExecutionService:
             file_references: List of FileReference objects from FileManagementService
             search_params: Optional search parameters for silo-based agents
             user_context: User context (api_key, user_id, etc.)
+            conversation_id: Optional conversation ID to continue existing conversation
             
         Returns:
             Dict containing agent response and metadata
@@ -83,10 +85,46 @@ class AgentExecutionService:
                         "file_path": file_ref.file_path
                     })
             
-            # Get user session for memory-enabled agents
+            # Get or create conversation for memory-enabled agents
             session = None
+            conversation = None
             if agent.has_memory:
-                session = await self.session_service.get_user_session(agent_id, user_context)
+                from services.conversation_service import ConversationService
+                
+                # If conversation_id provided, validate and use it
+                if conversation_id:
+                    conversation = ConversationService.get_conversation(
+                        db=db,
+                        conversation_id=conversation_id,
+                        user_context=user_context
+                    )
+                    if not conversation:
+                        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+                    
+                    # Extract session_id from conversation (without "conv_{agent_id}_" prefix)
+                    session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
+                    session = await self.session_service.get_user_session(
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        conversation_id=session_suffix
+                    )
+                else:
+                    # Auto-create a conversation if none exists
+                    conversation = ConversationService.create_conversation(
+                        db=db,
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        title=None  # Auto-generate title
+                    )
+                    logger.info(f"Auto-created conversation {conversation.conversation_id} for agent {agent_id}")
+                    
+                    # Extract session_id from conversation (without "conv_{agent_id}_" prefix)
+                    session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
+                    session = await self.session_service.get_user_session(
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        conversation_id=session_suffix
+                    )
             
             # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
             # This prevents blocking the event loop and allows other requests to be processed
@@ -108,9 +146,23 @@ class AgentExecutionService:
             if session:
                 await self.session_service.touch_session(session.id)
             
+            # Update conversation message count if using a specific conversation
+            if conversation:
+                from services.conversation_service import ConversationService
+                # Get last message preview (truncate response if too long)
+                last_message_preview = parsed_response[:200] if isinstance(parsed_response, str) else str(parsed_response)[:200]
+                # Increment by 2 (user message + agent response)
+                ConversationService.increment_message_count(
+                    db=db,
+                    conversation_id=conversation.conversation_id,
+                    last_message=last_message_preview,
+                    increment_by=2
+                )
+            
             return {
                 "response": parsed_response,
                 "agent_id": agent_id,
+                "conversation_id": conversation.conversation_id if conversation else None,
                 "metadata": {
                     "agent_name": agent.name,
                     "agent_type": agent.type,
@@ -719,13 +771,9 @@ class AgentExecutionService:
             # Fallback: convert to string
             return str(result)
         finally:
-            # Always close the MCP client in the SAME event loop
+            # As of langchain-mcp-adapters 0.1.0, MCP client doesn't need manual cleanup
             if mcp_client:
-                try:
-                    await mcp_client.__aexit__(None, None, None)
-                    logger.info("MCP client closed successfully")
-                except Exception as e:
-                    logger.warning(f"Error closing MCP client: {e}")
+                logger.info("MCP client will be cleaned up automatically")
             
             # Always close the checkpointer context manager
             if checkpointer_cm:

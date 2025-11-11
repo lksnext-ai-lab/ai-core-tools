@@ -30,6 +30,9 @@ class AgentDetailSchema(BaseModel):
     type: str
     is_tool: bool
     has_memory: bool
+    memory_max_messages: int = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: int = 10
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
@@ -65,6 +68,9 @@ class CreateUpdateAgentSchema(BaseModel):
     type: str = "agent"  # "agent", "ocr_agent"
     is_tool: bool = False
     has_memory: bool = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 10
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None

@@ -14,6 +14,7 @@ from .mcp_config import MCPConfig
 from .silo import Silo
 from .agent import Agent
 from .ocr_agent import OCRAgent
+from .conversation import Conversation
 from .repository import Repository
 from .resource import Resource
 from .folder import Folder
@@ -23,5 +24,5 @@ from .url import Url
 __all__ = [
     'User', 'App', 'AppCollaborator', 'Subscription', 'Plan', 'APIUsage', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
-    'Agent', 'OCRAgent', 'Repository', 'Resource', 'Folder', 'Domain', 'Url'
+    'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url'
 ] 

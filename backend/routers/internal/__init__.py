@@ -7,15 +7,17 @@ from .collaboration import collaboration_router
 from .admin import router as admin_router
 from .version import version_router
 from .apps_usage import router as apps_usage_router
+from .conversations import router as conversations_router
 
 # Create the main internal router
 internal_router = APIRouter()
 
 # Include sub-routers based on frontend expectations
 # Most routes are nested under apps: /internal/apps/{app_id}/...
-# Exceptions: collaboration, admin, version, apps_usage (standalone)
+# Exceptions: collaboration, admin, version, apps_usage, conversations (standalone)
 internal_router.include_router(apps_router, prefix="/apps")
 internal_router.include_router(collaboration_router, prefix="/collaboration")
 internal_router.include_router(admin_router, prefix="/admin")
 internal_router.include_router(version_router, prefix="/version")
 internal_router.include_router(apps_usage_router, prefix="/usage-stats")
+internal_router.include_router(conversations_router)
