@@ -24,6 +24,16 @@ COLLECTION_PREFIX = 'silo_'
 
 logger = get_logger(__name__)
 
+# Global vector store instance - initialized once at module load
+# This is a module-level variable (singleton pattern)
+def _init_vector_store() -> VectorStore:
+    """Initialize the global vector store instance"""
+    from db.database import db as db_obj
+    return VectorStore(db_obj)
+
+# Singleton instance - shared across all functions in this module
+pg_vector_tools = _init_vector_store()
+
 class SiloService:
 
     '''SILO CRUD Operations'''
@@ -65,8 +75,6 @@ class SiloService:
 
             logger.debug(f"Getting retriever for silo {silo_id} with embedding service: {silo.embedding_service.name}")
             
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = VectorStore(db_obj)
             collection_name = COLLECTION_PREFIX + str(silo_id)
             
             # Merge search_params with default k value
@@ -279,10 +287,8 @@ class SiloService:
     @staticmethod
     def check_silo_collection_exists(silo_id: int, db: Session) -> bool:
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Lazy import to avoid cycles
-        vector_store = VectorStore(db_obj)
         try:
-            return vector_store.collection_exists(collection_name)
+            return pg_vector_tools.collection_exists(collection_name)
         except Exception as exc:
             logger.error(f"Error checking collection for silo {silo_id}: {exc}")
             return False
@@ -290,10 +296,8 @@ class SiloService:
     @staticmethod
     def count_docs_in_silo(silo_id: int, db: Session) -> int:
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Lazy import to avoid cycles
-        vector_store = VectorStore(db_obj)
         try:
-            return vector_store.count_documents(collection_name)
+            return pg_vector_tools.count_documents(collection_name)
         except Exception as exc:
             logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
@@ -343,8 +347,6 @@ class SiloService:
         
         logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
         
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = VectorStore(db_obj)
         docs = SiloService._create_documents_for_indexing(silo_id, documents)
         pg_vector_tools.index_documents(
             collection_name,
@@ -535,8 +537,6 @@ class SiloService:
 
             docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = VectorStore(db_obj)
             embedding_service = resource_with_relations.repository.silo.embedding_service
             
             if not embedding_service:
@@ -573,8 +573,6 @@ class SiloService:
                 logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
                 return
 
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = VectorStore(db_obj)
             pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
         except Exception as e:
             logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
@@ -596,9 +594,6 @@ class SiloService:
             logger.error(f"Silo no encontrado para la url {url}")
             return
 
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = VectorStore(db_obj)
-        
         # Get embedding service within the same session
         embedding_service = None
         if silo.embedding_service_id:
@@ -623,8 +618,6 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = VectorStore(db_obj)
         pg_vector_tools.delete_documents(
             collection_name, 
             filter_metadata={"id": {"$eq": content_id}},
@@ -644,8 +637,6 @@ class SiloService:
             return
             
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = VectorStore(db_obj)
         pg_vector_tools.delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
@@ -666,8 +657,6 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = VectorStore(db_obj)
         pg_vector_tools.delete_documents(
             collection_name, 
             ids=ids,
@@ -683,8 +672,6 @@ class SiloService:
             return []
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = VectorStore(db_obj)
         
         # Get embedding service within the same session
         embedding_service = None
