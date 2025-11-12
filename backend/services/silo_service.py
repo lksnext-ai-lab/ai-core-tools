@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from utils.logger import get_logger
 from langchain_core.documents import Document
-from tools.vector_store import VectorStore
+from tools.vector_store_factory import VectorStoreFactory
+from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from models.silo import SiloType
 from services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
@@ -26,13 +27,13 @@ logger = get_logger(__name__)
 
 # Global vector store instance - initialized once at module load
 # This is a module-level variable (singleton pattern)
-def _init_vector_store() -> VectorStore:
+def _init_vector_store() -> VectorStoreInterface:
     """Initialize the global vector store instance"""
     from db.database import db as db_obj
-    return VectorStore(db_obj)
+    return VectorStoreFactory.get_vector_store(db_obj)
 
 # Singleton instance - shared across all functions in this module
-vector_store = _init_vector_store()
+vector_store: VectorStoreInterface = _init_vector_store()
 
 class SiloService:
 
