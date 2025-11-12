@@ -12,7 +12,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores.base import VectorStoreRetriever
 
 
-class VectorStoreBase(ABC):
+class VectorStoreInterface(ABC):
     """
     Abstract base class for vector database operations.
     
