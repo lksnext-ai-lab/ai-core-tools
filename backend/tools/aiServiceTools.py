@@ -14,7 +14,8 @@ from tools.outputParserTools import get_parser_model_by_id
 from typing import List
 from langchain_core.documents import Document
 from tools.embeddingTools import get_embeddings_model
-
+from tools.vector_store_factory import VectorStoreFactory
+from db.database import db as db_obj
 load_dotenv()
 
 logging.basicConfig(
@@ -24,24 +25,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize VectorStore lazily when needed
-_vector_store = None
+_vector_store = VectorStoreFactory.get_vector_store(db_obj)
 
-def get_vector_store():
-    """Get or create VectorStore instance"""
-    global _vector_store
-    if _vector_store is None:
-        from db.database import db
-        from tools.vector_store import VectorStore
-        _vector_store = VectorStore(db)
-    return _vector_store
 
-# Deprecated function for backward compatibility
-def get_pgVectorTools():
-    """
-    Deprecated: Use get_vector_store() instead.
-    This function is maintained for backward compatibility.
-    """
-    return get_vector_store()
 
 def get_embedding(text, embedding_service=None):
     """Get embeddings using the configured service"""

@@ -12,11 +12,11 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_postgres.vectorstores import PGVector
 
-from tools.vector_store_base import VectorStoreBase
+from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from tools.embeddingTools import get_embeddings_model
 
 
-class PGVectorStore(VectorStoreBase):
+class PGVectorStore(VectorStoreInterface):
     """
     PGVector implementation of the vector store interface.
     

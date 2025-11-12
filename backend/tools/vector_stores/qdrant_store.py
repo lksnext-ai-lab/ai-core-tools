@@ -13,13 +13,13 @@ from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.vectorstores.base import VectorStoreRetriever
 
-from tools.vector_store_base import VectorStoreBase
+from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from tools.embeddingTools import get_embeddings_model
 
 logger = logging.getLogger(__name__)
 
 
-class QdrantStore(VectorStoreBase):
+class QdrantStore(VectorStoreInterface):
     """
     Qdrant implementation of the vector store interface.
     
