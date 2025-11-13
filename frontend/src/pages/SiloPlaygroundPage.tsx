@@ -28,6 +28,7 @@ interface SearchResult {
 }
 
 function SiloPlaygroundPage() {
+  const [systemDBConfig, setSystemDBConfig] = useState('');
   const { appId, siloId } = useParams();
   const navigate = useNavigate();
   const [silo, setSilo] = useState<Silo | null>(null);
@@ -38,15 +39,32 @@ function SiloPlaygroundPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
+  const [filterOperators, setFilterOperators] = useState<Record<string, string>>({});
+  const [logicalOperator, setLogicalOperator] = useState<'$and' | '$or'>('$and');
   const [hasSearched, setHasSearched] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Load silo data
   useEffect(() => {
+    getSystemDBConfig();
     if (appId && siloId) {
       loadSilo();
     }
   }, [appId, siloId]);
+
+
+  async function getSystemDBConfig() {
+    if (!appId) return null;
+    try {
+      const config = await apiService.getSystemConfig();
+      setSystemDBConfig(config.vector_db_type);
+      console.log('System DB Config:', config.vector_db_type);
+    } catch (err) {
+      console.error('Error fetching system config:', err);
+      return null;
+    }
+  }
+
 
   async function loadSilo() {
     if (!appId || !siloId) return;
@@ -76,9 +94,10 @@ function SiloPlaygroundPage() {
       setHasSearched(true);
       
       // Build metadata filter object with proper type conversion
-      const filterMetadata: Record<string, any> = {};
+      const filterConditions: Array<Record<string, any>> = [];
       Object.entries(metadataFilters).forEach(([fieldName, value]) => {
         if (value.trim()) {
+          const operator = filterOperators[fieldName] || '$eq';
           // Find the field type from metadata_fields
           const field = silo?.metadata_fields?.find(f => f.name === fieldName);
           let convertedValue: any = value.trim();
@@ -95,16 +114,28 @@ function SiloPlaygroundPage() {
             // For 'str' and 'date', keep as string
           }
           
-          filterMetadata[fieldName] = { $eq: convertedValue };
+          filterConditions.push({ [fieldName]: { [operator]: convertedValue } });
         }
       });
+      
+      // Build final filter with logical operator (AND/OR)
+      let filterMetadata: Record<string, any> | undefined;
+      if (filterConditions.length > 0) {
+        if (filterConditions.length === 1) {
+          // If only one condition, use it directly without wrapping
+          filterMetadata = filterConditions[0];
+        } else {
+          // If multiple conditions, wrap with logical operator
+          filterMetadata = { [logicalOperator]: filterConditions };
+        }
+      }
       
       const response = await apiService.searchSiloDocuments(
         parseInt(appId), 
         parseInt(siloId), 
         searchQuery,
         10,
-        Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined
+        filterMetadata
       );
       
       // Extract _id from metadata and set as top-level id field
@@ -125,10 +156,14 @@ function SiloPlaygroundPage() {
     navigate(`/apps/${appId}/silos`);
   }
 
-  function handleMetadataFilterChange(fieldName: string, value: string) {
+  function handleMetadataFilterChange(fieldName: string, value: string, operator: string) {
     setMetadataFilters(prev => ({
       ...prev,
       [fieldName]: value
+    }));
+    setFilterOperators(prev => ({
+      ...prev,
+      [fieldName]: operator
     }));
   }
 
@@ -273,10 +308,27 @@ function SiloPlaygroundPage() {
           {/* Metadata Filters */}
           {silo.metadata_fields && silo.metadata_fields.length > 0 && (
             <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                <span className="mr-2">🔍</span>
-                Filter by Metadata
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-700">
+                  <span className="mr-2">🔍</span>
+                  Filter by Metadata
+                </h3>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="logicalOperator" className="text-sm text-gray-600">
+                    Match:
+                  </label>
+                  <select
+                    id="logicalOperator"
+                    value={logicalOperator}
+                    onChange={(e) => setLogicalOperator(e.target.value as '$and' | '$or')}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium bg-white"
+                    disabled={isSearching}
+                  >
+                    <option value="$and">ALL filters (AND)</option>
+                    <option value="$or">ANY filter (OR)</option>
+                  </select>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {silo.metadata_fields.map((field) => (
                   <div key={field.name}>
@@ -284,15 +336,30 @@ function SiloPlaygroundPage() {
                       {field.name}
                       <span className="text-xs text-gray-500 ml-1">({field.type})</span>
                     </label>
-                    <input
-                      type="text"
-                      id={`filter_${field.name}`}
-                      value={metadataFilters[field.name] || ''}
-                      onChange={(e) => handleMetadataFilterChange(field.name, e.target.value)}
-                      placeholder={`Filter by ${field.name}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
-                      disabled={isSearching}
-                    />
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={filterOperators[field.name] || '$eq'}
+                        onChange={(e) => handleMetadataFilterChange(field.name, metadataFilters[field.name] || '', e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="$eq">equals</option>
+                        <option value="$ne">not equals</option>
+                        <option value="$gt">greater than</option>
+                        <option value="$gte">greater than or equal</option>
+                        <option value="$lt">less than</option>
+                        <option value="$lte">less than or equal</option>
+                      </select>
+                      <input
+                        type="text"
+                        id={`filter_${field.name}`}
+                        value={metadataFilters[field.name] || ''}
+                        onChange={(e) => handleMetadataFilterChange(field.name, e.target.value, filterOperators[field.name] || '$eq')}
+                        placeholder={`Filter by ${field.name}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
+                        disabled={isSearching}
+                      />
+                    </div>
+                    
                     {field.description && (
                       <p className="text-xs text-gray-500 mt-1">{field.description}</p>
                     )}
@@ -465,4 +532,4 @@ function SiloPlaygroundPage() {
   );
 }
 
-export default SiloPlaygroundPage; 
+export default SiloPlaygroundPage;
