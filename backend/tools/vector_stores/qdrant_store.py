@@ -127,7 +127,7 @@ class QdrantStore(VectorStoreInterface):
             self.client.get_collection(collection_name)
             collection_exists = True
             logger.info(f"Collection {collection_name} already exists")
-        except Exception as e:
+        except Exception:
             logger.info(f"Collection {collection_name} doesn't exist, will create it")
         
         if not collection_exists:
@@ -178,28 +178,14 @@ class QdrantStore(VectorStoreInterface):
             vector_store.delete(ids=ids)
         else:
             # Deletion by metadata filter
-            # First, search for documents matching the filter
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            
-            # Convert metadata filter to Qdrant filter format
-            # This is a simplified implementation - may need to be expanded
-            # based on your specific filter requirements
-            conditions = []
-            for key, value in ids.items():
-                if isinstance(value, dict) and "$eq" in value:
-                    conditions.append(
-                        FieldCondition(
-                            key=key,
-                            match=MatchValue(value=value["$eq"])
-                        )
-                    )
-            
-            qdrant_filter = Filter(must=conditions) if conditions else None
-            
+            if ids is None:
+                logger.warning("No valid metadata filter provided for Qdrant deletion; skipping")
+                return
+
             # Search and get IDs
             results = self.client.scroll(
                 collection_name=collection_name,
-                scroll_filter=qdrant_filter,
+                scroll_filter=ids,
                 limit=1000,
                 with_payload=False,
                 with_vectors=False
@@ -250,30 +236,6 @@ class QdrantStore(VectorStoreInterface):
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
         
-        # Convert metadata filter to Qdrant filter format if provided
-        qdrant_filter = None
-        if filter_metadata:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            
-            conditions = []
-            for key, value in filter_metadata.items():
-                if isinstance(value, dict) and "$eq" in value:
-                    conditions.append(
-                        FieldCondition(
-                            key=key,
-                            match=MatchValue(value=value["$eq"])
-                        )
-                    )
-                else:
-                    conditions.append(
-                        FieldCondition(
-                            key=key,
-                            match=MatchValue(value=value)
-                        )
-                    )
-            
-            qdrant_filter = Filter(must=conditions) if conditions else None
-        
         # Handle empty queries
         if not query or (isinstance(query, str) and not query.strip()):
             query = " "  # Use a space as minimal query
@@ -282,7 +244,7 @@ class QdrantStore(VectorStoreInterface):
         results_with_scores = vector_store.similarity_search_with_score(
             query,
             k=k,
-            filter=qdrant_filter
+            filter=filter_metadata
         )
         
         # Convert results to include score in metadata
