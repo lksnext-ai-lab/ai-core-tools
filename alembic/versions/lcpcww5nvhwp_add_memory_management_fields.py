@@ -1,7 +1,7 @@
 """add memory management fields to agent
 
 Revision ID: lcpcww5nvhwp
-Revises: df20392c6cbe
+Revises: 42c2b73b86da
 Create Date: 2025-11-09
 
 """

@@ -80,7 +80,11 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
     Returns:
         Dictionary with count values for each entity type
     """
+    # Use a savepoint to isolate errors - if something fails, we can rollback
+    # just this operation without affecting the main transaction
+    savepoint = None
     try:
+        savepoint = db.begin_nested()
         from services.agent_service import AgentService
         from services.repository_service import RepositoryService
         from services.domain_service import DomainService
@@ -102,6 +106,8 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         collaborators = collaboration_service.get_app_collaborators(app_id)
         collaborator_count = len(collaborators) if collaborators else 0
         
+        if savepoint:
+            savepoint.commit()
         return {
             'agent_count': agent_count,
             'repository_count': repository_count,
@@ -112,6 +118,25 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         
     except Exception as e:
         logger.warning(f"Error calculating counts for app {app_id}: {str(e)}")
+        # Rollback the savepoint to clear the error state
+        # This prevents "current transaction is aborted" errors on subsequent queries
+        # while preserving the main transaction
+        if savepoint:
+            try:
+                savepoint.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Error rolling back savepoint: {str(rollback_error)}")
+                # If savepoint rollback fails, rollback the entire transaction
+                try:
+                    db.rollback()
+                except Exception as full_rollback_error:
+                    logger.error(f"Error rolling back full transaction: {str(full_rollback_error)}")
+        else:
+            # If we couldn't create a savepoint, rollback the entire transaction
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Error rolling back transaction: {str(rollback_error)}")
         return {
             'agent_count': 0,
             'repository_count': 0,

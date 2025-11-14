@@ -25,15 +25,17 @@ COLLECTION_PREFIX = 'silo_'
 
 logger = get_logger(__name__)
 
-# Global vector store instance - initialized once at module load
-# This is a module-level variable (singleton pattern)
-def _init_vector_store() -> VectorStoreInterface:
-    """Initialize the global vector store instance"""
-    from db.database import db as db_obj
-    return VectorStoreFactory.get_vector_store(db_obj)
+# Global vector store instance - lazy initialization (singleton pattern)
+_vector_store_instance: Optional[VectorStoreInterface] = None
 
-# Singleton instance - shared across all functions in this module
-vector_store: VectorStoreInterface = _init_vector_store()
+def _get_vector_store() -> VectorStoreInterface:
+    """Get or initialize the global vector store instance (lazy initialization)"""
+    global _vector_store_instance
+    if _vector_store_instance is None:
+        from db.database import db as db_obj
+        _vector_store_instance = VectorStoreFactory.get_vector_store(db_obj)
+        logger.info("Vector store instance initialized")
+    return _vector_store_instance
 
 class SiloService:
 
@@ -113,7 +115,7 @@ class SiloService:
             
             # Use async engine with psycopg (not asyncpg) for async operations
             # psycopg supports async natively and handles multiple SQL statements properly
-            return vector_store.get_retriever(
+            return _get_vector_store().get_retriever(
                 collection_name, 
                 silo.embedding_service, 
                 merged_search_kwargs,
@@ -289,7 +291,7 @@ class SiloService:
     def check_silo_collection_exists(silo_id: int, db: Session) -> bool:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         try:
-            return vector_store.collection_exists(collection_name)
+            return _get_vector_store().collection_exists(collection_name)
         except Exception as exc:
             logger.error(f"Error checking collection for silo {silo_id}: {exc}")
             return False
@@ -298,7 +300,7 @@ class SiloService:
     def count_docs_in_silo(silo_id: int, db: Session) -> int:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         try:
-            return vector_store.count_documents(collection_name)
+            return _get_vector_store().count_documents(collection_name)
         except Exception as exc:
             logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
@@ -349,7 +351,7 @@ class SiloService:
         logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
         
         docs = SiloService._create_documents_for_indexing(silo_id, documents)
-        vector_store.index_documents(
+        _get_vector_store().index_documents(
             collection_name,
             docs,
             embedding_service=embedding_service
@@ -544,7 +546,7 @@ class SiloService:
                 logger.warning(f"Silo {resource_with_relations.repository.silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
                 return
                 
-            vector_store.index_documents(collection_name, docs, embedding_service)
+            _get_vector_store().index_documents(collection_name, docs, embedding_service)
             logger.info(f"Successfully indexed resource {resource_with_relations.resource_id} in silo {resource_with_relations.repository.silo_id}")
         except Exception as e:
             logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}")
@@ -574,7 +576,7 @@ class SiloService:
                 logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
                 return
 
-            vector_store.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
+            _get_vector_store().delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
         except Exception as e:
             logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
             # Don't raise the exception - allow the resource to be deleted from database and disk
@@ -600,7 +602,7 @@ class SiloService:
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
-        vector_store.delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=embedding_service)
+        _get_vector_store().delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=embedding_service)
             
     @staticmethod
     def delete_content(silo_id: int, content_id: str, db: Session):
@@ -619,7 +621,7 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        vector_store.delete_documents(
+        _get_vector_store().delete_documents(
             collection_name, 
             filter_metadata={"id": {"$eq": content_id}},
             embedding_service=silo.embedding_service
@@ -638,7 +640,7 @@ class SiloService:
             return
             
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        vector_store.delete_collection(collection_name, silo.embedding_service)
+        _get_vector_store().delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str], db: Session):
@@ -658,7 +660,7 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        vector_store.delete_documents(
+        _get_vector_store().delete_documents(
             collection_name, 
             ids=ids,
             embedding_service=silo.embedding_service
@@ -680,14 +682,14 @@ class SiloService:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
         # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
-        results_limit = 1000 if filter_metadata else 5
-        
-        return vector_store.search_similar_documents(
+        results_limit = 100 if filter_metadata else 5
+
+        return _get_vector_store().search_similar_documents(
             collection_name, 
             query, 
             embedding_service=embedding_service,
             filter_metadata=filter_metadata or {},
-            RESULTS=results_limit
+            k=results_limit
         )
 
     @staticmethod
