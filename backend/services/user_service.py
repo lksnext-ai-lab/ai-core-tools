@@ -2,8 +2,71 @@ from sqlalchemy.orm import Session
 from models.user import User
 from repositories.user_repository import UserRepository
 from typing import Tuple, List, Dict, Any
+from utils.config import is_omniadmin
+from utils.logger import get_logger
 
 class UserService:
+    
+    # ============================================================================
+    # PRIVATE HELPER METHODS
+    # ============================================================================
+    
+    @staticmethod
+    def _user_to_dict(user: User, include_full_details: bool = True) -> Dict[str, Any]:
+        """
+        Convert User object to dictionary format
+        
+        Args:
+            user: User instance to convert
+            include_full_details: If True, includes all fields (apps, keys, etc.)
+                                 If False, includes only basic fields
+            
+        Returns:
+            Dictionary representation of the user
+        """
+        user_dict = {
+            'user_id': user.user_id,
+            'email': user.email,
+            'name': user.name,
+            'created_at': user.create_date.isoformat() if user.create_date else None,
+        }
+        
+        if include_full_details:
+            user_dict.update({
+                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
+                'api_keys_count': len(user.api_keys) if user.api_keys else 0,
+                'is_active': user.is_active if hasattr(user, 'is_active') else True,
+                'is_omniadmin': is_omniadmin(user.email)
+            })
+        
+        return user_dict
+    
+    @staticmethod
+    def _get_user_or_raise(db: Session, user_id: int) -> User:
+        """
+        Get user by ID or raise ValueError if not found
+        
+        Args:
+            db: Database session
+            user_id: ID of the user
+            
+        Returns:
+            User instance
+            
+        Raises:
+            ValueError: If user not found
+        """
+        user_repo = UserRepository(db)
+        user = user_repo.get_by_id(user_id)
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        return user
+    
+    # ============================================================================
+    # PUBLIC METHODS
+    # ============================================================================
     
     @staticmethod
     def get_or_create_user(db: Session, email: str, name: str = None) -> Tuple[User, bool]:
@@ -64,19 +127,7 @@ class UserService:
         users, total = user_repo.get_all_paginated(page, per_page)
         
         # Convert to dict format
-        from utils.config import is_omniadmin
-        users_list = []
-        for user in users:
-            users_list.append({
-                'user_id': user.user_id,
-                'email': user.email,
-                'name': user.name,
-                'created_at': user.create_date.isoformat() if user.create_date else None,
-                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                'api_keys_count': len(user.api_keys) if user.api_keys else 0,
-                'is_active': user.is_active if hasattr(user, 'is_active') else True,
-                'is_omniadmin': is_omniadmin(user.email)
-            })
+        users_list = [UserService._user_to_dict(user) for user in users]
         
         return users_list, total
     
@@ -113,19 +164,7 @@ class UserService:
         users, total = user_repo.search_users(query, page, per_page)
         
         # Convert to dict format
-        from utils.config import is_omniadmin
-        users_list = []
-        for user in users:
-            users_list.append({
-                'user_id': user.user_id,
-                'email': user.email,
-                'name': user.name,
-                'created_at': user.create_date.isoformat() if user.create_date else None,
-                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                'api_keys_count': len(user.api_keys) if user.api_keys else 0,
-                'is_active': user.is_active if hasattr(user, 'is_active') else True,
-                'is_omniadmin': is_omniadmin(user.email)
-            })
+        users_list = [UserService._user_to_dict(user) for user in users]
         
         return users_list, total
     
@@ -169,14 +208,10 @@ class UserService:
         # Recent users list (last 10)
         recent_users_list = user_repo.get_recent_users_list(30, 10)
         
-        recent_users_data = []
-        for user in recent_users_list:
-            recent_users_data.append({
-                'user_id': user.user_id,
-                'email': user.email,
-                'name': user.name,
-                'created_at': user.create_date.isoformat() if user.create_date else None
-            })
+        recent_users_data = [
+            UserService._user_to_dict(user, include_full_details=False) 
+            for user in recent_users_list
+        ]
         
         return {
             'total_users': total_users,
@@ -201,15 +236,8 @@ class UserService:
         Raises:
             ValueError: If user cannot be activated
         """
-        from utils.config import is_omniadmin
-        from utils.logger import get_logger
-        
         logger = get_logger(__name__)
-        user_repo = UserRepository(db)
-        user = user_repo.get_by_id(user_id)
-        
-        if not user:
-            raise ValueError("User not found")
+        user = UserService._get_user_or_raise(db, user_id)
         
         if user.is_active:
             raise ValueError("User is already active")
@@ -239,15 +267,8 @@ class UserService:
         Raises:
             ValueError: If user cannot be deactivated
         """
-        from utils.config import is_omniadmin
-        from utils.logger import get_logger
-        
         logger = get_logger(__name__)
-        user_repo = UserRepository(db)
-        user = user_repo.get_by_id(user_id)
-        
-        if not user:
-            raise ValueError("User not found")
+        user = UserService._get_user_or_raise(db, user_id)
         
         if not user.is_active:
             raise ValueError("User is already inactive")
