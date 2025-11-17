@@ -44,7 +44,14 @@ const demoConfig: LibraryConfig = {
   },
   
   authProps: {
-    enabled: false // Use existing session-based auth
+    enabled: import.meta.env.VITE_OIDC_ENABLED === 'true',
+    oidc: {
+      authority: import.meta.env.VITE_OIDC_AUTHORITY || '',
+      client_id: import.meta.env.VITE_OIDC_CLIENT_ID || '',
+      callbackPath: '/auth/success',
+      scope: import.meta.env.VITE_OIDC_SCOPE || 'openid profile email',
+      audience: import.meta.env.VITE_OIDC_AUDIENCE || 'api://4c151d3b-b6c9-4835-88e1-39412d31a443'
+    }
   },
   
   apiConfig: {

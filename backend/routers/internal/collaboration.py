@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional, Tuple
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
 # Import database
@@ -40,13 +41,13 @@ def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
                            response_model=List[CollaboratorListItemSchema])
 async def list_collaborators(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     List all collaborators for a specific app.
     """
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     try:
         _, collaboration_service = get_services(db)
@@ -92,13 +93,13 @@ async def list_collaborators(
 async def invite_collaborator(
     app_id: int,
     invitation_data: InviteCollaboratorSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Invite a user to collaborate on an app.
     """
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     try:
         _, collaboration_service = get_services(db)
@@ -170,13 +171,13 @@ async def update_collaborator_role(
     app_id: int,
     user_id: int,
     role_data: UpdateCollaboratorRoleSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Update a collaborator's role.
     """
-    current_user_id = current_user["user_id"]
+    current_user_id = auth_context.identity.id
     
     try:
         _, collaboration_service = get_services(db)
@@ -215,13 +216,13 @@ async def update_collaborator_role(
 async def remove_collaborator(
     app_id: int,
     user_id: int,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Remove a collaborator from an app.
     """
-    current_user_id = current_user["user_id"]
+    current_user_id = auth_context.identity.id
     
     try:
         _, collaboration_service = get_services(db)
@@ -261,13 +262,13 @@ async def remove_collaborator(
 async def respond_to_invitation(
     collaboration_id: int,
     response_data: InvitationResponseSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Accept or decline a collaboration invitation.
     """
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     try:
         _, collaboration_service = get_services(db)
@@ -304,13 +305,13 @@ async def respond_to_invitation(
                          tags=["Collaboration"],
                          response_model=List[CollaboratorListItemSchema])
 async def get_my_invitations(
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get all pending collaboration invitations for the current user.
     """
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     try:
         _, collaboration_service = get_services(db)

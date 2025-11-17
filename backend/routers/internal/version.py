@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from typing import Dict
 import toml
 from pathlib import Path
-from .auth_utils import get_current_user_oauth
 
 version_router = APIRouter()
 

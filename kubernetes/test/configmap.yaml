@@ -49,13 +49,13 @@ data:
   JWT_EXPIRATION_HOURS: "24"
   FRONTEND_URL: "https://aict-desa.lksnext.com"
   GOOGLE_DISCOVERY_URL: "https://accounts.google.com/.well-known/openid-configuration"
-  GOOGLE_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/callback"
+  GOOGLE_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
   
   # EntraID OAuth Configuration
   AICT_LOGIN: "OIDC"
   OAUTH_PROVIDER: "ENTRAID"
   ENTRAID_TENANT_ID: "b85a15eb-1d5f-449e-93d8-77a9cba50013"
-  ENTRAID_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/callback"
+  ENTRAID_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
   
   # Application mode and admins
   AICT_MODE: "SELF-HOSTED"

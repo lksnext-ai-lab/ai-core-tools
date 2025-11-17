@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -24,7 +25,7 @@ async def create_conversation(
     agent_id: int,
     title: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Create a new conversation for an agent
@@ -52,7 +53,7 @@ async def list_conversations(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     List all conversations for a user with a specific agent
@@ -83,7 +84,7 @@ async def list_conversations(
 async def get_conversation(
     conversation_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Get a specific conversation by ID
@@ -107,7 +108,7 @@ async def get_conversation(
 async def get_conversation_with_history(
     conversation_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Get a conversation with its complete message history
@@ -147,7 +148,7 @@ async def update_conversation(
     conversation_id: int,
     update_data: ConversationUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Update a conversation (mainly for title updates)
@@ -173,7 +174,7 @@ async def update_conversation(
 async def delete_conversation(
     conversation_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    current_user: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Delete a conversation and its associated chat history

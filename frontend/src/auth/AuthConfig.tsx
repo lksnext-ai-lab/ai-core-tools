@@ -8,6 +8,7 @@ export interface AuthProps {
     client_id: string;
     callbackPath?: string;
     scope?: string;
+    audience?: string;
   };
 }
 
@@ -32,8 +33,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       enabled: true,
       authority: config.oidc.authority,
       clientId: config.oidc.client_id,
-      redirectUri: `${window.location.origin}${config.oidc.callbackPath || '/callback'}`,
-      scope: config.oidc.scope || 'openid profile email'
+      redirectUri: `${globalThis.location.origin}${config.oidc.callbackPath || '/callback'}`,
+      scope: config.oidc.scope || 'openid profile email',
+      audience: config.oidc.audience
     }
   };
 

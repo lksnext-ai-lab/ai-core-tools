@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from typing import Optional
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from db.database import get_db
 from models.app import App
@@ -16,11 +17,11 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["admin"])
 
 
-def require_admin(current_user: dict = Depends(get_current_user_oauth)):
+def require_admin(auth_context: AuthContext = Depends(get_current_user_oauth)):
     """Dependency to require admin access"""
-    if not is_omniadmin(current_user.get('email')):
+    if not is_omniadmin(auth_context.identity.email):
         raise HTTPException(status_code=403, detail="Admin access required")
-    return current_user
+    return auth_context
 
 
 @router.get("/users", response_model=UserListResponse)
@@ -28,7 +29,7 @@ async def list_users(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Users per page"),
     search: Optional[str] = Query(None, description="Search query for name or email"),
-    current_user: dict = Depends(require_admin),
+    auth_context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """List all users with pagination and optional search"""
@@ -54,7 +55,7 @@ async def list_users(
 @router.get("/users/{user_id}", response_model=UserDetailResponse)
 async def get_user(
     user_id: int,
-    current_user: dict = Depends(require_admin),
+    auth_context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get detailed user information"""
@@ -81,7 +82,7 @@ async def get_user(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,
-    current_user: dict = Depends(require_admin),
+    auth_context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a user and all associated data"""
@@ -104,13 +105,13 @@ async def delete_user(
 @router.post("/users/{user_id}/activate")
 async def activate_user(
     user_id: int,
-    current_user: dict = Depends(require_admin),
+    auth_context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Activate a user account"""
     try:
-        user = UserService.activate_user(db, user_id, current_user.get('email'))
-        logger.info(f"User {user.email} activated by admin {current_user.get('email')}")
+        user = UserService.activate_user(db, user_id, auth_context.identity.email)
+        logger.info(f"User {user.email} activated by admin {auth_context.identity.email}")
         return {
             "message": f"User {user.email} has been activated successfully",
             "user_id": user.user_id,
@@ -126,13 +127,13 @@ async def activate_user(
 @router.post("/users/{user_id}/deactivate")
 async def deactivate_user(
     user_id: int,
-    current_user: dict = Depends(require_admin),
+    auth_context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Deactivate a user account"""
     try:
-        user = UserService.deactivate_user(db, user_id, current_user.get('email'))
-        logger.info(f"User {user.email} deactivated by admin {current_user.get('email')}")
+        user = UserService.deactivate_user(db, user_id, auth_context.identity.email)
+        logger.info(f"User {user.email} deactivated by admin {auth_context.identity.email}")
         return {
             "message": f"User {user.email} has been deactivated successfully",
             "user_id": user.user_id,
@@ -147,7 +148,7 @@ async def deactivate_user(
 
 @router.get("/stats", response_model=SystemStatsResponse)
 async def get_system_stats(
-    current_user: dict = Depends(require_admin),
+    auth_context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """Get system-wide statistics"""

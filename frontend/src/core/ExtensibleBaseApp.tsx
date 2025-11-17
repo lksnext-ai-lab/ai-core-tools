@@ -107,7 +107,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
               <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
-                <Route path="/login/success" element={<AuthSuccessPage />} />
+                <Route path="/auth/success" element={<AuthSuccessPage />} />
 
                 {/* Protected routes with Layout */}
                 <Route path="/" element={

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -27,14 +28,12 @@ ai_services_router = APIRouter()
                         response_model=List[AIServiceListItemSchema])
 async def list_ai_services(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     List all AI services for a specific app.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -53,14 +52,12 @@ async def list_ai_services(
 async def get_ai_service(
     app_id: int, 
     service_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific AI service.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -88,13 +85,12 @@ async def create_or_update_ai_service(
     app_id: int,
     service_id: int,
     service_data: CreateUpdateAIServiceSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Create a new AI service or update an existing one.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -151,13 +147,12 @@ async def copy_ai_service(
 async def delete_ai_service(
     app_id: int, 
     service_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Delete an AI service.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     

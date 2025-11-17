@@ -21,12 +21,6 @@ class AuthConfig:
     GOOGLE_DISCOVERY_URL: str = 'https://accounts.google.com/.well-known/openid-configuration'
     GOOGLE_REDIRECT_URI: str = 'http://localhost:8000/auth/callback'
     
-    # EntraID (Azure AD) OAuth Configuration
-    ENTRAID_CLIENT_ID: Optional[str] = None
-    ENTRAID_CLIENT_SECRET: Optional[str] = None
-    ENTRAID_TENANT_ID: str = 'common'  # 'common', 'organizations', 'consumers', or specific tenant ID
-    ENTRAID_AUTHORITY: Optional[str] = None
-    ENTRAID_REDIRECT_URI: str = 'http://localhost:8000/auth/callback'
     
     # Common Configuration
     FRONTEND_URL: str = 'http://localhost:5173'
@@ -57,17 +51,10 @@ class AuthConfig:
         cls.GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
         cls.GOOGLE_DISCOVERY_URL = os.getenv('GOOGLE_DISCOVERY_URL', cls.GOOGLE_DISCOVERY_URL)
         cls.GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', cls.GOOGLE_REDIRECT_URI)
-        
-        # EntraID OAuth Configuration
-        cls.ENTRAID_CLIENT_ID = os.getenv('ENTRAID_CLIENT_ID')
-        cls.ENTRAID_CLIENT_SECRET = os.getenv('ENTRAID_CLIENT_SECRET')
-        cls.ENTRAID_TENANT_ID = os.getenv('ENTRAID_TENANT_ID', cls.ENTRAID_TENANT_ID)
-        cls.ENTRAID_REDIRECT_URI = os.getenv('ENTRAID_REDIRECT_URI', cls.ENTRAID_REDIRECT_URI)
-        
-        # Build EntraID authority URL
-        if cls.ENTRAID_TENANT_ID:
-            cls.ENTRAID_AUTHORITY = f'https://login.microsoftonline.com/{cls.ENTRAID_TENANT_ID}'
-        
+               
+        cls.ENTRAID_CLIENT_ID = os.getenv('ENTRA_CLIENT_ID')
+        cls.ENTRAID_CLIENT_SECRET = os.getenv('ENTRA_CLIENT_SECRET')
+        cls.ENTRAID_TENANT_ID = os.getenv('ENTRA_TENANT_ID')
         # Common Configuration
         cls.FRONTEND_URL = os.getenv('FRONTEND_URL', cls.FRONTEND_URL)
         
@@ -121,26 +108,26 @@ class AuthConfig:
     @classmethod
     def _log_config_status(cls):
         """Log the current configuration status"""
-        logger.info(f"🔐 Login mode: {cls.LOGIN_MODE}")
-        logger.info(f"🔑 OAuth Provider: {cls.OAUTH_PROVIDER}")
+        logger.info(f"[LOCK] Login mode: {cls.LOGIN_MODE}")
+        logger.info(f"[KEY] OAuth Provider: {cls.OAUTH_PROVIDER}")
         
         if cls.LOGIN_MODE == 'FAKE':
-            logger.warning("⚠️  FAKE LOGIN MODE - For development/testing only!")
+            logger.warning("[WARN] FAKE LOGIN MODE - For development/testing only!")
             logger.info("   Any existing user email can log in without password")
         elif cls.is_oauth_configured():
             if cls.OAUTH_PROVIDER == 'GOOGLE':
-                logger.info("✅ Google OAuth is properly configured")
+                logger.info("[OK] Google OAuth is properly configured")
             elif cls.OAUTH_PROVIDER == 'ENTRAID':
-                logger.info("✅ EntraID (Azure AD) OAuth is properly configured")
+                logger.info("[OK] EntraID (Azure AD) OAuth is properly configured")
                 logger.info(f"   Tenant ID: {cls.ENTRAID_TENANT_ID}")
         else:
             if cls.DEVELOPMENT_MODE:
-                logger.warning(f"⚠️  {cls.OAUTH_PROVIDER} OAuth not configured, running in DEVELOPMENT MODE with test tokens")
-                logger.info("🔑 Development tokens available:")
+                logger.warning(f"[WARN] {cls.OAUTH_PROVIDER} OAuth not configured, running in DEVELOPMENT MODE with test tokens")
+                logger.info("[KEY] Development tokens available:")
                 for token, user in cls.DEV_USERS.items():
                     logger.info(f"   {token} -> {user['email']} (ID: {user['user_id']})")
             else:
-                logger.error(f"❌ {cls.OAUTH_PROVIDER} OAuth not configured and not in development mode")
+                logger.error(f"[ERROR] {cls.OAUTH_PROVIDER} OAuth not configured and not in development mode")
                 if cls.OAUTH_PROVIDER == 'GOOGLE':
                     logger.error("   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables")
                 elif cls.OAUTH_PROVIDER == 'ENTRAID':

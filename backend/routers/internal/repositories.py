@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from typing import List, Optional
 import os
 import logging
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
 # Import services
@@ -31,12 +32,15 @@ logger.info("Repositories router loaded successfully")
                          summary="List repositories",
                          tags=["Repositories"],
                          response_model=List[RepositoryListItemSchema])
-async def list_repositories(app_id: int, request: Request, db: Session = Depends(get_db)):
+async def list_repositories(
+    app_id: int,
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
     """
     List all repositories for a specific app.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     logger.info(f"List repositories called for app_id: {app_id}, user_id: {user_id}")
     
@@ -50,12 +54,15 @@ async def list_repositories(app_id: int, request: Request, db: Session = Depends
                         summary="Get repository details",
                         tags=["Repositories"],
                         response_model=RepositoryDetailSchema)
-async def get_repository(app_id: int, repository_id: int, request: Request, db: Session = Depends(get_db)):
+async def get_repository(
+    app_id: int,
+    repository_id: int,
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
     """
     Get detailed information about a specific repository including its resources.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -71,15 +78,12 @@ async def create_or_update_repository(
     app_id: int,
     repository_id: int,
     repo_data: CreateUpdateRepositorySchema,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth) 
 ):
     """
     Create a new repository or update an existing one.
-    """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     # Use RepositoryService for business logic
@@ -92,12 +96,15 @@ async def create_or_update_repository(
 @repositories_router.delete("/{repository_id}",
                            summary="Delete repository",
                            tags=["Repositories"])
-async def delete_repository(app_id: int, repository_id: int, request: Request, db: Session = Depends(get_db)):
+async def delete_repository(
+    app_id: int,
+    repository_id: int,
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
     """
     Delete a repository and all its resources.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -115,18 +122,16 @@ async def delete_repository(app_id: int, repository_id: int, request: Request, d
 async def upload_resources(
     app_id: int,
     repository_id: int,
-    request: Request,
     files: List[UploadFile] = File(...),
     folder_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db),
-    _: None = Depends(enforce_file_size_limit)
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Upload multiple resources to a repository.
     Optionally specify a folder_id to upload files to a specific folder.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, folder_id: {folder_id} (type: {type(folder_id)}), user_id: {user_id}")
     
@@ -151,15 +156,14 @@ async def move_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    request: Request,
     new_folder_id: Optional[int] = Form(default=None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Move a resource to a different folder within the same repository.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     logger.info(f"Move resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
     
@@ -183,14 +187,13 @@ async def delete_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Delete a specific resource from a repository.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     logger.info(f"Delete resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
     
@@ -214,14 +217,13 @@ async def download_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Download a specific resource from a repository.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     logger.info(f"Download resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
     
@@ -254,15 +256,14 @@ async def search_repository_documents(
     app_id: int,
     repository_id: int,
     search_query: RepositorySearchSchema,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Search for documents in a repository using semantic search with optional metadata filtering.
     This leverages the repository's associated silo for searching.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     logger.info(f"Repository search request - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
     logger.info(f"Search query: {search_query.query}, limit: {search_query.limit}, filter_metadata: {search_query.filter_metadata}")
