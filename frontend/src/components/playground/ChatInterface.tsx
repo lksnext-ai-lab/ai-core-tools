@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { apiService } from '../../services/api';
 import MessageContent from './MessageContent';
+import SearchFilters from './SearchFilters';
+import type { SearchFilterMetadataField } from './SearchFilters';
 
 interface Message {
   id: string;
@@ -17,14 +19,20 @@ interface ChatInterfaceProps {
   conversationId?: number | null;
   onConversationCreated?: (conversationId: number) => void;
   onMessageSent?: () => void;
-  metadataFields?: Array<{
-    name: string;
-    type: string;
-    description: string;
-  }>;
+  metadataFields?: SearchFilterMetadataField[];
+  vectorDbType?: string;
 }
 
-function ChatInterface({ appId, agentId, agentName, conversationId, onConversationCreated, onMessageSent, metadataFields }: ChatInterfaceProps) {
+function ChatInterface({
+  appId,
+  agentId,
+  agentName,
+  conversationId,
+  onConversationCreated,
+  onMessageSent,
+  metadataFields,
+  vectorDbType,
+}: Readonly<ChatInterfaceProps>) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,10 +41,12 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
   const [persistentFiles, setPersistentFiles] = useState<any[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(conversationId || null);
+  const [filterMetadata, setFilterMetadata] = useState<Record<string, unknown> | undefined>(undefined);
+  const [filtersKey, setFiltersKey] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const filterPanelId = `metadata-filters-${agentId}`;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -116,6 +126,13 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
     loadPersistentFiles();
   }, [appId, agentId, currentConversationId]);
 
+  useEffect(() => {
+    if ((!metadataFields || metadataFields.length === 0) && filterMetadata !== undefined) {
+      setFilterMetadata(undefined);
+      setFiltersKey((prev) => prev + 1);
+    }
+  }, [metadataFields, filterMetadata]);
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && selectedFiles.length === 0 && persistentFiles.length === 0) return;
 
@@ -132,31 +149,8 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
     setIsLoading(true);
 
     try {
-      // Build metadata filter object with proper type conversion
-      const filterMetadata: Record<string, any> = {};
-      Object.entries(metadataFilters).forEach(([fieldName, value]) => {
-        if (value.trim()) {
-          // Find the field type from metadataFields
-          const field = metadataFields?.find(f => f.name === fieldName);
-          let convertedValue: any = value.trim();
-          
-          // Convert value to the appropriate type
-          if (field) {
-            if (field.type === 'int') {
-              convertedValue = parseInt(value.trim());
-            } else if (field.type === 'float') {
-              convertedValue = parseFloat(value.trim());
-            } else if (field.type === 'bool') {
-              convertedValue = value.trim().toLowerCase() === 'true';
-            }
-            // For 'str' and 'date', keep as string
-          }
-          
-          filterMetadata[fieldName] = { $eq: convertedValue };
-        }
-      });
-
-      const searchParams = Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined;
+      const hasFilters = filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
+      const searchParams = hasFilters ? filterMetadata : undefined;
 
       // Send message with selected files (new files + persistent files) and conversation_id
       const response = await apiService.chatWithAgent(
@@ -226,7 +220,8 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
       setAttachedFiles([]);
       setSelectedFiles([]);
       setPersistentFiles([]);
-      setMetadataFilters({});
+      setFilterMetadata(undefined);
+      setFiltersKey((prev) => prev + 1);
     } catch (error) {
       console.error('Error resetting conversation:', error);
     }
@@ -290,14 +285,11 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
     }
   };
 
-  const handleFilterChange = (fieldName: string, value: string) => {
-    setMetadataFilters(prev => ({
-      ...prev,
-      [fieldName]: value
-    }));
-  };
+  const handleFilterMetadataChange = useCallback((metadata: Record<string, unknown> | undefined) => {
+    setFilterMetadata(metadata);
+  }, []);
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
@@ -309,51 +301,35 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
       {/* Metadata Filters Section */}
       {metadataFields && metadataFields.length > 0 && (
         <div className="bg-white shadow rounded-lg">
-          <div 
-            className="p-4 border-b cursor-pointer hover:bg-gray-50"
-            onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+          <button
+            type="button"
+            className="w-full p-4 border-b flex items-center justify-between text-left hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            onClick={() => setIsFilterExpanded((prev) => !prev)}
+            aria-expanded={isFilterExpanded}
+            aria-controls={filterPanelId}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-900">
-                <span className="mr-2">🔍</span>
-                Filter by Metadata
-              </h3>
-              <svg 
-                className={`w-5 h-5 text-gray-500 transform transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
+            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+              <span className="mr-2" aria-hidden="true">🔍</span>{' '}
+              Filter by Metadata
+            </h3>
+            <svg
+              className={`w-5 h-5 text-gray-500 transform transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div id={filterPanelId} className={`p-4 bg-gray-50 ${isFilterExpanded ? '' : 'hidden'}`}>
+            <SearchFilters
+              key={filtersKey}
+              metadataFields={metadataFields}
+              dbType={vectorDbType?.toUpperCase()}
+              disabled={isLoading}
+              onFilterMetadataChange={handleFilterMetadataChange}
+            />
           </div>
-          
-          {isFilterExpanded && (
-            <div className="p-4 bg-gray-50">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {metadataFields.map((field) => (
-                  <div key={field.name}>
-                    <label htmlFor={`filter_${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
-                      {field.name}
-                      <span className="text-xs text-gray-500 ml-1">({field.type})</span>
-                    </label>
-                    <input
-                      type="text"
-                      id={`filter_${field.name}`}
-                      value={metadataFilters[field.name] || ''}
-                      onChange={(e) => handleFilterChange(field.name, e.target.value)}
-                      placeholder={`Filter by ${field.name}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    />
-                    {field.description && (
-                      <p className="text-xs text-gray-500 mt-1">{field.description}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -385,37 +361,41 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
             </div>
           ) : (
             <>
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.type === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : message.type === 'error'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-gray-200 text-gray-900'
-                    }`}
-                  >
-                    <div className="text-sm font-medium mb-1">
-                      {message.type === 'user' ? 'You' : message.type === 'error' ? 'Error' : agentName}
-                    </div>
-                    <div>
-                      <MessageContent content={message.content} />
-                    </div>
-                    {message.files && message.files.length > 0 && (
-                      <div className="mt-2 text-xs opacity-75">
-                        📎 {message.files.join(', ')}
+              {messages.map((message) => {
+                const isUserMessage = message.type === 'user';
+                const isErrorMessage = message.type === 'error';
+                const alignmentClass = isUserMessage ? 'justify-end' : 'justify-start';
+
+                let bubbleClass = 'bg-gray-200 text-gray-900';
+                let senderLabel = agentName;
+
+                if (isUserMessage) {
+                  bubbleClass = 'bg-blue-600 text-white';
+                  senderLabel = 'You';
+                } else if (isErrorMessage) {
+                  bubbleClass = 'bg-red-600 text-white';
+                  senderLabel = 'Error';
+                }
+
+                return (
+                  <div key={message.id} className={`flex ${alignmentClass}`}>
+                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bubbleClass}`}>
+                      <div className="text-sm font-medium mb-1">{senderLabel}</div>
+                      <div>
+                        <MessageContent content={message.content} />
                       </div>
-                    )}
-                    <div className="text-xs opacity-75 mt-1">
-                      {message.timestamp.toLocaleTimeString()}
+                      {message.files && message.files.length > 0 && (
+                        <div className="mt-2 text-xs opacity-75">
+                          📎 {message.files.join(', ')}
+                        </div>
+                      )}
+                      <div className="text-xs opacity-75 mt-1">
+                        {message.timestamp.toLocaleTimeString()}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {isLoading && (
                 <div className="flex justify-start">
                   <div className="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg">
@@ -499,17 +479,20 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
             <div className="mb-3">
               <div className="text-sm font-medium text-blue-700 mb-2">Files for this message:</div>
               <div className="space-y-1">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between bg-blue-50 px-3 py-2 rounded border border-blue-200">
-                    <span className="text-sm text-blue-800">{file.name}</span>
-                    <button
-                      onClick={() => handleRemoveSelectedFile(index)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                {selectedFiles.map((file, index) => {
+                  const fileKey = `${file.name}-${file.lastModified}-${file.size}`;
+                  return (
+                    <div key={fileKey} className="flex items-center justify-between bg-blue-50 px-3 py-2 rounded border border-blue-200">
+                      <span className="text-sm text-blue-800">{file.name}</span>
+                      <button
+                        onClick={() => handleRemoveSelectedFile(index)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -519,17 +502,20 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
             <div className="mb-3">
               <div className="text-sm font-medium text-gray-700 mb-2">Temporary Files:</div>
               <div className="space-y-1">
-                {attachedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
-                    <span className="text-sm text-gray-600">{file.name}</span>
-                    <button
-                      onClick={() => handleRemoveFile(index)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                {attachedFiles.map((file, index) => {
+                  const tempKey = `${file.name}-${file.lastModified}-${file.size}`;
+                  return (
+                    <div key={tempKey} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
+                      <span className="text-sm text-gray-600">{file.name}</span>
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -539,7 +525,7 @@ function ChatInterface({ appId, agentId, agentName, conversationId, onConversati
             <textarea
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyDown}
               placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               rows={3}

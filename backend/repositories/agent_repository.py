@@ -217,6 +217,7 @@ class AgentRepository:
         silo_info = {
             "silo_id": silo.silo_id,
             "name": silo.name,
+            "vector_db_type": silo.vector_db_type,
             "metadata_definition": None
         }
         
@@ -225,7 +226,7 @@ class AgentRepository:
             metadata_parser = AgentRepository.get_output_parser_by_id(db, silo.metadata_definition_id)
             if metadata_parser and metadata_parser.fields:
                 silo_info["metadata_definition"] = {
-                    "fields": metadata_parser.fields if metadata_parser.fields else []
+                    "fields": metadata_parser.fields
                 }
         
         return silo_info
