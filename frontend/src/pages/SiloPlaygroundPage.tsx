@@ -1,6 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import SearchFilters from '../components/playground/SearchFilters';
+import type {
+  SearchFilterMetadataField,
+  SupportedDbType,
+} from '../components/playground/SearchFilters';
 
 // Define the Silo type
 interface Silo {
@@ -9,14 +14,7 @@ interface Silo {
   type?: string;
   created_at?: string;
   docs_count: number;
-  metadata_fields?: MetadataField[];
-}
-
-// Define the metadata field type
-interface MetadataField {
-  name: string;
-  type: string;
-  description: string;
+  metadata_fields?: SearchFilterMetadataField[];
 }
 
 // Define the search result type
@@ -27,118 +25,7 @@ interface SearchResult {
   id?: string;  // Add document ID
 }
 
-type MetadataOperator = '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte';
-type SupportedDbType = 'PGVECTOR' | 'QDRANT';
-
-type PreparedFilter = {
-  fieldName: string;
-  operator: MetadataOperator;
-  nativeOperator: string;
-  value: any;
-};
-
 const DEFAULT_DB_TYPE: SupportedDbType = 'PGVECTOR';
-const QDRANT_METADATA_PREFIX = 'metadata.';
-
-const FILTER_OPERATOR_MAPPINGS: Record<SupportedDbType, Record<MetadataOperator, string>> = {
-  PGVECTOR: {
-    $eq: '$eq',
-    $ne: '$ne',
-    $gt: '$gt',
-    $gte: '$gte',
-    $lt: '$lt',
-    $lte: '$lte',
-  },
-  QDRANT: {
-    $eq: 'match',
-    $ne: 'must_not_match',
-    $gt: 'gt',
-    $gte: 'gte',
-    $lt: 'lt',
-    $lte: 'lte',
-  },
-};
-
-function normalizeDbType(dbType?: string): SupportedDbType {
-  if (dbType && dbType.toUpperCase() === 'QDRANT') {
-    return 'QDRANT';
-  }
-  return DEFAULT_DB_TYPE;
-}
-
-function buildPgvectorFilter(filters: PreparedFilter[], logicalOperator: '$and' | '$or') {
-  if (filters.length === 0) {
-    return undefined;
-  }
-
-  if (filters.length === 1) {
-    const { fieldName, nativeOperator, value } = filters[0];
-    return { [fieldName]: { [nativeOperator]: value } };
-  }
-
-  const conditions = filters.map(({ fieldName, nativeOperator, value }) => ({
-    [fieldName]: { [nativeOperator]: value },
-  }));
-
-  return { [logicalOperator]: conditions };
-}
-
-function buildQdrantFilter(filters: PreparedFilter[], logicalOperator: '$and' | '$or') {
-  if (filters.length === 0) {
-    return undefined;
-  }
-
-  const must: any[] = [];
-  const should: any[] = [];
-  const mustNot: any[] = [];
-  const targetList = logicalOperator === '$and' ? must : should;
-
-  filters.forEach(({ fieldName, nativeOperator, value }) => {
-    const key = `${QDRANT_METADATA_PREFIX}${fieldName}`;
-
-    switch (nativeOperator) {
-      case 'must_not_match':
-        mustNot.push({
-          key,
-          match: { value },
-        });
-        break;
-      case 'match':
-        targetList.push({
-          key,
-          match: { value },
-        });
-        break;
-      case 'gt':
-      case 'gte':
-      case 'lt':
-      case 'lte':
-        targetList.push({
-          key,
-          range: { [nativeOperator]: value },
-        });
-        break;
-      default:
-        targetList.push({
-          key,
-          match: { value },
-        });
-    }
-  });
-
-  const qdrantFilter: Record<string, any> = {};
-  if (must.length > 0) {
-    qdrantFilter.must = must;
-  }
-  if (should.length > 0) {
-    qdrantFilter.should = should;
-  }
-  if (mustNot.length > 0) {
-    qdrantFilter.must_not = mustNot;
-  }
-
-  return Object.keys(qdrantFilter).length > 0 ? qdrantFilter : undefined;
-}
 
 function SiloPlaygroundPage() {
   const [systemDBConfig, setSystemDBConfig] = useState('');
@@ -151,11 +38,9 @@ function SiloPlaygroundPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
-  const [filterOperators, setFilterOperators] = useState<Record<string, string>>({});
-  const [logicalOperator, setLogicalOperator] = useState<'$and' | '$or'>('$and');
   const [hasSearched, setHasSearched] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filterMetadata, setFilterMetadata] = useState<Record<string, any> | undefined>(undefined);
 
   // Load silo data
   useEffect(() => {
@@ -192,56 +77,6 @@ function SiloPlaygroundPage() {
       setSearchError(null);
       setSearchResults([]);
       setHasSearched(true);
-      
-      const dbType = normalizeDbType(systemDBConfig);
-      const operatorMapping = FILTER_OPERATOR_MAPPINGS[dbType];
-
-      const preparedFilters: PreparedFilter[] = [];
-      Object.entries(metadataFilters).forEach(([fieldName, rawValue]) => {
-        const trimmedValue = rawValue.trim();
-        if (!trimmedValue) {
-          return;
-        }
-
-        const selectedOperator = (filterOperators[fieldName] || '$eq') as MetadataOperator;
-        const nativeOperator = operatorMapping[selectedOperator];
-        if (!nativeOperator) {
-          return;
-        }
-
-        const fieldDefinition = silo?.metadata_fields?.find(f => f.name === fieldName);
-        let convertedValue: any = trimmedValue;
-
-        if (fieldDefinition) {
-          if (fieldDefinition.type === 'int') {
-            const parsed = parseInt(trimmedValue, 10);
-            convertedValue = Number.isNaN(parsed) ? trimmedValue : parsed;
-          } else if (fieldDefinition.type === 'float') {
-            const parsed = parseFloat(trimmedValue);
-            convertedValue = Number.isNaN(parsed) ? trimmedValue : parsed;
-          } else if (fieldDefinition.type === 'bool') {
-            convertedValue = trimmedValue.toLowerCase() === 'true';
-          }
-          // Leave string and date as-is
-        }
-
-        preparedFilters.push({
-          fieldName,
-          operator: selectedOperator,
-          nativeOperator,
-          value: convertedValue,
-        });
-      });
-
-      let filterMetadata: Record<string, any> | undefined;
-      if (preparedFilters.length > 0) {
-        if (dbType === 'QDRANT') {
-          filterMetadata = buildQdrantFilter(preparedFilters, logicalOperator);
-        } else {
-          filterMetadata = buildPgvectorFilter(preparedFilters, logicalOperator);
-        }
-      }
-      
       const response = await apiService.searchSiloDocuments(
         parseInt(appId), 
         parseInt(siloId), 
@@ -268,16 +103,9 @@ function SiloPlaygroundPage() {
     navigate(`/apps/${appId}/silos`);
   }
 
-  function handleMetadataFilterChange(fieldName: string, value: string, operator: string) {
-    setMetadataFilters(prev => ({
-      ...prev,
-      [fieldName]: value
-    }));
-    setFilterOperators(prev => ({
-      ...prev,
-      [fieldName]: operator
-    }));
-  }
+  const handleFilterMetadataChange = useCallback((metadata: Record<string, any> | undefined) => {
+    setFilterMetadata(metadata);
+  }, []);
 
   async function handleDeleteDocument(result: SearchResult, index: number) {
     if (!appId || !siloId || !result.id) {
@@ -418,68 +246,12 @@ function SiloPlaygroundPage() {
         
         <form onSubmit={handleSearch} className="space-y-4">
           {/* Metadata Filters */}
-          {silo.metadata_fields && silo.metadata_fields.length > 0 && (
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-700">
-                  <span className="mr-2" aria-hidden="true">🔍</span>{' '}
-                  Filter by Metadata
-                </h3>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="logicalOperator" className="text-sm text-gray-600">
-                    Match:
-                  </label>
-                  <select
-                    id="logicalOperator"
-                    value={logicalOperator}
-                    onChange={(e) => setLogicalOperator(e.target.value as '$and' | '$or')}
-                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium bg-white"
-                    disabled={isSearching}
-                  >
-                    <option value="$and">ALL filters (AND)</option>
-                    <option value="$or">ANY filter (OR)</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {silo.metadata_fields.map((field) => (
-                  <div key={field.name}>
-                    <label htmlFor={`filter_${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
-                      {field.name}
-                      <span className="text-xs text-gray-500 ml-1">({field.type})</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={filterOperators[field.name] || '$eq'}
-                        onChange={(e) => handleMetadataFilterChange(field.name, metadataFilters[field.name] || '', e.target.value)}
-                        className="px-2 py-1 border border-gray-300 rounded-lg text-sm"
-                      >
-                        <option value="$eq">equals</option>
-                        <option value="$ne">not equals</option>
-                        <option value="$gt">greater than</option>
-                        <option value="$gte">greater than or equal</option>
-                        <option value="$lt">less than</option>
-                        <option value="$lte">less than or equal</option>
-                      </select>
-                      <input
-                        type="text"
-                        id={`filter_${field.name}`}
-                        value={metadataFilters[field.name] || ''}
-                        onChange={(e) => handleMetadataFilterChange(field.name, e.target.value, filterOperators[field.name] || '$eq')}
-                        placeholder={`Filter by ${field.name}`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
-                        disabled={isSearching}
-                      />
-                    </div>
-                    
-                    {field.description && (
-                      <p className="text-xs text-gray-500 mt-1">{field.description}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <SearchFilters
+            metadataFields={silo.metadata_fields}
+            dbType={systemDBConfig}
+            disabled={isSearching}
+            onFilterMetadataChange={handleFilterMetadataChange}
+          />
 
           {/* Search Query */}
           <div>
