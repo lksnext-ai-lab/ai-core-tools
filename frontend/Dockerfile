@@ -12,6 +12,10 @@ COPY frontend .
 ARG VITE_API_BASE_URL=https://aict-desa.lksnext.com
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
+# OIDC Configuration
+ARG OIDC_ENABLED=true
+ENV OIDC_ENABLED=${OIDC_ENABLED}
+
 # Set environment variables for Vite build
 ENV NODE_ENV=production
 
