@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Tuple
 from sqlalchemy.orm import Session
+from lks_idprovider.models.auth import AuthContext
 
 # Import database
 from db.database import get_db
@@ -152,13 +153,13 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
                 tags=["Apps"],
                 response_model=List[AppListItemSchema])
 async def list_apps(
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     List all apps that the current user owns or collaborates on.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
     
     app_service, collaboration_service = get_services(db)
     
@@ -212,13 +213,13 @@ async def list_apps(
                 response_model=AppDetailSchema)
 async def get_app(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific app.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     app_service, collaboration_service = get_services(db)
     
@@ -270,13 +271,13 @@ async def get_app(
                  status_code=status.HTTP_201_CREATED)
 async def create_app(
     app_data: CreateAppSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Create a new app for the current user.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
     
     app_service, _ = get_services(db)
     
@@ -320,13 +321,13 @@ async def create_app(
 async def update_app(
     app_id: int,
     app_data: UpdateAppSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Update an existing app. Only owners can update apps.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
     
     app_service, collaboration_service = get_services(db)
     
@@ -382,13 +383,13 @@ async def update_app(
                    tags=["Apps"])
 async def delete_app(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Delete an app. Only owners can delete apps.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
     
     app_service, collaboration_service = get_services(db)
     
@@ -423,13 +424,13 @@ async def delete_app(
                  response_model=MessageResponseSchema)
 async def leave_app(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Leave an app collaboration (for editors only).
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
     
     _, collaboration_service = get_services(db)
     

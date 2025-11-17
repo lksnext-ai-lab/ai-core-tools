@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -38,21 +39,51 @@ from models.url import Url
 
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
-from routers.auth import auth_router
+from utils.provider import initialize_provider, shutdown_provider, get_provider
+from lks_idprovider_fastapi.dependencies import get_default_provider
+
 from utils.logger import get_logger
 from utils.auth_config import AuthConfig
 
 logger = get_logger(__name__)
 
+# ==================== LIFESPAN CONTEXT MANAGER ====================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan (startup and shutdown)"""
+    # Startup
+    try:
+        # Initialize EntraID provider
+        await initialize_provider()
+        
+        # Override the default provider dependency
+        app.dependency_overrides[get_default_provider] = get_provider
+        
+        print("✅ Application startup complete")
+    except Exception as e:
+        print(f"❌ Error during startup: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    try:
+        await shutdown_provider()
+        print("✅ Application shutdown complete")
+    except Exception as e:
+        print(f"❌ Error during shutdown: {e}")
+
+
 app = FastAPI(
     title=os.getenv('APP_TITLE', f'{CLIENT_CONFIG.client_name} API'),
     description=os.getenv('APP_DESCRIPTION', 'AI Core Tools API'),
-    version=os.getenv('APP_VERSION', '0.2.37')
+    version=os.getenv('APP_VERSION', '0.2.37'),
+    lifespan=lifespan
 )
 
-# Log JWT configuration on startup
-logger.info(f"🔐 JWT Secret (first 20 chars): {AuthConfig.JWT_SECRET}...")
-logger.info(f"🔐 JWT Algorithm: {AuthConfig.JWT_ALGORITHM}")
+
+# ==================== CORS MIDDLEWARE ====================
 
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'true').lower() == 'true'  # Default to true for development
@@ -82,7 +113,6 @@ app.add_middleware(
 )
 
 # Mount routers - clean structure with no nesting
-app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(internal_router, prefix="/internal")
 app.include_router(public_v1_router, prefix="/public/v1")
 

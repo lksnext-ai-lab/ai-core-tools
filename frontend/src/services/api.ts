@@ -39,6 +39,15 @@ class ApiService {
     const response = await fetch(url, config);
     
     if (!response.ok) {
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        // Clear invalid token
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_expires');
+        
+        // Don't redirect - let the app handle auth state via ProtectedRoute
+        throw new Error('Authentication required');
+      }
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
 # Import schemas and auth
@@ -25,13 +26,12 @@ mcp_configs_router = APIRouter()
                         response_model=List[MCPConfigListItemSchema])
 async def list_mcp_configs(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     List all MCP configs for a specific app.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -52,13 +52,12 @@ async def list_mcp_configs(
 async def get_mcp_config(
     app_id: int, 
     config_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific MCP config.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -90,14 +89,12 @@ async def create_or_update_mcp_config(
     app_id: int,
     config_id: int,
     config_data: CreateUpdateMCPConfigSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Create a new MCP config or update an existing one.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -110,7 +107,7 @@ async def create_or_update_mcp_config(
             )
         
         # Return updated config (reuse the GET logic)
-        return await get_mcp_config(app_id, config.config_id, current_user, db)
+        return await get_mcp_config(app_id, config.config_id, auth_context, db)
         
     except HTTPException:
         raise
@@ -127,13 +124,12 @@ async def create_or_update_mcp_config(
 async def delete_mcp_config(
     app_id: int, 
     config_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Delete an MCP config.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     

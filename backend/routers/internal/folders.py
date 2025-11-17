@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -38,7 +39,7 @@ async def get_root_folders(
     Get all root folders (parent_folder_id is None) for a repository.
     """
     current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Get root folders - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
     
@@ -85,14 +86,13 @@ async def get_root_folders(
 async def get_folder_tree(
     app_id: int,
     repository_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Get the complete folder tree structure for a repository.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Get folder tree - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
     
@@ -146,14 +146,13 @@ async def get_folder_details(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    request: Request,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific folder.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Get folder details - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, user_id: {user_id}")
     
@@ -198,15 +197,14 @@ async def get_folder_details(
 async def create_folder(
     app_id: int,
     repository_id: int,
-    request: Request,
     folder_data: CreateFolderSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Create a new folder in the repository.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Create folder - app_id: {app_id}, repository_id: {repository_id}, name: {folder_data.name}, parent: {folder_data.parent_folder_id}, user_id: {user_id}")
     
@@ -252,15 +250,14 @@ async def update_folder(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    request: Request,
     folder_data: UpdateFolderSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Update a folder's name.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Update folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, name: {folder_data.name}, user_id: {user_id}")
     
@@ -312,14 +309,13 @@ async def delete_folder(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Delete a folder and all its contents (subfolders and resources).
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Delete folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, user_id: {user_id}")
     
@@ -356,15 +352,14 @@ async def move_folder(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    request: Request,
     move_data: MoveFolderSchema,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Move a folder to a new parent folder.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     logger.info(f"Move folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, new_parent: {move_data.new_parent_folder_id}, user_id: {user_id}")
     

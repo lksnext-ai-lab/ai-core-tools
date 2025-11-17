@@ -1,4 +1,5 @@
 import { configService } from '../core/ConfigService';
+import type { User } from 'oidc-client-ts';
 
 class AuthService {
   private get baseURL(): string {
@@ -16,6 +17,15 @@ class AuthService {
     }
   }
 
+  setOIDCToken(user: User) {
+    if (user.access_token) {
+      const expiresAt = user.expires_at 
+        ? new Date(user.expires_at * 1000).toISOString()
+        : undefined;
+      this.setToken(user.access_token, expiresAt);
+    }
+  }
+
   getToken(): string | null {
     const token = localStorage.getItem(this.TOKEN_KEY);
     const expires = localStorage.getItem(this.EXPIRES_KEY);
@@ -26,12 +36,20 @@ class AuthService {
     if (expires) {
       const expiryDate = new Date(expires);
       if (expiryDate <= new Date()) {
+        // Token is expired
+        console.warn('Token expired');
         this.clearAuth();
         return null;
       }
     }
     
     return token;
+  }
+
+  async getValidToken(): Promise<string | null> {
+    // Simply return the current token from localStorage
+    // OIDC token refresh is handled by OIDCProvider
+    return this.getToken();
   }
 
   clearAuth() {
@@ -52,7 +70,7 @@ class AuthService {
       'Content-Type': 'application/json',
     };
 
-    const token = this.getToken();
+    const token = await this.getValidToken();
     if (token) {
       defaultHeaders['Authorization'] = `Bearer ${token}`;
     }
@@ -70,13 +88,14 @@ class AuthService {
       
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expired or invalid
+          // Clear auth on 401 but don't redirect
+          // Let the calling code handle the error
           this.clearAuth();
-          window.location.href = '/login';
-          throw new Error('Authentication required');
         }
         
-        const errorData = await response.json().catch(() => ({ detail: 'Request failed' }));
+        const errorData = await response.json().catch(
+          () => ({ detail: 'Request failed' })
+        );
         throw new Error(errorData.detail || `HTTP ${response.status}`);
       }
 
@@ -89,33 +108,9 @@ class AuthService {
 
   // ==================== AUTHENTICATION FLOW ====================
 
-  async getLoginMode(): Promise<{ mode: string; login_url?: string; state?: string; message?: string }> {
-    return this.request('/auth/login');
-  }
-
-  async login() {
-    try {
-      const response = await this.getLoginMode();
-      
-      if (response.mode === 'FAKE') {
-        // Fake login mode - don't redirect
-        throw new Error('Fake login mode - use email login form');
-      }
-      
-      // OIDC mode - redirect to Google OAuth
-      if (response.login_url) {
-        window.location.href = response.login_url;
-      } else {
-        throw new Error('No login URL provided');
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
-    }
-  }
-
+  // Development mode only - fake login for testing without OIDC
   async fakeLogin(email: string): Promise<{ access_token: string; user: any; expires_at: string }> {
-    const response = await this.request('/auth/fake-login', {
+    const response = await this.request('/internal/auth/dev-login', {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
@@ -128,78 +123,10 @@ class AuthService {
     return response;
   }
 
-  async verifyToken(token?: string): Promise<any> {
-    const tokenToVerify = token || this.getToken();
-    if (!tokenToVerify) {
-      throw new Error('No token available');
-    }
-
-    return this.request('/auth/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${tokenToVerify}`
-      }
-    });
-  }
-
+  // Get current user info (used for fake-login dev mode)
+  // In OIDC mode, user info comes from the OIDC User object
   async getCurrentUser(): Promise<any> {
     return this.request('/auth/me');
-  }
-
-  async logout() {
-    try {
-      // Call backend logout endpoint
-      await this.request('/auth/logout', { method: 'POST' });
-    } catch (error) {
-      console.error('Logout API call failed:', error);
-    } finally {
-      // Clear local auth data regardless of API call result
-      this.clearAuth();
-      window.location.href = '/login';
-    }
-  }
-
-  // ==================== AUTH CALLBACK HANDLING ====================
-
-  handleAuthCallback() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const expires = urlParams.get('expires');
-    const error = urlParams.get('error');
-
-    if (error) {
-      console.error('Auth callback error:', error);
-      return { success: false, error };
-    }
-
-    if (token) {
-      this.setToken(token, expires || undefined);
-      
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-      
-      return { success: true, token };
-    }
-
-    return { success: false, error: 'No token received' };
-  }
-
-  // ==================== INITIALIZATION ====================
-
-  async initialize(): Promise<boolean> {
-    const token = this.getToken();
-    if (!token) {
-      return false;
-    }
-
-    try {
-      await this.verifyToken(token);
-      return true;
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      this.clearAuth();
-      return false;
-    }
   }
 }
 

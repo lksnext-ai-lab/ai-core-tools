@@ -33,6 +33,7 @@ export interface AuthConfig {
     clientId: string;
     redirectUri: string;
     scope?: string;
+    audience?: string;
   };
 }
 

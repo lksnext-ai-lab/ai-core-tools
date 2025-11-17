@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthContext';
 import { useUser } from '../../contexts/UserContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
 import { apiService } from '../../services/api';
@@ -39,7 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { appId } = useParams();
   const location = useLocation();
-  const { user, logout } = useUser();
+  const { user } = useUser();
+  const { logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [currentApp, setCurrentApp] = useState<App | null>(null);
   const [isLoadingApp, setIsLoadingApp] = useState(false);

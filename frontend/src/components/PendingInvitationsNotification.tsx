@@ -23,8 +23,8 @@ function PendingInvitationsNotification() {
 
   async function loadPendingInvitations() {
     try {
-      const response = await apiService.getPendingInvitations();
-      setInvitations(response);
+      //const response = await apiService.getPendingInvitations();
+      //setInvitations(response);
     } catch (error) {
       console.error('Failed to load pending invitations:', error);
     }

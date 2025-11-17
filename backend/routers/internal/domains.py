@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Request, Depends, BackgroundTasks
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -76,12 +77,10 @@ def background_reindex_domain(domain_id: int):
                     summary="List domains",
                     tags=["Domains"],
                     response_model=List[DomainListItemSchema])
-async def list_domains(app_id: int, request: Request, db: Session = Depends(get_db)):
+async def list_domains(app_id: int, request: Request, db: Session = Depends(get_db), auth_context: AuthContext = Depends(get_current_user_oauth)):
     """
     List all domains for a specific app.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -113,12 +112,10 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
                     summary="Get domain details",
                     tags=["Domains"],
                     response_model=DomainDetailSchema)
-async def get_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db)):
+async def get_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db), auth_context: AuthContext = Depends(get_current_user_oauth)):
     """
     Get detailed information about a specific domain.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -161,13 +158,12 @@ async def create_or_update_domain(
     domain_id: int,
     domain_data: CreateUpdateDomainSchema,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Create a new domain or update an existing one.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -201,12 +197,10 @@ async def create_or_update_domain(
 @domains_router.delete("/{domain_id}",
                        summary="Delete domain",
                        tags=["Domains"])
-async def delete_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db)):
+async def delete_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db), auth_context: AuthContext = Depends(get_current_user_oauth)):
     """
     Delete a domain and its associated silo and URLs.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -243,13 +237,12 @@ async def list_domain_urls(
     request: Request,
     db: Session = Depends(get_db),
     page: int = 1,
-    per_page: int = 20
+    per_page: int = 20,
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     List URLs for a specific domain with pagination.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -286,13 +279,12 @@ async def add_url_to_domain(
     url_data: CreateURLSchema,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Add a new URL to a domain and scrape its content.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -339,13 +331,12 @@ async def delete_url_from_domain(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Delete a URL from a domain and remove its indexed content.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -376,13 +367,12 @@ async def reindex_url(
     url_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Re-index content for a specific URL.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -435,13 +425,12 @@ async def unindex_url(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Remove URL content from index and mark as unindexed.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -487,13 +476,14 @@ async def reject_url(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Mark URL as rejected (content not suitable for indexing).
     """
     current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     # TODO: Add app access validation
     
@@ -538,13 +528,12 @@ async def reindex_domain(
     domain_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Re-index content for all URLs in a domain.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -581,13 +570,12 @@ async def get_url_content(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Get the scraped content for a specific URL.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     

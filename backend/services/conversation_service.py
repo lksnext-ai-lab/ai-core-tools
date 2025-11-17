@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 from typing import List, Optional, Dict
+from numpy import isin
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from datetime import datetime
@@ -10,6 +11,7 @@ from models.agent import Agent
 from schemas.conversation_schemas import ConversationCreate, ConversationUpdate
 from services.agent_cache_service import CheckpointerCacheService
 from utils.logger import get_logger
+from lks_idprovider import AuthContext
 
 logger = get_logger(__name__)
 
@@ -105,7 +107,7 @@ class ConversationService:
     def list_conversations(
         db: Session,
         agent_id: int,
-        user_context: Dict,
+        user_context: AuthContext|dict,
         limit: int = 50,
         offset: int = 0
     ) -> tuple[List[Conversation], int]:
@@ -126,12 +128,12 @@ class ConversationService:
         query = db.query(Conversation).filter(Conversation.agent_id == agent_id)
         
         # Filter by user
-        user_id = user_context.get('user_id')
-        api_key = user_context.get('api_key')
+        user_id = user_context.identity.id
         
         if user_id:
             query = query.filter(Conversation.user_id == user_id)
-        elif api_key:
+        elif isinstance(user_context, dict) and user_context.get('api_key'):
+            api_key = user_context.get('api_key')
             api_key_hash = hashlib.md5(api_key.encode()).hexdigest()
             query = query.filter(Conversation.api_key_hash == api_key_hash)
         else:
@@ -292,7 +294,7 @@ class ConversationService:
             db.commit()
     
     @staticmethod
-    def _validate_user_access(conversation: Conversation, user_context: Dict) -> bool:
+    def _validate_user_access(conversation: Conversation, user_context: AuthContext|dict) -> bool:
         """
         Validate if a user has access to a conversation
         
@@ -303,16 +305,18 @@ class ConversationService:
         Returns:
             True if user has access, False otherwise
         """
-        user_id = user_context.get('user_id')
-        api_key = user_context.get('api_key')
-        
+        if isinstance(user_context, AuthContext):
+            user_id = int(user_context.identity.id)
+        else:
+            user_id = user_context.get('user_id')
+
         # Check OAuth user
         if user_id and conversation.user_id == user_id:
             return True
         
         # Check API key user
-        if api_key:
-            api_key_hash = hashlib.md5(api_key.encode()).hexdigest()
+        if  isinstance(user_context, dict) and user_context.get('api_key'):
+            api_key_hash = hashlib.md5(user_context['api_key'].encode()).hexdigest()
             if conversation.api_key_hash == api_key_hash:
                 return True
         
