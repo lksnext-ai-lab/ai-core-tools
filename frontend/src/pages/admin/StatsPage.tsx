@@ -64,6 +64,9 @@ function StatsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Users</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total_users}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {stats.active_users} active · {stats.inactive_users} inactive
+              </p>
             </div>
           </div>
         </div>
@@ -110,6 +113,33 @@ function StatsPage() {
 
       {/* Detailed Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* User Status Breakdown */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Status</h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Active Users</span>
+              <span className="text-sm font-medium text-green-600">{stats.active_users}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Inactive Users</span>
+              <span className="text-sm font-medium text-red-600">{stats.inactive_users}</span>
+            </div>
+            <div className="pt-2 border-t border-gray-200">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-900">Total Users</span>
+                <span className="text-sm font-medium text-gray-900">{stats.total_users}</span>
+              </div>
+            </div>
+            <div className="pt-2">
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <span>Active Rate</span>
+                <span>{stats.total_users > 0 ? Math.round((stats.active_users / stats.total_users) * 100) : 0}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* API Keys Breakdown */}
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">API Keys Status</h3>
@@ -130,6 +160,10 @@ function StatsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Additional Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* User Activity */}
         <div className="bg-white rounded-lg shadow p-6">

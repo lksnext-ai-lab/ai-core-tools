@@ -1,5 +1,7 @@
 import os
+import asyncio
 from typing import List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,7 @@ from services.agent_service import AgentService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
+from utils.config import get_app_config
 
 logger = get_logger(__name__)
 
@@ -27,12 +30,151 @@ logger = get_logger(__name__)
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
+    # Shared thread pool for blocking operations (LLM calls, file I/O, etc.)
+    # This prevents blocking the event loop
+    _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="agent_exec")
+    
     def __init__(self, db: Session = None):
         self.agent_service = AgentService()
         self.session_service = SessionManagementService()
         self.agent_execution_repo = AgentExecutionRepository()
         self.db = db
     
+    async def execute_agent_chat_with_file_refs(
+        self, 
+        agent_id: int, 
+        message: str, 
+        file_references: List = None,
+        search_params: Dict = None,
+        user_context: Dict = None,
+        conversation_id: int = None,
+        db: Session = None
+    ) -> Dict[str, Any]:
+        """
+        Execute agent chat with persistent file references
+        
+        Args:
+            agent_id: ID of the agent to execute
+            message: User message
+            file_references: List of FileReference objects from FileManagementService
+            search_params: Optional search parameters for silo-based agents
+            user_context: User context (api_key, user_id, etc.)
+            conversation_id: Optional conversation ID to continue existing conversation
+            
+        Returns:
+            Dict containing agent response and metadata
+        """
+        try:
+            # Get agent
+            agent = self.agent_service.get_agent(db, agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            
+            # Validate user has access to this agent
+            await self._validate_agent_access(agent, user_context)
+            
+            # Process file references to extract content
+            processed_files = []
+            if file_references:
+                for file_ref in file_references:
+                    processed_files.append({
+                        "filename": file_ref.filename,
+                        "content": file_ref.content,
+                        "type": file_ref.file_type,
+                        "file_id": file_ref.file_id,
+                        "file_path": file_ref.file_path
+                    })
+            
+            # Get or create conversation for memory-enabled agents
+            session = None
+            conversation = None
+            if agent.has_memory:
+                from services.conversation_service import ConversationService
+                
+                # If conversation_id provided, validate and use it
+                if conversation_id:
+                    conversation = ConversationService.get_conversation(
+                        db=db,
+                        conversation_id=conversation_id,
+                        user_context=user_context
+                    )
+                    if not conversation:
+                        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
+                    
+                    # Extract session_id from conversation (without "conv_{agent_id}_" prefix)
+                    session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
+                    session = await self.session_service.get_user_session(
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        conversation_id=session_suffix
+                    )
+                else:
+                    # Auto-create a conversation if none exists
+                    conversation = ConversationService.create_conversation(
+                        db=db,
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        title=None  # Auto-generate title
+                    )
+                    logger.info(f"Auto-created conversation {conversation.conversation_id} for agent {agent_id}")
+                    
+                    # Extract session_id from conversation (without "conv_{agent_id}_" prefix)
+                    session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
+                    session = await self.session_service.get_user_session(
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        conversation_id=session_suffix
+                    )
+            
+            # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
+            # This prevents blocking the event loop and allows other requests to be processed
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                self._executor,
+                self._execute_langchain_agent,
+                agent, message, processed_files, search_params, session, user_context, db
+            )
+            
+            # Parse response based on agent's output parser
+            from tools.agentTools import parse_agent_response
+            parsed_response = parse_agent_response(response, agent)
+            
+            # Update request count
+            self._update_request_count(agent, db)
+            
+            # Update session timestamp to keep it alive
+            if session:
+                await self.session_service.touch_session(session.id)
+            
+            # Update conversation message count if using a specific conversation
+            if conversation:
+                from services.conversation_service import ConversationService
+                # Get last message preview (truncate response if too long)
+                last_message_preview = parsed_response[:200] if isinstance(parsed_response, str) else str(parsed_response)[:200]
+                # Increment by 2 (user message + agent response)
+                ConversationService.increment_message_count(
+                    db=db,
+                    conversation_id=conversation.conversation_id,
+                    last_message=last_message_preview,
+                    increment_by=2
+                )
+            
+            return {
+                "response": parsed_response,
+                "agent_id": agent_id,
+                "conversation_id": conversation.conversation_id if conversation else None,
+                "metadata": {
+                    "agent_name": agent.name,
+                    "agent_type": agent.type,
+                    "files_processed": len(processed_files),
+                    "has_memory": agent.has_memory
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error executing agent chat: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+
     async def execute_agent_chat(
         self, 
         agent_id: int, 
@@ -40,7 +182,6 @@ class AgentExecutionService:
         files: List[UploadFile] = None,
         search_params: Dict = None,
         user_context: Dict = None,
-        conversation_id: str = None,
         db: Session = None
     ) -> Dict[str, Any]:
         """
@@ -73,11 +214,17 @@ class AgentExecutionService:
             # Get user session for memory-enabled agents
             session = None
             if agent.has_memory:
+                # Extract conversation_id from user_context to ensure correct session identification
+                conversation_id = user_context.get("conversation_id") if user_context else None
                 session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
             
-            # Execute agent using LangChain
-            response = self._execute_langchain_agent(
-                agent, message, processed_files, search_params, session, db
+            # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
+            # This prevents blocking the event loop and allows other requests to be processed
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                self._executor,
+                self._execute_langchain_agent,
+                agent, message, processed_files, search_params, session, user_context, db
             )
             
             # Parse response based on agent's output parser
@@ -87,11 +234,9 @@ class AgentExecutionService:
             # Update request count
             self._update_request_count(agent, db)
             
-            # Add to session history if memory enabled
+            # Update session timestamp to keep it alive
             if session:
-                await self.session_service.add_message_to_session(
-                    session.id, message, parsed_response
-                )
+                await self.session_service.touch_session(session.id)
             
             return {
                 "response": parsed_response,
@@ -210,13 +355,91 @@ class AgentExecutionService:
             
             # Reset session if memory enabled
             if agent.has_memory:
+                # Extract conversation_id from user_context if present
+                conversation_id = user_context.get("conversation_id")
+                
+                # IMPORTANT: First get the session to find the session_id before resetting
+                # This ensures we can invalidate the checkpointer for the correct session
+                from services.agent_cache_service import CheckpointerCacheService
+                
+                # Get the session to find the session_id (pass conversation_id explicitly)
+                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
+                if session:
+                    # Invalidate the checkpointer for this specific session (use async version)
+                    await CheckpointerCacheService.invalidate_checkpointer_async(agent_id, session.id)
+                    logger.info(f"Invalidated checkpointer for agent {agent_id}, session {session.id}")
+                
+                # Reset the session object (clears messages and memory)
+                # This should be done after invalidating checkpointer to ensure we have the session ID
                 await self.session_service.reset_user_session(agent_id, user_context)
             
+            # Clear all attached files for this user/agent session
+            from services.file_management_service import FileManagementService
+            file_service = FileManagementService()
+            
+            # Get all attached files for this session
+            attached_files = await file_service.list_attached_files(agent_id, user_context)
+            
+            # Remove each file
+            for file_data in attached_files:
+                try:
+                    await file_service.remove_file(
+                        file_id=file_data['file_id'],
+                        agent_id=agent_id,
+                        user_context=user_context
+                    )
+                    logger.info(f"Removed file {file_data['filename']} during conversation reset")
+                except Exception as e:
+                    logger.error(f"Error removing file {file_data['file_id']} during reset: {str(e)}")
+            
+            logger.info(f"Conversation reset for agent {agent_id} - cleared {len(attached_files)} files")
             return True
             
         except Exception as e:
             logger.error(f"Error resetting agent conversation: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+    
+    async def get_conversation_history(
+        self,
+        agent_id: int,
+        user_context: Dict = None,
+        db: Session = None
+    ) -> List[Dict[str, str]]:
+        """
+        Get conversation history - used by playground to load existing conversation
+        
+        Args:
+            agent_id: ID of the agent
+            user_context: User context (api_key, user_id, etc.)
+            
+        Returns:
+            List of messages with role and content
+        """
+        try:
+            # Get agent
+            agent = self.agent_service.get_agent(db, agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            
+            # Validate user has access to this agent
+            await self._validate_agent_access(agent, user_context)
+            
+            # Get conversation history if memory enabled
+            if agent.has_memory:
+                # Get the session to find the session_id
+                session = await self.session_service.get_user_session(agent_id, user_context)
+                if session:
+                    # Get history from checkpointer
+                    from services.agent_cache_service import CheckpointerCacheService
+                    history = await CheckpointerCacheService.get_conversation_history_async(agent_id, session.id)
+                    logger.info(f"Retrieved {len(history)} messages for agent {agent_id}, session {session.id}")
+                    return history
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error getting conversation history: {str(e)}")
+            return []
     
     async def _validate_agent_access(self, agent: Agent, user_context: Dict):
         """Validate user has access to the agent"""
@@ -234,24 +457,16 @@ class AgentExecutionService:
                 # Save file temporarily
                 temp_path = await self._save_uploaded_file(file)
                 
-                # Process based on file type
-                if file.filename.lower().endswith('.pdf'):
-                    # Use existing PDF tools
-                    text_content = extract_text_from_pdf(temp_path)
-                    processed_files.append({
-                        "filename": file.filename,
-                        "content": text_content,
-                        "type": "pdf"
-                    })
-                else:
-                    # Handle other file types
-                    with open(temp_path, 'r') as f:
-                        content = f.read()
-                    processed_files.append({
-                        "filename": file.filename,
-                        "content": content,
-                        "type": "text"
-                    })
+                # Process based on file type IN THREAD POOL (blocking I/O)
+                loop = asyncio.get_event_loop()
+                file_data = await loop.run_in_executor(
+                    self._executor,
+                    self._process_single_file,
+                    temp_path, file.filename
+                )
+                
+                if file_data:
+                    processed_files.append(file_data)
                 
                 # Clean up
                 if os.path.exists(temp_path):
@@ -263,8 +478,43 @@ class AgentExecutionService:
         
         return processed_files
     
+    def _process_single_file(self, temp_path: str, filename: str) -> Dict:
+        """Synchronous file processing - called in thread pool"""
+        try:
+            if filename.lower().endswith('.pdf'):
+                # Use existing PDF tools (blocking I/O)
+                text_content = extract_text_from_pdf(temp_path)
+                return {
+                    "filename": filename,
+                    "content": text_content,
+                    "type": "pdf"
+                }
+            else:
+                # Handle other file types (blocking I/O)
+                with open(temp_path, 'r') as f:
+                    content = f.read()
+                return {
+                    "filename": filename,
+                    "content": content,
+                    "type": "text"
+                }
+        except Exception as e:
+            logger.error(f"Error in _process_single_file: {str(e)}")
+            return None
+    
     async def _process_pdf_with_ocr(self, agent: OCRAgent, pdf_path: str, db: Session) -> Dict[str, Any]:
         """Process PDF using OCR workflow respecting output parser/data structure"""
+        # Run all OCR processing in thread pool (blocking operations: PDF parsing, LLM calls, etc.)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            self._executor,
+            self._process_pdf_with_ocr_sync,
+            agent, pdf_path, db
+        )
+        return result
+    
+    def _process_pdf_with_ocr_sync(self, agent: OCRAgent, pdf_path: str, db: Session) -> Dict[str, Any]:
+        """Synchronous OCR processing - called in thread pool"""
         try:
             # Re-load agent with all relationships
             agent = self.agent_execution_repo.get_ocr_agent_with_relationships(db, agent.agent_id)
@@ -338,7 +588,8 @@ class AgentExecutionService:
                 }
             else:
                 # Convert to images and process with vision
-                images_dir = os.getenv("IMAGES_PATH", "data/temp/images/")
+                app_config = get_app_config()
+                images_dir = app_config['IMAGES_PATH']
                 os.makedirs(images_dir, exist_ok=True)
                 
                 image_paths = convert_pdf_to_images(pdf_path, images_dir)
@@ -430,11 +681,13 @@ class AgentExecutionService:
         processed_files: List[Dict], 
         search_params: Dict = None,
         session = None,
+        user_context: Dict = None,
         db: Session = None
     ) -> str:
-        """Execute agent using LangChain with existing tools"""
+        """Execute agent using the new create_agent approach with full tool support"""
         try:
-            from tools.aiServiceTools import invoke, invoke_with_rag, invoke_conversational_retrieval_chain
+            import asyncio
+            from tools.agentTools import create_agent, prepare_agent_config
             
             # Re-query the agent with relationships loaded using repository
             fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent.agent_id)
@@ -442,31 +695,115 @@ class AgentExecutionService:
             if not fresh_agent:
                 raise Exception("Agent not found in database")
             
-            # Check if agent has memory (conversational)
-            if fresh_agent.has_memory and session:
-                # Use conversational retrieval chain
-                return invoke_conversational_retrieval_chain(fresh_agent, message, session)
+            # Enhance message with file contents if files were uploaded
+            enhanced_message = message
+            if processed_files:
+                #TODO: we should move this to class initialization? It is repeated in many places.
+                # Get TMP_BASE_FOLDER from config
+                app_config = get_app_config()
+                tmp_base_folder = app_config['TMP_BASE_FOLDER']
+                enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
+                enhanced_message += "\n\n[Attached files:]"
+                for file_data in processed_files:
+                    enhanced_message += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
             
-            # Check if agent has RAG capabilities (silo)
-            elif fresh_agent.silo:
-                # Use RAG-enabled invocation with search parameters
-                return invoke_with_rag(fresh_agent, message, search_params)
+            # Wrap all async operations in a single event loop to avoid conflicts
+            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+            result_text = asyncio.run(self._execute_agent_async(
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context
+            ))
             
-            # Default invocation
-            else:
-                return invoke(fresh_agent, message)
+            return result_text
                 
         except Exception as e:
-            logger.error(f"Error executing LangChain agent: {str(e)}")
-            raise Exception(f"Agent execution failed: {str(e)}")
+            import traceback
+            error_msg = str(e) if str(e) else repr(e)
+            logger.error(f"Error executing LangChain agent: {error_msg}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise Exception(f"Agent execution failed: {error_msg}")
+    
+    async def _execute_agent_async(
+        self,
+        fresh_agent: Agent,
+        message: str,
+        search_params: Dict = None,
+        session_id_for_cache: str = None,
+        user_context: Dict = None
+    ) -> str:
+        """Async helper to execute agent with MCP client in same event loop"""
+        from tools.agentTools import create_agent, prepare_agent_config
+        from langchain_core.messages import HumanMessage
+        
+        mcp_client = None
+        checkpointer_cm = None
+        try:
+            # Create the agent chain with all tools and capabilities
+            # All async operations happen in the SAME event loop
+            agent_chain, tracer, mcp_client, checkpointer_cm = await create_agent(
+                fresh_agent, search_params, session_id_for_cache, user_context
+            )
+            
+            # Prepare configuration with tracer
+            config = prepare_agent_config(fresh_agent, tracer)
+            
+            # Add session-specific configuration if memory is enabled
+            if fresh_agent.has_memory and session_id_for_cache:
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session_id_for_cache}"
+                logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
+            else:
+                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
+            
+            # Add the question to config
+            config["configurable"]["question"] = message
+            
+            # Execute the agent in the SAME event loop as where MCP client was created
+            formatted_user_message = fresh_agent.prompt_template.format(question=message)
+            result = await agent_chain.ainvoke({"messages": [HumanMessage(content=formatted_user_message)]}, config=config)
+            
+            # Extract the response from the result
+            if isinstance(result, dict) and "messages" in result:
+                # Get the last AI message
+                messages = result["messages"]
+                for msg in reversed(messages):
+                    if hasattr(msg, 'content') and msg.content:
+                        return msg.content
+                # Fallback: return the last message content
+                if messages:
+                    return str(messages[-1].content) if hasattr(messages[-1], 'content') else str(messages[-1])
+            
+            # If result is a string, return it directly
+            if isinstance(result, str):
+                return result
+                
+            # Fallback: convert to string
+            return str(result)
+        finally:
+            # As of langchain-mcp-adapters 0.1.0, MCP client doesn't need manual cleanup
+            if mcp_client:
+                logger.info("MCP client will be cleaned up automatically")
+            
+            # Always close the checkpointer context manager
+            if checkpointer_cm:
+                try:
+                    await checkpointer_cm.__aexit__(None, None, None)
+                    logger.debug("Checkpointer context manager closed successfully")
+                except Exception as e:
+                    logger.warning(f"Error closing checkpointer context manager: {e}")
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location"""
         import tempfile
         
-        # Create temporary file
+        #TODO: we should move this to class initialization? It is repeated in many places.
+        # Get TMP_BASE_FOLDER from config
+        app_config = get_app_config()
+        tmp_base_folder = app_config['TMP_BASE_FOLDER']
+        uploads_dir = os.path.join(tmp_base_folder, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=uploads_dir)
         
         try:
             # Write file content

@@ -1,29 +1,29 @@
-from langchain_anthropic import ChatAnthropic
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from models.agent import Agent
-from models.silo import Silo
-from langchain_core.prompts import PromptTemplate
-from langchain_core.tools import BaseTool
-import os
+from models.silo import Silo, SiloType
+from langchain_core.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
-from typing import Any
-from langchain.tools.retriever import create_retriever_tool
-from langchain_mcp_adapters.tools import load_mcp_tools
+from typing import Any, Optional, Dict, List
+from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
-from models.ai_service import ProviderEnum
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from services.agent_cache_service import CheckpointerCacheService
+from services.memory_management_service import MemoryManagementService
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
 from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
+from langsmith.run_helpers import traceable
 import json
+import base64
+import asyncio
+from datetime import datetime
 from utils.logger import get_logger
-import logging
+from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 
 logger = get_logger(__name__)
 
@@ -36,39 +36,81 @@ class MCPClientManager:
             cls._instance = super(MCPClientManager, cls).__new__(cls)
         return cls._instance
 
-    async def get_client(self, agent: Agent = None):
-        if self._client is None and agent is not None:
+    async def get_client(self, agent: Agent = None, user_context: Optional[Dict] = None):
+        """Get or create an MCP client for the given agent with authentication support.
+        
+        Args:
+            agent: The agent to create the client for
+            user_context: Optional user context containing authentication tokens
+            
+        Returns:
+            MultiServerMCPClient or None
+        """
+        # Always create a new client for each agent execution to avoid ClosedResourceError
+        # Don't use singleton pattern as the client lifecycle is tied to the agent execution
+        if agent is not None:
             connections = {}
             for mcp_assoc in agent.mcp_associations:
                 mcp_config = mcp_assoc.mcp
                 try:
-                    # Store the config directly without additional wrapping
+                    # Get the config from the database
                     connection_config = mcp_config.to_connection_dict()
                     if connection_config:
+                        # Add authentication headers if user context is provided
+                        if user_context:
+                            auth_token = get_user_token_from_context(user_context)
+                            if auth_token:
+                                # Prepare headers for MCP server authentication
+                                headers = prepare_mcp_headers(auth_token)
+                                
+                                # Add headers to each connection in the config
+                                for server_name, server_config in connection_config.items():
+                                    if isinstance(server_config, dict):
+                                        # If it's an SSE connection with a URL
+                                        if 'url' in server_config:
+                                            if 'headers' not in server_config:
+                                                server_config['headers'] = {}
+                                            server_config['headers'].update(headers)
+                                            logger.info(f"Added auth headers to MCP server: {server_name}")
+                        
                         connections.update(connection_config)
                 except ValueError as e:
                     logger.error(f"Error configuring MCP {mcp_config.name}: {e}")
                     continue
                 
             if connections:
-                logger.info(f"Creating MCP client with connections: {connections}")
-                self._client = MultiServerMCPClient(connections=connections)
-                await self._client.__aenter__()
+                logger.info(f"Creating new MCP client with connections: {connections}")
+                # Create a new client each time - don't reuse the singleton
+                # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
+                client = MultiServerMCPClient(connections=connections)
+                return client
             else:
                 logger.warning("No valid MCP configurations found for agent")
+                return None
                 
-        return self._client
+        return None
 
     async def close(self):
+        # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient doesn't need manual cleanup
+        # The client is managed internally by the library
         if self._client is not None:
-            await self._client.__aexit__(None, None, None)
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None):
-    """Create a new agent instance with cached checkpointer if memory is enabled."""
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None):
+    """Create a new agent instance with cached checkpointer if memory is enabled.
+    
+    Args:
+        agent: The agent to create
+        search_params: Optional search parameters for silo-based retrieval
+        session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
+        user_context: Optional user context containing authentication tokens for MCP
+    """
     llm = get_llm(agent)
     if llm is None:
         raise ValueError("No LLM found for agent")
+    
+    # Setup tracer for LangSmith if configured
+    tracer = setup_tracer(agent)
     
     output_parser = get_output_parser(agent)
     format_instructions = ""
@@ -85,40 +127,54 @@ async def create_agent(agent: Agent, search_params=None):
 
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
+    checkpointer_cm = None
     if agent.has_memory:
-        # For now, use default session - the actual session ID will be handled by the session management
-        # The checkpointer will be associated with the session through the session management service
-        checkpointer = CheckpointerCacheService.get_cached_checkpointer(agent.agent_id, "default")
-        
-        if checkpointer is None:
-            # Create new checkpointer and cache it
-            checkpointer = InMemorySaver()
-            CheckpointerCacheService.cache_checkpointer(agent.agent_id, checkpointer, "default")
-            logger.info("Created and cached new checkpointer for agent")
-        else:
-            logger.info("Using cached checkpointer for agent")
+        # Use the session_id if provided, otherwise use "default"
+        cache_session_id = session_id if session_id else "default"
+        # Create the async PostgreSQL checkpointer in the current event loop
+        # This ensures the checkpointer uses the same event loop as ainvoke()
+        checkpointer, checkpointer_cm = await CheckpointerCacheService.get_async_checkpointer()
+        logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-        # Get the initial question from config
-        initial_question = config.get("configurable", {}).get("question", "")
-        formatted_human_prompt = agent.prompt_template.format(question=initial_question)
+        """
+        Prepare messages for the agent, applying hybrid memory management strategy.
         
+        When has_memory=True, automatically applies:
+        1. Remove tool messages (reduce noise)
+        2. Trim to max_messages
+        3. Enforce max_tokens limit if specified
+        """
+        # Get conversation history
+        history = state.get("messages", [])
+        
+        # Apply hybrid memory management if agent has memory enabled
+        if agent.has_memory:
+            try:
+                history = MemoryManagementService.apply_hybrid_strategy(
+                    messages=history,
+                    max_messages=agent.memory_max_messages or 20,
+                    max_tokens=agent.memory_max_tokens
+                )
+                
+                # Log memory statistics
+                stats = MemoryManagementService.get_memory_stats(history)
+                logger.info(f"Memory stats for agent {agent.agent_id}: {stats}")
+                
+            except Exception as e:
+                logger.error(f"Error applying memory management: {e}. Using unmodified history.")
+        
+        # Build final message list
         messages = []
         
-        # Add system messages only if this is the first message in the conversation
-        history = state.get("messages", [])
+        # Add system messages for every turn
         messages.extend([
             SystemMessage(content=agent.system_prompt),
             SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
         ])
         
-        # Add conversation history
+        # Add processed conversation history
         messages.extend(history)
-        
-        # Only add human message if the last message wasn't a tool message
-        from langchain_core.messages import ToolMessage
-        if not history or not any(isinstance(msg, ToolMessage) for msg in history[-1:]):
-            messages.append(HumanMessage(content=formatted_human_prompt))
         
         return messages
 
@@ -127,21 +183,29 @@ async def create_agent(agent: Agent, search_params=None):
         sub_agent = tool.tool
         tools.append(IACTTool(sub_agent))
 
+    #add base useful tools
+    tools.append(get_current_date)
+    #tools.append(fetch_file_in_base64)
+
     if agent.silo_id is not None:
+        
         retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
 
+    mcp_client = None
     try:
         logger.info("Starting MCP tools loading...")
-        mcp_client = await MCPClientManager().get_client(agent)
+        mcp_client = await MCPClientManager().get_client(agent, user_context)
         if (mcp_client):
-            mcp_tools = mcp_client.get_tools()
-            logger.info(f"MCP tools loaded successfully: {mcp_tools}")
+            mcp_tools = await mcp_client.get_tools()
+            logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
             if (mcp_tools):
                 tools.extend(mcp_tools)
     except Exception as e:
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)
+        # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
+        mcp_client = None
     
     if pydantic_model:
         # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
@@ -168,8 +232,9 @@ async def create_agent(agent: Agent, search_params=None):
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
+    logger.info(f"Tracer configured: {tracer is not None}")
 
-    return agent_chain
+    return agent_chain, tracer, mcp_client, checkpointer_cm
 
 
 def prepare_agent_config(agent, tracer):
@@ -228,33 +293,116 @@ class IACTTool(BaseTool):
         
         self.agent = agent  
         self.name = agent.name.replace(" ", "_")
-        self.description = agent.description
+        self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
         if self.llm is None:
             raise ValueError("No LLM found for agent")
         
         tools = []
+        # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
             tools.append(IACTTool(sub_agent))
-        state_modifier = SystemMessage(content=agent.system_prompt)
-
+        
+        # Add base useful tools
+        tools.append(get_current_date)
+        tools.append(fetch_file_in_base64)
+        
+        # Add silo retriever if configured
         if agent.silo_id is not None:
             retriever_tool = get_retriever_tool(agent.silo)
             if retriever_tool is not None:
                 tools.append(retriever_tool)
+        
+        # Use system_prompt as state_modifier
+        state_modifier = SystemMessage(content=agent.system_prompt) if agent.system_prompt else None
 
         self.react_agent = create_react_agent(
             self.llm, 
             tools, 
-            debug=False,  # Set debug to False
+            debug=False,
             state_modifier=state_modifier
         )
 
     def _run(self, query: str, *args, **kwargs) -> str:
-        formatted_prompt = self.agent.prompt_template.format(question=query)
-        messages = [HumanMessage(content=formatted_prompt)]
-        return self.react_agent.invoke({"messages": messages})
+        """Synchronous execution of the agent tool"""
+        try:
+            # Format the message using prompt_template if available, otherwise use query directly
+            if self.agent.prompt_template:
+                try:
+                    formatted_prompt = self.agent.prompt_template.format(question=query)
+                except KeyError:
+                    # If 'question' is not in template, try other common placeholders
+                    try:
+                        formatted_prompt = self.agent.prompt_template.format(query=query)
+                    except KeyError:
+                        # If no placeholder works, just use the query
+                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
+                        formatted_prompt = query
+            else:
+                formatted_prompt = query
+            
+            messages = [HumanMessage(content=formatted_prompt)]
+            result = self.react_agent.invoke({"messages": messages})
+            
+            # Extract the content from the last AI message
+            if isinstance(result, dict) and "messages" in result:
+                messages_list = result["messages"]
+                # Find the last AI message with content
+                for msg in reversed(messages_list):
+                    if hasattr(msg, 'content') and msg.content:
+                        return str(msg.content)
+                # Fallback: return the last message content
+                if messages_list:
+                    last_msg = messages_list[-1]
+                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+            
+            # If result is a string, return it directly
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error executing agent tool {self.name}: {str(e)}")
+            return f"Error executing agent tool: {str(e)}"
+    
+    async def _arun(self, query: str, *args, **kwargs) -> str:
+        """Asynchronous execution of the agent tool"""
+        try:
+            # Format the message using prompt_template if available, otherwise use query directly
+            if self.agent.prompt_template:
+                try:
+                    formatted_prompt = self.agent.prompt_template.format(question=query)
+                except KeyError:
+                    # If 'question' is not in template, try other common placeholders
+                    try:
+                        formatted_prompt = self.agent.prompt_template.format(query=query)
+                    except KeyError:
+                        # If no placeholder works, just use the query
+                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
+                        formatted_prompt = query
+            else:
+                formatted_prompt = query
+            
+            messages = [HumanMessage(content=formatted_prompt)]
+            result = await self.react_agent.ainvoke({"messages": messages})
+            
+            # Extract the content from the last AI message
+            if isinstance(result, dict) and "messages" in result:
+                messages_list = result["messages"]
+                # Find the last AI message with content
+                for msg in reversed(messages_list):
+                    if hasattr(msg, 'content') and msg.content:
+                        return str(msg.content)
+                # Fallback: return the last message content
+                if messages_list:
+                    last_msg = messages_list[-1]
+                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+            
+            # If result is a string, return it directly
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")
+            return f"Error executing agent tool: {str(e)}"
 
 def convert_search_params_to_types(search_params: dict, metadata_definition) -> dict:
     """
@@ -311,17 +459,67 @@ def get_retriever_tool(silo: Silo, search_params=None):
         retriever = SiloService.get_silo_retriever(silo.silo_id, search_params)
         name = "silo_retriever"
         description = "Use this tool to search for documents in the pgvector collection."
-        if silo.repository is not None:
+        if silo.silo_type == SiloType.REPO:
             #todo: add description to repository model to compose description
             description = "Use this tool to search for relevant documents in the repository."
-        elif silo.domain is not None:
+        elif silo.silo_type == SiloType.DOMAIN:
             description = f"Use this tool to search for documents. This tool stores information about a web site and this is its description: {silo.domain.description}"
         else:
-            description = f"Use this tool to search for documents in a repository about {silo.description}"
+            description = f"Use this tool to search for documents and information about {silo.description}"
+
+        # Create a wrapper retriever that includes metadata in page_content
+        # This ensures the agent can see metadata like holiday_item_id, type, etc.
+        # We'll use a closure to capture the retriever instead of storing it as an attribute
+        original_retriever = retriever
         
-        prompt = PromptTemplate.from_template("""Name of the document: {name}\n
-        Page number: {page}\n
-        Page content: {page_content}
-        """)
-        return  create_retriever_tool(retriever=retriever, name=name, description=description, document_prompt=prompt)
+        def format_docs_with_metadata(docs: List[Document]) -> List[Document]:
+            """Format documents to include metadata in page_content"""
+            formatted_docs = []
+            for doc in docs:
+                metadata_str = json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else "{}"
+                # Include metadata in the page_content so the agent can see it
+                formatted_content = f"Content: {doc.page_content}\nMetadata: {metadata_str}"
+                formatted_doc = Document(
+                    page_content=formatted_content,
+                    metadata=doc.metadata  # Keep original metadata for filtering
+                )
+                formatted_docs.append(formatted_doc)
+            return formatted_docs
+        
+        class MetadataRetrieverWrapper(BaseRetriever):
+            """Wrapper retriever that includes metadata in document content"""
+            
+            def _get_relevant_documents(self, query: str) -> List[Document]:
+                docs = original_retriever.invoke(query)
+                return format_docs_with_metadata(docs)
+            
+            async def _aget_relevant_documents(self, query: str) -> List[Document]:
+                docs = await original_retriever.ainvoke(query)
+                return format_docs_with_metadata(docs)
+        
+        # Wrap the retriever to include metadata in content
+        wrapped_retriever = MetadataRetrieverWrapper()
+        
+        # Use default document prompt since metadata is now in page_content
+        from langchain_core.prompts import PromptTemplate
+        document_prompt = PromptTemplate.from_template("{page_content}")
+
+        return create_retriever_tool(
+            retriever=wrapped_retriever, 
+            name=name, 
+            description=description, 
+            response_format="content_and_artifact",
+            document_prompt=document_prompt
+        )
     return None
+
+@tool
+def get_current_date():
+    """This tool is useful to get the current date."""
+    return datetime.now().strftime("%Y-%m-%d")
+
+@tool
+def fetch_file_in_base64(file_path: str):
+    """This tool is useful to get the file in base64 format."""
+    with open(file_path, "rb") as file:
+        return base64.b64encode(file.read()).decode("utf-8")

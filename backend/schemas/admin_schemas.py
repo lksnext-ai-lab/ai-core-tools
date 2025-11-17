@@ -22,6 +22,8 @@ class UserDetailResponse(BaseModel):
 
 class SystemStatsResponse(BaseModel):
     total_users: int
+    active_users: int
+    inactive_users: int
     total_apps: int
     total_agents: int
     total_api_keys: int

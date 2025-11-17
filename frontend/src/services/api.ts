@@ -1,6 +1,10 @@
 // API Service - Think of this like your backend services!
+import { configService } from '../core/ConfigService';
+
 class ApiService {
-  private baseURL = import.meta.env.VITE_API_BASE_URL || 'https://iacoretoolstest.lksnext.com';
+  private get baseURL(): string {
+    return configService.getApiBaseUrl();
+  }
 
   private getAuthToken(): string | null {
     // Get token from localStorage (same as auth service)
@@ -35,6 +39,15 @@ class ApiService {
     const response = await fetch(url, config);
     
     if (!response.ok) {
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        // Clear invalid token
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_expires');
+        
+        // Don't redirect - let the app handle auth state via ProtectedRoute
+        throw new Error('Authentication required');
+      }
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
 
@@ -50,14 +63,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}`);
   }
 
-  async createApp(data: { name: string }) {
+  async createApp(data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string }) {
     return this.request('/internal/apps/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateApp(appId: number, data: { name: string }) {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string }) {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -74,6 +87,15 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/leave`, {
       method: 'POST',
     });
+  }
+
+  // ==================== USAGE STATS API ====================
+  async getUsageStats() {
+    return this.request('/internal/usage-stats/');
+  }
+
+  async getAppUsageStats(appId: number) {
+    return this.request(`/internal/usage-stats/${appId}`);
   }
 
   async getPendingInvitations() {
@@ -116,6 +138,28 @@ class ApiService {
     });
   }
 
+  async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: promptType,
+        prompt: prompt
+      }),
+    });
+  }
+
+  async resetAgentConversation(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
+      method: 'POST',
+    });
+  }
+
+  async getConversationHistory(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/conversation-history`, {
+      method: 'GET',
+    });
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);
@@ -139,6 +183,12 @@ class ApiService {
     });
   }
 
+  async copyAIService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/ai-services/${serviceId}/copy`, {
+      method: 'POST',
+    });
+  }
+  
   async deleteAIService(appId: number, serviceId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
       method: 'DELETE',
@@ -348,6 +398,13 @@ class ApiService {
     });
   }
 
+  async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/documents`, {
+      method: 'DELETE',
+      body: JSON.stringify({ document_ids: documentIds }),
+    });
+  }
+
   // ==================== REPOSITORIES API ====================
   async getRepositories(appId: number) {
     console.log('API: Getting repositories for appId:', appId);
@@ -380,14 +437,22 @@ class ApiService {
     });
   }
 
-  async uploadResources(appId: number, repositoryId: number, files: File[]) {
-    console.log('API: uploadResources called with:', { appId, repositoryId, filesCount: files.length });
+  async uploadResources(appId: number, repositoryId: number, files: File[], folderId?: number) {
+    console.log('API: uploadResources called with:', { appId, repositoryId, filesCount: files.length, folderId });
     
     const formData = new FormData();
     files.forEach(file => {
       formData.append('files', file);
       console.log('API: Added file to FormData:', file.name);
     });
+    
+    // Add folder_id if provided
+    if (folderId !== undefined && folderId !== null) {
+      formData.append('folder_id', folderId.toString());
+      console.log('API: Added folder_id to FormData:', folderId);
+    } else {
+      console.log('API: No folder_id provided or folderId is null/undefined');
+    }
 
     // Get the auth token manually for this request
     const token = this.getAuthToken();
@@ -411,6 +476,8 @@ class ApiService {
         body: formData,
       });
       console.log('API: Upload successful:', result);
+      console.log('API: Failed files in result:', result.failed_files);
+      console.log('API: Created resources in result:', result.created_resources);
       return result;
     } catch (error) {
       console.error('API: Upload failed:', error);
@@ -421,6 +488,18 @@ class ApiService {
   async deleteResource(appId: number, repositoryId: number, resourceId: number) {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async moveResource(appId: number, repositoryId: number, resourceId: number, newFolderId?: number) {
+    const formData = new FormData();
+    if (newFolderId !== undefined) {
+      formData.append('new_folder_id', newFolderId.toString());
+    }
+    
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}/move`, {
+      method: 'POST',
+      body: formData,
     });
   }
 
@@ -456,12 +535,16 @@ class ApiService {
   }
 
   // ==================== PLAYGROUND API ====================
-  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any) {
+  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null) {
     const formData = new FormData();
     formData.append('message', message);
     
     if (searchParams) {
       formData.append('search_params', JSON.stringify(searchParams));
+    }
+    
+    if (conversationId) {
+      formData.append('conversation_id', conversationId.toString());
     }
     
     if (files && files.length > 0) {
@@ -476,12 +559,7 @@ class ApiService {
     });
   }
 
-  async resetAgentConversation(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
-      method: 'POST',
-    });
-  }
-
+  // ==================== FILE MANAGEMENT API ====================
   async uploadFileForChat(appId: number, agentId: number, file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -506,7 +584,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('pdf_file', file);
 
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/ocr`, {
+    return this.request(`/internal/apps/${appId}/ocr/${agentId}/process`, {
       method: 'POST',
       body: formData,
     });
@@ -591,6 +669,93 @@ class ApiService {
   async getVersion(): Promise<{ name: string; version: string }> {
     const response = await this.request('/internal/version/');
     return response;
+  }
+
+  async getSystemConfig(): Promise<{ vector_db_type: string }> {
+    const response = await this.request('/internal/version/config');
+    return response;
+  }
+
+  // ==================== FOLDERS API ====================
+  
+  async getFolders(appId: number, repositoryId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/`);
+  }
+
+  async getFolderTree(appId: number, repositoryId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/tree`);
+  }
+
+  async getFolder(appId: number, repositoryId: number, folderId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`);
+  }
+
+  async createFolder(appId: number, repositoryId: number, name: string, parentFolderId?: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        parent_folder_id: parentFolderId || null
+      }),
+    });
+  }
+
+  async updateFolder(appId: number, repositoryId: number, folderId: number, name: string) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteFolder(appId: number, repositoryId: number, folderId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async moveFolder(appId: number, repositoryId: number, folderId: number, newParentFolderId?: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        new_parent_folder_id: newParentFolderId || null
+      }),
+    });
+  }
+
+  async uploadResourcesToFolder(appId: number, repositoryId: number, folderId: number, files: File[]) {
+    return this.uploadResources(appId, repositoryId, files, folderId);
+  }
+
+  // ==================== CONVERSATION METHODS ====================
+  async createConversation(agentId: number, title?: string) {
+    return this.request(`/internal/conversations?agent_id=${agentId}${title ? `&title=${encodeURIComponent(title)}` : ''}`, {
+      method: 'POST',
+    });
+  }
+
+  async listConversations(agentId: number, limit = 50, offset = 0) {
+    return this.request(`/internal/conversations?agent_id=${agentId}&limit=${limit}&offset=${offset}`);
+  }
+
+  async getConversation(conversationId: number) {
+    return this.request(`/internal/conversations/${conversationId}`);
+  }
+
+  async getConversationWithHistory(conversationId: number) {
+    return this.request(`/internal/conversations/${conversationId}/history`);
+  }
+
+  async updateConversation(conversationId: number, data: { title?: string }) {
+    return this.request(`/internal/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteConversation(conversationId: number) {
+    return this.request(`/internal/conversations/${conversationId}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== UTILITY METHODS ====================

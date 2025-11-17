@@ -19,6 +19,7 @@ class Repository(Base):
                            foreign_keys=[app_id])
     
     resources = relationship('Resource', lazy=True)
+    folders = relationship('Folder', back_populates='repository', cascade='all, delete-orphan')
 
     silo = relationship('Silo', lazy=False, uselist=False)
     silo_id = Column(Integer, ForeignKey('Silo.silo_id'), nullable=False)

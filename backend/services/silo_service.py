@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 import os
+import json
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
@@ -7,7 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from utils.logger import get_logger
 from langchain_core.documents import Document
-from tools.pgVectorTools import PGVectorTools
+from tools.vector_store_factory import VectorStoreFactory
+from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from models.silo import SiloType
 from services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
@@ -22,6 +24,18 @@ REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
 
 logger = get_logger(__name__)
+
+# Global vector store instance - lazy initialization (singleton pattern)
+_vector_store_instance: Optional[VectorStoreInterface] = None
+
+def _get_vector_store() -> VectorStoreInterface:
+    """Get or initialize the global vector store instance (lazy initialization)"""
+    global _vector_store_instance
+    if _vector_store_instance is None:
+        from db.database import db as db_obj
+        _vector_store_instance = VectorStoreFactory.get_vector_store(db_obj)
+        logger.info("Vector store instance initialized")
+    return _vector_store_instance
 
 class SiloService:
 
@@ -64,11 +78,49 @@ class SiloService:
 
             logger.debug(f"Getting retriever for silo {silo_id} with embedding service: {silo.embedding_service.name}")
             
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            keywords = {'search_kwargs': {'k': 30}}
-            return pg_vector_tools.get_pgvector_retriever(collection_name, silo.embedding_service, search_params, **keywords)
+            
+            # Merge search_params with default k value
+            # search_params typically contains 'filter' for metadata filtering
+            merged_search_kwargs = {'k': 30}
+            
+            if search_params:
+                # Known retriever parameters that should not be wrapped in 'filter'
+                known_params = {'k', 'filter', 'score_threshold', 'fetch_k', 'lambda_mult', 'search_type'}
+                
+                # Separate known params from filter fields
+                filter_fields = {}
+                direct_params = {}
+                
+                for key, value in search_params.items():
+                    if key in known_params:
+                        direct_params[key] = value
+                    else:
+                        # Any unknown key is treated as a filter field
+                        filter_fields[key] = value
+                
+                # Update merged_search_kwargs with direct params
+                merged_search_kwargs.update(direct_params)
+                
+                # If there are filter fields, wrap them in 'filter' key
+                if filter_fields:
+                    if 'filter' in merged_search_kwargs:
+                        # Merge with existing filter
+                        merged_search_kwargs['filter'].update(filter_fields)
+                    else:
+                        # Create new filter with these fields
+                        merged_search_kwargs['filter'] = filter_fields
+                
+                logger.debug(f"Merged search_kwargs: {merged_search_kwargs}")
+            
+            # Use async engine with psycopg (not asyncpg) for async operations
+            # psycopg supports async natively and handles multiple SQL statements properly
+            return _get_vector_store().get_retriever(
+                collection_name, 
+                silo.embedding_service, 
+                merged_search_kwargs,
+                use_async=True  # Use async psycopg engine for LangGraph compatibility
+            )
         except Exception as e:
             logger.error(f"Failed to create retriever for silo {silo_id}: {str(e)}", exc_info=True)
             raise
@@ -231,22 +283,27 @@ class SiloService:
                 output_parser_service = OutputParserService()
                 output_parser_service.delete_parser(db, metadata_definition_id)
 
+
+
     '''SILO and DATA Operations'''
 
     @staticmethod
     def check_silo_collection_exists(silo_id: int, db: Session) -> bool:
-        return SiloRepository.check_collection_exists(silo_id, db)
-    
-    @staticmethod
-    def get_silo_collection_uuid(silo_id: int, db: Session) -> str:
-        return SiloRepository.get_collection_uuid(silo_id, db)
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        try:
+            return _get_vector_store().collection_exists(collection_name)
+        except Exception as exc:
+            logger.error(f"Error checking collection for silo {silo_id}: {exc}")
+            return False
     
     @staticmethod
     def count_docs_in_silo(silo_id: int, db: Session) -> int:
-        if not SiloService.check_silo_collection_exists(silo_id, db):
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        try:
+            return _get_vector_store().count_documents(collection_name)
+        except Exception as exc:
+            logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
-        collection_uuid = SiloService.get_silo_collection_uuid(silo_id, db)
-        return SiloRepository.count_documents_in_collection(collection_uuid, db)
     
     @staticmethod
     def _get_silo_for_indexing(silo_id: int, db: Session):
@@ -293,10 +350,8 @@ class SiloService:
         
         logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
         
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
         docs = SiloService._create_documents_for_indexing(silo_id, documents)
-        pg_vector_tools.index_documents(
+        _get_vector_store().index_documents(
             collection_name,
             docs,
             embedding_service=embedding_service
@@ -345,6 +400,99 @@ class SiloService:
         return docs
 
     @staticmethod
+    def update_resource_metadata(resource: Resource, db_session: Session = None):
+        """
+        Update only the metadata of a resource in the vector database without re-indexing content.
+        This is more efficient for operations like moving files between folders.
+        
+        Args:
+            resource: Resource instance with updated folder information
+            db_session: Optional database session to use (if None, creates new session)
+        """
+        try:
+            # Use provided session or create new one
+            if db_session:
+                session = db_session
+            else:
+                session = SessionLocal()
+            
+            # Get resource with relations
+            resource_with_relations = session.query(Resource).filter(
+                Resource.resource_id == resource.resource_id
+            ).first()
+            
+            if not resource_with_relations:
+                logger.error(f"Resource {resource.resource_id} not found for metadata update")
+                return
+            
+            logger.info(f"Updating metadata for resource {resource.resource_id}, folder_id: {resource_with_relations.folder_id}")
+            
+            collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
+            
+            # Build the correct file path including folder structure
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+            else:
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            
+            file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
+            
+            # Prepare updated metadata
+            base_metadata = {
+                "repository_id": resource_with_relations.repository_id,
+                "resource_id": resource_with_relations.resource_id,
+                "silo_id": resource_with_relations.repository.silo_id,
+                "name": resource_with_relations.uri,
+                "file_type": file_extension
+            }
+            
+            # Add folder information if resource is in a folder
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                base_metadata["folder_id"] = resource_with_relations.folder_id
+                base_metadata["folder_path"] = folder_path
+                # Store relative path including folder structure
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+                logger.info(f"Resource in folder: {folder_path}, ref: {base_metadata['ref']}")
+            else:
+                # Resource is at root level
+                base_metadata["folder_id"] = None
+                base_metadata["folder_path"] = ""
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
+                logger.info(f"Resource at root, ref: {base_metadata['ref']}")
+            
+            # Update metadata in vector database using direct SQL
+            # The langchain_pg_embedding table stores documents with metadata as JSONB
+            update_query = text("""
+                UPDATE langchain_pg_embedding 
+                SET cmetadata = :new_metadata
+                WHERE collection_id = (
+                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
+                )
+                AND cmetadata->>'resource_id' = :resource_id
+            """)
+            
+            session.execute(update_query, {
+                'new_metadata': json.dumps(base_metadata),
+                'collection_name': collection_name,
+                'resource_id': str(resource.resource_id)
+            })
+            session.commit()
+            
+            logger.info(f"Updated metadata for resource {resource.resource_id} in collection {collection_name}")
+            
+        except Exception as e:
+            logger.error(f"Error updating resource metadata: {str(e)}")
+            raise
+        finally:
+            # Only close if we created the session
+            if not db_session:
+                session.close()
+
+    @staticmethod
     def index_resource(resource: Resource):
         # For resource operations, we need a fresh session since this might be called from other contexts
         session = SessionLocal()
@@ -356,7 +504,15 @@ class SiloService:
                 return
                 
             collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
-            path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            
+            # Build the correct file path including folder structure
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+            else:
+                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
+            
             file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
 
             # Prepare base metadata
@@ -365,22 +521,32 @@ class SiloService:
                 "resource_id": resource_with_relations.resource_id,
                 "silo_id": resource_with_relations.repository.silo_id,
                 "name": resource_with_relations.uri,
-                # Store relative path instead of absolute path for portability
-                "ref": os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri),
                 "file_type": file_extension
             }
+            
+            # Add folder information if resource is in a folder
+            if resource_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
+                base_metadata["folder_id"] = resource_with_relations.folder_id
+                base_metadata["folder_path"] = folder_path
+                # Store relative path including folder structure
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
+            else:
+                # Resource is at root level
+                base_metadata["folder_id"] = None
+                base_metadata["folder_path"] = ""
+                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
 
             docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
             embedding_service = resource_with_relations.repository.silo.embedding_service
             
             if not embedding_service:
                 logger.warning(f"Silo {resource_with_relations.repository.silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
                 return
                 
-            pg_vector_tools.index_documents(collection_name, docs, embedding_service)
+            _get_vector_store().index_documents(collection_name, docs, embedding_service)
             logger.info(f"Successfully indexed resource {resource_with_relations.resource_id} in silo {resource_with_relations.repository.silo_id}")
         except Exception as e:
             logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}")
@@ -410,9 +576,7 @@ class SiloService:
                 logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
                 return
 
-            from db.database import db as db_obj  # Import the database object
-            pg_vector_tools = PGVectorTools(db_obj)
-            pg_vector_tools.delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
+            _get_vector_store().delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
         except Exception as e:
             logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
             # Don't raise the exception - allow the resource to be deleted from database and disk
@@ -433,15 +597,12 @@ class SiloService:
             logger.error(f"Silo no encontrado para la url {url}")
             return
 
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
-        
         # Get embedding service within the same session
         embedding_service = None
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
-        pg_vector_tools.delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=embedding_service)
+        _get_vector_store().delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=embedding_service)
             
     @staticmethod
     def delete_content(silo_id: int, content_id: str, db: Session):
@@ -460,9 +621,7 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
-        pg_vector_tools.delete_documents(
+        _get_vector_store().delete_documents(
             collection_name, 
             filter_metadata={"id": {"$eq": content_id}},
             embedding_service=silo.embedding_service
@@ -481,9 +640,7 @@ class SiloService:
             return
             
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
-        pg_vector_tools.delete_collection(collection_name, silo.embedding_service)
+        _get_vector_store().delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str], db: Session):
@@ -503,9 +660,7 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
-        pg_vector_tools.delete_documents(
+        _get_vector_store().delete_documents(
             collection_name, 
             ids=ids,
             embedding_service=silo.embedding_service
@@ -520,19 +675,21 @@ class SiloService:
             return []
         
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        from db.database import db as db_obj  # Import the database object
-        pg_vector_tools = PGVectorTools(db_obj)
         
         # Get embedding service within the same session
         embedding_service = None
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
-        return pg_vector_tools.search_similar_documents(
+        # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
+        results_limit = 100 if filter_metadata else 5
+
+        return _get_vector_store().search_similar_documents(
             collection_name, 
             query, 
             embedding_service=embedding_service,
-            filter_metadata=filter_metadata or {}
+            filter_metadata=filter_metadata or {},
+            k=results_limit
         )
 
     @staticmethod
@@ -618,6 +775,7 @@ class SiloService:
             result.append(SiloListItemSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
+                description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count
@@ -638,6 +796,7 @@ class SiloService:
             return SiloDetailSchema(
                 silo_id=0,
                 name="",
+                description=None,
                 type=None,
                 created_at=None,
                 docs_count=0,
@@ -700,6 +859,7 @@ class SiloService:
             return SiloDetailSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
+                description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count,
@@ -730,6 +890,7 @@ class SiloService:
         form_data = {
             'silo_id': silo_id,
             'name': silo_data.name,
+            'description': silo_data.description,
             'app_id': app_id,
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,
@@ -805,4 +966,4 @@ class SiloService:
             "results": response_results,
             "total_results": len(response_results),
             "filter_metadata": filter_metadata
-        } 
+        }

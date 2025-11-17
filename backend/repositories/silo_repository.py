@@ -1,6 +1,5 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.embedding_service import EmbeddingService
@@ -82,35 +81,6 @@ class SiloRepository:
         """
         parser_repo = OutputParserRepository()
         return parser_repo.get_by_id(db, parser_id)
-    
-    # ==================== COLLECTION QUERIES ====================
-    
-    @staticmethod
-    def check_collection_exists(silo_id: int, db: Session) -> bool:
-        """
-        Check if a silo collection exists in the vector database
-        """
-        sql = text("SELECT COUNT(*) FROM langchain_pg_collection WHERE name = :silo_id;")
-        result = db.execute(sql, {'silo_id': 'silo_' + str(silo_id)})
-        return result.fetchone()[0] > 0
-    
-    @staticmethod
-    def get_collection_uuid(silo_id: int, db: Session) -> str:
-        """
-        Get the UUID of a silo collection
-        """
-        sql = text("SELECT uuid FROM langchain_pg_collection WHERE name = :silo_id;")
-        result = db.execute(sql, {'silo_id': 'silo_' + str(silo_id)})
-        return result.fetchone()[0]
-    
-    @staticmethod
-    def count_documents_in_collection(collection_uuid: str, db: Session) -> int:
-        """
-        Count documents in a collection by UUID
-        """
-        sql = text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = :collection_uuid;")
-        result = db.execute(sql, {'collection_uuid': collection_uuid})
-        return result.fetchone()[0]
     
     @staticmethod
     def get_embedding_service_by_id(service_id: int, db: Session) -> Optional[EmbeddingService]:

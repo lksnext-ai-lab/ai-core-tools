@@ -14,11 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 import os
+from config import CLIENT_CONFIG
 
 from models.app import App
 from models.user import User
@@ -32,23 +34,59 @@ from models.repository import Repository
 from models.ai_service import AIService
 from models.embedding_service import EmbeddingService
 from models.output_parser import OutputParser
-from models.subscription import Subscription
-from models.api_usage import APIUsage
 from models.resource import Resource
 from models.url import Url
 
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
-from routers.auth import auth_router
+from utils.provider import initialize_provider, shutdown_provider, get_provider
+from lks_idprovider_fastapi.dependencies import get_default_provider
+
+from utils.logger import get_logger
+from utils.auth_config import AuthConfig
+
+logger = get_logger(__name__)
+
+# ==================== LIFESPAN CONTEXT MANAGER ====================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan (startup and shutdown)"""
+    # Startup
+    try:
+        # Initialize EntraID provider
+        await initialize_provider()
+        
+        # Override the default provider dependency
+        app.dependency_overrides[get_default_provider] = get_provider
+        
+        print("✅ Application startup complete")
+    except Exception as e:
+        print(f"❌ Error during startup: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    try:
+        await shutdown_provider()
+        print("✅ Application shutdown complete")
+    except Exception as e:
+        print(f"❌ Error during shutdown: {e}")
+
 
 app = FastAPI(
-    title=os.getenv('APP_TITLE', 'IA Core Tools API'),
-    description=os.getenv('APP_DESCRIPTION', 'Modern FastAPI backend for IA Core Tools'),
-    version=os.getenv('APP_VERSION', '2.0.6')
+    title=os.getenv('APP_TITLE', f'{CLIENT_CONFIG.client_name} API'),
+    description=os.getenv('APP_DESCRIPTION', 'AI Core Tools API'),
+    version=os.getenv('APP_VERSION', '0.2.37'),
+    lifespan=lifespan
 )
 
+
+# ==================== CORS MIDDLEWARE ====================
+
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'true').lower() == 'true'  # Default to true for development
+OIDC_ENABLED = os.getenv('OIDC_ENABLED', 'false').lower() == 'true'  # Default to false for local development
 
 cors_origins = [
     FRONTEND_URL,  # Main frontend URL from environment
@@ -58,7 +96,7 @@ cors_origins = [
     os.getenv('CORS_ORIGIN_DOCKER_ALT', 'http://127.0.0.1:3000'),  # Alternative localhost for Docker
 ]
 
-if DEVELOPMENT_MODE:
+if not OIDC_ENABLED:
     cors_origins.extend([
         os.getenv('CORS_ORIGIN_DEV_8080', 'http://localhost:8080'),  # Additional dev ports
         os.getenv('CORS_ORIGIN_DEV_8080_ALT', 'http://127.0.0.1:8080'),
@@ -75,9 +113,20 @@ app.add_middleware(
 )
 
 # Mount routers - clean structure with no nesting
-app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(internal_router, prefix="/internal")
 app.include_router(public_v1_router, prefix="/public/v1")
+
+# Add client config endpoint
+@app.get("/api/internal/client-config")
+async def get_client_config():
+    """Get client configuration for frontend"""
+    return {
+        "client_id": CLIENT_CONFIG.client_id,
+        "client_name": CLIENT_CONFIG.client_name,
+        "oidc_enabled": CLIENT_CONFIG.oidc_enabled,
+        "oidc_authority": CLIENT_CONFIG.oidc_authority,
+        "oidc_client_id": CLIENT_CONFIG.oidc_client_id
+    }
 
 # ==================== CUSTOM OPENAPI DOCS ====================
 

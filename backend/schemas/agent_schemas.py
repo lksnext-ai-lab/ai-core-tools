@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from models.agent import DEFAULT_AGENT_TEMPERATURE
 
 # ==================== AGENT SCHEMAS ====================
 
@@ -29,9 +30,13 @@ class AgentDetailSchema(BaseModel):
     type: str
     is_tool: bool
     has_memory: bool
+    memory_max_messages: int = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: int = 10
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
+    temperature: float = DEFAULT_AGENT_TEMPERATURE
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
     created_at: Optional[datetime]
@@ -63,9 +68,13 @@ class CreateUpdateAgentSchema(BaseModel):
     type: str = "agent"  # "agent", "ocr_agent"
     is_tool: bool = False
     has_memory: bool = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 10
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
+    temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     # OCR-specific fields
@@ -115,6 +124,7 @@ class PublicAgentDetailSchema(BaseModel):
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
+    temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
@@ -133,6 +143,7 @@ class CreateAgentRequestSchema(BaseModel):
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
+    temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
 
@@ -148,6 +159,7 @@ class CreateOCRAgentRequestSchema(BaseModel):
     vision_system_prompt: Optional[str] = ""
     text_system_prompt: Optional[str] = ""
     output_parser_id: Optional[int] = None
+    temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
 
@@ -163,6 +175,7 @@ class UpdateAgentRequestSchema(BaseModel):
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
+    temperature: Optional[float] = None
     tool_ids: Optional[List[int]] = None
     mcp_config_ids: Optional[List[int]] = None
 
@@ -178,6 +191,7 @@ class UpdateOCRAgentRequestSchema(BaseModel):
     vision_system_prompt: Optional[str] = None
     text_system_prompt: Optional[str] = None
     output_parser_id: Optional[int] = None
+    temperature: Optional[float] = None
     tool_ids: Optional[List[int]] = None
     mcp_config_ids: Optional[List[int]] = None
 

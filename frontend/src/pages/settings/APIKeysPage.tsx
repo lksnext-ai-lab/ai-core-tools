@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SettingsLayout from '../../components/layout/SettingsLayout';
 import Modal from '../../components/ui/Modal';
 import APIKeyForm from '../../components/forms/APIKeyForm';
 import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface APIKey {
   key_id: number;
@@ -20,6 +21,7 @@ interface APIKey {
 function APIKeysPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,18 +183,18 @@ function APIKeysPage() {
 
   if (loading) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading API keys...</p>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   if (error) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600">Error: {error}</p>
@@ -204,12 +206,12 @@ function APIKeysPage() {
             </button>
           </div>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   return (
-    <SettingsLayout>
+    
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -217,19 +219,24 @@ function APIKeysPage() {
             <h2 className="text-xl font-semibold text-gray-900">API Keys</h2>
             <p className="text-gray-600">Manage API keys for external application access</p>
           </div>
-          <button 
-            onClick={handleCreateKey}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Create New API Key
-          </button>
+          {isAdmin && (
+            <button 
+              onClick={handleCreateKey}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Create New API Key
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* API Keys Table */}
         {apiKeys.length > 0 ? (
           <div className="bg-white shadow rounded-lg overflow-visible">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-visible">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -259,7 +266,12 @@ function APIKeysPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <span className="text-blue-400 text-xl mr-3">🔑</span>
-                          <div className="text-sm font-medium text-gray-900">{apiKey.name}</div>
+                            <div 
+                              className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => handleEditKey(apiKey.key_id)}
+                            >
+                              {apiKey.name}
+                            </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -286,29 +298,33 @@ function APIKeysPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        <ActionDropdown
-                          actions={[
-                            {
-                              label: 'Edit',
-                              onClick: () => handleEditKey(apiKey.key_id),
-                              icon: '✏️',
-                              variant: 'primary'
-                            },
-                            {
-                              label: apiKey.is_active ? 'Deactivate' : 'Activate',
-                              onClick: () => handleToggle(apiKey.key_id),
-                              icon: apiKey.is_active ? '⏸️' : '▶️',
-                              variant: apiKey.is_active ? 'warning' : 'success'
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => handleDelete(apiKey.key_id),
-                              icon: '🗑️',
-                              variant: 'danger'
-                            }
-                          ]}
-                          size="sm"
-                        />
+                        {isAdmin ? (
+                          <ActionDropdown
+                            actions={[
+                              {
+                                label: 'Edit',
+                                onClick: () => handleEditKey(apiKey.key_id),
+                                icon: '✏️',
+                                variant: 'primary'
+                              },
+                              {
+                                label: apiKey.is_active ? 'Deactivate' : 'Activate',
+                                onClick: () => handleToggle(apiKey.key_id),
+                                icon: apiKey.is_active ? '⏸️' : '▶️',
+                                variant: apiKey.is_active ? 'warning' : 'success'
+                              },
+                              {
+                                label: 'Delete',
+                                onClick: () => handleDelete(apiKey.key_id),
+                                icon: '🗑️',
+                                variant: 'danger'
+                              }
+                            ]}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-sm">View only</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -373,7 +389,7 @@ function APIKeysPage() {
           apiKey={createdKey}
         />
       </div>
-    </SettingsLayout>
+    
   );
 }
 

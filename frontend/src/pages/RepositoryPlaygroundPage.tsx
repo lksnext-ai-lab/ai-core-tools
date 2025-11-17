@@ -81,11 +81,27 @@ const RepositoryPlaygroundPage: React.FC = () => {
       setResults([]);
       setHasSearched(true);
 
-      // Build metadata filter object
+      // Build metadata filter object with proper type conversion
       const filterMetadata: Record<string, any> = {};
       Object.entries(metadataFilters).forEach(([fieldName, value]) => {
         if (value.trim()) {
-          filterMetadata[fieldName] = { $eq: value.trim() };
+          // Find the field type from metadata_fields
+          const field = repository?.metadata_fields?.find(f => f.name === fieldName);
+          let convertedValue: any = value.trim();
+          
+          // Convert value to the appropriate type
+          if (field) {
+            if (field.type === 'int') {
+              convertedValue = parseInt(value.trim());
+            } else if (field.type === 'float') {
+              convertedValue = parseFloat(value.trim());
+            } else if (field.type === 'bool') {
+              convertedValue = value.trim().toLowerCase() === 'true';
+            }
+            // For 'str' and 'date', keep as string
+          }
+          
+          filterMetadata[fieldName] = { $eq: convertedValue };
         }
       });
 
@@ -149,7 +165,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
             <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
               <h3 className="text-sm font-medium text-gray-700 mb-3">
                 <span className="mr-2">🔍</span>
-                Filter by Metadata
+                <span>Filter by Metadata</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {repository.metadata_fields.map((field) => (
@@ -222,8 +238,10 @@ const RepositoryPlaygroundPage: React.FC = () => {
           </h2>
           
           <div className="space-y-4">
-            {results.map((result, index) => (
-              <div key={index} className="border border-gray-200 rounded-lg p-4">
+            {results.map((result, index) => {
+              const uniqueKey = `${result.metadata.source}-${result.metadata.page ?? 'no-page'}-${result.page_content.substring(0, 30).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')}`;
+              return (
+              <div key={uniqueKey} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-2">
                   <span className="text-sm font-medium text-gray-500">
                     Result #{index + 1}
@@ -253,7 +271,8 @@ const RepositoryPlaygroundPage: React.FC = () => {
                   </div>
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}

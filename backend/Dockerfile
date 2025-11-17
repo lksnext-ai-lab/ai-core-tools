@@ -9,11 +9,11 @@ ENV PYTHONUNBUFFERED=1 \
 # Instalar dependencias de compilación
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    pkg-config \
+    gcc \
     libmariadb-dev \
     libpq-dev \
+    pkg-config \
     python3-dev \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Poetry con la versión que funciona
@@ -34,7 +34,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/aict_backend
 
 ENV AICT_MODE=SELF-HOSTED \
-    DEVELOPMENT_MODE=false \
+    OIDC_ENABLED=true \
     JWT_ALGORITHM=HS256 \
     JWT_EXPIRATION_HOURS=24 \
     FRONTEND_URL=http://localhost:5173
@@ -78,4 +78,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 WORKDIR /aict_backend
 
-CMD ["sh", "-c", "cd / && python -m alembic upgrade head && cd /aict_backend && python -m uvicorn main:app --host=0.0.0.0 --port=8000"]
+CMD ["sh", "-c", "cd / && python -m alembic upgrade head && cd /aict_backend && python -m uvicorn main:app --host=0.0.0.0 --port=8000 --workers 4 --limit-concurrency 100"]

@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
-from models.app_collaborator import AppCollaborator, CollaborationStatus
+from models.app_collaborator import AppCollaborator, CollaborationStatus, CollaborationRole
 from models.app import App
 from models.user import User
 from datetime import datetime
@@ -16,11 +16,13 @@ class AppCollaborationRepository:
     
     def get_user_accessible_apps(self, user_id: int) -> List[App]:
         """Get all apps that a user can access (owned + collaborated)"""
-        # Get owned apps
-        owned_apps = self.db.query(App).filter(App.owner_id == user_id).all()
+        # Get owned apps with owner relationship loaded
+        owned_apps = self.db.query(App).options(joinedload(App.owner)).filter(App.owner_id == user_id).all()
         
-        # Get collaborated apps (accepted collaborations only)
-        collaborations = self.db.query(AppCollaborator).filter(
+        # Get collaborated apps (accepted collaborations only) with owner relationship loaded
+        collaborations = self.db.query(AppCollaborator).options(
+            joinedload(AppCollaborator.app).joinedload(App.owner)
+        ).filter(
             AppCollaborator.user_id == user_id,
             AppCollaborator.status == CollaborationStatus.ACCEPTED
         ).all()
@@ -40,6 +42,37 @@ class AppCollaborationRepository:
             App.owner_id == user_id
         ).first()
         return app is not None
+    
+    def can_user_manage_collaborators(self, user_id: int, app_id: int) -> bool:
+        """Check if user can manage collaborators (owner only)"""
+        # Only the owner can manage collaborators
+        app = self.db.query(App).filter(
+            App.app_id == app_id,
+            App.owner_id == user_id
+        ).first()
+        
+        return app is not None
+    
+    def can_user_administer_app(self, user_id: int, app_id: int) -> bool:
+        """Check if user can administer an app (owner or administrator)"""
+        # Check if user is owner
+        app = self.db.query(App).filter(
+            App.app_id == app_id,
+            App.owner_id == user_id
+        ).first()
+        
+        if app:
+            return True
+        
+        # Check if user is an administrator collaborator
+        collaboration = self.db.query(AppCollaborator).filter(
+            AppCollaborator.app_id == app_id,
+            AppCollaborator.user_id == user_id,
+            AppCollaborator.role == CollaborationRole.ADMINISTRATOR,
+            AppCollaborator.status == CollaborationStatus.ACCEPTED
+        ).first()
+        
+        return collaboration is not None
     
     def can_user_access_app(self, user_id: int, app_id: int) -> bool:
         """Check if user can access an app (owner or accepted collaborator)"""

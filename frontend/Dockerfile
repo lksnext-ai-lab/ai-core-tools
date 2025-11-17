@@ -3,13 +3,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 # Copy frontend source code (excluding .env files via .dockerignore)
 COPY frontend .
 
 # Build-time API base URL - using build argument instead of .env files
-ARG VITE_API_BASE_URL=https://iacoretoolstest.lksnext.com
+ARG VITE_API_BASE_URL=https://aict-desa.lksnext.com
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # Set environment variables for Vite build

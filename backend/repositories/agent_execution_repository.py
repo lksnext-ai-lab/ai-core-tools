@@ -1,6 +1,6 @@
 from typing import Optional, Union
-from sqlalchemy.orm import Session, joinedload
-from models.agent import Agent
+from sqlalchemy.orm import Session, joinedload, selectinload
+from models.agent import Agent, AgentTool
 from models.ocr_agent import OCRAgent
 from models.silo import Silo
 from models.output_parser import OutputParser
@@ -16,10 +16,31 @@ class AgentExecutionRepository:
     
     @staticmethod
     def get_agent_with_relationships(db: Session, agent_id: int) -> Optional[Agent]:
-        """Get agent with all necessary relationships for execution"""
-        return db.query(Agent).options(
-            joinedload(Agent.silo).joinedload(Silo.embedding_service)
+        """
+        Get agent with all necessary relationships for execution.
+        
+        Uses eager loading to prevent:
+        - N+1 query problems (multiple DB hits for related data)
+        - DetachedInstanceError (when accessing relations after session closes)
+        - Lazy loading issues in async contexts
+        
+        This is critical when agents use other agents as tools, as the tool agents
+        also need their relationships (ai_service, silo, tool_associations) loaded.
+        """
+        agent = db.query(Agent).options(
+            # Main agent relationships
+            joinedload(Agent.silo).joinedload(Silo.embedding_service),
+            joinedload(Agent.mcp_associations),
+            joinedload(Agent.ai_service),
+            joinedload(Agent.output_parser),
+            joinedload(Agent.app),
+            # Tool agents and their relationships (critical for IACTTool)
+            selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.ai_service),
+            selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.silo),
+            selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.tool_associations)
         ).filter(Agent.agent_id == agent_id).first()
+        
+        return agent
     
     @staticmethod
     def get_ocr_agent_with_relationships(db: Session, agent_id: int) -> Optional[OCRAgent]:

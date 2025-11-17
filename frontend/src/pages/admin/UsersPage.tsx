@@ -11,6 +11,7 @@ function UsersPage() {
   const [totalUsers, setTotalUsers] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingUser, setDeletingUser] = useState<number | null>(null);
+  const [activatingUser, setActivatingUser] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -54,6 +55,42 @@ function UsersPage() {
       setError('Failed to delete user. Please try again.');
     } finally {
       setDeletingUser(null);
+    }
+  }
+
+  async function handleActivateUser(userId: number) {
+    try {
+      setActivatingUser(userId);
+      setError(null);
+      setSuccess(null);
+      const response = await adminService.activateUser(userId);
+      setSuccess(response.message);
+      await loadUsers(); // Reload the list
+    } catch (error: any) {
+      console.error('Failed to activate user:', error);
+      setError(error.message || 'Failed to activate user. Please try again.');
+    } finally {
+      setActivatingUser(null);
+    }
+  }
+
+  async function handleDeactivateUser(userId: number, userName: string) {
+    if (!confirm(`Are you sure you want to deactivate ${userName}? They will not be able to access the system.`)) {
+      return;
+    }
+
+    try {
+      setActivatingUser(userId);
+      setError(null);
+      setSuccess(null);
+      const response = await adminService.deactivateUser(userId);
+      setSuccess(response.message);
+      await loadUsers(); // Reload the list
+    } catch (error: any) {
+      console.error('Failed to deactivate user:', error);
+      setError(error.message || 'Failed to deactivate user. Please try again.');
+    } finally {
+      setActivatingUser(null);
     }
   }
 
@@ -141,19 +178,22 @@ function UsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-lg shadow overflow-y-visible">
+      <div className="bg-white rounded-lg shadow overflow-visible">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
             Users ({totalUsers} total)
           </h2>
         </div>
 
-        <div className="overflow-x-auto overflow-y-visible">
+        <div className="overflow-x-auto overflow-visible">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   User
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Apps
@@ -173,7 +213,7 @@ function UsersPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center">
+                  <td colSpan={6} className="px-6 py-8 text-center">
                     <div className="text-gray-500">
                       <p className="text-lg font-medium">No users found</p>
                       <p className="text-sm mt-1">
@@ -187,11 +227,29 @@ function UsersPage() {
                   <tr key={user.user_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.name || 'No name'}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-900">
+                            {user.name || 'No name'}
+                          </span>
+                          {user.is_omniadmin && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              👑 Admin
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.is_active ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          ✓ Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          ✗ Inactive
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {user.owned_apps_count}
@@ -204,18 +262,40 @@ function UsersPage() {
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: deletingUser === user.user_id ? 'Deleting...' : 'Delete',
-                            onClick: () => handleDeleteUser(user.user_id),
-                            icon: '🗑️',
-                            variant: 'danger',
-                            disabled: deletingUser === user.user_id
-                          }
-                        ]}
-                        size="sm"
-                      />
+                      {user.is_omniadmin ? (
+                        <span className="text-xs text-gray-500 italic">Protected account</span>
+                      ) : (
+                        <ActionDropdown
+                          actions={[
+                            // Show activate/deactivate for non-omniadmins
+                            ...(user.is_active ? [
+                              {
+                                label: activatingUser === user.user_id ? 'Deactivating...' : 'Deactivate',
+                                onClick: () => handleDeactivateUser(user.user_id, user.name || user.email),
+                                icon: '🚫',
+                                variant: 'warning' as const,
+                                disabled: activatingUser === user.user_id
+                              }
+                            ] : [
+                              {
+                                label: activatingUser === user.user_id ? 'Activating...' : 'Activate',
+                                onClick: () => handleActivateUser(user.user_id),
+                                icon: '✓',
+                                variant: 'success' as const,
+                                disabled: activatingUser === user.user_id
+                              }
+                            ]),
+                            {
+                              label: deletingUser === user.user_id ? 'Deleting...' : 'Delete',
+                              onClick: () => handleDeleteUser(user.user_id),
+                              icon: '🗑️',
+                              variant: 'danger' as const,
+                              disabled: deletingUser === user.user_id
+                            }
+                          ]}
+                          size="sm"
+                        />
+                      )}
                     </td>
                   </tr>
                 ))

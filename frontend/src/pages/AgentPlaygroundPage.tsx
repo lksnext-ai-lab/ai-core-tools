@@ -4,6 +4,8 @@ import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
 import APIExamples from '../components/playground/APIExamples';
+import PromptModal from '../components/playground/PromptModal';
+import ConversationSidebar from '../components/playground/ConversationSidebar';
 
 interface Agent {
   agent_id: number;
@@ -11,6 +13,9 @@ interface Agent {
   description?: string;
   status: string;
   type: string;
+  has_memory?: boolean;
+  system_prompt?: string;
+  prompt_template?: string;
   silo?: {
     silo_id: number;
     name: string;
@@ -41,6 +46,10 @@ function AgentPlaygroundPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('playground');
+  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+  const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
+  const [conversationKey, setConversationKey] = useState(0); // Key to force ChatInterface remount
+  const [conversationReloadTrigger, setConversationReloadTrigger] = useState(0); // Trigger to reload conversation list
 
   useEffect(() => {
     if (appId && agentId) {
@@ -64,9 +73,47 @@ function AgentPlaygroundPage() {
     }
   }
 
+  const handlePromptUpdate = async () => {
+    // Refresh agent data after prompt update
+    await loadAgent();
+  };
+
   function handleBack() {
     navigate(`/apps/${appId}/agents`);
   }
+
+  const handleConversationSelect = (conversationId: number) => {
+    setCurrentConversationId(conversationId);
+    setConversationKey(prev => prev + 1); // Force remount to load new conversation
+  };
+
+  const handleNewConversation = async () => {
+    if (!agentId) return;
+    
+    try {
+      // Create a new conversation
+      const response = await apiService.createConversation(parseInt(agentId));
+      setCurrentConversationId(response.conversation_id);
+      setConversationKey(prev => prev + 1); // Force remount to clear messages
+      setConversationReloadTrigger(prev => prev + 1); // Trigger conversation list reload
+    } catch (error) {
+      console.error('Error creating new conversation:', error);
+      // Fallback: just clear the current conversation
+      setCurrentConversationId(null);
+      setConversationKey(prev => prev + 1);
+    }
+  };
+
+  const handleConversationCreated = (conversationId: number) => {
+    // This is called when a conversation is auto-created during chat
+    setCurrentConversationId(conversationId);
+    setConversationReloadTrigger(prev => prev + 1); // Trigger conversation list reload
+  };
+  
+  const handleMessageSent = () => {
+    // This is called after sending a message to update the conversation list
+    setConversationReloadTrigger(prev => prev + 1); // Trigger conversation list reload to update message counts
+  };
 
   if (loading) {
     return (
@@ -131,12 +178,21 @@ function AgentPlaygroundPage() {
             Test and integrate your AI agent
           </p>
         </div>
-        <button
-          onClick={handleBack}
-          className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          ← Back to Agents
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setIsPromptModalOpen(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+          >
+            <span>✏️</span>
+            <span>Edit Prompts</span>
+          </button>
+          <button
+            onClick={handleBack}
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            ← Back to Agents
+          </button>
+        </div>
       </div>
 
       {/* Agent Info */}
@@ -203,40 +259,70 @@ function AgentPlaygroundPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-6">
-          {activeTab === 'playground' && (
-            <>
-              {/* Playground Interface */}
-              {isOCRAgent ? (
-                <OCRInterface 
-                  appId={parseInt(appId!)} 
-                  agentId={parseInt(agentId!)} 
-                  agentName={agent.name}
-                  outputParser={agent.output_parser}
-                />
-              ) : (
-                <ChatInterface 
-                  appId={parseInt(appId!)} 
-                  agentId={parseInt(agentId!)} 
-                  agentName={agent.name}
-                  metadataFields={agent.silo?.metadata_definition?.fields}
-                />
-              )}
-            </>
-          )}
-
-          {activeTab === 'api' && (
-            <APIExamples 
-              appId={parseInt(appId!)}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Conversation Sidebar - Only show for non-OCR agents with memory */}
+          {activeTab === 'playground' && !isOCRAgent && agent.has_memory && (
+            <ConversationSidebar
+              key={conversationReloadTrigger}
               agentId={parseInt(agentId!)}
-              agentName={agent.name}
-              agentType={agent.type}
-              hasSilo={!!agent.silo}
-              siloName={agent.silo?.name}
+              currentConversationId={currentConversationId}
+              onConversationSelect={handleConversationSelect}
+              onNewConversation={handleNewConversation}
             />
           )}
+          
+          {/* Main Content Area */}
+          <div className="flex-1 p-6 overflow-y-auto">
+            {activeTab === 'playground' && (
+              <>
+                {/* Playground Interface */}
+                {isOCRAgent ? (
+                  <OCRInterface 
+                    appId={parseInt(appId!)} 
+                    agentId={parseInt(agentId!)} 
+                    agentName={agent.name}
+                    outputParser={agent.output_parser}
+                  />
+                ) : (
+                  <ChatInterface 
+                    key={conversationKey}
+                    appId={parseInt(appId!)} 
+                    agentId={parseInt(agentId!)} 
+                    agentName={agent.name}
+                    conversationId={currentConversationId}
+                    onConversationCreated={handleConversationCreated}
+                    onMessageSent={handleMessageSent}
+                    metadataFields={agent.silo?.metadata_definition?.fields}
+                  />
+                )}
+              </>
+            )}
+
+            {activeTab === 'api' && (
+              <APIExamples 
+                appId={parseInt(appId!)}
+                agentId={parseInt(agentId!)}
+                agentName={agent.name}
+                agentType={agent.type}
+                hasSilo={!!agent.silo}
+                siloName={agent.silo?.name}
+              />
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Prompt Modal */}
+      <PromptModal
+        isOpen={isPromptModalOpen}
+        onClose={() => setIsPromptModalOpen(false)}
+        appId={parseInt(appId!)}
+        agentId={parseInt(agentId!)}
+        agentName={agent.name}
+        initialSystemPrompt={agent.system_prompt || ''}
+        initialPromptTemplate={agent.prompt_template || ''}
+        onPromptUpdate={handlePromptUpdate}
+      />
     </div>
   );
 }

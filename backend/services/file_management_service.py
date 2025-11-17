@@ -15,11 +15,12 @@ logger = get_logger(__name__)
 class FileReference:
     """Represents a file reference for agent consumption"""
     
-    def __init__(self, file_id: str, filename: str, file_type: str, content: str):
+    def __init__(self, file_id: str, filename: str, file_type: str, content: str, file_path: str = None):
         self.file_id = file_id
         self.filename = filename
         self.file_type = file_type
         self.content = content
+        self.file_path = file_path  # Relative path to TMP_BASE_FOLDER
         self.uploaded_at = datetime.utcnow()
     
     def to_dict(self) -> Dict[str, Any]:
@@ -28,6 +29,8 @@ class FileReference:
             "file_id": self.file_id,
             "filename": self.filename,
             "file_type": self.file_type,
+            "content": self.content,
+            "file_path": self.file_path,
             "uploaded_at": self.uploaded_at.isoformat()
         }
 
@@ -36,12 +39,24 @@ class FileManagementService:
     """Unified file management - used by both public and internal APIs"""
     
     def __init__(self):
-        # In-memory file storage (in production, use cloud storage)
-        self._files: Dict[str, FileReference] = {}
-        self._temp_dir = os.getenv("TEMP_DIR", "data/temp/uploads/")
+        # Persistent file storage on disk
+        # Structure: {session_key: {file_id: FileReference}}
+        self._files: Dict[str, Dict[str, FileReference]] = {}
         
-        # Ensure temp directory exists
+        # Get TMP_BASE_FOLDER from config
+        from utils.config import get_app_config
+        app_config = get_app_config()
+        self._tmp_base_folder = app_config['TMP_BASE_FOLDER']
+        self._persistent_dir = os.path.join(self._tmp_base_folder, "persistent")
+        self._temp_dir = os.path.join(self._tmp_base_folder, "uploads")
+        
+        # Ensure directories exist
+        os.makedirs(self._persistent_dir, exist_ok=True)
         os.makedirs(self._temp_dir, exist_ok=True)
+        os.makedirs(os.path.join(self._tmp_base_folder, "downloads"), exist_ok=True)
+        os.makedirs(os.path.join(self._tmp_base_folder, "images"), exist_ok=True)
+        
+        # Files will be loaded on-demand per session
     
     async def upload_file(
         self, 
@@ -72,15 +87,29 @@ class FileManagementService:
             file_type = self._get_file_type(file.filename)
             
             # Process file based on type
-            content = await self._process_file_content(file, file_type)
+            content, temp_path = await self._process_file_content(file, file_type)
             
-            # Create file reference
+            # Create file reference (file_path will be set later)
             file_ref = FileReference(file_id, file.filename, file_type, content)
             
-            # Store file reference
-            self._files[file_id] = file_ref
+            # Create session key for this agent and user
+            session_key = self._get_session_key(agent_id, user_context)
             
-            logger.info(f"Uploaded file {file.filename} for agent {agent_id}")
+            # Initialize session if not exists
+            if session_key not in self._files:
+                self._files[session_key] = {}
+            
+            # Save file to disk for persistence (including original file)
+            await self._save_file_to_disk(session_key, file_id, file_ref, temp_path)
+            
+            # Store file reference in session (after file_path is set)
+            self._files[session_key][file_id] = file_ref
+            
+            # Clean up temporary file after saving to persistent storage
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+            
+            logger.info(f"Uploaded file {file.filename} for agent {agent_id}, session {session_key}")
             return file_ref
             
         except Exception as e:
@@ -149,9 +178,22 @@ class FileManagementService:
             List of file references
         """
         try:
-            # In a real implementation, you'd filter by user context
-            # For now, return all files (this should be improved)
-            return [file_ref.to_dict() for file_ref in self._files.values()]
+            # Get session key for this agent and user
+            session_key = self._get_session_key(agent_id, user_context)
+            
+            # Load files for this session if not already loaded
+            if session_key not in self._files:
+                self._load_session_files(session_key)
+            
+            # Return files for this session
+            if session_key in self._files:
+                files_list = [file_ref.to_dict() for file_ref in self._files[session_key].values()]
+                logger.info(f"Returning {len(files_list)} files for session {session_key}")
+                for file_data in files_list:
+                    logger.info(f"File: {file_data['filename']}, Path: {file_data.get('file_path', 'None')}")
+                return files_list
+            else:
+                return []
             
         except Exception as e:
             logger.error(f"Error listing attached files: {str(e)}")
@@ -160,6 +202,7 @@ class FileManagementService:
     async def remove_file(
         self, 
         file_id: str, 
+        agent_id: int,
         user_context: Dict = None
     ) -> bool:
         """
@@ -167,18 +210,30 @@ class FileManagementService:
         
         Args:
             file_id: File ID to remove
+            agent_id: ID of the agent
             user_context: User context
             
         Returns:
             True if removed successfully
         """
         try:
-            if file_id in self._files:
-                del self._files[file_id]
-                logger.info(f"Removed file {file_id}")
+            # Get session key for this agent and user
+            session_key = self._get_session_key(agent_id, user_context)
+            
+            # Load files for this session if not already loaded
+            if session_key not in self._files:
+                self._load_session_files(session_key)
+            
+            if session_key in self._files and file_id in self._files[session_key]:
+                del self._files[session_key][file_id]
+                
+                # Also remove from disk
+                await self._remove_file_from_disk(session_key, file_id)
+                
+                logger.info(f"Removed file {file_id} from session {session_key}")
                 return True
             else:
-                logger.warning(f"File {file_id} not found for removal")
+                logger.warning(f"File {file_id} not found for removal in session {session_key}")
                 return False
                 
         except Exception as e:
@@ -215,7 +270,7 @@ class FileManagementService:
         """Get file type from file path"""
         return self._get_file_type(os.path.basename(file_path))
     
-    async def _process_file_content(self, file: UploadFile, file_type: str) -> str:
+    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str]:
         """
         Process file content based on file type
         
@@ -224,7 +279,7 @@ class FileManagementService:
             file_type: Type of file
             
         Returns:
-            Processed content string
+            Tuple of (processed_content, temp_file_path)
         """
         try:
             # Save file temporarily
@@ -233,39 +288,43 @@ class FileManagementService:
             try:
                 if file_type == "pdf":
                     # Use existing PDF tools
-                    return extract_text_from_pdf(temp_path)
+                    content = extract_text_from_pdf(temp_path)
+                    return content, temp_path
                 
                 elif file_type == "text":
                     # Read text files
                     with open(temp_path, 'r', encoding='utf-8') as f:
-                        return f.read()
+                        content = f.read()
+                    return content, temp_path
                 
                 elif file_type == "image":
                     # For images, return basic info (in production, use OCR)
-                    return f"Image file: {file.filename} (OCR processing not implemented)"
+                    content = f"Image file: {file.filename} (OCR processing not implemented)"
+                    return content, temp_path
                 
                 elif file_type == "document":
                     # For documents, return basic info (in production, use document processing)
-                    return f"Document file: {file.filename} (Document processing not implemented)"
+                    content = f"Document file: {file.filename} (Document processing not implemented)"
+                    return content, temp_path
                 
                 else:
                     # For unknown types, return basic info
-                    return f"File: {file.filename} (type: {file_type})"
+                    content = f"File: {file.filename} (type: {file_type})"
+                    return content, temp_path
                     
-            finally:
-                # Clean up temporary file
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
+            except Exception as e:
+                logger.error(f"Error processing file content: {str(e)}")
+                return f"Error processing file: {str(e)}", temp_path
                     
         except Exception as e:
             logger.error(f"Error processing file content: {str(e)}")
-            return f"Error processing file: {str(e)}"
+            return f"Error processing file: {str(e)}", None
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location"""
-        # Create temporary file
+        # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=self._temp_dir)
         
         try:
             # Write file content
@@ -277,19 +336,167 @@ class FileManagementService:
         finally:
             temp_file.close()
     
+    def _get_session_key(self, agent_id: int, user_context: Dict = None) -> str:
+        """Generate session key for agent and user combination"""
+        if user_context:
+            user_id = user_context.get('user_id', 'anonymous')
+            app_id = user_context.get('app_id', 'default')
+            return f"agent_{agent_id}_user_{user_id}_app_{app_id}"
+        else:
+            return f"agent_{agent_id}_anonymous"
+
+    async def _save_file_to_disk(self, session_key: str, file_id: str, file_ref: FileReference, original_file_path: str = None):
+        """Save file reference to disk for persistence"""
+        try:
+            session_dir = os.path.join(self._persistent_dir, session_key)
+            os.makedirs(session_dir, exist_ok=True)
+            
+            # Save file metadata
+            metadata_file = os.path.join(session_dir, f"{file_id}.json")
+            with open(metadata_file, 'w') as f:
+                import json
+                json.dump(file_ref.to_dict(), f, indent=2)
+            
+            # Save file content (extracted text)
+            content_file = os.path.join(session_dir, f"{file_id}.content")
+            with open(content_file, 'w', encoding='utf-8') as f:
+                f.write(file_ref.content)
+            
+            # Save original file if provided
+            if original_file_path and os.path.exists(original_file_path):
+                original_filename = os.path.basename(original_file_path)
+                original_extension = os.path.splitext(original_filename)[1]
+                original_file = os.path.join(session_dir, f"{file_id}{original_extension}")
+                
+                import shutil
+                shutil.copy2(original_file_path, original_file)
+                
+                # Calculate relative path from TMP_BASE_FOLDER
+                relative_path = os.path.relpath(original_file, self._tmp_base_folder)
+                file_ref.file_path = relative_path
+                
+                logger.info(f"Saved original file {original_filename} to {original_file} (relative: {relative_path})")
+                logger.info(f"FileReference file_path set to: {file_ref.file_path}")
+                
+            logger.info(f"Saved file {file_id} to disk: {session_dir}")
+            
+        except Exception as e:
+            logger.error(f"Error saving file to disk: {str(e)}")
+
+    def _load_session_files(self, session_key: str):
+        """Load existing files from disk for a specific session"""
+        try:
+            if not os.path.exists(self._persistent_dir):
+                return
+                
+            session_path = os.path.join(self._persistent_dir, session_key)
+            if not os.path.exists(session_path) or not os.path.isdir(session_path):
+                return
+                
+            # Initialize session if not exists
+            if session_key not in self._files:
+                self._files[session_key] = {}
+            
+            # Load files for this session
+            for filename in os.listdir(session_path):
+                if filename.endswith('.json'):
+                    file_id = filename[:-5]  # Remove .json extension
+                    metadata_file = os.path.join(session_path, filename)
+                    content_file = os.path.join(session_path, f"{file_id}.content")
+                    
+                    if os.path.exists(content_file):
+                        try:
+                            with open(metadata_file, 'r') as f:
+                                import json
+                                metadata = json.load(f)
+                            
+                            with open(content_file, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            
+                            # Recreate FileReference
+                            file_ref = FileReference(
+                                metadata['file_id'],
+                                metadata['filename'],
+                                metadata['file_type'],
+                                content,
+                                metadata.get('file_path')  # Load file path from metadata
+                            )
+                            
+                            # If file_path is missing, try to regenerate it
+                            if not file_ref.file_path:
+                                # Look for the original file in the session directory
+                                for filename in os.listdir(session_path):
+                                    if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
+                                        original_file = os.path.join(session_path, filename)
+                                        if os.path.exists(original_file):
+                                            # Calculate relative path
+                                            relative_path = os.path.relpath(original_file, self._tmp_base_folder)
+                                            file_ref.file_path = relative_path
+                                            
+                                            # Update metadata file with the new path
+                                            metadata['file_path'] = relative_path
+                                            with open(metadata_file, 'w') as f:
+                                                import json
+                                                json.dump(metadata, f, indent=2)
+                                            
+                                            logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
+                                            break
+                            
+                            self._files[session_key][file_id] = file_ref
+                            logger.info(f"Loaded persistent file {file_id} for session {session_key}")
+                            logger.info(f"Loaded file_path: {file_ref.file_path}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error loading file {file_id}: {str(e)}")
+                            
+            logger.info(f"Loaded {len(self._files.get(session_key, {}))} persistent files for session {session_key}")
+            
+        except Exception as e:
+            logger.error(f"Error loading persistent files for session {session_key}: {str(e)}")
+
+    async def _remove_file_from_disk(self, session_key: str, file_id: str):
+        """Remove file from disk"""
+        try:
+            session_dir = os.path.join(self._persistent_dir, session_key)
+            metadata_file = os.path.join(session_dir, f"{file_id}.json")
+            content_file = os.path.join(session_dir, f"{file_id}.content")
+            
+            # Remove metadata and content files
+            if os.path.exists(metadata_file):
+                os.remove(metadata_file)
+            if os.path.exists(content_file):
+                os.remove(content_file)
+            
+            # Remove original file (look for any file with the file_id as prefix)
+            for filename in os.listdir(session_dir):
+                if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
+                    original_file = os.path.join(session_dir, filename)
+                    if os.path.exists(original_file):
+                        os.remove(original_file)
+                        logger.info(f"Removed original file {filename}")
+                
+            logger.info(f"Removed file {file_id} from disk")
+            
+        except Exception as e:
+            logger.error(f"Error removing file from disk: {str(e)}")
+
     def get_file_stats(self) -> Dict[str, Any]:
         """Get file management statistics"""
         try:
             file_types = {}
             total_size = 0
+            total_files = 0
             
-            for file_ref in self._files.values():
-                file_type = file_ref.file_type
-                file_types[file_type] = file_types.get(file_type, 0) + 1
-                total_size += len(file_ref.content)
+            for session_files in self._files.values():
+                for file_ref in session_files.values():
+                    file_type = file_ref.file_type
+                    file_types[file_type] = file_types.get(file_type, 0) + 1
+                    total_size += len(file_ref.content)
+                    total_files += 1
             
             return {
-                "total_files": len(self._files),
+                "total_files": total_files,
+                "total_sessions": len(self._files),
                 "file_types": file_types,
                 "total_size_bytes": total_size,
                 "total_size_mb": round(total_size / (1024 * 1024), 2)

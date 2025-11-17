@@ -8,6 +8,7 @@ import type { ActionItem } from '../components/ui/ActionDropdown';
 interface Silo {
   silo_id: number;
   name: string;
+  description?: string;
   type?: string;
   created_at?: string;
   docs_count: number;
@@ -56,7 +57,7 @@ function SilosPage() {
       setError(err instanceof Error ? err.message : 'Failed to delete silo');
       console.error('Error deleting silo:', err);
     }
-  }
+  } 
 
   if (loading) {
     return (
@@ -141,13 +142,16 @@ function SilosPage() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-md border overflow-y-visible">
-          <div className="overflow-x-auto overflow-y-visible">
+        <div className="bg-white rounded-lg shadow-md border overflow-visible">
+          <div className="overflow-x-auto overflow-visible">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Type
@@ -175,10 +179,19 @@ function SilosPage() {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {silo.name}
+                            <Link
+                              to={`/apps/${appId}/silos/${silo.silo_id}`}
+                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                            >
+                                {silo.name}
+                            </Link>
                           </div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {silo.description
+                      }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">

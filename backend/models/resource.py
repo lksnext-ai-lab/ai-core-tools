@@ -14,7 +14,13 @@ class Resource(Base):
     repository_id = Column(Integer,
                         ForeignKey('Repository.repository_id'),
                         nullable=True)
+    folder_id = Column(Integer,
+                       ForeignKey('Folder.folder_id'),
+                       nullable=True)
 
     repository = relationship('Repository',
                            back_populates='resources',
-                           foreign_keys=[repository_id]) 
+                           foreign_keys=[repository_id])
+    folder = relationship('Folder',
+                         back_populates='resources',
+                         foreign_keys=[folder_id]) 

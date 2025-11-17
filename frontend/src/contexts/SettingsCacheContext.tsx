@@ -27,12 +27,7 @@ interface EmbeddingService {
   created_at: string;
 }
 
-interface MCPConfig {
-  config_id: number;
-  name: string;
-  transport_type: string;
-  created_at: string;
-}
+import type { MCPConfig } from '../core/types';
 
 interface DataStructure {
   parser_id: number;

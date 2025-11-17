@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -32,12 +33,12 @@ embedding_services_router = APIRouter()
 async def list_embedding_services(
     app_id: int, 
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     List all embedding services for a specific app.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     # TODO: Add app access validation
     
@@ -59,12 +60,12 @@ async def get_embedding_service(
     app_id: int, 
     service_id: int, 
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Get detailed information about a specific embedding service.
     """
-    user_id = current_user["user_id"]
+    user_id = int(auth_context.identity.id)
     
     # TODO: Add app access validation
     
@@ -97,13 +98,11 @@ async def create_or_update_embedding_service(
     service_id: int,
     service_data: CreateUpdateEmbeddingServiceSchema,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Create a new embedding service or update an existing one.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -136,12 +135,11 @@ async def delete_embedding_service(
     app_id: int, 
     service_id: int, 
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Delete an embedding service.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     

@@ -9,6 +9,8 @@ class App(Base):
     app_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     agent_rate_limit = Column(Integer, default=0)
+    max_file_size_mb = Column(Integer, default=0)
+    agent_cors_origins = Column(String(1000))
     create_date = Column(DateTime, default=datetime.now)
     langsmith_api_key = Column(String(255))
     repositories = relationship('Repository', lazy=True)

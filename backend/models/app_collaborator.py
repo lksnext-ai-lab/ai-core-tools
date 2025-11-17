@@ -6,6 +6,7 @@ import enum
 
 class CollaborationRole(enum.Enum):
     OWNER = "owner"
+    ADMINISTRATOR = "administrator"
     EDITOR = "editor"
 
 class CollaborationStatus(enum.Enum):
