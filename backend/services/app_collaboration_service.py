@@ -22,6 +22,14 @@ class AppCollaborationService:
         """Check if user can manage an app (owner only)"""
         return self.repo.can_user_manage_app(user_id, app_id)
     
+    def can_user_manage_collaborators(self, user_id: int, app_id: int) -> bool:
+        """Check if user can manage collaborators (owner only)"""
+        return self.repo.can_user_manage_collaborators(user_id, app_id)
+    
+    def can_user_administer_app(self, user_id: int, app_id: int) -> bool:
+        """Check if user can administer an app (owner or administrator)"""
+        return self.repo.can_user_administer_app(user_id, app_id)
+    
     def can_user_access_app(self, user_id: int, app_id: int) -> bool:
         """Check if user can access an app (owner or accepted collaborator)"""
         return self.repo.can_user_access_app(user_id, app_id)
@@ -48,7 +56,7 @@ class AppCollaborationService:
     def invite_user_to_app(self, app_id: int, user_email: str, invited_by_user_id: int, role: str = "editor") -> Optional[AppCollaborator]:
         """Invite a user to collaborate on an app"""
         try:
-            # Validate app exists and inviter is owner
+            # Validate app exists and inviter is owner (only owners can manage collaborators)
             if not self.repo.can_user_manage_app(invited_by_user_id, app_id):
                 raise ValueError("Only app owners can invite collaborators")
             

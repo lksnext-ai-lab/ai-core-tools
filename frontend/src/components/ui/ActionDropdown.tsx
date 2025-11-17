@@ -55,9 +55,20 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
       }
     };
 
+    const handleScroll = () => {
+      if (isOpen) {
+        setIsOpen(false);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [setIsOpen]);
+    window.addEventListener('scroll', handleScroll, true);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [setIsOpen, isOpen]);
 
   // Calculate dropdown position to avoid going off-screen for regular dropdown
   const calculateRegularDropdownStyle = () => {
@@ -80,29 +91,31 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     const tableBody = dropdownRef.current.closest('tbody');
     const isLastRow = tableRow && tableBody && tableRow === tableBody.lastElementChild;
 
-    let style: React.CSSProperties = {};
+    // Use fixed positioning to avoid being clipped by overflow containers
+    let style: React.CSSProperties = {
+      position: 'fixed',
+      zIndex: 9999,
+    };
 
     // If it's the last row or not enough space below, position above
     if (isLastRow || (spaceBelow < dropdownHeight && spaceAbove > spaceBelow)) {
-      style.bottom = '100%';
-      style.top = 'auto';
-      style.marginBottom = '0.5rem';
-      style.marginTop = '0';
+      // Position above the button
+      style.top = `${triggerRect.top - dropdownHeight - 8}px`;
     } else {
-      style.top = '100%';
-      style.bottom = 'auto';
-      style.marginTop = '0.5rem';
-      style.marginBottom = '0';
+      // Position below the button
+      style.top = `${triggerRect.bottom + 8}px`;
     }
 
     // Check horizontal position
+    const dropdownWidth = 192; // w-48 in pixels
     const spaceRight = viewportWidth - triggerRect.right;
-    if (spaceRight < 192) { // 192px is w-48
-      style.right = '0';
-      style.left = 'auto';
+    
+    if (spaceRight < dropdownWidth) {
+      // Align to the right edge of the trigger
+      style.left = `${triggerRect.right - dropdownWidth}px`;
     } else {
-      style.right = '0';
-      style.left = 'auto';
+      // Align to the right edge of the trigger
+      style.left = `${triggerRect.right - dropdownWidth}px`;
     }
 
     return style;
@@ -211,8 +224,8 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
       {isOpen && (
         <div 
           ref={menuRef}
-          className={`${position || (dropdownStyle.position === 'fixed') ? '' : 'absolute'} w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}
-          style={position ? calculateDropdownStyle() : { zIndex: 9999, ...dropdownStyle }}
+          className="w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+          style={position ? calculateDropdownStyle() : dropdownStyle}
         >
           <div className="py-1">
             {actions.map((action, index) => (

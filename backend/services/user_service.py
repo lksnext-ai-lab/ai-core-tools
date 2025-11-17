@@ -2,8 +2,71 @@ from sqlalchemy.orm import Session
 from models.user import User
 from repositories.user_repository import UserRepository
 from typing import Tuple, List, Dict, Any
+from utils.config import is_omniadmin
+from utils.logger import get_logger
 
 class UserService:
+    
+    # ============================================================================
+    # PRIVATE HELPER METHODS
+    # ============================================================================
+    
+    @staticmethod
+    def _user_to_dict(user: User, include_full_details: bool = True) -> Dict[str, Any]:
+        """
+        Convert User object to dictionary format
+        
+        Args:
+            user: User instance to convert
+            include_full_details: If True, includes all fields (apps, keys, etc.)
+                                 If False, includes only basic fields
+            
+        Returns:
+            Dictionary representation of the user
+        """
+        user_dict = {
+            'user_id': user.user_id,
+            'email': user.email,
+            'name': user.name,
+            'created_at': user.create_date.isoformat() if user.create_date else None,
+        }
+        
+        if include_full_details:
+            user_dict.update({
+                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
+                'api_keys_count': len(user.api_keys) if user.api_keys else 0,
+                'is_active': user.is_active if hasattr(user, 'is_active') else True,
+                'is_omniadmin': is_omniadmin(user.email)
+            })
+        
+        return user_dict
+    
+    @staticmethod
+    def _get_user_or_raise(db: Session, user_id: int) -> User:
+        """
+        Get user by ID or raise ValueError if not found
+        
+        Args:
+            db: Database session
+            user_id: ID of the user
+            
+        Returns:
+            User instance
+            
+        Raises:
+            ValueError: If user not found
+        """
+        user_repo = UserRepository(db)
+        user = user_repo.get_by_id(user_id)
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        return user
+    
+    # ============================================================================
+    # PUBLIC METHODS
+    # ============================================================================
     
     @staticmethod
     def get_or_create_user(db: Session, email: str, name: str = None) -> Tuple[User, bool]:
@@ -43,36 +106,6 @@ class UserService:
         # TODO: Implement this method
         pass
     
-    @staticmethod
-    def get_user_subscription(user_id: int):
-        """Get user's current active subscription"""
-        # TODO: Implement this method
-        pass
-    
-    @staticmethod
-    def get_user_current_plan(user_id: int):
-        """Get user's current active plan"""
-        # TODO: Implement this method
-        pass
-    
-    @staticmethod
-    def can_user_create_agent(user_id: int) -> bool:
-        """Check if user can create more agents"""
-        # TODO: Implement this method
-        return True  # For now, allow all users
-    
-    @staticmethod
-    def can_user_create_domain(user_id: int) -> bool:
-        """Check if user can create more domains"""
-        # TODO: Implement this method
-        return True  # For now, allow all users
-    
-    @staticmethod
-    def user_has_feature(user_id: int, feature_name: str) -> bool:
-        """Check if user has access to a specific feature"""
-        # TODO: Implement this method
-        return True  # For now, allow all features
-    
     # ============================================================================
     # ADMIN METHODS
     # ============================================================================
@@ -94,16 +127,7 @@ class UserService:
         users, total = user_repo.get_all_paginated(page, per_page)
         
         # Convert to dict format
-        users_list = []
-        for user in users:
-            users_list.append({
-                'user_id': user.user_id,
-                'email': user.email,
-                'name': user.name,
-                'created_at': user.create_date.isoformat() if user.create_date else None,
-                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                'api_keys_count': len(user.api_keys) if user.api_keys else 0
-            })
+        users_list = [UserService._user_to_dict(user) for user in users]
         
         return users_list, total
     
@@ -140,16 +164,7 @@ class UserService:
         users, total = user_repo.search_users(query, page, per_page)
         
         # Convert to dict format
-        users_list = []
-        for user in users:
-            users_list.append({
-                'user_id': user.user_id,
-                'email': user.email,
-                'name': user.name,
-                'created_at': user.create_date.isoformat() if user.create_date else None,
-                'owned_apps_count': len(user.owned_apps) if user.owned_apps else 0,
-                'api_keys_count': len(user.api_keys) if user.api_keys else 0
-            })
+        users_list = [UserService._user_to_dict(user) for user in users]
         
         return users_list, total
     
@@ -193,18 +208,110 @@ class UserService:
         # Recent users list (last 10)
         recent_users_list = user_repo.get_recent_users_list(30, 10)
         
-        recent_users_data = []
-        for user in recent_users_list:
-            recent_users_data.append({
-                'user_id': user.user_id,
-                'email': user.email,
-                'name': user.name,
-                'created_at': user.create_date.isoformat() if user.create_date else None
-            })
+        recent_users_data = [
+            UserService._user_to_dict(user, include_full_details=False) 
+            for user in recent_users_list
+        ]
         
         return {
             'total_users': total_users,
             'recent_users': recent_users,
             'users_with_apps': users_with_apps,
             'recent_users_list': recent_users_data
-        } 
+        }
+    
+    @staticmethod
+    def activate_user(db: Session, user_id: int, admin_email: str) -> User:
+        """
+        Activate a user account
+        
+        Args:
+            db: Database session
+            user_id: ID of the user to activate
+            admin_email: Email of the admin performing the action
+            
+        Returns:
+            Updated User instance
+            
+        Raises:
+            ValueError: If user cannot be activated
+        """
+        logger = get_logger(__name__)
+        user = UserService._get_user_or_raise(db, user_id)
+        
+        if user.is_active:
+            raise ValueError("User is already active")
+        
+        # Activate the user
+        user.is_active = True
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"User activated - Admin: {admin_email}, Target User: {user.email} (ID: {user_id})")
+        
+        return user
+    
+    @staticmethod
+    def deactivate_user(db: Session, user_id: int, admin_email: str) -> User:
+        """
+        Deactivate a user account
+        
+        Args:
+            db: Database session
+            user_id: ID of the user to deactivate
+            admin_email: Email of the admin performing the action
+            
+        Returns:
+            Updated User instance
+            
+        Raises:
+            ValueError: If user cannot be deactivated
+        """
+        logger = get_logger(__name__)
+        user = UserService._get_user_or_raise(db, user_id)
+        
+        if not user.is_active:
+            raise ValueError("User is already inactive")
+        
+        # Prevent deactivating admin users
+        if is_omniadmin(user.email):
+            raise ValueError("Cannot deactivate admin users")
+        
+        # Prevent self-deactivation
+        if user.email == admin_email:
+            raise ValueError("Cannot deactivate your own account")
+        
+        # Deactivate the user
+        user.is_active = False
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"User deactivated - Admin: {admin_email}, Target User: {user.email} (ID: {user_id})")
+        
+        return user
+    
+    @staticmethod
+    def get_active_users_count(db: Session) -> int:
+        """
+        Get count of active users
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Count of active users
+        """
+        return db.query(User).filter(User.is_active == True).count()
+    
+    @staticmethod
+    def get_inactive_users_count(db: Session) -> int:
+        """
+        Get count of inactive users
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Count of inactive users
+        """
+        return db.query(User).filter(User.is_active == False).count() 

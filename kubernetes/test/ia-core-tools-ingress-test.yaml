@@ -13,15 +13,15 @@ metadata:
       more_set_headers "X-Content-Type-Options: nosniff";
       more_set_headers "X-Frame-Options: DENY";
       more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
-      more_set_headers "Content-Security-Policy: default-src 'self' https://iacoretoolstest.lksnext.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:";
+      more_set_headers "Content-Security-Policy: default-src 'self' aict-desa.lksnext.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:";
       more_set_headers "Cross-Origin-Resource-Policy: same-site";
 spec:
   tls:
     - hosts:
-        - iacoretoolstest.lksnext.com
+        - aict-desa.lksnext.com
       secretName: lksnext-tls-secret
   rules:
-    - host: iacoretoolstest.lksnext.com
+    - host: aict-desa.lksnext.com
       http:
         paths:
           # Backend API routes

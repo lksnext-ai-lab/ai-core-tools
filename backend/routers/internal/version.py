@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from typing import Dict
 import toml
 from pathlib import Path
-from .auth_utils import get_current_user_oauth
 
 version_router = APIRouter()
 
@@ -104,4 +103,21 @@ async def get_app_version():
     Get the current application version from pyproject.toml.
     Public endpoint - no authentication required.
     """
-    return get_version_info() 
+    return get_version_info()
+
+@version_router.get("/config", 
+                   summary="Get system configuration",
+                   tags=["System"])
+async def get_system_config():
+    """
+    Get system configuration including vector database type.
+    Public endpoint - no authentication required.
+    
+    Returns:
+        - vector_db_type: Type of vector database (PGVECTOR or QDRANT)
+    """
+    from backend.config import VECTOR_DB_TYPE
+    
+    return {
+        "vector_db_type": VECTOR_DB_TYPE
+    } 

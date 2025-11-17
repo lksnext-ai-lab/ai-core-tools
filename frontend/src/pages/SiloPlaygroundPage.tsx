@@ -24,9 +24,124 @@ interface SearchResult {
   page_content: string;
   metadata: Record<string, any>;
   score?: number;
+  id?: string;  // Add document ID
+}
+
+type MetadataOperator = '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte';
+type SupportedDbType = 'PGVECTOR' | 'QDRANT';
+
+type PreparedFilter = {
+  fieldName: string;
+  operator: MetadataOperator;
+  nativeOperator: string;
+  value: any;
+};
+
+const DEFAULT_DB_TYPE: SupportedDbType = 'PGVECTOR';
+const QDRANT_METADATA_PREFIX = 'metadata.';
+
+const FILTER_OPERATOR_MAPPINGS: Record<SupportedDbType, Record<MetadataOperator, string>> = {
+  PGVECTOR: {
+    $eq: '$eq',
+    $ne: '$ne',
+    $gt: '$gt',
+    $gte: '$gte',
+    $lt: '$lt',
+    $lte: '$lte',
+  },
+  QDRANT: {
+    $eq: 'match',
+    $ne: 'must_not_match',
+    $gt: 'gt',
+    $gte: 'gte',
+    $lt: 'lt',
+    $lte: 'lte',
+  },
+};
+
+function normalizeDbType(dbType?: string): SupportedDbType {
+  if (dbType && dbType.toUpperCase() === 'QDRANT') {
+    return 'QDRANT';
+  }
+  return DEFAULT_DB_TYPE;
+}
+
+function buildPgvectorFilter(filters: PreparedFilter[], logicalOperator: '$and' | '$or') {
+  if (filters.length === 0) {
+    return undefined;
+  }
+
+  if (filters.length === 1) {
+    const { fieldName, nativeOperator, value } = filters[0];
+    return { [fieldName]: { [nativeOperator]: value } };
+  }
+
+  const conditions = filters.map(({ fieldName, nativeOperator, value }) => ({
+    [fieldName]: { [nativeOperator]: value },
+  }));
+
+  return { [logicalOperator]: conditions };
+}
+
+function buildQdrantFilter(filters: PreparedFilter[], logicalOperator: '$and' | '$or') {
+  if (filters.length === 0) {
+    return undefined;
+  }
+
+  const must: any[] = [];
+  const should: any[] = [];
+  const mustNot: any[] = [];
+  const targetList = logicalOperator === '$and' ? must : should;
+
+  filters.forEach(({ fieldName, nativeOperator, value }) => {
+    const key = `${QDRANT_METADATA_PREFIX}${fieldName}`;
+
+    switch (nativeOperator) {
+      case 'must_not_match':
+        mustNot.push({
+          key,
+          match: { value },
+        });
+        break;
+      case 'match':
+        targetList.push({
+          key,
+          match: { value },
+        });
+        break;
+      case 'gt':
+      case 'gte':
+      case 'lt':
+      case 'lte':
+        targetList.push({
+          key,
+          range: { [nativeOperator]: value },
+        });
+        break;
+      default:
+        targetList.push({
+          key,
+          match: { value },
+        });
+    }
+  });
+
+  const qdrantFilter: Record<string, any> = {};
+  if (must.length > 0) {
+    qdrantFilter.must = must;
+  }
+  if (should.length > 0) {
+    qdrantFilter.should = should;
+  }
+  if (mustNot.length > 0) {
+    qdrantFilter.must_not = mustNot;
+  }
+
+  return Object.keys(qdrantFilter).length > 0 ? qdrantFilter : undefined;
 }
 
 function SiloPlaygroundPage() {
+  const [systemDBConfig, setSystemDBConfig] = useState('');
   const { appId, siloId } = useParams();
   const navigate = useNavigate();
   const [silo, setSilo] = useState<Silo | null>(null);
@@ -37,14 +152,32 @@ function SiloPlaygroundPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
+  const [filterOperators, setFilterOperators] = useState<Record<string, string>>({});
+  const [logicalOperator, setLogicalOperator] = useState<'$and' | '$or'>('$and');
   const [hasSearched, setHasSearched] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Load silo data
   useEffect(() => {
+    getSystemDBConfig();
     if (appId && siloId) {
       loadSilo();
     }
   }, [appId, siloId]);
+
+
+  async function getSystemDBConfig() {
+    if (!appId) return null;
+    try {
+      const config = await apiService.getSystemConfig();
+      setSystemDBConfig(config.vector_db_type);
+      console.log('System DB Config:', config.vector_db_type);
+    } catch (err) {
+      console.error('Error fetching system config:', err);
+      return null;
+    }
+  }
+
 
   async function loadSilo() {
     if (!appId || !siloId) return;
@@ -73,23 +206,69 @@ function SiloPlaygroundPage() {
       setSearchResults([]);
       setHasSearched(true);
       
-      // Build metadata filter object
-      const filterMetadata: Record<string, any> = {};
-      Object.entries(metadataFilters).forEach(([fieldName, value]) => {
-        if (value.trim()) {
-          filterMetadata[fieldName] = { $eq: value.trim() };
+      const dbType = normalizeDbType(systemDBConfig);
+      const operatorMapping = FILTER_OPERATOR_MAPPINGS[dbType];
+
+      const preparedFilters: PreparedFilter[] = [];
+      Object.entries(metadataFilters).forEach(([fieldName, rawValue]) => {
+        const trimmedValue = rawValue.trim();
+        if (!trimmedValue) {
+          return;
         }
+
+        const selectedOperator = (filterOperators[fieldName] || '$eq') as MetadataOperator;
+        const nativeOperator = operatorMapping[selectedOperator];
+        if (!nativeOperator) {
+          return;
+        }
+
+        const fieldDefinition = silo?.metadata_fields?.find(f => f.name === fieldName);
+        let convertedValue: any = trimmedValue;
+
+        if (fieldDefinition) {
+          if (fieldDefinition.type === 'int') {
+            const parsed = parseInt(trimmedValue, 10);
+            convertedValue = Number.isNaN(parsed) ? trimmedValue : parsed;
+          } else if (fieldDefinition.type === 'float') {
+            const parsed = parseFloat(trimmedValue);
+            convertedValue = Number.isNaN(parsed) ? trimmedValue : parsed;
+          } else if (fieldDefinition.type === 'bool') {
+            convertedValue = trimmedValue.toLowerCase() === 'true';
+          }
+          // Leave string and date as-is
+        }
+
+        preparedFilters.push({
+          fieldName,
+          operator: selectedOperator,
+          nativeOperator,
+          value: convertedValue,
+        });
       });
+
+      let filterMetadata: Record<string, any> | undefined;
+      if (preparedFilters.length > 0) {
+        if (dbType === 'QDRANT') {
+          filterMetadata = buildQdrantFilter(preparedFilters, logicalOperator);
+        } else {
+          filterMetadata = buildPgvectorFilter(preparedFilters, logicalOperator);
+        }
+      }
       
       const response = await apiService.searchSiloDocuments(
         parseInt(appId), 
         parseInt(siloId), 
         searchQuery,
         10,
-        Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined
+        filterMetadata
       );
       
-      setSearchResults(response.results || []);
+      // Extract _id from metadata and set as top-level id field
+      const resultsWithIds = (response.results || []).map((result: SearchResult) => ({
+        ...result,
+        id: result.metadata?._id,  // Extract document ID from metadata
+      }));
+      setSearchResults(resultsWithIds);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Search failed');
       console.error('Error searching silo:', err);
@@ -102,11 +281,49 @@ function SiloPlaygroundPage() {
     navigate(`/apps/${appId}/silos`);
   }
 
-  function handleMetadataFilterChange(fieldName: string, value: string) {
+  function handleMetadataFilterChange(fieldName: string, value: string, operator: string) {
     setMetadataFilters(prev => ({
       ...prev,
       [fieldName]: value
     }));
+    setFilterOperators(prev => ({
+      ...prev,
+      [fieldName]: operator
+    }));
+  }
+
+  async function handleDeleteDocument(result: SearchResult, index: number) {
+    if (!appId || !siloId || !result.id) {
+      alert('Cannot delete: Document ID not available');
+      return;
+    }
+    
+    if (!window.confirm('Are you sure you want to delete this document from the silo? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setDeletingId(result.id);
+      
+      // Delete using document ID
+      await apiService.deleteSiloDocuments(
+        parseInt(appId),
+        parseInt(siloId),
+        [result.id]  // Pass as array of IDs
+      );
+      
+      // Remove from results locally
+      setSearchResults(prev => prev.filter((_, i) => i !== index));
+      
+      // Reload silo to update document count
+      await loadSilo();
+      
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      setSearchError(err instanceof Error ? err.message : 'Failed to delete document');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (loading) {
@@ -216,10 +433,27 @@ function SiloPlaygroundPage() {
           {/* Metadata Filters */}
           {silo.metadata_fields && silo.metadata_fields.length > 0 && (
             <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                <span className="mr-2">🔍</span>
-                Filter by Metadata
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-700">
+                  <span className="mr-2" aria-hidden="true">🔍</span>{' '}
+                  Filter by Metadata
+                </h3>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="logicalOperator" className="text-sm text-gray-600">
+                    Match:
+                  </label>
+                  <select
+                    id="logicalOperator"
+                    value={logicalOperator}
+                    onChange={(e) => setLogicalOperator(e.target.value as '$and' | '$or')}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium bg-white"
+                    disabled={isSearching}
+                  >
+                    <option value="$and">ALL filters (AND)</option>
+                    <option value="$or">ANY filter (OR)</option>
+                  </select>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {silo.metadata_fields.map((field) => (
                   <div key={field.name}>
@@ -227,15 +461,30 @@ function SiloPlaygroundPage() {
                       {field.name}
                       <span className="text-xs text-gray-500 ml-1">({field.type})</span>
                     </label>
-                    <input
-                      type="text"
-                      id={`filter_${field.name}`}
-                      value={metadataFilters[field.name] || ''}
-                      onChange={(e) => handleMetadataFilterChange(field.name, e.target.value)}
-                      placeholder={`Filter by ${field.name}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
-                      disabled={isSearching}
-                    />
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={filterOperators[field.name] || '$eq'}
+                        onChange={(e) => handleMetadataFilterChange(field.name, metadataFilters[field.name] || '', e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="$eq">equals</option>
+                        <option value="$ne">not equals</option>
+                        <option value="$gt">greater than</option>
+                        <option value="$gte">greater than or equal</option>
+                        <option value="$lt">less than</option>
+                        <option value="$lte">less than or equal</option>
+                      </select>
+                      <input
+                        type="text"
+                        id={`filter_${field.name}`}
+                        value={metadataFilters[field.name] || ''}
+                        onChange={(e) => handleMetadataFilterChange(field.name, e.target.value, filterOperators[field.name] || '$eq')}
+                        placeholder={`Filter by ${field.name}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
+                        disabled={isSearching}
+                      />
+                    </div>
+                    
                     {field.description && (
                       <p className="text-xs text-gray-500 mt-1">{field.description}</p>
                     )}
@@ -296,38 +545,69 @@ function SiloPlaygroundPage() {
           </h2>
           
           <div className="space-y-4">
-            {searchResults.map((result, index) => (
-              <div key={index} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500">
-                    Result #{index + 1}
-                  </span>
-                  {result.score && (
-                    <span className="text-sm text-gray-500">
-                      Score: {result.score.toFixed(3)}
-                    </span>
-                  )}
-                </div>
-                
-                <div className="mb-3">
-                  <h3 className="text-sm font-medium text-gray-700 mb-1">Content:</h3>
-                  <p className="text-gray-900 text-sm leading-relaxed">
-                    {result.page_content}
-                  </p>
-                </div>
-                
-                {result.metadata && Object.keys(result.metadata).length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">Metadata:</h3>
-                    <div className="bg-gray-50 rounded p-2">
-                      <pre className="text-xs text-gray-600 overflow-x-auto">
-                        {JSON.stringify(result.metadata, null, 2)}
-                      </pre>
+            {searchResults.map((result, index) => {
+              const resultKey = result.id
+                ?? result.metadata?._id
+                ?? `${result.page_content}-${result.score ?? 'no-score'}`;
+              return (
+                <div key={resultKey} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-500">
+                        Result #{index + 1}
+                      </span>
+                      {result.id && (
+                        <span className="text-xs text-gray-400" title={`Document ID: ${result.id}`}>
+                          (ID: {result.id.substring(0, 8)}...)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {result.score && (
+                        <span className="text-sm text-gray-500">
+                          Score: {result.score.toFixed(3)}
+                        </span>
+                      )}
+                      {result.id && (
+                        <button
+                          onClick={() => handleDeleteDocument(result, index)}
+                          disabled={deletingId === result.id}
+                          className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete this document from silo"
+                        >
+                          {deletingId === result.id ? (
+                            <span className="flex items-center gap-1">
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                              Deleting...
+                            </span>
+                          ) : (
+                            '🗑️ Delete'
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  <div className="mb-3">
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Content:</h3>
+                    <p className="text-gray-900 text-sm leading-relaxed">
+                      {result.page_content}
+                    </p>
+                  </div>
+
+                  {result.metadata && Object.keys(result.metadata).length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 mb-1">Metadata:</h3>
+                      <div className="bg-gray-50 rounded p-2">
+                        <pre className="text-xs text-gray-600 overflow-x-auto">
+                          {JSON.stringify(result.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -382,4 +662,4 @@ function SiloPlaygroundPage() {
   );
 }
 
-export default SiloPlaygroundPage; 
+export default SiloPlaygroundPage;

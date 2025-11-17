@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SettingsLayout from '../../components/layout/SettingsLayout';
 import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface DataStructure {
   parser_id: number;
@@ -18,6 +19,7 @@ interface DataStructure {
 function DataStructuresPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,18 +163,18 @@ function DataStructuresPage() {
 
   if (loading) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading data structures...</p>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   if (error) {
     return (
-      <SettingsLayout>
+      
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-600">Error: {error}</p>
@@ -184,12 +186,12 @@ function DataStructuresPage() {
             </button>
           </div>
         </div>
-      </SettingsLayout>
+      
     );
   }
 
   return (
-    <SettingsLayout>
+    
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -197,19 +199,25 @@ function DataStructuresPage() {
             <h2 className="text-xl font-semibold text-gray-900">Data Structures</h2>
             <p className="text-gray-600">Define schemas for structured data extraction and validation</p>
           </div>
-          <button 
-            onClick={handleCreateStructure}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Create Data Structure
-          </button>
+          {isAdmin && (
+            <button 
+              onClick={handleCreateStructure}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Create Data Structure
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Data Structures Table */}
         {dataStructures.length > 0 ? (
-          <div className="bg-white shadow rounded-lg">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="bg-white shadow rounded-lg overflow-visible">
+            <div className="overflow-x-auto overflow-visible">
+              <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -236,7 +244,12 @@ function DataStructuresPage() {
                       <div className="flex items-center">
                         <span className="text-purple-400 text-xl mr-3">📊</span>
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{structure.name}</div>
+                            <div 
+                              className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => handleEditStructure(structure.parser_id)}
+                            >
+                              {structure.name}
+                            </div>
                         </div>
                       </div>
                     </td>
@@ -254,28 +267,33 @@ function DataStructuresPage() {
                       {structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Edit',
-                            onClick: () => handleEditStructure(structure.parser_id),
-                            icon: '✏️',
-                            variant: 'primary'
-                          },
-                          {
-                            label: 'Delete',
-                            onClick: () => handleDelete(structure),
-                            icon: '🗑️',
-                            variant: 'danger'
-                          }
-                        ]}
-                        size="sm"
-                      />
+                      {isAdmin ? (
+                        <ActionDropdown
+                          actions={[
+                            {
+                              label: 'Edit',
+                              onClick: () => handleEditStructure(structure.parser_id),
+                              icon: '✏️',
+                              variant: 'primary'
+                            },
+                            {
+                              label: 'Delete',
+                              onClick: () => handleDelete(structure),
+                              icon: '🗑️',
+                              variant: 'danger'
+                            }
+                          ]}
+                          size="sm"
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-sm">View only</span>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         ) : (
           <div className="text-center py-12">
@@ -387,7 +405,7 @@ function DataStructuresPage() {
           </div>
         </Modal>
       </div>
-    </SettingsLayout>
+    
   );
 }
 

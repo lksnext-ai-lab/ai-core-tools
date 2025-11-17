@@ -119,7 +119,7 @@ docker build -f frontend/Dockerfile -t registry.lksnext.com/ia-core-tools/fronte
 
 ## Monitoreo
 
-- Backend health check: `GET https://iacoretoolstest.lksnext.com/api/`
-- Frontend health check: `GET https://iacoretoolstest.lksnext.com/health`
+- Backend health check: `GET aict-desa.lksnext.com/api/`
+- Frontend health check: `GET aict-desa.lksnext.com/health`
 - Logs del backend: `kubectl logs -f deployment/ia-core-tools-backend-test -n test`
 - Logs del frontend: `kubectl logs -f deployment/ia-core-tools-frontend-test -n test`

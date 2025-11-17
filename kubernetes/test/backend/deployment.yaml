@@ -233,6 +233,38 @@ spec:
                   name: ia-core-tools-config-test
                   key: FRONTEND_URL
             
+            # EntraID OAuth Configuration
+            - name: OAUTH_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: OAUTH_PROVIDER
+            - name: AICT_LOGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: AICT_LOGIN
+            - name: ENTRAID_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: ENTRAID_CLIENT_ID
+            - name: ENTRAID_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: ENTRAID_CLIENT_SECRET
+            - name: ENTRAID_TENANT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: ENTRAID_TENANT_ID
+            - name: ENTRAID_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: ENTRAID_REDIRECT_URI
+            
             # Application configuration
             - name: AICT_MODE
               valueFrom:
@@ -244,11 +276,11 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: AICT_OMNIADMINS
-            - name: DEVELOPMENT_MODE
+            - name: OIDC_ENABLED
               valueFrom:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
-                  key: DEVELOPMENT_MODE
+                  key: OIDC_ENABLED
             - name: REPO_BASE_FOLDER
               valueFrom:
                 configMapKeyRef:

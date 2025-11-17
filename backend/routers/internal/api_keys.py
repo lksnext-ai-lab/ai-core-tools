@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -30,13 +31,12 @@ api_key_service = APIKeyService()
                     response_model=List[APIKeyListItemSchema])
 async def list_api_keys(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     List all API keys for a specific app.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -57,14 +57,13 @@ async def list_api_keys(
 async def get_api_key(
     app_id: int, 
     key_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific API key.
     Note: The actual key value is only shown once upon creation.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -96,13 +95,13 @@ async def create_or_update_api_key(
     app_id: int,
     key_id: int,
     api_key_data: CreateUpdateAPIKeySchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Create a new API key or update an existing one.
     """
-    user_id = current_user["user_id"]
+    user_id = auth_context.identity.id
     
     # TODO: Add app access validation
     
@@ -141,13 +140,12 @@ async def create_or_update_api_key(
 async def delete_api_key(
     app_id: int, 
     key_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Delete an API key.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -177,13 +175,12 @@ async def delete_api_key(
 async def toggle_api_key(
     app_id: int, 
     key_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Toggle the active status of an API key.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     

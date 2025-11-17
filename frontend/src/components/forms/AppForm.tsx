@@ -1,97 +1,79 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
+import { useFormState } from '../../hooks/useFormState';
+import { FormField } from '../ui/FormField';
+import { FormError } from '../ui/FormError';
+import { FormActions } from '../ui/FormActions';
 
 interface App {
   app_id: number;
   name: string;
   created_at: string;
   owner_id: number;
+  agent_rate_limit: number;
 }
 
 interface AppFormProps {
-  app?: App | null; // null for create, App object for edit
-  onSubmit: (data: { name: string }) => Promise<void>;
-  onCancel: () => void;
+  readonly app?: App | null; // null for create, App object for edit
+  readonly onSubmit: (data: { name: string }) => Promise<void>;
+  readonly onCancel: () => void;
 }
 
 function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
-  const [name, setName] = useState(app?.name || '');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const isEditing = !!app;
+  
+  // Use shared form state hook
+  const { formData, updateField, isSubmitting, error, setError, handleSubmit } = useFormState({
+    name: app?.name || ''
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    
-    // Basic validation
-    if (!name.trim()) {
+  // Update form when app prop changes
+  useEffect(() => {
+    if (app) {
+      updateField('name', app.name);
+    }
+  }, [app]);
+
+  // Validation
+  const validate = () => {
+    if (!formData.name.trim()) {
       setError('App name is required');
-      return;
+      return false;
     }
+    return true;
+  };
 
-    try {
-      setIsSubmitting(true);
-      setError(null);
-      
-      await onSubmit({ name: name.trim() });
-      
-      // Success - parent component will handle closing modal
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save app');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  // Submit handler with validation
+  const onFormSubmit = async (e: React.FormEvent) => {
+    if (!validate()) return;
+    
+    await handleSubmit(e, async () => {
+      await onSubmit({ name: formData.name.trim() });
+    }, 'Failed to save app');
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={onFormSubmit} className="space-y-4">
       {/* App Name Field */}
-      <div>
-        <label 
-          htmlFor="app-name" 
-          className="block text-sm font-medium text-gray-700 mb-2"
-        >
-          App Name
-        </label>
-        <input
-          id="app-name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter app name"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          disabled={isSubmitting}
-        />
-      </div>
+      <FormField
+        label="App Name"
+        id="app-name"
+        type="text"
+        value={formData.name}
+        onChange={(e) => updateField('name', e.target.value)}
+        placeholder="Enter app name"
+        disabled={isSubmitting}
+        required
+      />
 
       {/* Error Message */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      <FormError error={error} />
 
       {/* Action Buttons */}
-      <div className="flex justify-end space-x-3 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isSubmitting}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting || !name.trim()}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting 
-            ? (isEditing ? 'Updating...' : 'Creating...') 
-            : (isEditing ? 'Update App' : 'Create App')
-          }
-        </button>
-      </div>
+      <FormActions
+        onCancel={onCancel}
+        isSubmitting={isSubmitting}
+        submitLabel={isEditing ? 'Update App' : 'Create App'}
+      />
     </form>
   );
 }

@@ -5,7 +5,7 @@ metadata:
   namespace: test
 data:
   # Backend API URL for frontend
-  VITE_API_BASE_URL: "https://iacoretoolstest.lksnext.com"
+  VITE_API_BASE_URL: "https://aict-desa.lksnext.com"
   
   # Application Configuration
   APP_TITLE: "IA Core Tools API"
@@ -29,14 +29,14 @@ data:
   PUBLIC_DOCS_PATH: "/docs/public"
   
   # CORS Configuration
-  CORS_ORIGIN_DEV_SERVER: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_DEV_SERVER_ALT: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_DOCKER: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_DOCKER_ALT: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_DEV_8080: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_DEV_8080_ALT: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_VITE_PREVIEW: "https://iacoretoolstest.lksnext.com"
-  CORS_ORIGIN_VITE_PREVIEW_ALT: "https://iacoretoolstest.lksnext.com"
+  CORS_ORIGIN_DEV_SERVER: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_SERVER_ALT: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DOCKER: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DOCKER_ALT: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_8080: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_DEV_8080_ALT: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_VITE_PREVIEW: "https://aict-desa.lksnext.com"
+  CORS_ORIGIN_VITE_PREVIEW_ALT: "https://aict-desa.lksnext.com"
   
   # Database configuration
   DATABASE_HOST: "ia-core-tools-postgresql-service-test"
@@ -44,12 +44,18 @@ data:
   SQLALCHEMY_DATABASE_URI: "postgresql://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
   
   # Authentication Configuration
-  DEVELOPMENT_MODE: "false"
+  OIDC_ENABLED: "true"
   JWT_ALGORITHM: "HS256"
   JWT_EXPIRATION_HOURS: "24"
-  FRONTEND_URL: "https://iacoretoolstest.lksnext.com"
+  FRONTEND_URL: "https://aict-desa.lksnext.com"
   GOOGLE_DISCOVERY_URL: "https://accounts.google.com/.well-known/openid-configuration"
   GOOGLE_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
+  
+  # EntraID OAuth Configuration
+  AICT_LOGIN: "OIDC"
+  OAUTH_PROVIDER: "ENTRAID"
+  ENTRAID_TENANT_ID: "b85a15eb-1d5f-449e-93d8-77a9cba50013"
+  ENTRAID_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
   
   # EntraID OAuth Configuration
   AICT_LOGIN: "OIDC"
@@ -59,7 +65,7 @@ data:
   VITE_OIDC_ENABLED: "true"
   # Application mode and admins
   AICT_MODE: "SELF-HOSTED"
-  AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com"
+  AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com,mikellonbide@gmail.com"
   
   # Storage paths
   REPO_BASE_FOLDER: "data/repositories"

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 
@@ -181,8 +181,8 @@ function AgentsPage() {
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-md border overflow-y-visible">
-          <div className="overflow-x-auto overflow-y-visible">
+        <div className="bg-white rounded-lg shadow-md border overflow-visible">
+          <div className="overflow-x-auto overflow-visible">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -224,11 +224,16 @@ function AgentsPage() {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {agent.name}
+                            <Link 
+                              to={`/apps/${appId}/agents/${agent.agent_id}`} 
+                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                              >
+                                {agent.name}
+                            </Link>
                           </div>
                           {agent.is_tool && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Tool
+                              Tool 
                             </span>
                           )}
                         </div>

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import Optional
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
 from db.database import get_db
@@ -20,7 +21,7 @@ ocr_router = APIRouter(tags=["Internal OCR"])
 async def process_ocr_internal(
     agent_id: int,
     pdf_file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
@@ -29,9 +30,8 @@ async def process_ocr_internal(
     try:
         # Create user context for OAuth user
         user_context = {
-            "user_id": current_user["user_id"],
+            "user_id": int(auth_context.identity.id),
             "oauth": True,
-            "app_id": current_user.get("app_id")
         }
         
         # Use unified service layer
@@ -43,7 +43,7 @@ async def process_ocr_internal(
             db=db
         )
         
-        logger.info(f"OCR processing completed for agent {agent_id} by user {current_user['user_id']}")
+        logger.info(f"OCR processing completed for agent {agent_id} by user {int(auth_context.identity.id)}")
         return OCRResponseSchema(**result)
         
     except HTTPException:

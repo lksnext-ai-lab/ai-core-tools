@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
+from sqlalchemy.orm import Session
 import json
 import tempfile
 import os
@@ -14,6 +15,8 @@ from services.resource_service import ResourceService
 # Import Pydantic models and auth
 from .schemas import *
 from .auth import get_api_key_auth, validate_api_key_for_app, APIKeyAuth
+# File size validation handled by enforce_file_size_limit dependency in router
+from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
@@ -32,13 +35,14 @@ async def attach_file(
     app_id: int,
     agent_id: int,
     file: UploadFile = File(...),
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Attach a file to an agent for chat context."""
     # Validate API key for this app
     auth = validate_api_key_for_app(app_id, api_key)
     
-    # TODO: Implement file attachment logic
+   # TODO: Implement file attachment logic
     # For now, return a mock response
     file_reference = f"file_{agent_id}_{file.filename}"
     

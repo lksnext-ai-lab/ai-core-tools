@@ -4,6 +4,19 @@ from datetime import datetime
 
 # ==================== APP SCHEMAS ====================
 
+class AppUsageStatsSchema(BaseModel):
+    """Schema for app usage statistics"""
+    usage_percentage: float
+    stress_level: str  # "low", "moderate", "high", "critical", "unlimited"
+    current_usage: int
+    limit: int
+    remaining: int
+    reset_in_seconds: int
+    is_over_limit: bool
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AppListItemSchema(BaseModel):
     """Schema for app list items"""
     app_id: int
@@ -15,13 +28,16 @@ class AppListItemSchema(BaseModel):
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
     agent_rate_limit: int
+    max_file_size_mb: Optional[int] = 0
+    agent_cors_origins: Optional[str] = None
     # Entity counts for table display
-
     agent_count: int = 0
     repository_count: int = 0
     domain_count: int = 0
     silo_count: int = 0
     collaborator_count: int = 0
+    # Usage statistics for speedometer
+    usage_stats: Optional[AppUsageStatsSchema] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,7 +50,11 @@ class AppDetailSchema(BaseModel):
     user_role: str
     created_at: Optional[datetime]
     owner_id: int
+    owner_email: Optional[str] = None
+    owner_name: Optional[str] = None
     agent_rate_limit: int
+    max_file_size_mb: Optional[int] = 0
+    agent_cors_origins: Optional[str] = None
     # Entity counts for dashboard display
      
     agent_count: int = 0
@@ -51,12 +71,17 @@ class CreateAppSchema(BaseModel):
     name: str
     langsmith_api_key: Optional[str] = ""
     agent_rate_limit: Optional[int] = 0
+    max_file_size_mb: Optional[int] = 0
+    agent_cors_origins: Optional[str] = None
 
 
 class UpdateAppSchema(BaseModel):
     """Schema for updating an app"""
     name: str
     langsmith_api_key: Optional[str] = ""
+    agent_rate_limit: Optional[int] = 0
+    max_file_size_mb: Optional[int] = 0
+    agent_cors_origins: Optional[str] = None
 
 
 # ==================== COLLABORATION SCHEMAS ====================

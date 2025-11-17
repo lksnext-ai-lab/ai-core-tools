@@ -1,5 +1,6 @@
 from models.resource import Resource
 from repositories.resource_repository import ResourceRepository
+from services.folder_service import FolderService
 from typing import List, Tuple, Optional
 import os
 from services.silo_service import SiloService
@@ -14,6 +15,7 @@ class ResourceService:
 
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
+
 
     @staticmethod
     def get_resources_by_repo_id(repository_id: int, db: Session) -> List[Resource]:
@@ -43,6 +45,80 @@ class ResourceService:
         """
         return ResourceRepository.get_by_id(db, resource_id)
     
+    @staticmethod
+    def move_resource_to_folder(resource_id: int, repository_id: int, new_folder_id: Optional[int], db: Session) -> dict:
+        """
+        Move a resource to a different folder within the same repository.
+        Updates file system location, database record, and re-indexes in vector DB.
+        
+        Args:
+            resource_id: ID of the resource to move
+            repository_id: Repository ID (for validation)
+            new_folder_id: New folder ID (None for root)
+            db: Database session
+            
+        Returns:
+            dict: Result with success status and updated resource info
+        """
+        try:
+            # Get the resource
+            resource = ResourceService.get_resource(resource_id, db)
+            if not resource:
+                raise ValueError(f"Resource {resource_id} not found")
+            
+            # Validate repository ownership
+            if resource.repository_id != repository_id:
+                raise ValueError(f"Resource {resource_id} does not belong to repository {repository_id}")
+            
+            # Validate new folder if provided
+            if new_folder_id is not None:
+                if not FolderService.validate_folder_access(new_folder_id, repository_id, db):
+                    raise ValueError(f"Folder {new_folder_id} does not belong to repository {repository_id}")
+            
+            # Get old and new paths
+            old_path = ResourceService.get_resource_file_path(resource_id, db)
+            if not old_path:
+                raise ValueError(f"Could not determine current path for resource {resource_id}")
+            
+            # Build new path
+            repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
+            if new_folder_id:
+                folder_path = FolderService.get_folder_path(new_folder_id, db)
+                new_path = os.path.join(repository_path, folder_path, resource.uri)
+            else:
+                new_path = os.path.join(repository_path, resource.uri)
+            
+            # Create target directory if it doesn't exist
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            
+            # Move the file in the file system
+            import shutil
+            shutil.move(old_path, new_path)
+            logger.info(f"Moved file from {old_path} to {new_path}")
+            
+            # Update database record
+            resource.folder_id = new_folder_id
+            db.add(resource)
+            db.commit()  # Commit the database changes first
+            logger.info(f"Updated resource {resource_id} folder_id to {new_folder_id}")
+            
+            # Update metadata in vector database without re-indexing content
+            from services.silo_service import SiloService
+            SiloService.update_resource_metadata(resource, db)
+            logger.info(f"Updated metadata for resource {resource_id} with new folder information")
+            
+            return {
+                "success": True,
+                "message": "Resource moved successfully",
+                "resource_id": resource_id,
+                "new_folder_id": new_folder_id,
+                "new_path": new_path
+            }
+            
+        except Exception as e:
+            logger.error(f"Error moving resource {resource_id}: {str(e)}")
+            raise ValueError(f"Failed to move resource: {str(e)}")
+
     @staticmethod
     def delete_resource(resource_id: int, db: Session) -> bool:
         """
@@ -99,10 +175,16 @@ class ResourceService:
         if not resource:
             return None
         
-        return os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
+        # Build path including folder structure
+        if resource.folder_id:
+            folder_path = FolderService.get_folder_path(resource.folder_id, db)
+            return os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), folder_path, resource.uri)
+        else:
+            # Resource is at root level
+            return os.path.join(REPO_BASE_FOLDER, str(resource.repository_id), resource.uri)
     
     @staticmethod
-    def create_multiple_resources(files: List, repository_id: int, db: Session, custom_names: dict = None) -> Tuple[List[Resource], List[dict]]:
+    def create_multiple_resources(files: List, repository_id: int, db: Session, custom_names: dict = None, folder_id: Optional[int] = None) -> Tuple[List[Resource], List[dict]]:
         """
         Create multiple resources from uploaded files
         
@@ -111,6 +193,7 @@ class ResourceService:
             repository_id: The ID of the repository
             db: Database session
             custom_names: Dictionary mapping file indices to custom names (without extensions)
+            folder_id: Optional folder ID to upload files to
             
         Returns:
             Tuple containing a list of created Resource instances and a list of failed files
@@ -124,15 +207,32 @@ class ResourceService:
         if custom_names is None:
             custom_names = {}
         
+        # Validate folder_id if provided
+        if folder_id is not None:
+            logger.info(f"Validating folder access: folder_id={folder_id}, repository_id={repository_id}")
+            if not FolderService.validate_folder_access(folder_id, repository_id, db):
+                logger.error(f"Folder {folder_id} does not belong to repository {repository_id}")
+                raise ValueError(f"Folder {folder_id} does not belong to repository {repository_id}")
+            logger.info(f"Folder access validated successfully")
+        
+        # Build the target path
         repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
-        os.makedirs(repository_path, exist_ok=True)
+        if folder_id:
+            folder_path = FolderService.get_folder_path(folder_id, db)
+            target_path = os.path.join(repository_path, folder_path)
+            logger.info(f"Building path for folder: repository_path={repository_path}, folder_path={folder_path}, target_path={target_path}")
+        else:
+            target_path = repository_path
+            logger.info(f"Building path for root: target_path={target_path}")
+        
+        os.makedirs(target_path, exist_ok=True)
 
         created_resources = []
         failed_files = []
         
         for index, file in enumerate(files):
             custom_name = custom_names.get(index)
-            result = ResourceService._process_single_file(file, repository_id, repository_path, custom_name, db)
+            result = ResourceService._process_single_file(file, repository_id, target_path, custom_name, folder_id, db)
             if isinstance(result, Resource):
                 created_resources.append(result)
                 logger.info(f"Resource {result.name} prepared for indexing")
@@ -156,15 +256,16 @@ class ResourceService:
         return created_resources, failed_files
 
     @staticmethod
-    def _process_single_file(file, repository_id: int, repository_path: str, custom_name: str = None, db: Session = None):
+    def _process_single_file(file, repository_id: int, target_path: str, custom_name: str = None, folder_id: Optional[int] = None, db: Session = None):
         """
         Process a single file upload
         
         Args:
             file: The uploaded file
             repository_id: The ID of the repository
-            repository_path: The path to save the file
+            target_path: The path to save the file
             custom_name: Custom name for the resource (without extension)
+            folder_id: Optional folder ID
             db: Database session to use
             
         Returns:
@@ -172,6 +273,7 @@ class ResourceService:
         """
         if not file or not hasattr(file, 'filename') or file.filename == '':
             return {'filename': 'Unknown', 'error': 'Empty filename'}
+            
             
         file_extension = os.path.splitext(file.filename)[1].lower()
         if file_extension not in ResourceService.SUPPORTED_EXTENSIONS:
@@ -195,9 +297,10 @@ class ResourceService:
                 name=name, 
                 uri=save_filename, 
                 repository_id=repository_id,
+                folder_id=folder_id,
                 type=file_extension  # Set the file type based on extension
             )
-            file_path = os.path.join(repository_path, save_filename)
+            file_path = os.path.join(target_path, save_filename)
             
             # Save the file with the new name
             if hasattr(file, 'save'):
@@ -249,7 +352,8 @@ class ResourceService:
         app_id: int,
         repository_id: int,
         files: List[UploadFile],
-        db: Session
+        db: Session,
+        folder_id: Optional[int] = None
     ) -> dict:
         """
         Upload multiple resources to a repository - business logic from router
@@ -259,6 +363,7 @@ class ResourceService:
             repository_id: Repository ID
             files: List of uploaded files
             db: Database session
+            folder_id: Optional folder ID to upload files to
             
         Returns:
             Dictionary with upload results
@@ -274,7 +379,8 @@ class ResourceService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No files provided"
             )
-        
+
+
         # Validate repository exists
         repo = ResourceRepository.get_repository_by_id(db, repository_id)
         if not repo:
@@ -288,7 +394,7 @@ class ResourceService:
         
         # Process files using create_multiple_resources method
         created_resources, failed_files = ResourceService.create_multiple_resources(
-            files, repository_id, db
+            files, repository_id, db, folder_id=folder_id
         )
         
         logger.info(f"Upload completed - {len(created_resources)} resources created, {len(failed_files)} failed")

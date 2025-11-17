@@ -12,11 +12,17 @@ logger = get_logger(__name__)
 class AuthConfig:
     """Centralized authentication configuration"""
     
-    # OAuth Configuration
+    # OAuth Provider Configuration
+    OAUTH_PROVIDER: str = "ENTRAID"  # Options: GOOGLE, ENTRAID
+    
+    # Google OAuth Configuration
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_DISCOVERY_URL: str = 'https://accounts.google.com/.well-known/openid-configuration'
     GOOGLE_REDIRECT_URI: str = 'http://localhost:8000/auth/callback'
+    
+    
+    # Common Configuration
     FRONTEND_URL: str = 'http://localhost:5173'
     
     # JWT Configuration
@@ -24,18 +30,32 @@ class AuthConfig:
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     
-    # Development Mode
-    DEVELOPMENT_MODE: bool = False
+    # Login Mode Configuration
+    LOGIN_MODE: str = "OIDC"  # Options: OIDC, FAKE
+    
+    # OIDC Configuration
+    OIDC_ENABLED: bool = True
     DEV_USERS: Dict[str, Dict[str, Any]] = {}
     
     @classmethod
     def load_config(cls):
         """Load configuration from environment variables"""
-        # OAuth Configuration
+        # OAuth Provider Selection
+        cls.OAUTH_PROVIDER = os.getenv('OAUTH_PROVIDER', 'ENTRAID').upper()
+        if cls.OAUTH_PROVIDER not in ['GOOGLE', 'ENTRAID']:
+            logger.warning(f"Invalid OAUTH_PROVIDER value '{cls.OAUTH_PROVIDER}', defaulting to ENTRAID")
+            cls.OAUTH_PROVIDER = 'ENTRAID'
+        
+        # Google OAuth Configuration
         cls.GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
         cls.GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
         cls.GOOGLE_DISCOVERY_URL = os.getenv('GOOGLE_DISCOVERY_URL', cls.GOOGLE_DISCOVERY_URL)
         cls.GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', cls.GOOGLE_REDIRECT_URI)
+               
+        cls.ENTRAID_CLIENT_ID = os.getenv('ENTRA_CLIENT_ID')
+        cls.ENTRAID_CLIENT_SECRET = os.getenv('ENTRA_CLIENT_SECRET')
+        cls.ENTRAID_TENANT_ID = os.getenv('ENTRA_TENANT_ID')
+        # Common Configuration
         cls.FRONTEND_URL = os.getenv('FRONTEND_URL', cls.FRONTEND_URL)
         
         # JWT Configuration
@@ -43,11 +63,17 @@ class AuthConfig:
         cls.JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', cls.JWT_ALGORITHM)
         cls.JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', cls.JWT_EXPIRATION_HOURS))
         
-        # Development Mode
-        cls.DEVELOPMENT_MODE = os.getenv('DEVELOPMENT_MODE', 'false').lower() == 'true'
+        # Login Mode Configuration
+        cls.LOGIN_MODE = os.getenv('AICT_LOGIN', 'OIDC').upper()
+        if cls.LOGIN_MODE not in ['OIDC', 'FAKE']:
+            logger.warning(f"Invalid AICT_LOGIN value '{cls.LOGIN_MODE}', defaulting to OIDC")
+            cls.LOGIN_MODE = 'OIDC'
         
-        # Setup development users if in development mode
-        if cls.DEVELOPMENT_MODE:
+        # OIDC Configuration
+        cls.OIDC_ENABLED = os.getenv('OIDC_ENABLED', 'true').lower() == 'true'
+        
+        # Setup development users if OIDC is disabled (dev mode)
+        if not cls.OIDC_ENABLED:
             cls._setup_dev_users()
         
         cls._log_config_status()
@@ -82,28 +108,50 @@ class AuthConfig:
     @classmethod
     def _log_config_status(cls):
         """Log the current configuration status"""
-        if cls.is_oauth_configured():
-            logger.info("✅ Google OAuth is properly configured")
+        logger.info(f"[LOCK] Login mode: {cls.LOGIN_MODE}")
+        logger.info(f"[KEY] OAuth Provider: {cls.OAUTH_PROVIDER}")
+        
+        if cls.LOGIN_MODE == 'FAKE':
+            logger.warning("[WARN] FAKE LOGIN MODE - For development/testing only!")
+            logger.info("   Any existing user email can log in without password")
+        elif cls.is_oauth_configured():
+            if cls.OAUTH_PROVIDER == 'GOOGLE':
+                logger.info("[OK] Google OAuth is properly configured")
+            elif cls.OAUTH_PROVIDER == 'ENTRAID':
+                logger.info("[OK] EntraID (Azure AD) OAuth is properly configured")
+                logger.info(f"   Tenant ID: {cls.ENTRAID_TENANT_ID}")
         else:
-            if cls.DEVELOPMENT_MODE:
-                logger.warning("⚠️  Google OAuth not configured, running in DEVELOPMENT MODE with test tokens")
-                logger.info("🔑 Development tokens available:")
+            if not cls.OIDC_ENABLED:
+                logger.warning(f"[WARN] {cls.OAUTH_PROVIDER} OAuth not configured, running in DEVELOPMENT MODE (OIDC_ENABLED=false) with test tokens")
+                logger.info("[KEY] Development tokens available:")
                 for token, user in cls.DEV_USERS.items():
                     logger.info(f"   {token} -> {user['email']} (ID: {user['user_id']})")
             else:
-                logger.error("❌ Google OAuth not configured and not in development mode")
-                logger.error("   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables")
-                logger.error("   Or set DEVELOPMENT_MODE=true for testing")
+                logger.error(f"[ERROR] {cls.OAUTH_PROVIDER} OAuth not configured")
+                if cls.OAUTH_PROVIDER == 'GOOGLE':
+                    logger.error("   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables")
+                elif cls.OAUTH_PROVIDER == 'ENTRAID':
+                    logger.error("   Set ENTRAID_CLIENT_ID, ENTRAID_CLIENT_SECRET, and ENTRAID_TENANT_ID environment variables")
+                logger.error("   Or set OIDC_ENABLED=false for development mode testing")
     
     @classmethod
     def is_oauth_configured(cls) -> bool:
         """Check if OAuth is properly configured"""
-        return bool(cls.GOOGLE_CLIENT_ID and cls.GOOGLE_CLIENT_SECRET)
+        if cls.OAUTH_PROVIDER == 'GOOGLE':
+            return bool(cls.GOOGLE_CLIENT_ID and cls.GOOGLE_CLIENT_SECRET)
+        elif cls.OAUTH_PROVIDER == 'ENTRAID':
+            return bool(cls.ENTRAID_CLIENT_ID and cls.ENTRAID_CLIENT_SECRET and cls.ENTRAID_TENANT_ID)
+        return False
     
     @classmethod
     def is_development_mode(cls) -> bool:
-        """Check if running in development mode"""
-        return cls.DEVELOPMENT_MODE
+        """Check if running in development mode (OIDC disabled)"""
+        return not cls.OIDC_ENABLED
+    
+    @classmethod
+    def is_fake_login_mode(cls) -> bool:
+        """Check if running in fake login mode"""
+        return cls.LOGIN_MODE == 'FAKE'
     
     @classmethod
     def get_dev_user(cls, token: str) -> Optional[Dict[str, Any]]:
@@ -113,14 +161,25 @@ class AuthConfig:
     @classmethod
     def get_config_summary(cls) -> Dict[str, Any]:
         """Get configuration summary for debugging"""
-        return {
+        summary = {
+            "login_mode": cls.LOGIN_MODE,
+            "oauth_provider": cls.OAUTH_PROVIDER,
             "oauth_configured": cls.is_oauth_configured(),
+            "oidc_enabled": cls.OIDC_ENABLED,
             "development_mode": cls.is_development_mode(),
             "jwt_secret_set": bool(cls.JWT_SECRET and cls.JWT_SECRET != 'your-secret-key-SXSCDSDASD'),
             "frontend_url": cls.FRONTEND_URL,
-            "redirect_uri": cls.GOOGLE_REDIRECT_URI,
-            "dev_users_count": len(cls.DEV_USERS) if cls.DEVELOPMENT_MODE else 0
+            "dev_users_count": len(cls.DEV_USERS) if not cls.OIDC_ENABLED else 0
         }
+        
+        # Add provider-specific redirect URI
+        if cls.OAUTH_PROVIDER == 'GOOGLE':
+            summary["redirect_uri"] = cls.GOOGLE_REDIRECT_URI
+        elif cls.OAUTH_PROVIDER == 'ENTRAID':
+            summary["redirect_uri"] = cls.ENTRAID_REDIRECT_URI
+            summary["tenant_id"] = cls.ENTRAID_TENANT_ID
+        
+        return summary
 
 # Load configuration on module import
 AuthConfig.load_config() 

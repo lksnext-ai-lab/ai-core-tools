@@ -51,26 +51,36 @@ IA-Core-Tools (AICT) is available under a dual licensing model:
 
 ## Pricing and Terms
 
+### License Duration:
+- **Annual License**: Commercial licenses are issued on an annual basis
+- **Renewal**: Licenses must be renewed annually to maintain commercial use rights
+- **Grace Period**: 30-day grace period for license renewal
+
 ### Project License (Included with Custom Software):
 - AICT usage rights for the specific project
 - Modification rights for project optimization
 - No additional fees for project-related use
-- Full ownership of custom software
+- Full ownership of your custom software
 
 ### Commercial License (Additional Payment Required):
 - AICT usage for other projects
 - Commercial service provision
 - Enterprise features and support
-- Ongoing licensing fees
+- Annual licensing fees (contact for pricing)
+
+### Pricing:
+- **Contact Required**: All commercial licensing requires direct consultation
+- **Custom Pricing**: Pricing varies based on usage, features, and support requirements
+- **Volume Discounts**: Available for multiple projects or enterprise deployments
 
 ## Contact Information
 
 For commercial licensing inquiries, please contact:
 
 **LKS Next**
-- Email: [contact email]
-- Website: [company website]
-- Phone: [contact phone]
+- Email: agaldos@lksnext.com
+- Website: https://www.lksnext.com
+- Phone: +34 637 61 50 87
 
 ## Legal Notice
 
@@ -78,4 +88,4 @@ This commercial license is proprietary to LKS Next. All rights reserved. Unautho
 
 ---
 
-*Last updated: [Current Date]*
+*Last updated: October 10, 2025*

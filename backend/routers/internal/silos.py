@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from typing import List, Dict, Any
+from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
 from services.silo_service import SiloService
@@ -25,13 +26,12 @@ silos_router = APIRouter()
                   response_model=List[SiloListItemSchema])
 async def list_silos(
     app_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     List all silos for a specific app.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -52,14 +52,12 @@ async def list_silos(
 async def get_silo(
     app_id: int, 
     silo_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific silo including form data for editing.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -87,14 +85,12 @@ async def create_or_update_silo(
     app_id: int,
     silo_id: int,
     silo_data: CreateUpdateSiloSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Create a new silo or update an existing one.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -103,7 +99,7 @@ async def create_or_update_silo(
         
         # Return updated silo (reuse the GET logic)
         logger.info(f"Silo created/updated successfully: {silo.silo_id}, now getting details")
-        return await get_silo(app_id, silo.silo_id, current_user, db)
+        return await get_silo(app_id, silo.silo_id, auth_context, db)
         
     except HTTPException:
         raise
@@ -121,14 +117,12 @@ async def create_or_update_silo(
 async def delete_silo(
     app_id: int, 
     silo_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Delete a silo and all its documents.
-    """
-    user_id = current_user["user_id"]
-    
+    """    
     # TODO: Add app access validation
     
     try:
@@ -149,7 +143,6 @@ async def delete_silo(
             detail=f"Error deleting silo: {str(e)}"
         )
 
-
 # ==================== SILO PLAYGROUND ====================
 
 @silos_router.get("/{silo_id}/playground",
@@ -158,13 +151,12 @@ async def delete_silo(
 async def silo_playground(
     app_id: int, 
     silo_id: int, 
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Get silo playground interface for testing document search.
     """
-    user_id = current_user["user_id"]
     
     # TODO: Add app access validation
     
@@ -194,17 +186,15 @@ async def search_silo_documents(
     app_id: int,
     silo_id: int,
     search_query: SiloSearchSchema,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Search for documents in a silo using semantic search with optional metadata filtering.
     """
-    logger.info(f"Search request received - app_id: {app_id}, silo_id: {silo_id}, user_id: {current_user.get('user_id')}")
+    logger.info(f"Search request received - app_id: {app_id}, silo_id: {silo_id}, user_id: {auth_context.identity.id}")
     logger.info(f"Search query: {search_query.query}, limit: {search_query.limit}, filter_metadata: {search_query.filter_metadata}")
-    
-    user_id = current_user["user_id"]
-    
+        
     # TODO: Add app access validation
     
     try:
@@ -236,4 +226,53 @@ async def search_silo_documents(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error searching silo: {str(e)}"
+        )
+
+
+@silos_router.delete("/{silo_id}/documents",
+                     summary="Delete documents from silo by IDs",
+                     tags=["Silos"])
+async def delete_silo_documents(
+    app_id: int,
+    silo_id: int,
+    document_ids: List[str] = Body(..., embed=True),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete documents from a silo by their IDs.
+    Example request body: {"document_ids": ["uuid-1", "uuid-2"]}
+    """    
+    # TODO: Add app access validation
+    
+    try:
+        # Validate silo exists and belongs to app
+        silo = SiloService.get_silo(silo_id, db)
+        if not silo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Silo not found"
+            )
+        
+        if silo.app_id != app_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Silo does not belong to this app"
+            )
+        
+        # Delete documents using existing service method
+        SiloService.delete_docs_in_collection(silo_id, document_ids, db)
+        
+        return {
+            "message": f"Successfully deleted {len(document_ids)} document(s)",
+            "deleted_count": len(document_ids)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting silo documents: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting documents: {str(e)}"
         ) 

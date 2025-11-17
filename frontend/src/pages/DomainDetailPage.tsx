@@ -432,8 +432,17 @@ const DomainDetailPage: React.FC = () => {
 
           {/* URLs Section */}
           <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-xl font-semibold text-gray-900">URLs ({urls.length})</h2>
+              {urls.length > 0 && (
+                <button
+                  onClick={() => setShowAddUrlModal(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+                >
+                  <span className="mr-2">+</span>
+                  Add URL
+                </button>
+              )}
             </div>
             
             {urlsLoading ? (
@@ -453,7 +462,7 @@ const DomainDetailPage: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-visible">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>

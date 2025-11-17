@@ -1,0 +1,18 @@
+/* Import base application styles */
+@import '@lksnext/ai-core-tools-base/dist/style.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom client styles */
+.client-custom {
+  /* Add your custom styles here */
+}
+
+/* Override theme colors if needed */
+.theme-client-custom {
+  --color-primary: #YOUR_PRIMARY_COLOR;
+  --color-secondary: #YOUR_SECONDARY_COLOR;
+  --color-accent: #YOUR_ACCENT_COLOR;
+}

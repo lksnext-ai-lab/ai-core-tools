@@ -11,6 +11,7 @@ interface App {
   owner_email?: string;
   role: string;
   langsmith_configured: boolean;
+  agent_rate_limit: number;
   
   // Entity counts for display
   agent_count: number;

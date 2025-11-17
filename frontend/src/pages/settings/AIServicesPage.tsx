@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SettingsLayout from '../../components/layout/SettingsLayout';
 import Modal from '../../components/ui/Modal';
 import AIServiceForm from '../../components/forms/AIServiceForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 interface AIService {
   service_id: number;
@@ -18,6 +19,7 @@ interface AIService {
 function AIServicesPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
+  const { isOwner, isAdmin, userRole } = useAppRole(appId);
   const [services, setServices] = useState<AIService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +114,19 @@ function AIServicesPage() {
     }
   }
 
+  async function handleCopyService(serviceId: number) {
+    if (!appId) return;
+    try {
+      await apiService.copyAIService(parseInt(appId), serviceId);
+      // Invalidate cache and force reload
+      settingsCache.invalidateAIServices(appId);
+      await forceReloadAIServices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy service');
+      console.error('Error copying AI service:', err);
+    }
+  }
+
   async function handleSaveService(data: any) {
     if (!appId) return;
 
@@ -153,55 +168,55 @@ function AIServicesPage() {
 
   if (loading) {
     return (
-      <SettingsLayout>
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading AI services...</p>
-        </div>
-      </SettingsLayout>
+      <div className="p-6 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-2 text-gray-600">Loading AI services...</p>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <SettingsLayout>
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-600">Error: {error}</p>
-            <button 
-              onClick={() => loadAIServices()}
-              className="mt-2 text-red-800 hover:text-red-900 underline"
-            >
-              Try again
-            </button>
-          </div>
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600">Error: {error}</p>
+          <button 
+            onClick={() => loadAIServices()}
+            className="mt-2 text-red-800 hover:text-red-900 underline"
+          >
+            Try again
+          </button>
         </div>
-      </SettingsLayout>
+      </div>
     );
   }
 
   return (
-    <SettingsLayout>
-      <div className="p-6">
+    <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">AI Services</h2>
             <p className="text-gray-600">Manage language models and AI providers for your agents</p>
           </div>
-          <button 
-            onClick={handleCreateService}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Add AI Service
-          </button>
+          {isAdmin && (
+            <button 
+              onClick={handleCreateService}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Add AI Service
+            </button>
+          )}
         </div>
+        
+        {/* Read-only banner for non-admins */}
+        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Services Table */}
         {services.length > 0 ? (
           <div className="bg-white shadow rounded-lg overflow-visible">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-visible">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -226,7 +241,12 @@ function AIServicesPage() {
                   {services.map((service) => (
                     <tr key={service.service_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{service.name}</div>
+                        <div 
+                          className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                          onClick={() => handleEditService(service.service_id)}
+                        >
+                          {service.name}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">{service.model_name}</div>
@@ -240,23 +260,33 @@ function AIServicesPage() {
                         {service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        <ActionDropdown
-                          actions={[
-                            {
-                              label: 'Edit',
-                              onClick: () => handleEditService(service.service_id),
-                              icon: '✏️',
-                              variant: 'primary'
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => handleDelete(service.service_id),
-                              icon: '🗑️',
-                              variant: 'danger'
-                            }
-                          ]}
-                          size="sm"
-                        />
+                        {isAdmin ? (
+                          <ActionDropdown
+                            actions={[
+                              {
+                                label: 'Edit',
+                                onClick: () => handleEditService(service.service_id),
+                                icon: '✏️',
+                                variant: 'primary'
+                              },
+                              {
+                                label: 'Copy',
+                                onClick: () => handleCopyService(service.service_id),
+                                icon: '📋',
+                                variant: 'primary'
+                              },
+                              {
+                                label: 'Delete',
+                                onClick: () => handleDelete(service.service_id),
+                                icon: '🗑️',
+                                variant: 'danger'
+                              }
+                            ]}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-gray-400 text-sm">View only</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -271,12 +301,14 @@ function AIServicesPage() {
             <p className="text-gray-600 mb-6">
               Add your first AI service to start using language models in your agents.
             </p>
-            <button 
-              onClick={handleCreateService}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-            >
-              Add First AI Service
-            </button>
+            {isAdmin && (
+              <button 
+                onClick={handleCreateService}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+              >
+                Add First AI Service
+              </button>
+            )}
           </div>
         )}
 
@@ -311,10 +343,9 @@ function AIServicesPage() {
             aiService={editingService}
             onSubmit={handleSaveService}
             onCancel={handleCloseModal}
-          />
+          />  
         </Modal>
       </div>
-    </SettingsLayout>
   );
 }
 
