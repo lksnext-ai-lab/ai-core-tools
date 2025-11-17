@@ -57,7 +57,16 @@ const RepositoryFormPage: React.FC = () => {
         const embeddingServiceList: EmbeddingService[] = repository.embedding_services ?? [];
         const availableVectorDbOptions: VectorDbOption[] = repository.vector_db_options ?? [];
 
-        setEmbeddingServices(embeddingServiceList);
+        let servicesToUse = embeddingServiceList;
+        if (servicesToUse.length === 0) {
+          try {
+            servicesToUse = await apiService.getEmbeddingServices(appIdNumber);
+          } catch (serviceErr) {
+            console.error('Error loading embedding services:', serviceErr);
+          }
+        }
+
+        setEmbeddingServices(servicesToUse);
         setVectorDbOptions(availableVectorDbOptions);
 
         const normalizedVectorDbType = (repository.vector_db_type || 'PGVECTOR').toUpperCase();
@@ -65,9 +74,12 @@ const RepositoryFormPage: React.FC = () => {
           ? normalizedVectorDbType
           : (availableVectorDbOptions[0]?.code || 'PGVECTOR');
 
+        const nextEmbeddingServiceId = repository.embedding_service_id
+          ?? (isNewRepository && servicesToUse.length === 1 ? servicesToUse[0].service_id : undefined);
+
         setFormData({
           name: repository.name ?? '',
-          embedding_service_id: repository.embedding_service_id ?? undefined,
+          embedding_service_id: nextEmbeddingServiceId,
           vector_db_type: resolvedVectorDbType,
         });
       } catch (err) {

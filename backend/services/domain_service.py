@@ -15,7 +15,6 @@ from utils.error_handlers import (
     validate_required_fields
 )
 from tools.vector_store_factory import VectorStoreFactory
-import config
 logger = get_logger(__name__)
 
 
@@ -136,8 +135,7 @@ class DomainService:
             if domain.silo and getattr(domain.silo, 'vector_db_type', None):
                 vector_db_type = domain.silo.vector_db_type
             else:
-                default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-                vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+                vector_db_type = 'PGVECTOR'
             
             return DomainDetailSchema(
                 domain_id=domain.domain_id,
@@ -239,7 +237,7 @@ class DomainService:
         """Create a new domain with associated silo"""
         logger.info(f"Creating new domain: {name}")
 
-        resolved_vector_db_type = (vector_db_type or config.VECTOR_DB_TYPE).upper()
+        resolved_vector_db_type = (vector_db_type or 'PGVECTOR').upper()
         
         # Create associated silo
         silo_data = {
@@ -310,8 +308,7 @@ class DomainService:
                 if vector_db_type:
                     silo.vector_db_type = vector_db_type
                 elif not silo.vector_db_type:
-                    default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-                    silo.vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+                    silo.vector_db_type = 'PGVECTOR'
                 SiloRepository.update(silo, db)
                 logger.info(f"Successfully updated silo {domain.silo_id} embedding service")
             else:
@@ -325,8 +322,7 @@ class DomainService:
         elif domain.silo_id and not vector_db_type:
             silo = SiloService.get_silo(domain.silo_id, db)
             if silo and not silo.vector_db_type:
-                default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-                silo.vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+                silo.vector_db_type = 'PGVECTOR'
                 SiloRepository.update(silo, db)
         
         return updated_domain.domain_id

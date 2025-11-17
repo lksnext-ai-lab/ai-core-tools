@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Request, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
-import config
 
 # Import services
 from services.domain_service import DomainService
@@ -95,8 +94,7 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
             if domain.silo and getattr(domain.silo, 'vector_db_type', None):
                 domain_vector_db_type = domain.silo.vector_db_type
             else:
-                default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-                domain_vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+                domain_vector_db_type = 'PGVECTOR'
             result.append(DomainListItemSchema(
                 domain_id=domain.domain_id,
                 name=domain.name,
@@ -134,7 +132,7 @@ async def get_domain(app_id: int, domain_id: int, request: Request, db: Session 
         # New domain - return empty template with embedding services
         embedding_services = DomainService.get_embedding_services_for_app(app_id, db)
         vector_db_options = VectorStoreFactory.get_available_type_options()
-        default_vector_db_type = (config.VECTOR_DB_TYPE or 'PGVECTOR').upper()
+        default_vector_db_type = 'PGVECTOR'
         
         return DomainDetailSchema(
             domain_id=0,

@@ -2,7 +2,6 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
-import config
 
 class Repository(Base):
     __tablename__ = 'Repository'
@@ -38,8 +37,7 @@ class Repository(Base):
         if self.silo and getattr(self.silo, 'vector_db_type', None):
             vector_db_type = self.silo.vector_db_type
         else:
-            default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-            vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+            vector_db_type = 'PGVECTOR'
 
         data = {
             'repository_id': self.repository_id,

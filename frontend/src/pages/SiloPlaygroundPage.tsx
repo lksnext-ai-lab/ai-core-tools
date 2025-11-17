@@ -159,24 +159,10 @@ function SiloPlaygroundPage() {
 
   // Load silo data
   useEffect(() => {
-    getSystemDBConfig();
     if (appId && siloId) {
-      loadSilo();
+      void loadSilo();
     }
   }, [appId, siloId]);
-
-
-  async function getSystemDBConfig() {
-    if (!appId) return null;
-    try {
-      const config = await apiService.getSystemConfig();
-      setSystemDBConfig(config.vector_db_type);
-      console.log('System DB Config:', config.vector_db_type);
-    } catch (err) {
-      console.error('Error fetching system config:', err);
-      return null;
-    }
-  }
 
 
   async function loadSilo() {
@@ -187,6 +173,7 @@ function SiloPlaygroundPage() {
       setError(null);
       const response = await apiService.getSilo(parseInt(appId), parseInt(siloId));
       setSilo(response);
+      setSystemDBConfig(response.vector_db_type ? response.vector_db_type.toUpperCase() : DEFAULT_DB_TYPE);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load silo');
       console.error('Error loading silo:', err);

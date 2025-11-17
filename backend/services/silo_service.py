@@ -1,7 +1,6 @@
 from typing import Optional, List, Dict, Any
 import os
 import json
-import config
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
@@ -28,7 +27,7 @@ COLLECTION_PREFIX = 'silo_'
 logger = get_logger(__name__)
 
 def _resolve_vector_db_type(silo: Optional[Silo] = None, override: Optional[str] = None) -> str:
-    """Determine the vector DB type for a silo, falling back to global default."""
+    """Determine the vector DB type for a silo, falling back to PGVECTOR."""
 
     if override:
         return override.upper()
@@ -36,7 +35,7 @@ def _resolve_vector_db_type(silo: Optional[Silo] = None, override: Optional[str]
     if silo and getattr(silo, 'vector_db_type', None):
         return silo.vector_db_type.upper()
 
-    return (config.VECTOR_DB_TYPE or 'PGVECTOR').upper()
+    return 'PGVECTOR'
 
 
 def _get_vector_store(silo: Optional[Silo] = None, vector_db_type: Optional[str] = None) -> VectorStoreInterface:

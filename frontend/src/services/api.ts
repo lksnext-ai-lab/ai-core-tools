@@ -692,11 +692,6 @@ class ApiService {
     return response;
   }
 
-  async getSystemConfig(): Promise<{ vector_db_type: string }> {
-    const response = await this.request('/internal/version/config');
-    return response;
-  }
-
   // ==================== FOLDERS API ====================
   
   async getFolders(appId: number, repositoryId: number) {

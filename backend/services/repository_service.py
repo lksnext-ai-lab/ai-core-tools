@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 import os
 import shutil
-import config
 from dotenv import load_dotenv
 from services.silo_service import SiloService
 from models.silo import SiloType
@@ -78,7 +77,7 @@ class RepositoryService:
         output_parser_service = OutputParserService()
         parser_id = output_parser_service.create_default_filter_for_repo(db, repository)
 
-        resolved_vector_db_type = (vector_db_type or config.VECTOR_DB_TYPE or 'PGVECTOR')
+        resolved_vector_db_type = (vector_db_type or 'PGVECTOR')
         if isinstance(resolved_vector_db_type, str):
             resolved_vector_db_type = resolved_vector_db_type.upper()
         
@@ -133,8 +132,7 @@ class RepositoryService:
                 normalized_type = vector_db_type.upper()
                 repository.silo.vector_db_type = normalized_type
             elif not repository.silo.vector_db_type:
-                default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-                repository.silo.vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+                repository.silo.vector_db_type = 'PGVECTOR'
 
         return RepositoryRepository.update(db, repository)
     
@@ -215,8 +213,7 @@ class RepositoryService:
             if repo.silo and getattr(repo.silo, 'vector_db_type', None):
                 repo_vector_db_type = repo.silo.vector_db_type
             else:
-                default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-                repo_vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+                repo_vector_db_type = 'PGVECTOR'
 
             result.append(RepositoryListItemSchema(
                 repository_id=repo.repository_id,
@@ -263,7 +260,7 @@ class RepositoryService:
                 embedding_services=[],
                 silo_id=None,
                 metadata_fields=[],
-                vector_db_type=(config.VECTOR_DB_TYPE or 'PGVECTOR').upper(),
+                vector_db_type='PGVECTOR',
                 vector_db_options=vector_db_options
             )
         
@@ -326,8 +323,7 @@ class RepositoryService:
         if repo.silo and getattr(repo.silo, 'vector_db_type', None):
             vector_db_type = repo.silo.vector_db_type
         else:
-            default_type = config.VECTOR_DB_TYPE or 'PGVECTOR'
-            vector_db_type = default_type.upper() if isinstance(default_type, str) else default_type
+            vector_db_type = 'PGVECTOR'
         return RepositoryDetailSchema(
             repository_id=repo.repository_id,
             name=repo.name,

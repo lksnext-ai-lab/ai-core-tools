@@ -37,7 +37,7 @@ class VectorStoreFactory:
     def get_vector_store(db, vector_db_type: Optional[str] = None) -> VectorStoreInterface:
         """Return a cached vector store instance for the requested backend."""
 
-        resolved_type = (vector_db_type or config.VECTOR_DB_TYPE or 'PGVECTOR').upper()
+        resolved_type = (vector_db_type or 'PGVECTOR').upper()
 
         if resolved_type not in VectorStoreFactory.SUPPORTED_TYPES:
             supported = ', '.join(VectorStoreFactory.SUPPORTED_TYPES.keys())
