@@ -4,12 +4,24 @@ import { apiService } from '../services/api';
 import SiloForm from '../components/forms/SiloForm';
 
 // Define the Silo type
+interface VectorDbOption {
+  code: string;
+  label: string;
+}
+
 interface Silo {
   silo_id: number;
   name: string;
   type?: string;
   created_at?: string;
   docs_count: number;
+  description?: string;
+  vector_db_type?: string;
+  metadata_definition_id?: number;
+  embedding_service_id?: number;
+  output_parsers?: { parser_id: number; name: string }[];
+  embedding_services?: { service_id: number; name: string }[];
+  vector_db_options?: VectorDbOption[];
 }
 
 function SiloFormPage() {
@@ -19,24 +31,29 @@ function SiloFormPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const isEditing = siloId && siloId !== 'new';
+  const isEditing = siloId !== undefined && siloId !== 'new';
 
   // Load silo data if editing
   useEffect(() => {
-    if (isEditing && appId && siloId) {
-      loadSilo();
-    } else {
+    if (!appId) {
       setLoading(false);
+      return;
     }
+
+    const currentSiloId = isEditing && siloId ? parseInt(siloId, 10) : 0;
+    void loadSilo(currentSiloId);
   }, [appId, siloId, isEditing]);
 
-  async function loadSilo() {
-    if (!appId || !siloId) return;
-    
+  async function loadSilo(targetSiloId: number) {
+    if (!appId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getSilo(parseInt(appId), parseInt(siloId));
+      const response = await apiService.getSilo(parseInt(appId, 10), targetSiloId);
       setSilo(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load silo');

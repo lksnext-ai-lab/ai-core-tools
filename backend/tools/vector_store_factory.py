@@ -9,9 +9,7 @@ Includes factory logic for creating vector store instances based on configuratio
 """
 
 import config
-from typing import List, Optional, Dict, Any
-from langchain_core.documents import Document
-from langchain_core.vectorstores.base import VectorStoreRetriever
+from typing import List, Optional, Dict
 
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from utils.logger import get_logger
@@ -19,11 +17,9 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-
 class VectorStoreFactory:
 
-    
-    # Supported vector database types
+    # Supported vector database types (including future planned support)
     SUPPORTED_TYPES = {
         'PGVECTOR': 'PGVector (PostgreSQL with pgvector extension)',
         'QDRANT': 'Qdrant vector database',
@@ -31,48 +27,58 @@ class VectorStoreFactory:
         'WEAVIATE': 'Weaviate vector database (future support)',
         'CHROMA': 'Chroma vector database (future support)',
     }
-    
-    
-    
+
+    # Types that are currently implemented and can be selected by users
+    IMPLEMENTED_TYPES = ('PGVECTOR', 'QDRANT')
+
+    _instances: Dict[str, VectorStoreInterface] = {}
+
     @staticmethod
-    def get_vector_store(db) -> VectorStoreInterface:
-        """
-        Get or create the singleton backend instance.
-        
-        Args:
-            db: Database object
-            
-        Returns:
-            VectorStoreBase implementation instance
-            
-        Raises:
-            ValueError: If VECTOR_DB_TYPE is not supported or required config is missing
-        """
-        
-        vector_db_type = config.VECTOR_DB_TYPE
-        
-        logger.info(f"Initializing vector store backend: {vector_db_type}")
-        
-        # Validate that the type is supported
-        if vector_db_type not in VectorStoreFactory.SUPPORTED_TYPES:
+    def get_vector_store(db, vector_db_type: Optional[str] = None) -> VectorStoreInterface:
+        """Return a cached vector store instance for the requested backend."""
+
+        resolved_type = (vector_db_type or config.VECTOR_DB_TYPE or 'PGVECTOR').upper()
+
+        if resolved_type not in VectorStoreFactory.SUPPORTED_TYPES:
             supported = ', '.join(VectorStoreFactory.SUPPORTED_TYPES.keys())
             raise ValueError(
-                f"Unsupported VECTOR_DB_TYPE: {vector_db_type}. "
-                f"Supported types: {supported}"
-            )   
-        
-        # Create the appropriate vector store instance
-        if vector_db_type == 'PGVECTOR':
-            return VectorStoreFactory._create_pgvector_backend(db)
-            
-        elif vector_db_type == 'QDRANT':
-            return VectorStoreFactory._create_qdrant_backend(db)
-            
-        elif vector_db_type in ['PINECONE', 'WEAVIATE', 'CHROMA']:
-            raise NotImplementedError(
-                f"{vector_db_type} support is planned but not yet implemented. "
-                f"Currently supported: PGVECTOR, QDRANT"
+                f"Unsupported VECTOR_DB_TYPE: {resolved_type}. Supported types: {supported}"
             )
+
+        if resolved_type not in VectorStoreFactory.IMPLEMENTED_TYPES:
+            raise NotImplementedError(
+                f"{resolved_type} support is planned but not yet implemented. Currently available: "
+                f"{', '.join(VectorStoreFactory.IMPLEMENTED_TYPES)}"
+            )
+
+        if resolved_type in VectorStoreFactory._instances:
+            return VectorStoreFactory._instances[resolved_type]
+
+        logger.info("Initializing vector store backend: %s", resolved_type)
+
+        if resolved_type == 'PGVECTOR':
+            instance = VectorStoreFactory._create_pgvector_backend(db)
+        elif resolved_type == 'QDRANT':
+            instance = VectorStoreFactory._create_qdrant_backend(db)
+        else:
+            # Guard clause for future implementations
+            raise NotImplementedError(f"Vector DB type {resolved_type} is not implemented yet")
+
+        VectorStoreFactory._instances[resolved_type] = instance
+        return instance
+
+    @staticmethod
+    def get_available_type_options() -> List[Dict[str, str]]:
+        """Expose implemented vector DB choices with human-friendly labels."""
+
+        options: List[Dict[str, str]] = []
+        for key in VectorStoreFactory.IMPLEMENTED_TYPES:
+            label = VectorStoreFactory.SUPPORTED_TYPES.get(key, key)
+            options.append({
+                'code': key,
+                'label': label
+            })
+        return options
         
     
     @staticmethod

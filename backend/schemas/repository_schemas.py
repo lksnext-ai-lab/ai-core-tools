@@ -18,6 +18,7 @@ class RepositoryListItemSchema(BaseModel):
     status: Optional[str] = None
     created_at: Optional[datetime]
     resource_count: int
+    vector_db_type: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +35,8 @@ class RepositoryDetailSchema(BaseModel):
     embedding_services: List[Dict[str, Any]]
     embedding_service_id: Optional[int] = None
     silo_id: Optional[int] = None
+    vector_db_type: Optional[str] = None
+    vector_db_options: List[Dict[str, Any]] = []
     metadata_fields: Optional[List[MetadataFieldSchema]] = []
     
     model_config = ConfigDict(from_attributes=True)
@@ -45,6 +48,7 @@ class CreateUpdateRepositorySchema(BaseModel):
     type: Optional[str] = None
     status: Optional[str] = None
     embedding_service_id: Optional[int] = None
+    vector_db_type: Optional[str] = None
 
 
 class RepositorySearchSchema(BaseModel):

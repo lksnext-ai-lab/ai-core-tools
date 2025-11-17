@@ -1,9 +1,11 @@
 from typing import Optional, List, Dict, Any
 import os
 import json
+import config
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
+from db.database import db as db_obj
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from utils.logger import get_logger
@@ -25,17 +27,23 @@ COLLECTION_PREFIX = 'silo_'
 
 logger = get_logger(__name__)
 
-# Global vector store instance - lazy initialization (singleton pattern)
-_vector_store_instance: Optional[VectorStoreInterface] = None
+def _resolve_vector_db_type(silo: Optional[Silo] = None, override: Optional[str] = None) -> str:
+    """Determine the vector DB type for a silo, falling back to global default."""
 
-def _get_vector_store() -> VectorStoreInterface:
-    """Get or initialize the global vector store instance (lazy initialization)"""
-    global _vector_store_instance
-    if _vector_store_instance is None:
-        from db.database import db as db_obj
-        _vector_store_instance = VectorStoreFactory.get_vector_store(db_obj)
-        logger.info("Vector store instance initialized")
-    return _vector_store_instance
+    if override:
+        return override.upper()
+
+    if silo and getattr(silo, 'vector_db_type', None):
+        return silo.vector_db_type.upper()
+
+    return (config.VECTOR_DB_TYPE or 'PGVECTOR').upper()
+
+
+def _get_vector_store(silo: Optional[Silo] = None, vector_db_type: Optional[str] = None) -> VectorStoreInterface:
+    """Return the vector store implementation bound to the silo's backend."""
+
+    resolved_type = _resolve_vector_db_type(silo, vector_db_type)
+    return VectorStoreFactory.get_vector_store(db_obj, resolved_type)
 
 class SiloService:
 
@@ -115,7 +123,7 @@ class SiloService:
             
             # Use async engine with psycopg (not asyncpg) for async operations
             # psycopg supports async natively and handles multiple SQL statements properly
-            return _get_vector_store().get_retriever(
+            return _get_vector_store(silo).get_retriever(
                 collection_name, 
                 silo.embedding_service, 
                 merged_search_kwargs,
@@ -160,6 +168,19 @@ class SiloService:
         else:
             silo_data = dict(silo_data)
         
+        requested_vector_db_type = silo_data.get('vector_db_type')
+        if requested_vector_db_type is not None:
+            if not isinstance(requested_vector_db_type, str):
+                raise ValidationError("vector_db_type must be a string")
+            requested_vector_db_type = requested_vector_db_type.strip().upper()
+            if not requested_vector_db_type:
+                requested_vector_db_type = None
+            elif requested_vector_db_type not in VectorStoreFactory.IMPLEMENTED_TYPES:
+                supported = ', '.join(VectorStoreFactory.IMPLEMENTED_TYPES)
+                raise ValidationError(
+                    f"Unsupported vector_db_type '{requested_vector_db_type}'. Supported types: {supported}"
+                )
+
         # Validate required fields
         required_fields = ['name', 'app_id']
         validate_required_fields(silo_data, required_fields)
@@ -197,6 +218,8 @@ class SiloService:
                 # Set default type to CUSTOM, but allow override from form data
                 silo.silo_type = SiloType.CUSTOM.value
                 logger.info("Creating new silo")
+
+            silo.vector_db_type = _resolve_vector_db_type(silo, requested_vector_db_type)
             
             # Set silo type from form data if provided
             if silo_data.get('type') and silo_data['type'].strip():
@@ -291,7 +314,11 @@ class SiloService:
     def check_silo_collection_exists(silo_id: int, db: Session) -> bool:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         try:
-            return _get_vector_store().collection_exists(collection_name)
+            silo = SiloRepository.get_by_id(silo_id, db)
+            if not silo:
+                logger.warning("Silo %s not found while checking collection existence", silo_id)
+                return False
+            return _get_vector_store(silo).collection_exists(collection_name)
         except Exception as exc:
             logger.error(f"Error checking collection for silo {silo_id}: {exc}")
             return False
@@ -300,7 +327,11 @@ class SiloService:
     def count_docs_in_silo(silo_id: int, db: Session) -> int:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         try:
-            return _get_vector_store().count_documents(collection_name)
+            silo = SiloRepository.get_by_id(silo_id, db)
+            if not silo:
+                logger.warning("Silo %s not found while counting documents", silo_id)
+                return 0
+            return _get_vector_store(silo).count_documents(collection_name)
         except Exception as exc:
             logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
@@ -351,7 +382,7 @@ class SiloService:
         logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
         
         docs = SiloService._create_documents_for_indexing(silo_id, documents)
-        _get_vector_store().index_documents(
+        _get_vector_store(silo).index_documents(
             collection_name,
             docs,
             embedding_service=embedding_service
@@ -546,7 +577,11 @@ class SiloService:
                 logger.warning(f"Silo {resource_with_relations.repository.silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
                 return
                 
-            _get_vector_store().index_documents(collection_name, docs, embedding_service)
+            _get_vector_store(resource_with_relations.repository.silo).index_documents(
+                collection_name,
+                docs,
+                embedding_service
+            )
             logger.info(f"Successfully indexed resource {resource_with_relations.resource_id} in silo {resource_with_relations.repository.silo_id}")
         except Exception as e:
             logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}")
@@ -576,7 +611,11 @@ class SiloService:
                 logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
                 return
 
-            _get_vector_store().delete_documents(collection_name, ids={"resource_id": {"$eq": resource.resource_id}}, embedding_service=silo.embedding_service)
+            _get_vector_store(silo).delete_documents(
+                collection_name,
+                ids={"resource_id": {"$eq": resource.resource_id}},
+                embedding_service=silo.embedding_service
+            )
         except Exception as e:
             logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
             # Don't raise the exception - allow the resource to be deleted from database and disk
@@ -602,7 +641,11 @@ class SiloService:
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
-        _get_vector_store().delete_documents(collection_name, ids={"url": {"$eq": url}}, embedding_service=embedding_service)
+        _get_vector_store(silo).delete_documents(
+            collection_name,
+            ids={"url": {"$eq": url}},
+            embedding_service=embedding_service
+        )
             
     @staticmethod
     def delete_content(silo_id: int, content_id: str, db: Session):
@@ -621,7 +664,7 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        _get_vector_store().delete_documents(
+        _get_vector_store(silo).delete_documents(
             collection_name, 
             filter_metadata={"id": {"$eq": content_id}},
             embedding_service=silo.embedding_service
@@ -640,7 +683,7 @@ class SiloService:
             return
             
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        _get_vector_store().delete_collection(collection_name, silo.embedding_service)
+        _get_vector_store(silo).delete_collection(collection_name, silo.embedding_service)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str], db: Session):
@@ -660,7 +703,7 @@ class SiloService:
             return
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        _get_vector_store().delete_documents(
+        _get_vector_store(silo).delete_documents(
             collection_name, 
             ids=ids,
             embedding_service=silo.embedding_service
@@ -684,7 +727,7 @@ class SiloService:
         # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
         results_limit = 100 if filter_metadata else 5
 
-        return _get_vector_store().search_similar_documents(
+        return _get_vector_store(silo).search_similar_documents(
             collection_name, 
             query, 
             embedding_service=embedding_service,
@@ -778,7 +821,8 @@ class SiloService:
                 description=silo.description,
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
-                docs_count=docs_count
+                docs_count=docs_count,
+                vector_db_type=silo.vector_db_type
             ))
         
         return result
@@ -793,6 +837,8 @@ class SiloService:
         if silo_id == 0:
             # New silo
             logger.info("Returning new silo template")
+            vector_db_options = VectorStoreFactory.get_available_type_options()
+            default_vector_db_type = _resolve_vector_db_type()
             return SiloDetailSchema(
                 silo_id=0,
                 name="",
@@ -800,9 +846,11 @@ class SiloService:
                 type=None,
                 created_at=None,
                 docs_count=0,
+                vector_db_type=default_vector_db_type,
                 # Form data
                 output_parsers=[],
-                embedding_services=[]
+                embedding_services=[],
+                vector_db_options=vector_db_options
             )
         
         # Existing silo
@@ -856,6 +904,8 @@ class SiloService:
         
         try:
             logger.info(f"Creating SiloDetailSchema for silo {silo_id}")
+            vector_db_type = _resolve_vector_db_type(silo)
+            vector_db_options = VectorStoreFactory.get_available_type_options()
             return SiloDetailSchema(
                 silo_id=silo.silo_id,
                 name=silo.name,
@@ -863,12 +913,14 @@ class SiloService:
                 type=silo.silo_type if silo.silo_type else None,
                 created_at=silo.create_date,
                 docs_count=docs_count,
+                vector_db_type=vector_db_type,
                 # Current values for editing
                 metadata_definition_id=silo.metadata_definition_id,
                 embedding_service_id=silo.embedding_service_id,
                 # Form data
                 output_parsers=output_parsers,
                 embedding_services=embedding_services,
+                vector_db_options=vector_db_options,
                 # Metadata definition fields for playground
                 metadata_fields=metadata_fields
             )
@@ -894,7 +946,8 @@ class SiloService:
             'app_id': app_id,
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,
-            'embedding_service_id': silo_data.embedding_service_id
+            'embedding_service_id': silo_data.embedding_service_id,
+            'vector_db_type': silo_data.vector_db_type
         }
         
         # Create or update using the existing service

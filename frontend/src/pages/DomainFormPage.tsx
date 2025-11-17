@@ -7,6 +7,11 @@ interface EmbeddingService {
   name: string;
 }
 
+interface VectorDbOption {
+  code: string;
+  label: string;
+}
+
 interface DomainFormData {
   name: string;
   description: string;
@@ -15,6 +20,7 @@ interface DomainFormData {
   content_class: string;
   content_id: string;
   embedding_service_id?: number;
+  vector_db_type: string;
 }
 
 function DomainFormPage() {
@@ -24,7 +30,8 @@ function DomainFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
-  
+  const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
+
   const [formData, setFormData] = useState<DomainFormData>({
     name: '',
     description: '',
@@ -32,10 +39,19 @@ function DomainFormPage() {
     content_tag: 'body',
     content_class: '',
     content_id: '',
-    embedding_service_id: undefined
+    embedding_service_id: undefined,
+    vector_db_type: 'PGVECTOR'
   });
 
   const isNewDomain = domainId === 'new' || domainId === '0';
+  let submitButtonLabel = 'Update Domain';
+  if (isNewDomain) {
+    submitButtonLabel = 'Create Domain';
+  }
+  if (saving) {
+    submitButtonLabel = 'Saving...';
+  }
+  const vectorDbSelectValue = vectorDbOptions.length === 0 ? '' : formData.vector_db_type;
 
   useEffect(() => {
     loadDomainData();
@@ -48,13 +64,25 @@ function DomainFormPage() {
       setLoading(true);
       setError(null);
       
-      const domainIdNum = isNewDomain ? 0 : parseInt(domainId || '0');
-      const response = await apiService.getDomain(parseInt(appId), domainIdNum);
-      
+      const numericAppId = parseInt(appId, 10);
+      const domainIdNum = isNewDomain ? 0 : parseInt(domainId ?? '0', 10);
+      const response = await apiService.getDomain(numericAppId, domainIdNum);
+
       // Extract form data from response
       const domain = response; // Response is the domain object directly, not response.data
+      const availableVectorDbOptions: VectorDbOption[] = domain.vector_db_options || [];
+      const normalizedVectorDbType = domain.vector_db_type?.toUpperCase();
+      const matchedVectorDbOption = availableVectorDbOptions.find(
+        (option: VectorDbOption) => option.code.toUpperCase() === normalizedVectorDbType
+      );
+      const vectorDbTypeValue = matchedVectorDbOption?.code
+        || availableVectorDbOptions[0]?.code
+        || normalizedVectorDbType
+        || 'PGVECTOR';
+
       setEmbeddingServices(domain.embedding_services || []);
-      
+      setVectorDbOptions(availableVectorDbOptions);
+
       if (!isNewDomain) {
         setFormData({
           name: domain.name || '',
@@ -63,7 +91,8 @@ function DomainFormPage() {
           content_tag: domain.content_tag || 'body',
           content_class: domain.content_class || '',
           content_id: domain.content_id || '',
-          embedding_service_id: domain.embedding_service_id || undefined
+          embedding_service_id: domain.embedding_service_id || undefined,
+          vector_db_type: vectorDbTypeValue
         });
       } else {
         // Set default embedding service if only one exists
@@ -73,6 +102,10 @@ function DomainFormPage() {
             embedding_service_id: domain.embedding_services[0].service_id
           }));
         }
+        setFormData(prev => ({
+          ...prev,
+          vector_db_type: vectorDbTypeValue
+        }));
       }
     } catch (err) {
       console.error('Error loading domain data:', err);
@@ -91,8 +124,14 @@ function DomainFormPage() {
       setSaving(true);
       setError(null);
       
-      const domainIdNum = isNewDomain ? 0 : parseInt(domainId || '0');
-      await apiService.createDomain(parseInt(appId), domainIdNum, formData);
+      const numericAppId = parseInt(appId, 10);
+      const domainIdNum = isNewDomain ? 0 : parseInt(domainId ?? '0', 10);
+
+      if (isNewDomain) {
+        await apiService.createDomain(numericAppId, domainIdNum, formData);
+      } else {
+        await apiService.updateDomain(numericAppId, domainIdNum, formData);
+      }
       
       // Navigate back to domains list
       navigate(`/apps/${appId}/domains`);
@@ -103,7 +142,7 @@ function DomainFormPage() {
     }
   }
 
-  function handleInputChange(field: keyof DomainFormData, value: string | number) {
+  function handleInputChange(field: keyof DomainFormData, value: string | number | undefined) {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -170,10 +209,11 @@ function DomainFormPage() {
         {/* Basic Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="domain-name" className="block text-sm font-medium text-gray-700 mb-2">
               Domain Name *
             </label>
             <input
+              id="domain-name"
               type="text"
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
@@ -184,10 +224,11 @@ function DomainFormPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="domain-base-url" className="block text-sm font-medium text-gray-700 mb-2">
               Base URL *
             </label>
             <input
+              id="domain-base-url"
               type="url"
               value={formData.base_url}
               onChange={(e) => handleInputChange('base_url', e.target.value)}
@@ -199,10 +240,11 @@ function DomainFormPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="domain-description" className="block text-sm font-medium text-gray-700 mb-2">
             Description
           </label>
           <textarea
+            id="domain-description"
             value={formData.description}
             onChange={(e) => handleInputChange('description', e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -213,12 +255,16 @@ function DomainFormPage() {
 
         {/* Embedding Service Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="domain-embedding-service" className="block text-sm font-medium text-gray-700 mb-2">
             Embedding Service *
           </label>
           <select
+            id="domain-embedding-service"
             value={formData.embedding_service_id || ''}
-            onChange={(e) => handleInputChange('embedding_service_id', parseInt(e.target.value))}
+            onChange={(e) => {
+              const value = e.target.value;
+              handleInputChange('embedding_service_id', value ? parseInt(value, 10) : undefined);
+            }}
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           >
@@ -236,15 +282,42 @@ function DomainFormPage() {
           )}
         </div>
 
+        {/* Vector Database Selection */}
+        <div>
+          <label htmlFor="domain-vector-db" className="block text-sm font-medium text-gray-700 mb-2">
+            Vector Database *
+          </label>
+          <select
+            id="domain-vector-db"
+            value={vectorDbSelectValue}
+            onChange={(e) => handleInputChange('vector_db_type', e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+            disabled={vectorDbOptions.length === 0}
+          >
+            {vectorDbOptions.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {vectorDbOptions.length === 0 && (
+            <p className="text-sm text-red-600 mt-1">
+              No vector databases available. Please configure a silo with vector support first.
+            </p>
+          )}
+        </div>
+
         {/* Content Extraction Configuration */}
         <div className="border-t pt-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Content Extraction Settings</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="domain-content-tag" className="block text-sm font-medium text-gray-700 mb-2">
                 Content Tag
               </label>
               <input
+                id="domain-content-tag"
                 type="text"
                 value={formData.content_tag}
                 onChange={(e) => handleInputChange('content_tag', e.target.value)}
@@ -255,10 +328,11 @@ function DomainFormPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="domain-content-class" className="block text-sm font-medium text-gray-700 mb-2">
                 Content Class
               </label>
               <input
+                id="domain-content-class"
                 type="text"
                 value={formData.content_class}
                 onChange={(e) => handleInputChange('content_class', e.target.value)}
@@ -269,10 +343,11 @@ function DomainFormPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="domain-content-id" className="block text-sm font-medium text-gray-700 mb-2">
                 Content ID
               </label>
               <input
+                id="domain-content-id"
                 type="text"
                 value={formData.content_id}
                 onChange={(e) => handleInputChange('content_id', e.target.value)}
@@ -297,9 +372,9 @@ function DomainFormPage() {
           <button
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            disabled={saving || embeddingServices.length === 0}
+            disabled={saving || embeddingServices.length === 0 || vectorDbOptions.length === 0}
           >
-            {saving ? 'Saving...' : isNewDomain ? 'Create Domain' : 'Update Domain'}
+            {submitButtonLabel}
           </button>
         </div>
       </form>

@@ -12,6 +12,7 @@ interface Silo {
   type?: string;
   created_at?: string;
   docs_count: number;
+  vector_db_type?: string;
 }
 
 function SilosPage() {
@@ -120,8 +121,8 @@ function SilosPage() {
           to={`/apps/${appId}/silos/new`}
           className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
         >
-          <span className="mr-2">+</span>
-          Create Silo
+          <span aria-hidden="true" className="mr-2">+</span>
+          <span>Create Silo</span>
         </Link>
       </div>
 
@@ -137,8 +138,8 @@ function SilosPage() {
             to={`/apps/${appId}/silos/new`}
             className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
           >
-            <span className="mr-2">+</span>
-            Create Your First Silo
+            <span aria-hidden="true" className="mr-2">+</span>
+            <span>Create Your First Silo</span>
           </Link>
         </div>
       ) : (
@@ -155,6 +156,9 @@ function SilosPage() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Vector DB
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Documents
@@ -199,6 +203,9 @@ function SilosPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {silo.vector_db_type || 'Unknown'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {silo.docs_count} documents
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -221,7 +228,7 @@ function SilosPage() {
                           },
                           {
                             label: 'Delete',
-                            onClick: () => handleDelete(silo.silo_id),
+                            onClick: () => { void handleDelete(silo.silo_id); },
                             icon: '🗑️',
                             variant: 'danger'
                           }

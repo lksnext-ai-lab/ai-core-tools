@@ -5,13 +5,19 @@ import { apiService } from '../services/api';
 interface RepositoryFormData {
   name: string;
   embedding_service_id?: number;
+  vector_db_type: string;
 }
 
 interface EmbeddingService {
   service_id: number;
   name: string;
-  provider: string;
-  model_name: string;
+  provider?: string;
+  model_name?: string;
+}
+
+interface VectorDbOption {
+  code: string;
+  label: string;
 }
 
 const RepositoryFormPage: React.FC = () => {
@@ -21,51 +27,82 @@ const RepositoryFormPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
+  const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
   const [formData, setFormData] = useState<RepositoryFormData>({
     name: '',
     embedding_service_id: undefined,
+    vector_db_type: 'PGVECTOR',
   });
 
   const isNewRepository = repositoryId === '0';
 
   useEffect(() => {
-    loadEmbeddingServices();
-    if (!isNewRepository) {
-      loadRepository();
+    if (!appId || repositoryId === undefined) {
+      return;
     }
-  }, [repositoryId]);
 
-  const loadEmbeddingServices = async () => {
-    try {
-      const services = await apiService.getEmbeddingServices(parseInt(appId!));
-      setEmbeddingServices(services);
-    } catch (err) {
-      console.error('Error loading embedding services:', err);
-      setError('Failed to load embedding services');
-    }
-  };
+    const appIdNumber = parseInt(appId, 10);
+    const repositoryIdNumber = parseInt(repositoryId, 10);
 
-  const loadRepository = async () => {
-    try {
-      setLoading(true);
-      const repository = await apiService.getRepository(parseInt(appId!), parseInt(repositoryId!));
-      setFormData({
-        name: repository.name,
-        embedding_service_id: repository.embedding_service_id,
-      });
-    } catch (err) {
-      console.error('Error loading repository:', err);
-      setError('Failed to load repository');
-    } finally {
-      setLoading(false);
+    if (Number.isNaN(appIdNumber) || Number.isNaN(repositoryIdNumber)) {
+      return;
     }
-  };
+
+    const fetchRepository = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const repository = await apiService.getRepository(appIdNumber, repositoryIdNumber);
+        const embeddingServiceList: EmbeddingService[] = repository.embedding_services ?? [];
+        const availableVectorDbOptions: VectorDbOption[] = repository.vector_db_options ?? [];
+
+        setEmbeddingServices(embeddingServiceList);
+        setVectorDbOptions(availableVectorDbOptions);
+
+        const normalizedVectorDbType = (repository.vector_db_type || 'PGVECTOR').toUpperCase();
+        const resolvedVectorDbType = availableVectorDbOptions.some((option) => option.code === normalizedVectorDbType)
+          ? normalizedVectorDbType
+          : (availableVectorDbOptions[0]?.code || 'PGVECTOR');
+
+        setFormData({
+          name: repository.name ?? '',
+          embedding_service_id: repository.embedding_service_id ?? undefined,
+          vector_db_type: resolvedVectorDbType,
+        });
+      } catch (err) {
+        console.error('Error loading repository:', err);
+        setError('Failed to load repository');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchRepository();
+  }, [appId, repositoryId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name.trim()) {
+    if (!appId) {
+      setError('Invalid application context');
+      return;
+    }
+
+    const appIdNumber = parseInt(appId, 10);
+    if (Number.isNaN(appIdNumber)) {
+      setError('Invalid application context');
+      return;
+    }
+
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
       setError('Repository name is required');
+      return;
+    }
+
+    if (!formData.vector_db_type) {
+      setError('Vector database selection is required');
       return;
     }
 
@@ -74,19 +111,28 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
+    const normalizedVectorDbType = formData.vector_db_type.toUpperCase();
+    const repositoryIdNumber = repositoryId ? parseInt(repositoryId, 10) : 0;
+    if (!isNewRepository && Number.isNaN(repositoryIdNumber)) {
+      setError('Invalid repository context');
+      return;
+    }
+
     try {
       setSaving(true);
       setError(null);
 
       if (isNewRepository) {
-        await apiService.createRepository(parseInt(appId!), { 
-          name: formData.name,
-          embedding_service_id: formData.embedding_service_id
+        await apiService.createRepository(appIdNumber, { 
+          name: trimmedName,
+          embedding_service_id: formData.embedding_service_id,
+          vector_db_type: normalizedVectorDbType
         });
       } else {
-        await apiService.updateRepository(parseInt(appId!), parseInt(repositoryId!), { 
-          name: formData.name,
-          embedding_service_id: formData.embedding_service_id
+        await apiService.updateRepository(appIdNumber, repositoryIdNumber, { 
+          name: trimmedName,
+          embedding_service_id: formData.embedding_service_id,
+          vector_db_type: normalizedVectorDbType
         });
       }
 
@@ -155,6 +201,39 @@ const RepositoryFormPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Vector Database */}
+          <div>
+            <label htmlFor="vector_db_type" className="block text-sm font-medium text-gray-700 mb-2">
+              Vector Database <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="vector_db_type"
+              value={formData.vector_db_type}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  vector_db_type: e.target.value.toUpperCase(),
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            >
+              {vectorDbOptions.length === 0
+                ? (
+                  <option value={formData.vector_db_type}>{formData.vector_db_type}</option>
+                ) : (
+                  vectorDbOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">
+              Select where embeddings for this repository will be stored.
+            </p>
+          </div>
+
           {/* Embedding Service (only for new repositories) */}
           {isNewRepository && (
             <div>
@@ -166,7 +245,7 @@ const RepositoryFormPage: React.FC = () => {
                 value={formData.embedding_service_id || ''}
                 onChange={(e) => setFormData({ 
                   ...formData, 
-                  embedding_service_id: e.target.value ? parseInt(e.target.value) : undefined 
+                  embedding_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined 
                 })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
@@ -174,7 +253,9 @@ const RepositoryFormPage: React.FC = () => {
                 <option value="">Select an embedding service</option>
                 {embeddingServices.map((service) => (
                   <option key={service.service_id} value={service.service_id}>
-                    {service.name} ({service.provider} - {service.model_name})
+                    {service.provider && service.model_name
+                      ? `${service.name} (${service.provider} - ${service.model_name})`
+                      : service.name}
                   </option>
                 ))}
               </select>
@@ -210,4 +291,4 @@ const RepositoryFormPage: React.FC = () => {
   );
 };
 
-export default RepositoryFormPage; 
+export default RepositoryFormPage;

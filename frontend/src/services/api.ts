@@ -358,14 +358,18 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`);
   }
 
-  async createSilo(appId: number, data: any) {
+  async getSiloOptions(appId: number) {
+    return this.request(`/internal/apps/${appId}/silos/0`);
+  }
+
+  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean }) {
     return this.request(`/internal/apps/${appId}/silos/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: any) {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean; status?: string }) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -408,14 +412,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`);
   }
 
-  async createRepository(appId: number, data: { name: string; embedding_service_id?: number }) {
+  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
     return this.request(`/internal/apps/${appId}/repositories/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number }) {
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -590,14 +594,40 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`);
   }
 
-  async createDomain(appId: number, domainId: number, data: any) {
+  async createDomain(
+    appId: number,
+    domainId: number,
+    data: {
+      name: string;
+      description?: string;
+      base_url: string;
+      content_tag?: string;
+      content_class?: string;
+      content_id?: string;
+      embedding_service_id?: number;
+      vector_db_type?: string;
+    }
+  ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateDomain(appId: number, domainId: number, data: any) {
+  async updateDomain(
+    appId: number,
+    domainId: number,
+    data: {
+      name: string;
+      description?: string;
+      base_url: string;
+      content_tag?: string;
+      content_class?: string;
+      content_id?: string;
+      embedding_service_id?: number;
+      vector_db_type?: string;
+    }
+  ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
       method: 'POST',
       body: JSON.stringify(data),

@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 from models.domain import Domain
 from models.url import Url
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,12 +13,22 @@ class DomainRepository:
     @staticmethod
     def get_by_id(domain_id: int, db: Session) -> Optional[Domain]:
         """Get domain by ID"""
-        return db.query(Domain).filter(Domain.domain_id == domain_id).first()
+        return (
+            db.query(Domain)
+            .options(joinedload(Domain.silo))
+            .filter(Domain.domain_id == domain_id)
+            .first()
+        )
     
     @staticmethod
     def get_by_app_id(app_id: int, db: Session) -> List[Domain]:
         """Get all domains for a specific app"""
-        return db.query(Domain).filter(Domain.app_id == app_id).all()
+        return (
+            db.query(Domain)
+            .options(joinedload(Domain.silo))
+            .filter(Domain.app_id == app_id)
+            .all()
+        )
     
     @staticmethod
     def get_domains_with_url_counts(app_id: int, db: Session) -> List[Tuple[Domain, int]]:

@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from models.repository import Repository
 from typing import List, Optional
 
@@ -17,7 +17,12 @@ class RepositoryRepository:
         Returns:
             Repository instance or None if not found
         """
-        return db.query(Repository).filter(Repository.repository_id == repository_id).first()
+        return (
+            db.query(Repository)
+            .options(joinedload(Repository.silo))
+            .filter(Repository.repository_id == repository_id)
+            .first()
+        )
     
     @staticmethod
     def get_by_app_id(db: Session, app_id: int) -> List[Repository]:
@@ -31,7 +36,12 @@ class RepositoryRepository:
         Returns:
             List of Repository instances
         """
-        return db.query(Repository).filter(Repository.app_id == app_id).all()
+        return (
+            db.query(Repository)
+            .options(joinedload(Repository.silo))
+            .filter(Repository.app_id == app_id)
+            .all()
+        )
     
     @staticmethod
     def create(db: Session, repository: Repository) -> Repository:
