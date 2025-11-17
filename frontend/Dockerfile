@@ -12,14 +12,14 @@ COPY frontend .
 ARG VITE_API_BASE_URL=https://aict-desa.lksnext.com
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
-# OIDC Configuration
+# OIDC Configuration - map OIDC_ENABLED to VITE_OIDC_ENABLED for Vite
 ARG OIDC_ENABLED=true
-ENV OIDC_ENABLED=${OIDC_ENABLED}
+ENV VITE_OIDC_ENABLED=${OIDC_ENABLED}
 
 # Set environment variables for Vite build
 ENV NODE_ENV=production
 
-RUN echo "Using VITE_API_BASE_URL=${VITE_API_BASE_URL}" && npm run build:production
+RUN echo "Using VITE_API_BASE_URL=${VITE_API_BASE_URL} and VITE_OIDC_ENABLED=${VITE_OIDC_ENABLED}" && npm run build:production
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html

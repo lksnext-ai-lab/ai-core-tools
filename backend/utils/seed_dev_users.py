@@ -157,7 +157,7 @@ def main():
                 print(f"    • {user.email} (ID: {user.user_id})")
         
         print("\n  You can now login with any of these emails in dev mode.")
-        print("  Set VITE_OIDC_ENABLED=false in frontend/.env to use dev login.\n")
+        print("  Set OIDC_ENABLED=false in frontend/.env to use dev login.\n")
         
     except Exception as e:
         logger.error(f"Error seeding users: {str(e)}", exc_info=True)
