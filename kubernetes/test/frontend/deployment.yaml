@@ -35,6 +35,32 @@ spec:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
                   key: VITE_API_BASE_URL
+            - name: VITE_OIDC_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: OIDC_ENABLED
+            - name: VITE_OIDC_AUTHORITY
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: VITE_OIDC_AUTHORITY
+            - name: VITE_OIDC_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: VITE_OIDC_CLIENT_ID
+            - name: VITE_OIDC_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: VITE_OIDC_REDIRECT_URI
+            - name: VITE_OIDC_AUDIENCE
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: VITE_OIDC_AUDIENCE
+
           readinessProbe:
             httpGet:
               path: /
