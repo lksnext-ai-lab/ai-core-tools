@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import FieldManager from './FieldManager';
+import FormActions from './FormActions';
 
 interface FieldDefinition {
   name: string;
@@ -29,10 +30,9 @@ interface DataStructureFormProps {
   dataStructure?: DataStructure | null;
   onSubmit: (data: DataStructureFormData) => Promise<void>;
   onCancel: () => void;
-  loading?: boolean;
 }
 
-function DataStructureForm({ dataStructure, onSubmit, onCancel }: DataStructureFormProps) {
+function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataStructureFormProps>) {
   const [formData, setFormData] = useState<DataStructureFormData>({
     name: '',
     description: '',
@@ -218,26 +218,13 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: DataStructureF
       </div>
 
       {/* Form Actions */}
-      <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          disabled={isSubmitting}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg flex items-center transition-colors"
-        >
-          {isSubmitting && (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-          )}
-          {isSubmitting ? 'Saving...' : (isEditing ? 'Update Structure' : 'Create Structure')}
-        </button>
-      </div>
+      <FormActions
+        onCancel={onCancel}
+        isSubmitting={isSubmitting}
+        isEditing={isEditing}
+        submitLabel={isEditing ? 'Update Structure' : 'Create Structure'}
+        submitButtonColor="purple"
+      />
     </form>
   );
 }
