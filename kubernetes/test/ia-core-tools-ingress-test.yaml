@@ -46,13 +46,6 @@ spec:
                 name: ia-core-tools-backend-service-test
                 port:
                   number: 8000
-          - path: /auth
-            pathType: Prefix
-            backend:
-              service:
-                name: ia-core-tools-backend-service-test
-                port:
-                  number: 8000
           - path: /docs
             pathType: Prefix
             backend:
