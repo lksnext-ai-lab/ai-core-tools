@@ -126,7 +126,7 @@ class AuthService {
   // Get current user info (used for fake-login dev mode)
   // In OIDC mode, user info comes from the OIDC User object
   async getCurrentUser(): Promise<any> {
-    return this.request('/auth/me');
+    return this.request('/internal/me');
   }
 }
 

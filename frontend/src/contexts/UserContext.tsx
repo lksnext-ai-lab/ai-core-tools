@@ -50,7 +50,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           const baseUrl = configService.getApiBaseUrl();
           const token = oidcContext.user.access_token;
           
-          const response = await fetch(`${baseUrl}/api/internal/me`, {
+          const response = await fetch(`${baseUrl}/internal/me`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -123,7 +123,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             const baseUrl = configService.getApiBaseUrl();
             const token = oidcContext.user.access_token;
             
-            const response = await fetch(`${baseUrl}/api/internal/me`, {
+            const response = await fetch(`${baseUrl}/internal/me`, {
               headers: {
                 'Authorization': `Bearer ${token}`
               }
