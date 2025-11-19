@@ -128,341 +128,103 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 {/* Protected routes with Layout */}
                 <Route path="/" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       {config.homePage ? <config.homePage /> : <HomePage />}
-                    </Layout>
-                  </ProtectedRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AppsPage />
-                    </Layout>
-                  </ProtectedRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 {/* App-specific routes */}
                 <Route path="/apps/:appId" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <AppDashboard />
-                    </Layout>
-                  </ProtectedRoute>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                      <AppDashboard />                
+                  </ProtectedLayoutRoute>
                 } />
 
                 {/* App-specific routes */}
                 <Route path="/apps/:appId/agents" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AgentsPage />
-                    </Layout>
-                  </ProtectedRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/agents/:agentId" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AgentFormPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/agents/:agentId/playground" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AgentPlaygroundPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/silos" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SilosPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/silos/:siloId" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}> 
                       <SiloFormPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/silos/:siloId/playground" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SiloPlaygroundPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/repositories" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <RepositoriesPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/repositories/:repositoryId" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <RepositoryFormPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/repositories/:repositoryId/detail" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}>
+                     
                       <RepositoryDetailPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/repositories/:repositoryId/playground" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>            
                       <RepositoryPlaygroundPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/domains" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}>
                       <DomainsPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/domains/:domainId" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+
                       <DomainFormPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/domains/:domainId/detail" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}>
                       <DomainDetailPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 {/* App-specific settings routes */}
@@ -485,108 +247,37 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/settings/embedding-services" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                    <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/mcp-configs" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+
                       <SettingsLayout><MCPConfigsPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/api-keys" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+
                       <SettingsLayout><APIKeysPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/data-structures" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+
                       <SettingsLayout><DataStructuresPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/collaboration" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+
                       <SettingsLayout><CollaborationPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 {/* Global settings routes */}
@@ -597,66 +288,21 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/settings/api-keys" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><APIKeysPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/settings/collaboration" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><CollaborationPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/settings/embedding-services" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/settings/general" element={
@@ -666,45 +312,15 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/settings/mcp-configs" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><MCPConfigsPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/settings/data-structures" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><DataStructuresPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 {/* Admin routes */}
@@ -751,24 +367,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/about" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AboutPage />
-                    </Layout>
-                  </ProtectedRoute>
+                    </ProtectedLayoutRoute>
                 } />
 
                 {/* Client-specific extra routes */}
