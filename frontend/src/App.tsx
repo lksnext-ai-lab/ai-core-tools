@@ -20,6 +20,14 @@ import { ExtensibleBaseApp } from './core/ExtensibleBaseApp';
 import { baseTheme } from './themes/baseTheme';
 import type { LibraryConfig } from './core/types';
 
+// Get runtime configuration injected by container at startup
+// Falls back to build-time environment variables for local development
+const runtimeConfig = (window as any).__RUNTIME_CONFIG__;
+
+const getConfig = (key: string, fallback: string = ''): string => {
+  return runtimeConfig?.[key] || import.meta.env[key] || fallback;
+};
+
 // Demo configuration for the base application
 const demoConfig: LibraryConfig = {
   name: 'Mattin AI',
@@ -44,18 +52,18 @@ const demoConfig: LibraryConfig = {
   },
   
   authProps: {
-    enabled: import.meta.env.VITE_OIDC_ENABLED === 'true',
+    enabled: getConfig('VITE_OIDC_ENABLED') === 'true',
     oidc: {
-      authority: import.meta.env.VITE_OIDC_AUTHORITY || '',
-      client_id: import.meta.env.VITE_OIDC_CLIENT_ID || '',
+      authority: getConfig('VITE_OIDC_AUTHORITY'),
+      client_id: getConfig('VITE_OIDC_CLIENT_ID'),
       callbackPath: '/auth/success',
-      scope: import.meta.env.VITE_OIDC_SCOPE || 'openid profile email',
-      audience: import.meta.env.VITE_OIDC_AUDIENCE || 'api://4c151d3b-b6c9-4835-88e1-39412d31a443'
+      scope: getConfig('VITE_OIDC_SCOPE', 'openid profile email'),
+      audience: getConfig('VITE_OIDC_AUDIENCE')
     }
   },
   
   apiConfig: {
-    baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+    baseUrl: getConfig('VITE_API_BASE_URL', 'http://localhost:8000'),
     timeout: 30000,
     retries: 3
   },
