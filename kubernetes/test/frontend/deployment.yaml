@@ -39,26 +39,31 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
-                  key: OIDC_ENABLED
+                  key: VITE_OIDC_ENABLED
             - name: VITE_OIDC_AUTHORITY
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: VITE_OIDC_AUTHORITY
             - name: VITE_OIDC_CLIENT_ID
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: VITE_OIDC_CLIENT_ID
             - name: VITE_OIDC_REDIRECT_URI
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: VITE_OIDC_REDIRECT_URI
+            - name: VITE_OIDC_SCOPE
+              valueFrom:
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
+                  key: VITE_OIDC_SCOPE
             - name: VITE_OIDC_AUDIENCE
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: VITE_OIDC_AUDIENCE
 
           readinessProbe:

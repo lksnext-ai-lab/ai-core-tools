@@ -248,31 +248,31 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: ia-core-tools-api-secret-test
-                  key: ENTRA_CLIENT_ID
+                  key: ENTRAID_CLIENT_ID
             - name: ENTRA_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: ia-core-tools-api-secret-test
-                  key: ENTRA_CLIENT_SECRET
+                  key: ENTRAID_CLIENT_SECRET
             - name: ENTRA_TENANT_ID
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: ENTRA_TENANT_ID
             - name: ENTRA_TOKEN_TYPE
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: ENTRA_TOKEN_TYPE
             - name: ENTRA_VALIDATE_AUDIENCE
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: ENTRA_VALIDATE_AUDIENCE
             - name: ENTRA_VALIDATE_ISSUER
               valueFrom:
-                configMapKeyRef:
-                  name: ia-core-tools-config-test
+                secretKeyRef:
+                  name: ia-core-tools-api-secret-test
                   key: ENTRA_VALIDATE_ISSUER
             # Application configuration
             - name: AICT_MODE
