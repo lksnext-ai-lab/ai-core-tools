@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 import type { ReactNode } from 'react';
 import { authService } from '../services/auth';
 import { OIDCContext } from '../auth/OIDCProvider';
+import { configService } from '../core/ConfigService';
 
 export interface User {
   user_id: number;
@@ -9,6 +10,7 @@ export interface User {
   name?: string;
   is_authenticated: boolean;
   is_admin?: boolean;
+  is_omniadmin?: boolean;
 }
 
 interface UserContextType {
@@ -42,15 +44,43 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   const refreshUser = async () => {
     try {
-      // If using OIDC, get user from OIDC context
+      // If using OIDC, get user from backend
       if (oidcContext?.user) {
-        const oidcUser = oidcContext.user as any; // Type cast for profile access
+        try {
+          const baseUrl = configService.getApiBaseUrl();
+          const token = oidcContext.user.access_token;
+          
+          const response = await fetch(`${baseUrl}/api/internal/me`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            setUser({
+              user_id: userData.user_id,
+              email: userData.email,
+              name: userData.name,
+              is_authenticated: true,
+              is_admin: userData.is_admin || userData.is_omniadmin,
+              is_omniadmin: userData.is_omniadmin
+            });
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to fetch user from backend:', error);
+        }
+        
+        // Fallback: use OIDC profile if backend call fails
+        const oidcUser = oidcContext.user as any;
         const userData: User = {
-          user_id: 0, // OIDC doesn't provide user_id, backend will determine from token
+          user_id: 0,
           email: oidcUser.profile?.email || '',
           name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
           is_authenticated: true,
-          is_admin: false // Backend will determine from token claims
+          is_admin: false,
+          is_omniadmin: false
         };
         setUser(userData);
       } else if (authService.isAuthenticated()) {
@@ -62,6 +92,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           name: '',
           is_authenticated: true,
           is_admin: false,
+          is_omniadmin: false
         });
       } else {
         setUser(null);
@@ -86,15 +117,44 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   useEffect(() => {
     const initializeUser = async () => {
       try {
-        // If using OIDC, get user from OIDC context
+        // If using OIDC, get user from backend
         if (oidcContext?.user) {
-          const oidcUser = oidcContext.user as any; // Type cast for profile access
+          try {
+            const baseUrl = configService.getApiBaseUrl();
+            const token = oidcContext.user.access_token;
+            
+            const response = await fetch(`${baseUrl}/api/internal/me`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (response.ok) {
+              const userData = await response.json();
+              setUser({
+                user_id: userData.user_id,
+                email: userData.email,
+                name: userData.name,
+                is_authenticated: true,
+                is_admin: userData.is_admin || userData.is_omniadmin,
+                is_omniadmin: userData.is_omniadmin
+              });
+              setLoading(false);
+              return;
+            }
+          } catch (error) {
+            console.error('Failed to fetch user from backend:', error);
+          }
+          
+          // Fallback: use OIDC profile if backend call fails
+          const oidcUser = oidcContext.user as any;
           const userData: User = {
             user_id: 0,
             email: oidcUser.profile?.email || '',
             name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
             is_authenticated: true,
-            is_admin: false
+            is_admin: false,
+            is_omniadmin: false
           };
           setUser(userData);
         } else if (authService.isAuthenticated()) {
@@ -106,6 +166,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             name: '',
             is_authenticated: true,
             is_admin: false,
+            is_omniadmin: false
           });
         } else {
           // No OIDC user and no token means not authenticated
