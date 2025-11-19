@@ -6,9 +6,7 @@ import { UserProvider } from '../contexts/UserContext';
 import { SettingsCacheProvider } from '../contexts/SettingsCacheContext';
 import { Layout } from '../components/layout/Layout';
 import SettingsLayout from '../components/layout/SettingsLayout';
-import ProtectedRoute from '../components/ProtectedRoute';
-import AdminRoute from '../components/AdminRoute';
-import { ProtectedLayoutRoute } from '../components/ProtectedLayoutRoute';
+import { ProtectedLayoutRoute, AdminLayoutRoute } from '../components/ProtectedLayoutRoute';
 import { configService } from './ConfigService';
 import { mergeNavigationConfig } from './NavigationMerger';
 import { defaultNavigation } from './defaultNavigation';
@@ -254,28 +252,24 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 <Route path="/apps/:appId/settings/mcp-configs" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-
                       <SettingsLayout><MCPConfigsPage /></SettingsLayout>
                     </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/api-keys" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-
                       <SettingsLayout><APIKeysPage /></SettingsLayout>
                     </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/data-structures" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-
                       <SettingsLayout><DataStructuresPage /></SettingsLayout>
                     </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/collaboration" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-
                       <SettingsLayout><CollaborationPage /></SettingsLayout>
                     </ProtectedLayoutRoute>
                 } />
@@ -325,45 +319,15 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 {/* Admin routes */}
                 <Route path="/admin/users" element={
-                  <AdminRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <UsersPage />
-                    </Layout>
-                  </AdminRoute>
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <UsersPage />
+                  </AdminLayoutRoute>
                 } />
 
                 <Route path="/admin/stats" element={
-                  <AdminRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <StatsPage />
-                    </Layout>
-                  </AdminRoute>
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <StatsPage />
+                  </AdminLayoutRoute>
                 } />
 
                 <Route path="/about" element={
@@ -374,36 +338,21 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 {/* Client-specific extra routes */}
                 {allExtraRoutes.map(route => {
-                  const layoutContent = (
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      {route.element}
-                    </Layout>
-                  );
-
                   // Determine which route protection to use
                   let element;
                   if (route.adminOnly) {
                     // Admin-only route (requires authentication AND admin privileges)
-                    element = <AdminRoute>{layoutContent}</AdminRoute>;
+                    element = <AdminLayoutRoute {...commonLayoutProps}>{route.element}</AdminLayoutRoute>;
                   } else if (route.protected) {
                     // Protected route (requires authentication only)
-                    element = <ProtectedRoute>{layoutContent}</ProtectedRoute>;
+                    element = <ProtectedLayoutRoute {...commonLayoutProps}>{route.element}</ProtectedLayoutRoute>;
                   } else {
                     // Public route
-                    element = layoutContent;
+                    element = (
+                      <Layout {...commonLayoutProps}>
+                        {route.element}
+                      </Layout>
+                    );
                   }
 
                   return (

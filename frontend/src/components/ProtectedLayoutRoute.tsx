@@ -1,9 +1,10 @@
 import React from 'react';
 import { Layout } from './layout/Layout';
 import ProtectedRoute from './ProtectedRoute';
+import AdminRoute from './AdminRoute';
 import type { NavigationConfig } from '../core/types';
 
-interface ProtectedLayoutRouteProps {
+interface LayoutRouteProps {
   children: React.ReactNode;
   navigationConfig: NavigationConfig;
   headerProps?: {
@@ -17,13 +18,14 @@ interface ProtectedLayoutRouteProps {
   showSidebar?: boolean;
   showHeader?: boolean;
   showFooter?: boolean;
+  routeType?: 'protected' | 'admin';
 }
 
 /**
- * Reusable component that wraps content with ProtectedRoute and Layout.
- * This eliminates duplication across route definitions.
+ * Generic component that wraps content with a route protector and Layout.
+ * Can be used for both protected and admin routes.
  */
-export const ProtectedLayoutRoute: React.FC<ProtectedLayoutRouteProps> = ({
+export const LayoutRoute: React.FC<LayoutRouteProps> = ({
   children,
   navigationConfig,
   headerProps,
@@ -33,9 +35,12 @@ export const ProtectedLayoutRoute: React.FC<ProtectedLayoutRouteProps> = ({
   showSidebar = true,
   showHeader = true,
   showFooter = true,
+  routeType = 'protected',
 }) => {
+  const RouteWrapper = routeType === 'admin' ? AdminRoute : ProtectedRoute;
+
   return (
-    <ProtectedRoute>
+    <RouteWrapper>
       <Layout
         navigationConfig={navigationConfig}
         headerProps={headerProps}
@@ -48,6 +53,15 @@ export const ProtectedLayoutRoute: React.FC<ProtectedLayoutRouteProps> = ({
       >
         {children}
       </Layout>
-    </ProtectedRoute>
+    </RouteWrapper>
   );
 };
+
+// Convenience exports for backward compatibility and cleaner code
+export const ProtectedLayoutRoute: React.FC<Omit<LayoutRouteProps, 'routeType'>> = (props) => (
+  <LayoutRoute {...props} routeType="protected" />
+);
+
+export const AdminLayoutRoute: React.FC<Omit<LayoutRouteProps, 'routeType'>> = (props) => (
+  <LayoutRoute {...props} routeType="admin" />
+);
