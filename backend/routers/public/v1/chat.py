@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 # Import Pydantic models and auth
-from .schemas import *
+from .schemas import ChatRequestSchema, AgentResponseSchema, MessageResponseSchema
 from .auth import get_api_key_auth, validate_api_key_for_app
 from db.database import get_db
 
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 chat_router = APIRouter()
 
-# ==================== AGENT CHAT ENDPOINTS ====================
+#AGENT CHAT ENDPOINTS
 
 @chat_router.post("/{agent_id}/call", 
                   summary="Call agent", 

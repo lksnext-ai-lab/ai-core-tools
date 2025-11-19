@@ -621,7 +621,7 @@ class AgentExecutionService:
                         # Clean up image file
                         try:
                             os.remove(image_path)
-                        except:
+                        except (OSError, FileNotFoundError):
                             pass
                             
                     except Exception as e:

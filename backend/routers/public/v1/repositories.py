@@ -1,19 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from typing import List, Optional, Dict, Any
-import json
-import tempfile
-import os
-
-# Import our services
-from services.agent_service import AgentService
-from services.silo_service import SiloService
-from services.repository_service import RepositoryService
-from services.resource_service import ResourceService
-
+from fastapi import APIRouter, Depends, HTTPException
 # Import Pydantic models and auth
-from .schemas import *
-from .auth import get_api_key_auth, validate_api_key_for_app, APIKeyAuth
+from .schemas import RepositoriesResponseSchema, RepositoryResponseSchema, CreateRepositoryRequestSchema
+from .auth import get_api_key_auth, validate_api_key_for_app
 
 # Import logger
 from utils.logger import get_logger
@@ -22,7 +10,7 @@ logger = get_logger(__name__)
 
 repositories_router = APIRouter()
 
-# ==================== REPOSITORY ENDPOINTS ====================
+#REPOSITORY ENDPOINTS
 
 @repositories_router.get("/",
                         summary="Get all repos in app",

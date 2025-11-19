@@ -1,20 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-import json
-import tempfile
-import os
 
-# Import our services
-from services.agent_service import AgentService
-from services.silo_service import SiloService
-from services.repository_service import RepositoryService
-from services.resource_service import ResourceService
-
-# Import Pydantic models and auth
-from .schemas import *
-from .auth import get_api_key_auth, validate_api_key_for_app, APIKeyAuth
+from .schemas import OCRResponseSchema
+from .auth import get_api_key_auth, validate_api_key_for_app
 from db.database import get_db
 
 # Import logger
@@ -24,7 +12,7 @@ logger = get_logger(__name__)
 
 ocr_router = APIRouter()
 
-# ==================== OCR ENDPOINTS ====================
+#OCR ENDPOINTS
 
 @ocr_router.post("/{agent_id}/process",
                  summary="Process OCR",

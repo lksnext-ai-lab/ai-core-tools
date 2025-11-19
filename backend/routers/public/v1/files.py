@@ -1,20 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
-import json
-import tempfile
-import os
-
-# Import our services
-from services.agent_service import AgentService
-from services.silo_service import SiloService
-from services.repository_service import RepositoryService
-from services.resource_service import ResourceService
 
 # Import Pydantic models and auth
-from .schemas import *
-from .auth import get_api_key_auth, validate_api_key_for_app, APIKeyAuth
+from .schemas import AttachFileResponseSchema, MessageResponseSchema, ListFilesResponseSchema
+from .auth import get_api_key_auth, validate_api_key_for_app
 # File size validation handled by enforce_file_size_limit dependency in router
 from db.database import get_db
 
@@ -25,7 +14,7 @@ logger = get_logger(__name__)
 
 files_router = APIRouter()
 
-# ==================== FILE OPERATION ENDPOINTS ====================
+#FILE OPERATION ENDPOINTS
 
 @files_router.post("/{agent_id}/attach-file",
                    summary="Attach file for chat",

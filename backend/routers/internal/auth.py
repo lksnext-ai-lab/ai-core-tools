@@ -104,7 +104,7 @@ async def dev_login(
     # Check if user is active
     if hasattr(user, "is_active") and not user.is_active:
         logger.warning(
-            f"Dev login failed: inactive user attempted login: {email}"
+            "Dev login failed: inactive user attempted login."
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
