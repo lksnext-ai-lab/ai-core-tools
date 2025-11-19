@@ -22,7 +22,16 @@ ENV NODE_ENV=production
 RUN echo "Using VITE_API_BASE_URL=${VITE_API_BASE_URL} and VITE_OIDC_ENABLED=${VITE_OIDC_ENABLED}" && npm run build:production
 
 FROM nginx:alpine
+
+# Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy nginx configuration
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy the runtime config generation script
+COPY frontend/generate-config.sh /docker-entrypoint.d/40-generate-config.sh
+RUN chmod +x /docker-entrypoint.d/40-generate-config.sh
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

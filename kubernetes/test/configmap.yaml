@@ -56,13 +56,8 @@ data:
   OAUTH_PROVIDER: "ENTRAID"
   ENTRAID_TENANT_ID: "b85a15eb-1d5f-449e-93d8-77a9cba50013"
   ENTRAID_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
-  
-  # EntraID OAuth Configuration
-  AICT_LOGIN: "OIDC"
-  OAUTH_PROVIDER: "ENTRAID"
-  ENTRAID_TENANT_ID: "b85a15eb-1d5f-449e-93d8-77a9cba50013"
-  ENTRAID_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
   VITE_OIDC_ENABLED: "true"
+  
   # Application mode and admins
   AICT_MODE: "SELF-HOSTED"
   AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com,mikellonbide@gmail.com"
