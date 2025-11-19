@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '../themes/ThemeProvider';
 import { AuthProvider } from '../auth/AuthConfig';
@@ -8,6 +8,7 @@ import { Layout } from '../components/layout/Layout';
 import SettingsLayout from '../components/layout/SettingsLayout';
 import ProtectedRoute from '../components/ProtectedRoute';
 import AdminRoute from '../components/AdminRoute';
+import { ProtectedLayoutRoute } from '../components/ProtectedLayoutRoute';
 import { configService } from './ConfigService';
 import { mergeNavigationConfig } from './NavigationMerger';
 import { defaultNavigation } from './defaultNavigation';
@@ -97,6 +98,22 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   const mergedNavigationConfig = config.navigation 
     ? mergeNavigationConfig(config.navigation)
     : (config.navigationConfig || defaultNavigation);
+
+  // Common layout props used across all routes
+  const commonLayoutProps = useMemo(() => ({
+    navigationConfig: mergedNavigationConfig,
+    headerProps: {
+      ...config.headerProps,
+      title: config.headerProps?.title || config.name,
+      logoUrl: config.headerProps?.logoUrl || config.logo
+    },
+    footerProps: config.footerProps,
+    layoutProps: config.layoutProps,
+    navigationProps: config.navigationProps,
+    showSidebar: features.showSidebar !== false,
+    showHeader: features.showHeader !== false,
+    showFooter: features.showFooter !== false,
+  }), [mergedNavigationConfig, config, features]);
 
   return (
     <ThemeProvider theme={clientConfig.theme}>
@@ -450,66 +467,21 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 {/* App-specific settings routes */}
                 <Route path="/apps/:appId/settings" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/general" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/ai-services" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <SettingsLayout><AIServicesPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SettingsLayout><AIServicesPage /></SettingsLayout>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/embedding-services" element={
@@ -619,24 +591,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
                 {/* Global settings routes */}
                 <Route path="/settings/ai-services" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <SettingsLayout><AIServicesPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SettingsLayout><AIServicesPage /></SettingsLayout>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/settings/api-keys" element={
@@ -703,24 +660,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/settings/general" element={
-                  <ProtectedRoute>
-                    <Layout
-                      navigationConfig={mergedNavigationConfig}
-                      headerProps={{
-                        ...config.headerProps,
-                        title: config.headerProps?.title || config.name,
-                        logoUrl: config.headerProps?.logoUrl || config.logo
-                      }}
-                      footerProps={config.footerProps}
-                      layoutProps={config.layoutProps}
-                      navigationProps={config.navigationProps}
-                      showSidebar={features.showSidebar !== false}
-                      showHeader={features.showHeader !== false}
-                      showFooter={features.showFooter !== false}
-                    >
-                      <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
-                    </Layout>
-                  </ProtectedRoute>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/settings/mcp-configs" element={
