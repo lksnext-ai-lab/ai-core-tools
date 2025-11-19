@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
 import ActionDropdown from '../../components/ui/ActionDropdown';
+import Alert from '../../components/ui/Alert';
 
 function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -110,43 +111,8 @@ function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Success Message */}
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-green-400 text-xl mr-3">✅</span>
-            <div>
-              <h3 className="text-sm font-medium text-green-800">Success</h3>
-              <p className="text-sm text-green-600 mt-1">{success}</p>
-              <button 
-                onClick={() => setSuccess(null)}
-                className="mt-2 text-sm text-green-600 hover:text-green-800 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={() => setError(null)}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {success && <Alert type="success" message={success} onDismiss={() => setSuccess(null)} />}
+      {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
       {/* Header */}
       <div className="flex items-center justify-between">

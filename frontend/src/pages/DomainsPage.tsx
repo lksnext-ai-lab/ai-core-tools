@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
+import Alert from '../components/ui/Alert';
 
 interface Domain {
   domain_id: number;
@@ -94,21 +95,12 @@ function DomainsPage() {
           </div>
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Domains</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={() => loadDomains()}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
-                Try again
-              </button>
-            </div>
-          </div>
-        </div>
+        <Alert 
+          type="error" 
+          title="Error Loading Domains" 
+          message={error}
+          onDismiss={() => loadDomains()}
+        />
       </div>
     );
   }

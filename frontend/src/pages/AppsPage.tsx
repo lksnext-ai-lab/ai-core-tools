@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Speedometer from '../components/ui/Speedometer';
+import Alert from '../components/ui/Alert';
 
 // Define the App type (like your Pydantic models!)
 interface UsageStats {
@@ -200,67 +201,11 @@ Type the app name to confirm: "${app.name}"`;
     );
   }
 
-  // Show error message if something went wrong
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <div className="flex">
-          <span className="text-red-400 text-xl mr-3">⚠️</span>
-          <div>
-            <h3 className="text-sm font-medium text-red-800">Error Loading Apps</h3>
-            <p className="text-sm text-red-600 mt-1">{error}</p>
-            <button 
-              onClick={loadApps}
-              className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Main render
   return (
     <div className="space-y-6">
-      {/* Success Message */}
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-green-400 text-xl mr-3">✅</span>
-            <div>
-              <h3 className="text-sm font-medium text-green-800">Success</h3>
-              <p className="text-sm text-green-600 mt-1">{success}</p>
-              <button 
-                onClick={() => setSuccess(null)}
-                className="mt-2 text-sm text-green-600 hover:text-green-800 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={() => setError(null)}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {success && <Alert type="success" message={success} onDismiss={() => setSuccess(null)} />}
+      {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
       {/* Header */}
       <div className="flex items-center justify-between">

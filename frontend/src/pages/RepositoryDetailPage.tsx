@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import FolderTree from '../components/FolderTree';
+import Alert from '../components/ui/Alert';
 
 interface Resource {
   resource_id: number;
@@ -460,11 +461,7 @@ const RepositoryDetailPage: React.FC = () => {
       />
 
       {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          <div className="whitespace-pre-line">{error}</div>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} onDismiss={() => setError(null)} className="mb-6" />}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

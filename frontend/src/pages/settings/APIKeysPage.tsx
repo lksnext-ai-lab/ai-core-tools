@@ -8,6 +8,7 @@ import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
+import Alert from '../../components/ui/Alert';
 
 interface APIKey {
   key_id: number;
@@ -194,19 +195,9 @@ function APIKeysPage() {
 
   if (error) {
     return (
-      
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-600">Error: {error}</p>
-            <button 
-              onClick={() => loadAPIKeys()}
-              className="mt-2 text-red-800 hover:text-red-900 underline"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      
+      <div className="p-6">
+        <Alert type="error" message={error} onDismiss={() => loadAPIKeys()} />
+      </div>
     );
   }
 

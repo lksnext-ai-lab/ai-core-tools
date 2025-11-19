@@ -7,6 +7,7 @@ import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
+import Alert from '../../components/ui/Alert';
 
 interface EmbeddingService {
   service_id: number;
@@ -303,26 +304,12 @@ function EmbeddingServicesPage() {
         )}
 
         {/* Info Box */}
-        <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <span className="text-green-400 text-xl">🔍</span>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-green-800">
-                About Embedding Services
-              </h3>
-              <div className="mt-2 text-sm text-green-700">
-                <p>
-                  Embedding services convert text into high-dimensional vectors for semantic search, 
-                  document similarity, and RAG (Retrieval-Augmented Generation) applications. 
-                  Popular models include OpenAI's text-embedding-3-large, Mistral's mistral-embed, 
-                  and local options like Ollama.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Alert 
+          type="info" 
+          title="About Embedding Services" 
+          message="Embedding services convert text into high-dimensional vectors for semantic search, document similarity, and RAG (Retrieval-Augmented Generation) applications. Popular models include OpenAI's text-embedding-3-large, Mistral's mistral-embed, and local options like Ollama."
+          className="mt-6"
+        />
 
         {/* Create/Edit Modal */}
         <Modal

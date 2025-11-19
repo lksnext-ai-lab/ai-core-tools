@@ -4,6 +4,7 @@ import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import Alert from '../../components/ui/Alert';
 
 interface Collaborator {
   id: number;
@@ -283,19 +284,9 @@ function CollaborationPage() {
 
   if (error) {
     return (
-      
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-600">Error: {error}</p>
-            <button 
-              onClick={() => loadCollaborators()}
-              className="mt-2 text-red-800 hover:text-red-900 underline"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      
+      <div className="p-6">
+        <Alert type="error" message={error} onDismiss={() => loadCollaborators()} />
+      </div>
     );
   }
 

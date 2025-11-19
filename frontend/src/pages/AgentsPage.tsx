@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
+import Alert from '../components/ui/Alert';
 
 // Define the Agent type
 interface Agent {
@@ -154,17 +155,7 @@ function AgentsPage() {
       </div>
 
       {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
       {agents.length === 0 ? (
         <div className="bg-white rounded-lg shadow-md border p-8 text-center">
