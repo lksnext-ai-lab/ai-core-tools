@@ -512,6 +512,30 @@ function AgentFormPage() {
                 <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
               </div>
               
+              {/* No AI Services Warning */}
+              {agent && agent.ai_services.length === 0 && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6">
+                  <div className="flex items-start">
+                    <span className="text-amber-500 text-xl mr-3">⚠️</span>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-amber-900 mb-2">No AI Services Configured</h4>
+                      <p className="text-sm text-amber-800 mb-3">
+                        You need to configure at least one AI service before creating an OCR agent. 
+                        AI services define which models your agent will use for vision and text processing.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
+                        className="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                      >
+                        <span className="mr-2">⚙️</span>
+                        Configure AI Services
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-6">
                 <div>
                   <label htmlFor="vision_service" className="block text-sm font-medium text-gray-700 mb-2">
@@ -625,6 +649,30 @@ function AgentFormPage() {
                 <h3 className="text-xl font-semibold text-gray-900">Configuration</h3>
               </div>
               
+              {/* No AI Services Warning */}
+              {agent.ai_services.length === 0 && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6">
+                  <div className="flex items-start">
+                    <span className="text-amber-500 text-xl mr-3">⚠️</span>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-amber-900 mb-2">No AI Services Configured</h4>
+                      <p className="text-sm text-amber-800 mb-3">
+                        You need to configure at least one AI service before creating an agent. 
+                        AI services define which language model your agent will use.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
+                        className="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                      >
+                        <span className="mr-2">⚙️</span>
+                        Configure AI Services
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="ai_service" className="block text-sm font-medium text-gray-700 mb-2">
