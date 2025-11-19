@@ -281,7 +281,7 @@ const ThemeCustomizationDemo: React.FC = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {predefinedThemes.map((predefinedTheme) => (
-            <div 
+            <div
               key={predefinedTheme.name}
               className="p-4 rounded-lg border cursor-pointer transition-all hover:scale-105 hover:shadow-lg"
               style={{
@@ -289,6 +289,14 @@ const ThemeCustomizationDemo: React.FC = () => {
                 borderColor: theme.colors?.primary + '30'
               }}
               onClick={() => setCustomTheme(predefinedTheme.colors)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setCustomTheme(predefinedTheme.colors);
+                }
+              }}
+              tabIndex={0}
+              role="button"
             >
               <div className="mb-3">
                 <h3 

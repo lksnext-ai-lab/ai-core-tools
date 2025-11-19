@@ -1,9 +1,9 @@
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session, joinedload
 from models.user import User
 from models.app import App
 from sqlalchemy import or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -112,7 +112,7 @@ class UserRepository:
     
     def get_recent_users_count(self, days: int = 30) -> int:
         """Get count of recent users (last N days)"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return self.db.query(User).filter(
             User.create_date >= cutoff_date
         ).count()
@@ -123,7 +123,7 @@ class UserRepository:
     
     def get_recent_users_list(self, days: int = 30, limit: int = 10) -> List[User]:
         """Get recent users list (last N days)"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return self.db.query(User).filter(
             User.create_date >= cutoff_date
         ).order_by(User.create_date.desc()).limit(limit).all()

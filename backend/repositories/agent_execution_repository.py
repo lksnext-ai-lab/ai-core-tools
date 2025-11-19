@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional
 from sqlalchemy.orm import Session, joinedload, selectinload
 from models.agent import Agent, AgentTool
 from models.ocr_agent import OCRAgent
@@ -73,6 +73,6 @@ class AgentExecutionRepository:
             return False
     
     @staticmethod
-    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
+    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Agent | OCRAgent:
         """Get agent by ID and type - delegates to AgentRepository"""
         return AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type)

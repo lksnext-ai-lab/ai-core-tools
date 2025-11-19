@@ -1,7 +1,8 @@
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 
 from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
@@ -16,6 +17,8 @@ from schemas.conversation_schemas import (
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+CONVERSATION_NOT_FOUND = "Conversation not found"
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -99,8 +102,7 @@ async def get_conversation(
     )
     
     if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
+        raise HTTPException(status_code=404, detail=CONVERSATION_NOT_FOUND)
     return conversation
 
 
@@ -124,8 +126,7 @@ async def get_conversation_with_history(
     )
     
     if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
+        raise HTTPException(status_code=404, detail=CONVERSATION_NOT_FOUND)
     # Get message history
     try:
         history = await ConversationService.get_conversation_history(
@@ -165,8 +166,7 @@ async def update_conversation(
     )
     
     if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
+        raise HTTPException(status_code=404, detail=CONVERSATION_NOT_FOUND)
     return conversation
 
 
@@ -189,7 +189,6 @@ async def delete_conversation(
     )
     
     if not success:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
+        raise HTTPException(status_code=404, detail=CONVERSATION_NOT_FOUND)
     return {"message": "Conversation deleted successfully"}
 

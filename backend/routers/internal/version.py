@@ -3,6 +3,8 @@ from typing import Dict
 import toml
 from pathlib import Path
 
+
+PYPROJECT_TOML = "pyproject.toml"
 version_router = APIRouter()
 
 def get_project_root() -> Path:
@@ -12,22 +14,22 @@ def get_project_root() -> Path:
     
     # First, try the standard relative path (4 levels up)
     standard_path = current_path.parent.parent.parent.parent
-    if (standard_path / "pyproject.toml").exists():
+    if (standard_path / PYPROJECT_TOML).exists():
         return standard_path
     
     # For Docker containers, try current working directory
     cwd_path = Path.cwd()
-    if (cwd_path / "pyproject.toml").exists():
+    if (cwd_path / PYPROJECT_TOML).exists():
         return cwd_path
     
     # Try one level up from current working directory
     parent_path = cwd_path.parent
-    if (parent_path / "pyproject.toml").exists():
+    if (parent_path / PYPROJECT_TOML).exists():
         return parent_path
     
     # Try root directory (for Docker containers)
     root_path = Path("/")
-    if (root_path / "pyproject.toml").exists():
+    if (root_path / PYPROJECT_TOML).exists():
         return root_path
     
     # Fallback to standard path
@@ -36,7 +38,7 @@ def get_project_root() -> Path:
 def get_version() -> str:
     """Get the current version from pyproject.toml."""
     try:
-        pyproject_path = get_project_root() / "pyproject.toml"
+        pyproject_path = get_project_root() / PYPROJECT_TOML
         print(f"Trying to read version from: {pyproject_path}")
         print(f"File exists: {pyproject_path.exists()}")
         print(f"Current working directory: {Path.cwd()}")
@@ -62,7 +64,7 @@ def get_version() -> str:
 def get_version_info() -> Dict[str, str]:
     """Get detailed version information."""
     try:
-        pyproject_path = get_project_root() / "pyproject.toml"
+        pyproject_path = get_project_root() / PYPROJECT_TOML
         print(f"Trying to read version info from: {pyproject_path}")
         
         with open(pyproject_path, "r") as f:

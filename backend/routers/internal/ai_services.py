@@ -18,9 +18,12 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 ai_services_router = APIRouter()
 
-# ==================== AI SERVICE MANAGEMENT ====================
+AI_SERVICE_NOT_FOUND_ERROR = "AI service not found"
+
+#AI SERVICE MANAGEMENT
 
 @ai_services_router.get("/", 
                         summary="List AI services",
@@ -65,7 +68,7 @@ async def get_ai_service(
         if result is None and service_id != 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="AI service not found"
+                detail=AI_SERVICE_NOT_FOUND_ERROR
             )
         return result
     except HTTPException:
@@ -99,7 +102,7 @@ async def create_or_update_ai_service(
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="AI service not found"
+                detail=AI_SERVICE_NOT_FOUND_ERROR
             )
         return result
     except HTTPException:
@@ -129,7 +132,7 @@ async def copy_ai_service(
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="AI service not found"
+                detail=AI_SERVICE_NOT_FOUND_ERROR
             )
         return result
     except HTTPException:
@@ -161,7 +164,7 @@ async def delete_ai_service(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="AI service not found"
+                detail=AI_SERVICE_NOT_FOUND_ERROR
             )
         
         return {"message": "AI service deleted successfully"}

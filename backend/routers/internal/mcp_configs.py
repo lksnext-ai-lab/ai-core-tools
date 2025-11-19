@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
@@ -13,6 +13,9 @@ from services.mcp_config_service import MCPConfigService
 
 # Import logger
 from utils.logger import get_logger
+
+
+MCP_CONFIG_NOT_FOUND_ERROR = "MCP config not found"
 
 logger = get_logger(__name__)
 
@@ -67,7 +70,7 @@ async def get_mcp_config(
         if config_detail is None and config_id != 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="MCP config not found"
+                detail=MCP_CONFIG_NOT_FOUND_ERROR
             )
         
         return config_detail
@@ -103,7 +106,7 @@ async def create_or_update_mcp_config(
         if config is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="MCP config not found"
+                detail=MCP_CONFIG_NOT_FOUND_ERROR
             )
         
         # Return updated config (reuse the GET logic)
@@ -139,7 +142,7 @@ async def delete_mcp_config(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="MCP config not found"
+                detail=MCP_CONFIG_NOT_FOUND_ERROR
             )
         
         return {"message": "MCP config deleted successfully"}

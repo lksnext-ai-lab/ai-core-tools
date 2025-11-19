@@ -12,13 +12,21 @@ const ClientCard: React.FC<ClientCardProps> = ({ title, description, icon, onCli
   const { theme } = useTheme();
 
   return (
-    <div 
+    <div
       className="p-4 rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-shadow"
       style={{
         backgroundColor: theme.colors?.surface,
         borderColor: theme.colors?.primary + '20'
       }}
       onClick={onClick}
+      onKeyDown={e => {
+        if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      tabIndex={0}
+      role="button"
     >
       <div className="flex items-center space-x-3">
         {icon && (

@@ -27,7 +27,7 @@ const ThemePreviewCard: React.FC<ThemePreviewCardProps> = ({
   const { theme: currentTheme } = useTheme();
 
   return (
-    <div 
+    <div
       className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:scale-105 hover:shadow-lg ${
         isSelected ? 'ring-2 ring-blue-500' : ''
       }`}
@@ -36,6 +36,14 @@ const ThemePreviewCard: React.FC<ThemePreviewCardProps> = ({
         borderColor: isSelected ? '#3B82F6' : currentTheme.colors?.primary + '30'
       }}
       onClick={onSelect}
+      onKeyDown={e => {
+        if (onSelect && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      tabIndex={0}
+      role="button"
     >
       {/* Theme Name */}
       <div className="mb-3">

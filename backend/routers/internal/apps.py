@@ -59,7 +59,7 @@ apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parse
 apps_router.include_router(repositories_router, prefix="/{app_id}/repositories", tags=["Repositories"])
 apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repository_id}/folders", tags=["Folders"])
 
-# ==================== HELPER FUNCTIONS ====================
+#HELPER FUNCTIONS
 
 def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     """
@@ -68,6 +68,67 @@ def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     app_service = AppService(db)
     collaboration_service = AppCollaborationService(db)
     return app_service, collaboration_service
+
+def _safe_get_count(items) -> int:
+    """
+    Safely get count from a list or collection, returning 0 if None.
+    """
+    return len(items) if items else 0
+
+def _handle_savepoint_rollback(savepoint, db: Session, app_id: int):
+    """
+    Handle rolling back a savepoint with proper error handling.
+    """
+    try:
+        savepoint.rollback()
+    except Exception as rollback_error:
+        logger.error(f"Error rolling back savepoint for app {app_id}: {str(rollback_error)}")
+        _handle_transaction_rollback(db, app_id)
+
+def _handle_transaction_rollback(db: Session, app_id: int):
+    """
+    Handle rolling back the entire transaction with error handling.
+    """
+    try:
+        db.rollback()
+    except Exception as rollback_error:
+        logger.error(f"Error rolling back transaction for app {app_id}: {str(rollback_error)}")
+
+def _get_entity_counts(app_id: int, db: Session, collaboration_service: AppCollaborationService) -> dict:
+    """
+    Fetch all entity counts for an app.
+    """
+    from services.agent_service import AgentService
+    from services.repository_service import RepositoryService
+    from services.domain_service import DomainService
+    from services.silo_service import SiloService
+    
+    agent_service = AgentService()
+    agents = agent_service.get_agents(db, app_id)
+    repositories = RepositoryService.get_repositories_by_app_id(app_id, db)
+    domains = DomainService.get_domains_by_app_id(app_id, db)
+    silos = SiloService.get_silos_by_app_id(app_id, db)
+    collaborators = collaboration_service.get_app_collaborators(app_id)
+    
+    return {
+        'agent_count': _safe_get_count(agents),
+        'repository_count': _safe_get_count(repositories),
+        'domain_count': _safe_get_count(domains),
+        'silo_count': _safe_get_count(silos),
+        'collaborator_count': _safe_get_count(collaborators)
+    }
+
+def _get_empty_counts() -> dict:
+    """
+    Return a dictionary with all counts set to 0.
+    """
+    return {
+        'agent_count': 0,
+        'repository_count': 0,
+        'domain_count': 0,
+        'silo_count': 0,
+        'collaborator_count': 0
+    }
 
 def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service: AppCollaborationService) -> dict:
     """
@@ -81,72 +142,27 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
     Returns:
         Dictionary with count values for each entity type
     """
-    # Use a savepoint to isolate errors - if something fails, we can rollback
-    # just this operation without affecting the main transaction
     savepoint = None
     try:
         savepoint = db.begin_nested()
-        from services.agent_service import AgentService
-        from services.repository_service import RepositoryService
-        from services.domain_service import DomainService
-        from services.silo_service import SiloService
-        
-        agent_service = AgentService()
-        agents = agent_service.get_agents(db, app_id)
-        agent_count = len(agents) if agents else 0
-        
-        repositories = RepositoryService.get_repositories_by_app_id(app_id, db)
-        repository_count = len(repositories) if repositories else 0
-        
-        domains = DomainService.get_domains_by_app_id(app_id, db)
-        domain_count = len(domains) if domains else 0
-        
-        silos = SiloService.get_silos_by_app_id(app_id, db)
-        silo_count = len(silos) if silos else 0
-        
-        collaborators = collaboration_service.get_app_collaborators(app_id)
-        collaborator_count = len(collaborators) if collaborators else 0
+        counts = _get_entity_counts(app_id, db, collaboration_service)
         
         if savepoint:
             savepoint.commit()
-        return {
-            'agent_count': agent_count,
-            'repository_count': repository_count,
-            'domain_count': domain_count,
-            'silo_count': silo_count,
-            'collaborator_count': collaborator_count
-        }
+        return counts
         
     except Exception as e:
         logger.warning(f"Error calculating counts for app {app_id}: {str(e)}")
-        # Rollback the savepoint to clear the error state
-        # This prevents "current transaction is aborted" errors on subsequent queries
-        # while preserving the main transaction
+        
         if savepoint:
-            try:
-                savepoint.rollback()
-            except Exception as rollback_error:
-                logger.error(f"Error rolling back savepoint: {str(rollback_error)}")
-                # If savepoint rollback fails, rollback the entire transaction
-                try:
-                    db.rollback()
-                except Exception as full_rollback_error:
-                    logger.error(f"Error rolling back full transaction: {str(full_rollback_error)}")
+            _handle_savepoint_rollback(savepoint, db, app_id)
         else:
-            # If we couldn't create a savepoint, rollback the entire transaction
-            try:
-                db.rollback()
-            except Exception as rollback_error:
-                logger.error(f"Error rolling back transaction: {str(rollback_error)}")
-        return {
-            'agent_count': 0,
-            'repository_count': 0,
-            'domain_count': 0,
-            'silo_count': 0,
-            'collaborator_count': 0
-        }
+            _handle_transaction_rollback(db, app_id)
+        
+        return _get_empty_counts()
 
-# ==================== APP MANAGEMENT ====================
+
+#APP MANAGEMENT
 
 @apps_router.get("/", 
                 summary="List user's apps",

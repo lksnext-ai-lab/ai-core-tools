@@ -27,10 +27,13 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+DOMAIN_NOT_FOUND = "Domain not found"
+URL_NOT_FOUND = "URL not found"
+
 domains_router = APIRouter()
 
 
-# ==================== BACKGROUND TASKS ====================
+#BACKGROUND TASKS
 
 def background_scrape_and_index(domain_id: int, url_path: str, url_id: int):
     """
@@ -71,7 +74,7 @@ def background_reindex_domain(domain_id: int):
 
 
 
-# ==================== DOMAIN MANAGEMENT ====================
+#DOMAIN MANAGEMENT
 
 @domains_router.get("/", 
                     summary="List domains",
@@ -143,9 +146,8 @@ async def get_domain(app_id: int, domain_id: int, request: Request, db: Session 
     if not domain_detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Domain not found"
+            detail=DOMAIN_NOT_FOUND
         )
-    
     return domain_detail
 
 
@@ -209,12 +211,10 @@ async def delete_domain(app_id: int, domain_id: int, request: Request, db: Sessi
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         # Delete domain using service (this should also handle silo and URL cleanup)
         DomainService.delete_domain(domain_id, db)
-        
         return {"message": "Domain deleted successfully"}
         
     except Exception as e:
@@ -294,9 +294,8 @@ async def add_url_to_domain(
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         # Clean URL (remove query parameters)
         clean_url = url_data.url.split('?')[0]
         
@@ -382,14 +381,13 @@ async def reindex_url(
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="URL not found"
+                detail=URL_NOT_FOUND
             )
         
         # Remove old content first
@@ -440,14 +438,13 @@ async def unindex_url(
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="URL not found"
+                detail=URL_NOT_FOUND
             )
         
         # Unindex the URL
@@ -493,14 +490,13 @@ async def reject_url(
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="URL not found"
+                detail=URL_NOT_FOUND
             )
         
         # Reject the URL
@@ -543,9 +539,8 @@ async def reindex_domain(
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         # Add background task for re-indexing all URLs
         background_tasks.add_task(background_reindex_domain, domain_id)
         
@@ -585,15 +580,14 @@ async def get_url_content(
         if not domain:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Domain not found"
+                detail=DOMAIN_NOT_FOUND
             )
-        
         # Get URL info
         url = UrlService.get_url(url_id, db)
         if not url or url.domain_id != domain_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="URL not found"
+                detail=URL_NOT_FOUND
             )
         
         # Get content from silo

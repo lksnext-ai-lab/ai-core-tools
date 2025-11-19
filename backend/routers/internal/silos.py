@@ -14,6 +14,8 @@ from db.database import get_db
 
 from utils.logger import get_logger
 
+
+SILO_NOT_FOUND_MSG = "Silo not found"
 logger = get_logger(__name__)
 
 silos_router = APIRouter()
@@ -65,7 +67,7 @@ async def get_silo(
         if result is None and silo_id != 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Silo not found"
+                detail=SILO_NOT_FOUND_MSG
             )
         return result
     except HTTPException:
@@ -130,7 +132,7 @@ async def delete_silo(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Silo not found"
+                detail=SILO_NOT_FOUND_MSG
             )
         
         return {"message": "Silo deleted successfully"}
@@ -165,7 +167,7 @@ async def silo_playground(
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Silo not found"
+                detail=SILO_NOT_FOUND_MSG
             )
         
         return result
@@ -211,7 +213,7 @@ async def search_silo_documents(
             logger.error(f"Silo {silo_id} not found")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Silo not found"
+                detail=SILO_NOT_FOUND_MSG
             )
         
         logger.info(f"Search completed, found {result['total_results']} results")
@@ -251,7 +253,7 @@ async def delete_silo_documents(
         if not silo:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Silo not found"
+                detail=SILO_NOT_FOUND_MSG
             )
         
         if silo.app_id != app_id:

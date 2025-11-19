@@ -20,6 +20,9 @@ from fastapi import Request
 # Import logger
 from utils.logger import get_logger
 
+
+FOLDER_NOT_IN_REPO_ERROR = "Folder does not belong to this repository"
+
 logger = get_logger(__name__)
 
 folders_router = APIRouter()
@@ -170,7 +173,7 @@ async def get_folder_details(
         if not FolderService.validate_folder_access(folder_id, repository_id, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Folder does not belong to this repository"
+                detail=FOLDER_NOT_IN_REPO_ERROR
             )
         
         # Add folder path
@@ -268,7 +271,7 @@ async def update_folder(
         if not FolderService.validate_folder_access(folder_id, repository_id, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Folder does not belong to this repository"
+                detail=FOLDER_NOT_IN_REPO_ERROR
             )
         
         updated_folder = FolderService.update_folder(
@@ -326,7 +329,7 @@ async def delete_folder(
         if not FolderService.validate_folder_access(folder_id, repository_id, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Folder does not belong to this repository"
+                detail=FOLDER_NOT_IN_REPO_ERROR
             )
         
         FolderService.delete_folder(folder_id, db)
@@ -370,7 +373,7 @@ async def move_folder(
         if not FolderService.validate_folder_access(folder_id, repository_id, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Folder does not belong to this repository"
+                detail=FOLDER_NOT_IN_REPO_ERROR
             )
         
         moved_folder = FolderService.move_folder(

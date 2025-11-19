@@ -28,6 +28,71 @@ OIDC_ENABLED = os.getenv('OIDC_ENABLED', 'true').lower() == 'true'
 AUTH_FAILED_MESSAGE = "Authentication failed"
 
 
+def _create_enriched_auth_context(
+    db_user,
+    user_email: str,
+    auth_context: Optional[AuthContext] = None,
+) -> AuthContext:
+    """
+    Create enriched AuthContext with database user information.
+    
+    Args:
+        db_user: Database user object
+        user_email: User's email address
+        auth_context: Optional existing AuthContext (for OIDC flow)
+        
+    Returns:
+        AuthContext: Enriched with database user_id
+    """
+    if auth_context:
+        # Use existing auth context data
+        enriched_identity = LksUser(
+            id=str(db_user.user_id),
+            username=auth_context.identity.username or user_email,
+            email=user_email,
+            name=auth_context.identity.name,
+            first_name=auth_context.identity.first_name,
+            last_name=auth_context.identity.last_name,
+        )
+        return AuthContext(
+            identity=enriched_identity,
+            roles=auth_context.roles,
+            token_expires_at=auth_context.token_expires_at,
+            refresh_expires_at=auth_context.refresh_expires_at,
+            provider=auth_context.provider,
+            scopes=auth_context.scopes,
+            token_info=auth_context.token_info,
+        )
+    else:
+        # Create minimal auth context (dev mode)
+        enriched_identity = LksUser(
+            id=str(db_user.user_id),
+            username=user_email,
+            email=user_email,
+            name=db_user.name,
+            first_name=None,
+            last_name=None,
+        )
+        # Create minimal TokenInfo for dev mode
+        dev_token_info = TokenInfo(
+            token="dev-token",
+            token_type="access_token",
+            subject=user_email,
+            audience="dev",
+            issuer="dev",
+            scopes=[]
+        )
+        return AuthContext(
+            identity=enriched_identity,
+            roles=[],
+            token_expires_at=None,
+            refresh_expires_at=None,
+            provider="dev",
+            scopes=[],
+            token_info=dev_token_info,
+        )
+
+
 def _enrich_auth_context_with_db_user(
     user_email: str,
     db: Session,
@@ -89,55 +154,7 @@ def _enrich_auth_context_with_db_user(
         )
     
     # Create enriched identity with database user_id
-    if auth_context:
-        # Use existing auth context data
-        enriched_identity = LksUser(
-            id=str(db_user.user_id),
-            username=auth_context.identity.username or user_email,
-            email=user_email,
-            name=auth_context.identity.name,
-            first_name=auth_context.identity.first_name,
-            last_name=auth_context.identity.last_name,
-        )
-        enriched_context = AuthContext(
-            identity=enriched_identity,
-            roles=auth_context.roles,
-            token_expires_at=auth_context.token_expires_at,
-            refresh_expires_at=auth_context.refresh_expires_at,
-            provider=auth_context.provider,
-            scopes=auth_context.scopes,
-            token_info=auth_context.token_info,
-        )
-    else:
-        # Create minimal auth context (dev mode)
-        enriched_identity = LksUser(
-            id=str(db_user.user_id),
-            username=user_email,
-            email=user_email,
-            name=db_user.name,
-            first_name=None,
-            last_name=None,
-        )
-        # Create minimal TokenInfo for dev mode
-        dev_token_info = TokenInfo(
-            token="dev-token",
-            token_type="access_token",
-            subject=user_email,
-            audience="dev",
-            issuer="dev",
-            scopes=[]
-        )
-        enriched_context = AuthContext(
-            identity=enriched_identity,
-            roles=[],
-            token_expires_at=None,
-            refresh_expires_at=None,
-            provider="dev",
-            scopes=[],
-            token_info=dev_token_info,
-        )
-    
-    return enriched_context
+    return _create_enriched_auth_context(db_user, user_email, auth_context)
 
 
 def get_current_user_oidc(

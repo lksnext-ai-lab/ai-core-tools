@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool
 from models.ocr_agent import OCRAgent
@@ -28,7 +28,7 @@ class AgentRepository:
         return db.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
     
     @staticmethod
-    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
+    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Agent | OCRAgent:
         """Get agent by ID and type"""
         if agent_type == 'ocr' or agent_type == 'ocr_agent':
             return AgentRepository.get_ocr_agent_by_id(db, agent_id)
@@ -225,7 +225,7 @@ class AgentRepository:
             metadata_parser = AgentRepository.get_output_parser_by_id(db, silo.metadata_definition_id)
             if metadata_parser and metadata_parser.fields:
                 silo_info["metadata_definition"] = {
-                    "fields": metadata_parser.fields if metadata_parser.fields else []
+                    "fields": metadata_parser.fields
                 }
         
         return silo_info

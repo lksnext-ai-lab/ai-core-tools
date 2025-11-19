@@ -28,7 +28,6 @@ try:
     # CRITICAL: Import models to register them with Base.metadata
     # models/__init__.py imports all model classes  
     import models
-    #from db import base
     print(f"✓ Base and models imported. Tables registered: {len(Base.metadata.tables)}")
 except ImportError as e:
     print(f"Error al importar: {e}")

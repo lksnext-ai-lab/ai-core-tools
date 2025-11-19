@@ -7,7 +7,7 @@ import json
 from services.agent_service import AgentService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
-from schemas.chat_schemas import ChatRequestSchema, ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
+from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
@@ -19,17 +19,16 @@ logger = get_logger(__name__)
 
 agents_router = APIRouter()
 
-# ==================== CONSTANTS ====================
-
 AGENT_NOT_FOUND_ERROR = "Agent not found"
+INTERNAL_SERVER_ERROR = "Internal server error"
 
-# ==================== DEPENDENCIES ====================
+#DEPENDENCIES
 
 def get_agent_service() -> AgentService:
     """Dependency to get AgentService instance"""
     return AgentService()
 
-# ==================== AGENT MANAGEMENT ====================
+#AGENT MANAGEMENT
 
 @agents_router.get("/", 
                   summary="List agents",
@@ -377,7 +376,7 @@ async def chat_with_agent(
         raise
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
 @agents_router.post("/{agent_id}/reset",
@@ -419,7 +418,7 @@ async def reset_conversation(
         raise
     except Exception as e:
         logger.error(f"Error in reset endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
 @agents_router.get("/{agent_id}/conversation-history",
@@ -468,7 +467,7 @@ async def get_conversation_history(
         raise
     except Exception as e:
         logger.error(f"Error in conversation history endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
 @agents_router.post("/{agent_id}/upload-file",

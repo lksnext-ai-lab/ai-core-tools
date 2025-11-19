@@ -91,7 +91,7 @@ async def dev_login(
     
     if not user:
         logger.warning(
-            f"Dev login failed: email not found in database: {email}"
+            "Dev login failed: email not found in database."
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -114,7 +114,7 @@ async def dev_login(
     # Generate development JWT token
     token_data = generate_dev_token(email=email, name=user.name)
     
-    logger.info(f"Dev login successful: {email} (user_id: {user.user_id})")
+    logger.info("Dev login successful.")
     
     # Return token and user info
     return DevLoginResponse(

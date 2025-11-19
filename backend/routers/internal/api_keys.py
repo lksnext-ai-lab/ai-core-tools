@@ -6,8 +6,9 @@ from typing import List
 # Import services
 from services.api_key_service import APIKeyService
 
+
 # Import schemas and auth
-from schemas.api_key_schemas import *
+from schemas.api_key_schemas import APIKeyListItemSchema, APIKeyDetailSchema, CreateUpdateAPIKeySchema, APIKeyCreateResponseSchema
 from .auth_utils import get_current_user_oauth
 
 # Import database dependency
@@ -18,12 +19,15 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 api_keys_router = APIRouter()
+
+API_KEY_NOT_FOUND_ERROR = "API key not found"
 
 # Create service instance
 api_key_service = APIKeyService()
 
-# ==================== API KEY MANAGEMENT ====================
+#API KEY MANAGEMENT
 
 @api_keys_router.get("/", 
                     summary="List API keys",
@@ -73,7 +77,7 @@ async def get_api_key(
         if api_key_detail is None and key_id != 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="API key not found"
+                detail=API_KEY_NOT_FOUND_ERROR
             )
         
         return api_key_detail
@@ -120,7 +124,7 @@ async def create_or_update_api_key(
             if updated_key is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="API key not found"
+                    detail=API_KEY_NOT_FOUND_ERROR
                 )
             
             return updated_key
@@ -155,7 +159,7 @@ async def delete_api_key(
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="API key not found"
+                detail=API_KEY_NOT_FOUND_ERROR
             )
         
         return {"message": "API key deleted successfully"}
@@ -190,7 +194,7 @@ async def toggle_api_key(
         if message is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="API key not found"
+                detail=API_KEY_NOT_FOUND_ERROR
             )
         
         return {"message": message}

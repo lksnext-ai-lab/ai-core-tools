@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 
 # Import schemas and auth
 from schemas.embedding_service_schemas import (
@@ -20,11 +20,14 @@ from services.embedding_service_service import EmbeddingServiceService
 # Import logger
 from utils.logger import get_logger
 
+
 logger = get_logger(__name__)
+
+EMBEDDING_SERVICE_NOT_FOUND_MSG = "Embedding service not found"
 
 embedding_services_router = APIRouter()
 
-# ==================== EMBEDDING SERVICE MANAGEMENT ====================
+#EMBEDDING SERVICE MANAGEMENT
 
 @embedding_services_router.get("/", 
                                summary="List embedding services",
@@ -75,7 +78,7 @@ async def get_embedding_service(
         if service_detail is None and service_id != 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Embedding service not found"
+                detail=EMBEDDING_SERVICE_NOT_FOUND_MSG
             )
         
         return service_detail
@@ -113,7 +116,7 @@ async def create_or_update_embedding_service(
         if service is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Embedding service not found"
+                detail=EMBEDDING_SERVICE_NOT_FOUND_MSG
             )
         
         # Return updated service details
@@ -149,7 +152,7 @@ async def delete_embedding_service(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Embedding service not found"
+                detail=EMBEDDING_SERVICE_NOT_FOUND_MSG
             )
         
         return {"message": "Embedding service deleted successfully"}

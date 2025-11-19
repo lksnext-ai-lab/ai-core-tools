@@ -19,6 +19,9 @@ from services.output_parser_service import OutputParserService
 # Import logger
 from utils.logger import get_logger
 
+
+OUTPUT_PARSER_NOT_FOUND_ERROR = "Output parser not found"
+
 logger = get_logger(__name__)
 
 output_parsers_router = APIRouter()
@@ -72,7 +75,7 @@ async def get_output_parser(
         if result is None and parser_id != 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Output parser not found"
+                detail=OUTPUT_PARSER_NOT_FOUND_ERROR
             )
         
         return result
@@ -109,7 +112,7 @@ async def create_or_update_output_parser(
         if parser is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Output parser not found"
+                detail=OUTPUT_PARSER_NOT_FOUND_ERROR
             )
         
         # Return updated parser (reuse the GET logic)
@@ -145,7 +148,7 @@ async def delete_output_parser(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Output parser not found"
+                detail=OUTPUT_PARSER_NOT_FOUND_ERROR
             )
         
         return {"message": "Output parser deleted successfully"}
