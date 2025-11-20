@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
+import Alert from '../components/ui/Alert';
 
 // Define the Agent types
 interface Agent {
@@ -57,6 +58,59 @@ interface AgentFormData {
   vision_system_prompt?: string;
   text_system_prompt?: string;
 }
+
+// Output Parser Field Component
+const OutputParserField = ({
+  showOutputParser,
+  setShowOutputParser,
+  formData,
+  handleInputChange,
+  agent
+}: {
+  showOutputParser: boolean;
+  setShowOutputParser: (value: boolean) => void;
+  formData: AgentFormData;
+  handleInputChange: (field: keyof AgentFormData, value: any) => void;
+  agent: Agent | null;
+}) => (
+  <div>
+    <div className="flex items-center mb-2">
+      <input
+        type="checkbox"
+        checked={showOutputParser}
+        onChange={(e) => {
+          setShowOutputParser(e.target.checked);
+          if (!e.target.checked) {
+            handleInputChange('output_parser_id', undefined);
+          }
+        }}
+        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      />
+      <span className="ml-2 text-sm font-medium text-gray-700">Data Structure</span>
+    </div>
+
+    {showOutputParser && (
+      <select
+        id="output_parser"
+        value={formData.output_parser_id || ''}
+        onChange={(e) =>
+          handleInputChange(
+            'output_parser_id',
+            e.target.value ? parseInt(e.target.value) : undefined
+          )
+        }
+        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+      >
+        <option value="">-- Select a Data Structure --</option>
+        {agent?.output_parsers.map((parser) => (
+          <option key={parser.parser_id} value={parser.parser_id}>
+            {parser.name}
+          </option>
+        ))}
+      </select>
+    )}
+  </div>
+);
 
 function AgentFormPage() {
   const { appId, agentId } = useParams();
@@ -189,7 +243,7 @@ function AgentFormPage() {
         vision_service_id: formData.vision_service_id,
         vision_system_prompt: formData.vision_system_prompt,
         text_system_prompt: formData.text_system_prompt,
-        app_id: parseInt(appId!)
+        app_id: parseInt(appId)
       };
 
       if (parseInt(agentId) === 0) {
@@ -223,6 +277,26 @@ function AgentFormPage() {
     );
   }
 
+  // Extract page title logic
+  let pageTitle: string;
+  if (formData.type === 'ocr_agent') {
+    pageTitle = 'Agente OCR';
+  } else if (isNewAgent) {
+    pageTitle = 'Create Agent';
+  } else {
+    pageTitle = 'Edit Agent';
+  }
+
+  // Extract page description logic
+  let pageDescription: string;
+  if (formData.type === 'ocr_agent') {
+    pageDescription = 'Configure OCR agent for document processing';
+  } else if (isNewAgent) {
+    pageDescription = 'Configure a new AI agent with advanced capabilities';
+  } else {
+    pageDescription = `Modify agent: ${agent?.name}`;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-6xl mx-auto">
@@ -230,10 +304,10 @@ function AgentFormPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {formData.type === 'ocr_agent' ? 'Agente OCR' : (isNewAgent ? 'Create Agent' : 'Edit Agent')}
+              {pageTitle}
             </h1>
             <p className="text-gray-600 mt-2">
-              {formData.type === 'ocr_agent' ? 'Configure OCR agent for document processing' : (isNewAgent ? 'Configure a new AI agent with advanced capabilities' : `Modify agent: ${agent?.name}`)}
+              {pageDescription}
             </p>
           </div>
           <button
@@ -241,21 +315,19 @@ function AgentFormPage() {
             className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-gray-700 shadow-sm border border-gray-200 transition-all duration-200"
           >
             <span className="mr-2">←</span>
-            Back to Agents
+            {' '}Back to Agents
           </button>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
-            <div className="flex">
-              <span className="text-red-400 text-xl mr-3">⚠️</span>
-              <div>
-                <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <p className="text-sm text-red-600 mt-1">{error}</p>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="error"
+            title="Error"
+            message={error}
+            className="mb-6"
+            onDismiss={() => setError(null)}
+          />
         )}
 
         {/* Agent Form */}
@@ -329,26 +401,28 @@ function AgentFormPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex items-center p-4 bg-gray-50 rounded-xl">
                   <input
+                    id="is_tool"
                     type="checkbox"
                     checked={formData.is_tool}
                     onChange={(e) => handleInputChange('is_tool', e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <div className="ml-3">
-                    <label className="text-sm font-medium text-gray-900">Tool Agent</label>
+                    <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
                     <p className="text-xs text-gray-500">Can be used by other agents</p>
                   </div>
                 </div>
 
                 <div className="flex items-center p-4 bg-gray-50 rounded-xl">
                   <input
+                    id="has_memory"
                     type="checkbox"
                     checked={formData.has_memory}
                     onChange={(e) => handleInputChange('has_memory', e.target.checked)}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <div className="ml-3">
-                    <label className="text-sm font-medium text-gray-900">Conversational</label>
+                    <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
                     <p className="text-xs text-gray-500">Maintains conversation memory</p>
                   </div>
                 </div>
@@ -579,38 +653,13 @@ function AgentFormPage() {
                   />
                 </div>
 
-                <div>
-                  <div className="flex items-center mb-2">
-                    <input
-                      type="checkbox"
-                      checked={showOutputParser}
-                      onChange={(e) => {
-                        setShowOutputParser(e.target.checked);
-                        if (!e.target.checked) {
-                          handleInputChange('output_parser_id', undefined);
-                        }
-                      }}
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm font-medium text-gray-700">Data Structure</span>
-                  </div>
-                  
-                  {showOutputParser && (
-                    <select
-                      id="output_parser"
-                      value={formData.output_parser_id || ''}
-                      onChange={(e) => handleInputChange('output_parser_id', e.target.value ? parseInt(e.target.value) : undefined)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    >
-                      <option value="">-- Select a Data Structure --</option>
-                      {agent?.output_parsers.map((parser) => (
-                        <option key={parser.parser_id} value={parser.parser_id}>
-                          {parser.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                <OutputParserField
+                  showOutputParser={showOutputParser}
+                  setShowOutputParser={setShowOutputParser}
+                  formData={formData}
+                  handleInputChange={handleInputChange}
+                  agent={agent}
+                />
               </div>
             </div>
           )}
@@ -689,38 +738,13 @@ function AgentFormPage() {
                   </p>
                 </div>
 
-                <div>
-                  <div className="flex items-center mb-2">
-                    <input
-                      type="checkbox"
-                      checked={showOutputParser}
-                      onChange={(e) => {
-                        setShowOutputParser(e.target.checked);
-                        if (!e.target.checked) {
-                          handleInputChange('output_parser_id', undefined);
-                        }
-                      }}
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm font-medium text-gray-700">Data Structure</span>
-                  </div>
-                  
-                  {showOutputParser && (
-                    <select
-                      id="output_parser"
-                      value={formData.output_parser_id || ''}
-                      onChange={(e) => handleInputChange('output_parser_id', e.target.value ? parseInt(e.target.value) : undefined)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    >
-                      <option value="">Select Data Structure</option>
-                      {agent.output_parsers.map((parser) => (
-                        <option key={parser.parser_id} value={parser.parser_id}>
-                          {parser.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                <OutputParserField
+                  showOutputParser={showOutputParser}
+                  setShowOutputParser={setShowOutputParser}
+                  formData={formData}
+                  handleInputChange={handleInputChange}
+                  agent={agent}
+                />
               </div>
             </div>
           )}
@@ -737,9 +761,10 @@ function AgentFormPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {agent.tools.map((tool) => (
-                  <div
+                  <button
                     key={tool.agent_id}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                    type="button"
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
                       formData.tool_ids.includes(tool.agent_id)
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 bg-gray-50 hover:border-gray-300'
@@ -760,7 +785,7 @@ function AgentFormPage() {
                         formData.tool_ids.includes(tool.agent_id) ? 'bg-blue-500' : 'bg-gray-300'
                       }`} />
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
               
@@ -775,7 +800,7 @@ function AgentFormPage() {
           )}
 
           {/* MCP Configs Card - Only for regular agents */}
-          {agent && agent.mcp_configs && formData.type !== 'ocr_agent' && (
+          {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
@@ -804,9 +829,10 @@ function AgentFormPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {agent.mcp_configs.map((mcp) => (
-                      <div
+                      <button
                         key={mcp.config_id}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                        type="button"
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
                           formData.mcp_config_ids.includes(mcp.config_id)
                             ? 'border-purple-500 bg-purple-50'
                             : 'border-gray-200 bg-gray-50 hover:border-gray-300'
@@ -827,7 +853,7 @@ function AgentFormPage() {
                             formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
                           }`} />
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                   
@@ -854,7 +880,7 @@ function AgentFormPage() {
                     className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     <span className="mr-2">⚙️</span>
-                    Configure MCP Servers
+                    {' '}Configure MCP Servers
                   </button>
                 </div>
               )}
@@ -876,14 +902,17 @@ function AgentFormPage() {
               className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
               disabled={saving}
             >
-              {saving ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Saving...
-                </div>
-              ) : (
-                isNewAgent ? 'Create Agent' : 'Save Changes'
-              )}
+              {(() => {
+                if (saving) {
+                  return (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </div>
+                  );
+                }
+                return isNewAgent ? 'Create Agent' : 'Save Changes';
+              })()}
             </button>
           </div>
         </form>
@@ -892,4 +921,4 @@ function AgentFormPage() {
   );
 }
 
-export default AgentFormPage; 
+export default AgentFormPage;
