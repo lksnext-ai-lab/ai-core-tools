@@ -151,7 +151,7 @@ function AgentsPage() {
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
         >
           <span className="mr-2">+</span>
-          Create Agent
+          {' '}Create Agent
         </button>
       </div>
 
@@ -234,7 +234,7 @@ function AgentsPage() {
             render: () => (
               <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
                 <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
-                Active
+                {' '}Active
               </span>
             )
           },

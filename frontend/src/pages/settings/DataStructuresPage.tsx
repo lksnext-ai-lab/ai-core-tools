@@ -21,7 +21,7 @@ interface DataStructure {
 function DataStructuresPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, isAdmin, userRole } = useAppRole(appId);
+  const { isAdmin, userRole } = useAppRole(appId);
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -197,7 +197,7 @@ function DataStructuresPage() {
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
               <span className="mr-2">+</span>
-              Create Data Structure
+              {' '}Create Data Structure
             </button>
           )}
         </div>

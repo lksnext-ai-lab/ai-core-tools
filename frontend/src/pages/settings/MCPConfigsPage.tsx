@@ -14,7 +14,7 @@ import Table from '../../components/ui/Table';
 function MCPConfigsPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, isAdmin, userRole } = useAppRole(appId);
+  const { isAdmin, userRole } = useAppRole(appId);
   const [configs, setConfigs] = useState<MCPConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -170,7 +170,7 @@ function MCPConfigsPage() {
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
               <span className="mr-2">+</span>
-              Add MCP Config
+              {' '}Add MCP Config
             </button>
           )}
         </div>

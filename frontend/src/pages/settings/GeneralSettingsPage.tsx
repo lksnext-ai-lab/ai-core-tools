@@ -262,7 +262,7 @@ function GeneralSettingsPage() {
                     {saved && (
                       <div className="flex items-center text-green-600">
                         <span className="mr-2">✓</span>
-                        Settings saved successfully
+                        {' '}Settings saved successfully
                       </div>
                     )}
                   </div>

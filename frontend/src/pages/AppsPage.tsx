@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { useUser } from '../contexts/UserContext';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -113,15 +112,11 @@ function AppsPage() {
 
   // Function to create a new app
   async function handleCreateApp(data: { name: string }) {
-    try {
-      await apiService.createApp(data);
-      setShowCreateModal(false);
-      setSuccess(`App "${data.name}" created successfully!`);
-      setError(null);
-      loadApps(); // Reload the list
-    } catch (err) {
-      throw err; // Let the form handle the error
-    }
+    await apiService.createApp(data);
+    setShowCreateModal(false);
+    setSuccess(`App "${data.name}" created successfully!`);
+    setError(null);
+    loadApps(); // Reload the list
   }
 
   // Function to leave an app (for editors only)
@@ -219,7 +214,7 @@ Type the app name to confirm: "${app.name}"`;
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
         >
           <span className="mr-2">+</span>
-          New App
+          {' '}New App
         </button>
       </div>
 
@@ -241,23 +236,29 @@ Type the app name to confirm: "${app.name}"`;
           },
           {
             header: 'Role',
-            render: (app) => (
-              app.role === 'owner' ? (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  <span className="mr-1">👑</span>
-                  Owner
-                </span>
-              ) : app.role === 'administrator' ? (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                  <span className="mr-1">⚙️</span>
-                  Administrator
-                </span>
-              ) : (
+            render: (app) => {
+              if (app.role === 'owner') {
+                return (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="mr-1">👑</span>
+                    {' '}Owner
+                  </span>
+                );
+              }
+              if (app.role === 'administrator') {
+                return (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    <span className="mr-1">⚙️</span>
+                    {' '}Administrator
+                  </span>
+                );
+              }
+              return (
                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                  Editor
+                  {' '}Editor
                 </span>
-              )
-            )
+              );
+            }
           },
           {
             header: '🤖 Agents',
@@ -303,11 +304,16 @@ Type the app name to confirm: "${app.name}"`;
             header: '👥 Collabs',
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => (
-              <span className={`text-sm font-medium ${(app.collaborator_count + (app.role === 'owner' ? 1 : 0)) > 1 ? 'text-indigo-600' : 'text-gray-400'}`}>
-                {app.collaborator_count + (app.role === 'owner' ? 1 : 0)}
-              </span>
-            )
+            render: (app) => {
+              const ownerBonus = app.role === 'owner' ? 1 : 0;
+              const totalCollaborators = app.collaborator_count + ownerBonus;
+              const textColor = totalCollaborators > 1 ? 'text-indigo-600' : 'text-gray-400';
+              return (
+                <span className={`text-sm font-medium ${textColor}`}>
+                  {totalCollaborators}
+                </span>
+              );
+            }
           },
           {
             header: 'Owner',

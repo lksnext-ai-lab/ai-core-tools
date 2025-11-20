@@ -23,7 +23,7 @@ interface APIKey {
 function APIKeysPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, isAdmin, userRole } = useAppRole(appId);
+  const { isAdmin, userRole } = useAppRole(appId);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +217,7 @@ function APIKeysPage() {
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
               <span className="mr-2">+</span>
-              Create New API Key
+              {' '}Create New API Key
             </button>
           )}
         </div>

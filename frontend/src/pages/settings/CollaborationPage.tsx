@@ -51,7 +51,7 @@ function CollaborationPage() {
     const members: Collaborator[] = [];
     
     // Add owner as first member if exists
-    if (appOwner && appOwner.email) { // Only add if we have email (complete data)
+    if (appOwner?.email) { // Only add if we have email (complete data)
       members.push({
         id: -1, // Special ID for owner
         user_id: appOwner.id,
@@ -184,7 +184,7 @@ function CollaborationPage() {
         // Check if user is administrator by getting collaborators
         const response = await apiService.getCollaborators(parseInt(appId));
         const myCollaboration = response.find((c: Collaborator) => c.user_id === user?.user_id);
-        if (myCollaboration && myCollaboration.role === 'administrator') {
+        if (myCollaboration?.role === 'administrator') {
           setCurrentUserRole('administrator');
         } else {
           setCurrentUserRole('editor');
@@ -291,6 +291,67 @@ function CollaborationPage() {
     );
   }
 
+  // Invite New Collaborator - Only show to owners
+  let inviteCollaboratorSection;
+  if (isOwner) {
+    inviteCollaboratorSection = (
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 flex items-center">
+            <span className="text-indigo-400 text-xl mr-2">👥</span>
+            {' '}Invite Collaborator
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Invite users to collaborate on this app as editors. They'll receive an email invitation.
+          </p>
+        </div>
+        <div className="p-6">
+          <CollaborationForm onSubmit={handleInviteUser} />
+        </div>
+      </div>
+    );
+  } else if (isAdmin) {
+    inviteCollaboratorSection = (
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <span className="text-purple-400 text-xl">ℹ️</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-purple-800">
+              Administrator Access
+            </h3>
+            <div className="mt-2 text-sm text-purple-700">
+              <p>
+                You have administrator access to this app. Only the app owner can manage collaborators.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  } else {
+    inviteCollaboratorSection = (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <span className="text-yellow-400 text-xl">ℹ️</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-yellow-800">
+              Editor Access
+            </h3>
+            <div className="mt-2 text-sm text-yellow-700">
+              <p>
+                You have editor access to this app. Only the app owner can invite new collaborators.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     
       <div className="p-6 space-y-8">
@@ -300,59 +361,7 @@ function CollaborationPage() {
           <p className="text-gray-600">Manage who can access and edit this app</p>
         </div>
 
-        {/* Invite New Collaborator - Only show to owners */}
-        {isOwner ? (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                <span className="text-indigo-400 text-xl mr-2">👥</span>
-                Invite Collaborator
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Invite users to collaborate on this app as editors. They'll receive an email invitation.
-              </p>
-            </div>
-            <div className="p-6">
-              <CollaborationForm onSubmit={handleInviteUser} />
-            </div>
-          </div>
-        ) : isAdmin ? (
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <span className="text-purple-400 text-xl">ℹ️</span>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-purple-800">
-                  Administrator Access
-                </h3>
-                <div className="mt-2 text-sm text-purple-700">
-                  <p>
-                    You have administrator access to this app. Only the app owner can manage collaborators.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <span className="text-yellow-400 text-xl">ℹ️</span>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  Editor Access
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <p>
-                    You have editor access to this app. Only the app owner can invite new collaborators.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {inviteCollaboratorSection}
 
         {/* Current Collaborators */}
         <div className="bg-white shadow rounded-lg">
@@ -405,7 +414,7 @@ function CollaborationPage() {
                   member.role === 'owner' ? (
                     <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
                       <span className="mr-1">👑</span>
-                      Owner
+                      {' '}Owner
                     </span>
                   ) : (
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
@@ -541,4 +550,4 @@ function CollaborationPage() {
   );
 }
 
-export default CollaborationPage; 
+export default CollaborationPage;

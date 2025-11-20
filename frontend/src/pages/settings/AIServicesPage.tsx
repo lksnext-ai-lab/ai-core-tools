@@ -21,7 +21,7 @@ interface AIService {
 function AIServicesPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, isAdmin, userRole } = useAppRole(appId);
+  const { isAdmin, userRole } = useAppRole(appId);
   const [services, setServices] = useState<AIService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -203,7 +203,7 @@ function AIServicesPage() {
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
               <span className="mr-2">+</span>
-              Add AI Service
+              {' '}Add AI Service
             </button>
           )}
         </div>
@@ -219,20 +219,13 @@ function AIServicesPage() {
             {
               header: 'Name',
               render: (service) => (
-                <div 
-                  className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                <button
+                  type="button"
+                  className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
                   onClick={() => handleEditService(service.service_id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleEditService(service.service_id);
-                    }
-                  }}
                 >
                   {service.name}
-                </div>
+                </button>
               )
             },
             {

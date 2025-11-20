@@ -65,14 +65,16 @@ function DomainFormPage() {
           content_id: domain.content_id || '',
           embedding_service_id: domain.embedding_service_id || undefined
         });
-      } else {
-        // Set default embedding service if only one exists
-        if (domain.embedding_services?.length === 1) {
-          setFormData(prev => ({
-            ...prev,
-            embedding_service_id: domain.embedding_services[0].service_id
-          }));
-        }
+      }
+
+      // If creating a new domain and there is a single embedding service,
+      // preselect it as the default. Kept outside the else to avoid a
+      // single-statement else block.
+      if (isNewDomain && domain.embedding_services?.length === 1) {
+        setFormData(prev => ({
+          ...prev,
+          embedding_service_id: domain.embedding_services[0].service_id
+        }));
       }
     } catch (err) {
       console.error('Error loading domain data:', err);
@@ -170,10 +172,11 @@ function DomainFormPage() {
         {/* Basic Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="domain-name" className="block text-sm font-medium text-gray-700 mb-2">
               Domain Name *
             </label>
             <input
+              id="domain-name"
               type="text"
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
@@ -184,10 +187,11 @@ function DomainFormPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="base-url" className="block text-sm font-medium text-gray-700 mb-2">
               Base URL *
             </label>
             <input
+              id="base-url"
               type="url"
               value={formData.base_url}
               onChange={(e) => handleInputChange('base_url', e.target.value)}
@@ -199,10 +203,11 @@ function DomainFormPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
             Description
           </label>
           <textarea
+            id="description"
             value={formData.description}
             onChange={(e) => handleInputChange('description', e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -213,11 +218,12 @@ function DomainFormPage() {
 
         {/* Embedding Service Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="embedding-service" className="block text-sm font-medium text-gray-700 mb-2">
             Embedding Service *
           </label>
           <select
             value={formData.embedding_service_id || ''}
+            id="embedding-service"
             onChange={(e) => handleInputChange('embedding_service_id', parseInt(e.target.value))}
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
@@ -241,10 +247,11 @@ function DomainFormPage() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">Content Extraction Settings</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="content-tag" className="block text-sm font-medium text-gray-700 mb-2">
                 Content Tag
               </label>
               <input
+                id="content-tag"
                 type="text"
                 value={formData.content_tag}
                 onChange={(e) => handleInputChange('content_tag', e.target.value)}
@@ -255,10 +262,11 @@ function DomainFormPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="content-class" className="block text-sm font-medium text-gray-700 mb-2">
                 Content Class
               </label>
               <input
+                id="content-class"
                 type="text"
                 value={formData.content_class}
                 onChange={(e) => handleInputChange('content_class', e.target.value)}
@@ -269,10 +277,11 @@ function DomainFormPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="content-id" className="block text-sm font-medium text-gray-700 mb-2">
                 Content ID
               </label>
               <input
+                id="content-id"
                 type="text"
                 value={formData.content_id}
                 onChange={(e) => handleInputChange('content_id', e.target.value)}
@@ -294,13 +303,23 @@ function DomainFormPage() {
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            disabled={saving || embeddingServices.length === 0}
-          >
-            {saving ? 'Saving...' : isNewDomain ? 'Create Domain' : 'Update Domain'}
-          </button>
+          {(() => {
+            let submitText = 'Create Domain';
+            if (saving) {
+              submitText = 'Saving...';
+            } else if (!isNewDomain) {
+              submitText = 'Update Domain';
+            }
+            return (
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                disabled={saving || embeddingServices.length === 0}
+              >
+                {submitText}
+              </button>
+            );
+          })()}
         </div>
       </form>
     </div>
