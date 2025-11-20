@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import type { ActionItem } from '../components/ui/ActionDropdown';
+import Table from '../components/ui/Table';
 
 // ...existing code...
 interface Silo {
@@ -142,99 +143,91 @@ function SilosPage() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-md border overflow-visible">
-          <div className="overflow-x-auto overflow-visible">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Documents
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {silos.map((silo) => (
-                  <tr key={silo.silo_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center">
-                            <span className="text-yellow-600 text-lg">🗄️</span>
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            <Link
-                              to={`/apps/${appId}/silos/${silo.silo_id}`}
-                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                            >
-                                {silo.name}
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {silo.description
-                      }
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                        {silo.type || 'Custom'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {silo.docs_count} documents
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Playground',
-                            onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}/playground`),
-                            icon: '🎮',
-                            variant: 'warning'
-                          },
-                          {
-                            label: 'Edit',
-                            onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
-                            icon: '✏️',
-                            variant: 'primary'
-                          },
-                          {
-                            label: 'Delete',
-                            onClick: () => handleDelete(silo.silo_id),
-                            icon: '🗑️',
-                            variant: 'danger'
-                          }
-                        ]}
-                        size="sm"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Table
+          data={silos}
+          keyExtractor={(silo) => silo.silo_id.toString()}
+          columns={[
+            {
+              header: 'Name',
+              render: (silo) => (
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 h-10 w-10">
+                    <div className="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center">
+                      <span className="text-yellow-600 text-lg">🗄️</span>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <div className="text-sm font-medium text-gray-900">
+                      <Link
+                        to={`/apps/${appId}/silos/${silo.silo_id}`}
+                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                      >
+                        {silo.name}
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )
+            },
+            {
+              header: 'Description',
+              accessor: 'description',
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            },
+            {
+              header: 'Type',
+              render: (silo) => (
+                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                  {silo.type || 'Custom'}
+                </span>
+              )
+            },
+            {
+              header: 'Documents',
+              render: (silo) => `${silo.docs_count} documents`,
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            },
+            {
+              header: 'Created',
+              render: (silo) => silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'N/A',
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            },
+            {
+              header: 'Actions',
+              headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+              className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
+              render: (silo) => (
+                <ActionDropdown
+                  actions={[
+                    {
+                      label: 'Playground',
+                      onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}/playground`),
+                      icon: '🎮',
+                      variant: 'warning'
+                    },
+                    {
+                      label: 'Edit',
+                      onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
+                      icon: '✏️',
+                      variant: 'primary'
+                    },
+                    {
+                      label: 'Delete',
+                      onClick: () => { void handleDelete(silo.silo_id); },
+                      icon: '🗑️',
+                      variant: 'danger'
+                    }
+                  ]}
+                  size="sm"
+                />
+              )
+            }
+          ]}
+          emptyIcon="🗄️"
+          emptyMessage="No Silos Yet"
+          emptySubMessage="Create your first silo to start storing and searching documents with vector embeddings."
+          loading={loading}
+        />
       )}
     </div>
   );

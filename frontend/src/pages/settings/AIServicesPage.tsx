@@ -8,6 +8,7 @@ import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
+import Table from '../../components/ui/Table';
 
 interface AIService {
   service_id: number;
@@ -211,101 +212,94 @@ function AIServicesPage() {
         {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Services Table */}
-        {services.length > 0 ? (
-          <div className="bg-white shadow rounded-lg overflow-visible">
-            <div className="overflow-x-auto overflow-visible">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Model
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Provider
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {services.map((service) => (
-                    <tr key={service.service_id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div 
-                          className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleEditService(service.service_id)}
-                        >
-                          {service.name}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{service.model_name}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>
-                          {service.provider}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        {isAdmin ? (
-                          <ActionDropdown
-                            actions={[
-                              {
-                                label: 'Edit',
-                                onClick: () => handleEditService(service.service_id),
-                                icon: '✏️',
-                                variant: 'primary'
-                              },
-                              {
-                                label: 'Copy',
-                                onClick: () => handleCopyService(service.service_id),
-                                icon: '📋',
-                                variant: 'primary'
-                              },
-                              {
-                                label: 'Delete',
-                                onClick: () => handleDelete(service.service_id),
-                                icon: '🗑️',
-                                variant: 'danger'
-                              }
-                            ]}
-                            size="sm"
-                          />
-                        ) : (
-                          <span className="text-gray-400 text-sm">View only</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🤖</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No AI Services</h3>
-            <p className="text-gray-600 mb-6">
-              Add your first AI service to start using language models in your agents.
-            </p>
-            {isAdmin && (
-              <button 
-                onClick={handleCreateService}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-              >
-                Add First AI Service
-              </button>
-            )}
+        <Table
+          data={services}
+          keyExtractor={(service) => service.service_id.toString()}
+          columns={[
+            {
+              header: 'Name',
+              render: (service) => (
+                <div 
+                  className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handleEditService(service.service_id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleEditService(service.service_id);
+                    }
+                  }}
+                >
+                  {service.name}
+                </div>
+              )
+            },
+            {
+              header: 'Model',
+              accessor: 'model_name'
+            },
+            {
+              header: 'Provider',
+              render: (service) => (
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>
+                  {service.provider}
+                </span>
+              )
+            },
+            {
+              header: 'Created',
+              render: (service) => 
+                service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A'
+            },
+            {
+              header: 'Actions',
+              className: 'relative',
+              render: (service) => (
+                isAdmin ? (
+                  <ActionDropdown
+                    actions={[
+                      {
+                        label: 'Edit',
+                        onClick: () => void handleEditService(service.service_id),
+                        icon: '✏️',
+                        variant: 'primary'
+                      },
+                      {
+                        label: 'Copy',
+                        onClick: () => void handleCopyService(service.service_id),
+                        icon: '📋',
+                        variant: 'primary'
+                      },
+                      {
+                        label: 'Delete',
+                        onClick: () => void handleDelete(service.service_id),
+                        icon: '🗑️',
+                        variant: 'danger'
+                      }
+                    ]}
+                    size="sm"
+                  />
+                ) : (
+                  <span className="text-gray-400 text-sm">View only</span>
+                )
+              )
+            }
+          ]}
+          emptyIcon="🤖"
+          emptyMessage="No AI Services"
+          emptySubMessage="Add your first AI service to start using language models in your agents."
+          loading={loading}
+        />
+
+        {!loading && services.length === 0 && isAdmin && (
+          <div className="text-center py-6">
+            <button 
+              onClick={handleCreateService}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+            >
+              Add First AI Service
+            </button>
           </div>
         )}
 

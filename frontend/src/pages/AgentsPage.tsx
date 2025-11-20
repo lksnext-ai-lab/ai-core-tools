@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
+import Table from '../components/ui/Table';
 
 // Define the Agent type
 interface Agent {
@@ -157,161 +158,152 @@ function AgentsPage() {
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
-      {agents.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md border p-8 text-center">
-          <div className="text-6xl mb-4">🤖</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Agents Yet</h3>
-          <p className="text-gray-600 mb-4">
-            Create your first AI agent to get started with intelligent automation.
-          </p>
+      <Table
+        data={agents}
+        keyExtractor={(agent) => agent.agent_id.toString()}
+        columns={[
+          {
+            header: 'Agent',
+            render: (agent) => (
+              <div className="flex items-center">
+                <div className="flex-shrink-0 h-10 w-10">
+                  <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <span className="text-blue-600 text-lg">{getAgentTypeIcon(agent.type)}</span>
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <div className="text-sm font-medium text-gray-900">
+                    <Link 
+                      to={`/apps/${appId}/agents/${agent.agent_id}`} 
+                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                    >
+                      {agent.name}
+                    </Link>
+                  </div>
+                  {agent.is_tool && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      Tool 
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          },
+          {
+            header: 'Description',
+            render: (agent) => (
+              <div className="text-sm text-gray-900 max-w-xs">
+                {agent.description ? (
+                  <div className="truncate" title={agent.description}>
+                    {agent.description}
+                  </div>
+                ) : (
+                  <span className="text-gray-400 italic">No description</span>
+                )}
+              </div>
+            ),
+            className: 'px-6 py-4'
+          },
+          {
+            header: 'Type',
+            render: (agent) => (
+              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                {getAgentTypeLabel(agent.type)}
+              </span>
+            )
+          },
+          {
+            header: 'AI Service',
+            render: (agent) => (
+              agent.ai_service ? (
+                <div className="text-sm">
+                  <div className="font-medium text-gray-900">
+                    {agent.ai_service.name}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {agent.ai_service.model_name} • {agent.ai_service.provider}
+                  </div>
+                </div>
+              ) : (
+                <span className="text-gray-400 italic text-sm">No AI Service</span>
+              )
+            )
+          },
+          {
+            header: 'Status',
+            render: () => (
+              <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
+                Active
+              </span>
+            )
+          },
+          {
+            header: 'Usage',
+            render: (agent) => (
+              <div className="text-sm text-gray-900">
+                <div className="flex items-center">
+                  <span className="font-medium">{agent.request_count}</span>
+                  <span className="text-gray-500 ml-1">requests</span>
+                </div>
+                {agent.request_count > 0 && (
+                  <div className="text-xs text-gray-500">
+                    Last used: {formatDate(agent.created_at)}
+                  </div>
+                )}
+              </div>
+            )
+          },
+          {
+            header: 'Created',
+            render: (agent) => formatDate(agent.created_at),
+            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+          },
+          {
+            header: 'Actions',
+            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
+            render: (agent) => (
+              <ActionDropdown
+                actions={[
+                  {
+                    label: 'Playground',
+                    onClick: () => handlePlayground(agent.agent_id),
+                    icon: '🎮',
+                    variant: 'warning'
+                  },
+                  {
+                    label: 'Edit',
+                    onClick: () => handleEditAgent(agent.agent_id),
+                    icon: '✏️',
+                    variant: 'primary'
+                  },
+                  {
+                    label: 'Delete',
+                    onClick: () => handleDeleteAgent(agent),
+                    icon: '🗑️',
+                    variant: 'danger'
+                  }
+                ]}
+                size="sm"
+              />
+            )
+          }
+        ]}
+        emptyIcon="🤖"
+        emptyMessage="No Agents Yet"
+        emptySubMessage="Create your first AI agent to get started with intelligent automation."
+        loading={loading}
+      />
+
+      {!loading && agents.length === 0 && (
+        <div className="text-center py-6">
           <button 
             onClick={handleCreateAgent}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
           >
             Create Your First Agent
           </button>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md border overflow-visible">
-          <div className="overflow-x-auto overflow-visible">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Agent
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    AI Service
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Usage
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {agents.map((agent) => (
-                  <tr key={agent.agent_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                            <span className="text-blue-600 text-lg">{getAgentTypeIcon(agent.type)}</span>
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            <Link 
-                              to={`/apps/${appId}/agents/${agent.agent_id}`} 
-                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                              >
-                                {agent.name}
-                            </Link>
-                          </div>
-                          {agent.is_tool && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Tool 
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 max-w-xs">
-                        {agent.description ? (
-                          <div className="truncate" title={agent.description}>
-                            {agent.description}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 italic">No description</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                        {getAgentTypeLabel(agent.type)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {agent.ai_service ? (
-                        <div className="text-sm">
-                          <div className="font-medium text-gray-900">
-                            {agent.ai_service.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {agent.ai_service.model_name} • {agent.ai_service.provider}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 italic text-sm">No AI Service</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-                        Active
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div className="flex items-center">
-                          <span className="font-medium">{agent.request_count}</span>
-                          <span className="text-gray-500 ml-1">requests</span>
-                        </div>
-                        {agent.request_count > 0 && (
-                          <div className="text-xs text-gray-500">
-                            Last used: {formatDate(agent.created_at)}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(agent.created_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Playground',
-                            onClick: () => handlePlayground(agent.agent_id),
-                            icon: '🎮',
-                            variant: 'warning'
-                          },
-                          {
-                            label: 'Edit',
-                            onClick: () => handleEditAgent(agent.agent_id),
-                            icon: '✏️',
-                            variant: 'primary'
-                          },
-                          {
-                            label: 'Delete',
-                            onClick: () => handleDeleteAgent(agent),
-                            icon: '🗑️',
-                            variant: 'danger'
-                          }
-                        ]}
-                        size="sm"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       )}
 

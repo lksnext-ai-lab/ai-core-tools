@@ -9,6 +9,7 @@ import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import type { MCPConfig } from '../../core/types';
 import Alert from '../../components/ui/Alert';
+import Table from '../../components/ui/Table';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
@@ -178,92 +179,81 @@ function MCPConfigsPage() {
         {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Configs Table */}
-        {configs.length > 0 ? (
-          <div className="bg-white shadow rounded-lg overflow-visible">
-            <div className="overflow-x-auto overflow-visible">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {configs.map((config) => (
-                  <tr key={config.config_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-purple-400 text-xl mr-3">🔌</span>
-                        <div 
-                          className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleEditConfig(config.config_id)}
-                          >
-                            {config.name}
-                          </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-600 max-w-xs truncate">
-                        {config.description || <span className="text-gray-400 italic">No description</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                      {isAdmin ? (
-                        <ActionDropdown
-                          actions={[
-                            {
-                              label: 'Edit',
-                              onClick: () => handleEditConfig(config.config_id),
-                              icon: '✏️',
-                              variant: 'primary'
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => handleDelete(config.config_id),
-                              icon: '🗑️',
-                              variant: 'danger'
-                            }
-                          ]}
-                          size="sm"
-                        />
-                      ) : (
-                        <span className="text-gray-400 text-sm">View only</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔌</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No MCP Configs</h3>
-            <p className="text-gray-600 mb-6">
-              Add your first MCP configuration to connect agents with external tools and data sources.
-            </p>
-            {isAdmin && (
-              <button 
-                onClick={handleCreateConfig}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-              >
-                Add First MCP Config
-              </button>
-            )}
+        <Table
+          data={configs}
+          keyExtractor={(config) => config.config_id.toString()}
+          columns={[
+            {
+              header: 'Name',
+              render: (config) => (
+                <div className="flex items-center">
+                  <span className="text-purple-400 text-xl mr-3">🔌</span>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                    onClick={() => void handleEditConfig(config.config_id)}
+                  >
+                    {config.name}
+                  </button>
+                </div>
+              )
+            },
+            {
+              header: 'Description',
+              render: (config) => (
+                <div className="text-sm text-gray-600 max-w-xs truncate">
+                  {config.description || <span className="text-gray-400 italic">No description</span>}
+                </div>
+              ),
+              className: 'px-6 py-4'
+            },
+            {
+              header: 'Created',
+              render: (config) => config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A',
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            },
+            {
+              header: 'Actions',
+              className: 'relative',
+              render: (config) => (
+                isAdmin ? (
+                  <ActionDropdown
+                    actions={[
+                      {
+                        label: 'Edit',
+                        onClick: () => { void handleEditConfig(config.config_id); },
+                        icon: '✏️',
+                        variant: 'primary'
+                      },
+                      {
+                        label: 'Delete',
+                        onClick: () => { void handleDelete(config.config_id); },
+                        icon: '🗑️',
+                        variant: 'danger'
+                      }
+                    ]}
+                    size="sm"
+                  />
+                ) : (
+                  <span className="text-gray-400 text-sm">View only</span>
+                )
+              )
+            }
+          ]}
+          emptyIcon="🔌"
+          emptyMessage="No MCP Configs"
+          emptySubMessage="Add your first MCP configuration to connect agents with external tools and data sources."
+          loading={loading}
+        />
+
+        {!loading && configs.length === 0 && isAdmin && (
+          <div className="text-center py-6">
+            <button 
+              onClick={handleCreateConfig}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
+            >
+              Add First MCP Config
+            </button>
           </div>
         )}
 
