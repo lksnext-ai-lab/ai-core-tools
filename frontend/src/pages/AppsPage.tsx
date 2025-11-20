@@ -7,6 +7,7 @@ import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Speedometer from '../components/ui/Speedometer';
 import Alert from '../components/ui/Alert';
+import Table from '../components/ui/Table';
 
 // Define the App type (like your Pydantic models!)
 interface UsageStats {
@@ -223,240 +224,221 @@ Type the app name to confirm: "${app.name}"`;
       </div>
 
       {/* Apps Table */}
-      {apps.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-6xl mb-4">🤖</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No apps yet</h3>
-          <p className="text-gray-600 mb-4">Create your first AI application to get started</p>
+      <Table
+        data={apps}
+        keyExtractor={(app) => app.app_id.toString()}
+        columns={[
+          {
+            header: 'App Name',
+            render: (app) => (
+              <Link
+                to={`/apps/${app.app_id}`}
+                className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+              >
+                {app.name}
+              </Link>
+            )
+          },
+          {
+            header: 'Role',
+            render: (app) => (
+              app.role === 'owner' ? (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <span className="mr-1">👑</span>
+                  Owner
+                </span>
+              ) : app.role === 'administrator' ? (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  <span className="mr-1">⚙️</span>
+                  Administrator
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  Editor
+                </span>
+              )
+            )
+          },
+          {
+            header: '🤖 Agents',
+            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-4 py-4 whitespace-nowrap text-center',
+            render: (app) => (
+              <span className={`text-sm font-medium ${app.agent_count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                {app.agent_count}
+              </span>
+            )
+          },
+          {
+            header: '📁 Repos',
+            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-4 py-4 whitespace-nowrap text-center',
+            render: (app) => (
+              <span className={`text-sm font-medium ${app.repository_count > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                {app.repository_count}
+              </span>
+            )
+          },
+          {
+            header: '🌐 Domains',
+            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-4 py-4 whitespace-nowrap text-center',
+            render: (app) => (
+              <span className={`text-sm font-medium ${app.domain_count > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+                {app.domain_count}
+              </span>
+            )
+          },
+          {
+            header: '🗄️ Silos',
+            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-4 py-4 whitespace-nowrap text-center',
+            render: (app) => (
+              <span className={`text-sm font-medium ${app.silo_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                {app.silo_count}
+              </span>
+            )
+          },
+          {
+            header: '👥 Collabs',
+            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-4 py-4 whitespace-nowrap text-center',
+            render: (app) => (
+              <span className={`text-sm font-medium ${(app.collaborator_count + (app.role === 'owner' ? 1 : 0)) > 1 ? 'text-indigo-600' : 'text-gray-400'}`}>
+                {app.collaborator_count + (app.role === 'owner' ? 1 : 0)}
+              </span>
+            )
+          },
+          {
+            header: 'Owner',
+            render: (app) => (
+              app.role === 'owner' ? (
+                <span className="text-sm text-gray-500">You</span>
+              ) : (
+                <div className="flex items-center">
+                  <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                    <span className="text-xs font-medium text-gray-600">
+                      {getUserInitials(app.owner_name, app.owner_email)}
+                    </span>
+                  </div>
+                  <span className="text-sm text-gray-900">
+                    {app.owner_name || app.owner_email}
+                  </span>
+                </div>
+              )
+            )
+          },
+          {
+            header: 'Status',
+            render: (app) => (
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                app.langsmith_configured 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-gray-100 text-gray-600'
+              }`}>
+                {app.langsmith_configured ? '✓ Configured' : 'Not configured'}
+              </span>
+            )
+          },
+          {
+            header: '📊 Usage',
+            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-4 py-4 whitespace-nowrap text-center',
+            render: (app) => (
+              usageStats[app.app_id] ? (
+                <div className="group relative">
+                  <Speedometer 
+                    usageStats={usageStats[app.app_id]} 
+                    size="sm" 
+                    showDetails={false}
+                  />
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                    <div className="font-medium">
+                      {usageStats[app.app_id].stress_level.charAt(0).toUpperCase() + usageStats[app.app_id].stress_level.slice(1)} Stress
+                    </div>
+                    <div className="text-gray-300">
+                      {usageStats[app.app_id].current_usage}/{usageStats[app.app_id].limit === 0 ? '∞' : usageStats[app.app_id].limit} calls
+                    </div>
+                    {usageStats[app.app_id].limit > 0 && (
+                      <div className="text-gray-300">
+                        Resets in {Math.ceil(usageStats[app.app_id].reset_in_seconds)}s
+                      </div>
+                    )}
+                    {usageStats[app.app_id].is_over_limit && (
+                      <div className="text-red-300 font-medium">
+                        Over limit!
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-gray-400 text-xs">No data</div>
+              )
+            )
+          },
+          {
+            header: 'Created',
+            render: (app) => app.created_at ? new Date(app.created_at).toLocaleDateString() : '-',
+            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+          },
+          {
+            header: 'Actions',
+            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+            className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
+            render: (app) => (
+              <ActionDropdown
+                actions={[
+                  {
+                    label: 'Open Dashboard',
+                    onClick: () => { window.location.href = `/apps/${app.app_id}`; },
+                    icon: '📊',
+                    variant: 'primary'
+                  },
+                  {
+                    label: 'Manage Agents',
+                    onClick: () => { window.location.href = `/apps/${app.app_id}/agents`; },
+                    icon: '🤖',
+                    variant: 'secondary'
+                  },
+                  {
+                    label: 'App Settings',
+                    onClick: () => { window.location.href = `/apps/${app.app_id}/settings`; },
+                    icon: '⚙️',
+                    variant: 'secondary'
+                  },
+                  ...(app.role === 'editor' ? [{
+                    label: 'Leave App',
+                    onClick: () => handleLeaveApp(app),
+                    icon: '🚪',
+                    variant: 'danger' as const
+                  }] : []),
+                  ...(app.role === 'owner' ? [{
+                    label: 'Delete App',
+                    onClick: () => handleDeleteApp(app),
+                    icon: '🗑️',
+                    variant: 'danger' as const
+                  }] : [])
+                ]}
+                size="sm"
+              />
+            )
+          }
+        ]}
+        emptyIcon="🤖"
+        emptyMessage="No apps yet"
+        emptySubMessage="Create your first AI application to get started"
+        loading={loading}
+      />
+
+      {!loading && apps.length === 0 && (
+        <div className="text-center py-6">
           <button
             onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
           >
             Create App
           </button>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible">
-          <div className="overflow-x-auto overflow-visible">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    App Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    🤖 Agents
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    📁 Repos
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    🌐 Domains
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    🗄️ Silos
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    👥 Collabs
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Owner
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    📊 Usage
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {apps.map((app) => (
-                  <tr key={app.app_id} className="hover:bg-gray-50 transition-colors">
-                    {/* App Name */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link
-                        to={`/apps/${app.app_id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                      >
-                        {app.name}
-                      </Link>
-                    </td>
-
-                    {/* Role */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {app.role === 'owner' ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          <span className="mr-1">👑</span>
-                          Owner
-                        </span>
-                      ) : app.role === 'administrator' ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                          <span className="mr-1">⚙️</span>
-                          Administrator
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          Editor
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Agent Count */}
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      <span className={`text-sm font-medium ${app.agent_count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                        {app.agent_count}
-                      </span>
-                    </td>
-
-                    {/* Repository Count */}
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      <span className={`text-sm font-medium ${app.repository_count > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                        {app.repository_count}
-                      </span>
-                    </td>
-
-                    {/* Domain Count */}
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      <span className={`text-sm font-medium ${app.domain_count > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
-                        {app.domain_count}
-                      </span>
-                    </td>
-
-                    {/* Silo Count */}
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      <span className={`text-sm font-medium ${app.silo_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                        {app.silo_count}
-                      </span>
-                    </td>
-
-                    {/* Collaborator Count */}
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      <span className={`text-sm font-medium ${(app.collaborator_count + (app.role === 'owner' ? 1 : 0)) > 1 ? 'text-indigo-600' : 'text-gray-400'}`}>
-                        {app.collaborator_count + (app.role === 'owner' ? 1 : 0)}
-                      </span>
-                    </td>
-
-                    {/* Owner */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {app.role === 'owner' ? (
-                        <span className="text-sm text-gray-500">You</span>
-                      ) : (
-                        <div className="flex items-center">
-                          <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center mr-2">
-                            <span className="text-xs font-medium text-gray-600">
-                              {getUserInitials(app.owner_name, app.owner_email)}
-                            </span>
-                          </div>
-                          <span className="text-sm text-gray-900">
-                            {app.owner_name || app.owner_email}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        app.langsmith_configured 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {app.langsmith_configured ? '✓ Configured' : 'Not configured'}
-                      </span>
-                    </td>
-
-                    {/* Usage Speedometer */}
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                      {usageStats[app.app_id] ? (
-                        <div className="group relative">
-                          <Speedometer 
-                            usageStats={usageStats[app.app_id]} 
-                            size="sm" 
-                            showDetails={false}
-                          />
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                            <div className="font-medium">
-                              {usageStats[app.app_id].stress_level.charAt(0).toUpperCase() + usageStats[app.app_id].stress_level.slice(1)} Stress
-                            </div>
-                            <div className="text-gray-300">
-                              {usageStats[app.app_id].current_usage}/{usageStats[app.app_id].limit === 0 ? '∞' : usageStats[app.app_id].limit} calls
-                            </div>
-                            {usageStats[app.app_id].limit > 0 && (
-                              <div className="text-gray-300">
-                                Resets in {Math.ceil(usageStats[app.app_id].reset_in_seconds)}s
-                              </div>
-                            )}
-                            {usageStats[app.app_id].is_over_limit && (
-                              <div className="text-red-300 font-medium">
-                                Over limit!
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-gray-400 text-xs">No data</div>
-                      )}
-                    </td>
-
-                    {/* Created Date */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {app.created_at ? new Date(app.created_at).toLocaleDateString() : '-'}
-                    </td>
-
-                    {/* Actions Dropdown */}
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <ActionDropdown
-                        actions={[
-                          {
-                            label: 'Open Dashboard',
-                            onClick: () => window.location.href = `/apps/${app.app_id}`,
-                            icon: '📊',
-                            variant: 'primary'
-                          },
-                          {
-                            label: 'Manage Agents',
-                            onClick: () => window.location.href = `/apps/${app.app_id}/agents`,
-                            icon: '🤖',
-                            variant: 'secondary'
-                          },
-                          {
-                            label: 'App Settings',
-                            onClick: () => window.location.href = `/apps/${app.app_id}/settings`,
-                            icon: '⚙️',
-                            variant: 'secondary'
-                          },
-                          ...(app.role === 'editor' ? [{
-                            label: 'Leave App',
-                            onClick: () => handleLeaveApp(app),
-                            icon: '🚪',
-                            variant: 'danger' as const
-                          }] : []),
-                          ...(app.role === 'owner' ? [{
-                            label: 'Delete App',
-                            onClick: () => handleDeleteApp(app),
-                            icon: '🗑️',
-                            variant: 'danger' as const
-                          }] : [])
-                        ]}
-                        size="sm"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       )}
 
