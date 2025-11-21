@@ -19,11 +19,12 @@ interface Agent {
   silo?: {
     silo_id: number;
     name: string;
+    vector_db_type?: string;
     metadata_definition?: {
       fields: Array<{
         name: string;
         type: string;
-        description: string;
+        description?: string;
       }>;
     };
   };
@@ -293,6 +294,7 @@ function AgentPlaygroundPage() {
                     onConversationCreated={handleConversationCreated}
                     onMessageSent={handleMessageSent}
                     metadataFields={agent.silo?.metadata_definition?.fields}
+                    vectorDbType={agent.silo?.vector_db_type}
                   />
                 )}
               </>

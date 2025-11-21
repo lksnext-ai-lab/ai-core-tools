@@ -24,6 +24,7 @@ class Silo(Base):
     metadata_definition = relationship('OutputParser', uselist=False)
     embedding_service_id = Column(Integer, ForeignKey('embedding_service.service_id'), nullable=True)
     embedding_service = relationship('EmbeddingService', uselist=False)
+    vector_db_type = Column(String(45), default='PGVECTOR')
 
     agents = relationship('Agent', lazy=True)
     repository = relationship('Repository', back_populates='silo')

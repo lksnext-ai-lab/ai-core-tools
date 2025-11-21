@@ -11,6 +11,7 @@ class SiloListItemSchema(BaseModel):
     type: Optional[str]
     created_at: Optional[datetime]
     docs_count: int
+    vector_db_type: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,12 +24,14 @@ class SiloDetailSchema(BaseModel):
     type: Optional[str]
     created_at: Optional[datetime]
     docs_count: int
+    vector_db_type: Optional[str] = None
     # Current values for editing
     metadata_definition_id: Optional[int] = None
     embedding_service_id: Optional[int] = None
     # Form data
     output_parsers: List[Dict[str, Any]]
     embedding_services: List[Dict[str, Any]]
+    vector_db_options: List[Dict[str, Any]] = []
     # Metadata definition fields for playground
     metadata_fields: Optional[List[Dict[str, Any]]] = None
     
@@ -42,6 +45,7 @@ class CreateUpdateSiloSchema(BaseModel):
     type: Optional[str] = None
     output_parser_id: Optional[int] = None
     embedding_service_id: Optional[int] = None
+    vector_db_type: Optional[str] = None
 
 
 class SiloSearchSchema(BaseModel):

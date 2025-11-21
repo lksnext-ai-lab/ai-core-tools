@@ -17,6 +17,7 @@ from repositories.embedding_service_repository import EmbeddingServiceRepository
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema
 from datetime import datetime
 from utils.logger import get_logger
+from tools.vector_store_factory import VectorStoreFactory
 
 load_dotenv()
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
@@ -55,7 +56,12 @@ class RepositoryService:
         return RepositoryRepository.get_by_app_id(db, app_id)
     
     @staticmethod
-    def create_repository(repository: Repository, embedding_service_id: Optional[int] = None, db: Session = None) -> Repository:
+    def create_repository(
+        repository: Repository,
+        embedding_service_id: Optional[int] = None,
+        vector_db_type: Optional[str] = None,
+        db: Session = None
+    ) -> Repository:
         """
         Create a new repository with its associated silo
         
@@ -70,6 +76,10 @@ class RepositoryService:
         # First create the output parser for the repository
         output_parser_service = OutputParserService()
         parser_id = output_parser_service.create_default_filter_for_repo(db, repository)
+
+        resolved_vector_db_type = (vector_db_type or 'PGVECTOR')
+        if isinstance(resolved_vector_db_type, str):
+            resolved_vector_db_type = resolved_vector_db_type.upper()
         
         # Create the silo with the correct metadata_definition_id
         silo_service = SiloService()
@@ -81,7 +91,8 @@ class RepositoryService:
             'app_id': repository.app_id,
             'fixed_metadata': False,
             'metadata_definition_id': parser_id,
-            'embedding_service_id': embedding_service_id
+            'embedding_service_id': embedding_service_id,
+            'vector_db_type': resolved_vector_db_type
         }
         silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO, db)
         
@@ -96,7 +107,12 @@ class RepositoryService:
         return created_repository
     
     @staticmethod
-    def update_repository(repository: Repository, embedding_service_id: Optional[int] = None, db: Session = None) -> Repository:
+    def update_repository(
+        repository: Repository,
+        embedding_service_id: Optional[int] = None,
+        vector_db_type: Optional[str] = None,
+        db: Session = None
+    ) -> Repository:
         """
         Update an existing repository
         
@@ -110,6 +126,14 @@ class RepositoryService:
         """
         if repository.silo and embedding_service_id:
             repository.silo.embedding_service_id = embedding_service_id
+
+        if repository.silo:
+            if vector_db_type is not None:
+                normalized_type = vector_db_type.upper()
+                repository.silo.vector_db_type = normalized_type
+            elif not repository.silo.vector_db_type:
+                repository.silo.vector_db_type = 'PGVECTOR'
+
         return RepositoryRepository.update(db, repository)
     
     @staticmethod
@@ -186,13 +210,19 @@ class RepositoryService:
         for repo in repositories:
             resource_count = ResourceRepository.count_by_repository_id(db, repo.repository_id)
             
+            if repo.silo and getattr(repo.silo, 'vector_db_type', None):
+                repo_vector_db_type = repo.silo.vector_db_type
+            else:
+                repo_vector_db_type = 'PGVECTOR'
+
             result.append(RepositoryListItemSchema(
                 repository_id=repo.repository_id,
                 name=repo.name,
                 type=repo.type,
                 status=repo.status,
                 created_at=repo.create_date,
-                resource_count=resource_count
+                resource_count=resource_count,
+                vector_db_type=repo_vector_db_type
             ))
         
         return result
@@ -217,6 +247,9 @@ class RepositoryService:
         
         if repository_id == 0:
             # New repository
+            vector_db_options = VectorStoreFactory.get_available_type_options()
+            embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
             return RepositoryDetailSchema(
                 repository_id=0,
                 name="",
@@ -226,7 +259,9 @@ class RepositoryService:
                 resources=[],
                 embedding_services=[],
                 silo_id=None,
-                metadata_fields=[]
+                metadata_fields=[],
+                vector_db_type='PGVECTOR',
+                vector_db_options=vector_db_options
             )
         
         # Existing repository
@@ -284,6 +319,11 @@ class RepositoryService:
                 except Exception as e:
                     logger.warning(f"Error parsing metadata fields for repository {repository_id}: {str(e)}")
         
+        vector_db_options = VectorStoreFactory.get_available_type_options()
+        if repo.silo and getattr(repo.silo, 'vector_db_type', None):
+            vector_db_type = repo.silo.vector_db_type
+        else:
+            vector_db_type = 'PGVECTOR'
         return RepositoryDetailSchema(
             repository_id=repo.repository_id,
             name=repo.name,
@@ -295,7 +335,9 @@ class RepositoryService:
             embedding_services=embedding_services,
             embedding_service_id=embedding_service_id,
             silo_id=silo_id,
-            metadata_fields=metadata_fields
+            metadata_fields=metadata_fields,
+            vector_db_type=vector_db_type,
+            vector_db_options=vector_db_options
         )
 
     @staticmethod
@@ -321,6 +363,21 @@ class RepositoryService:
             HTTPException: If repository not found (for updates)
         """
         from fastapi import HTTPException, status
+
+        normalized_vector_db_type = None
+        if repo_data.vector_db_type is not None:
+            if not isinstance(repo_data.vector_db_type, str):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="vector_db_type must be a string"
+                )
+            candidate_type = repo_data.vector_db_type.strip().upper()
+            if candidate_type and candidate_type not in VectorStoreFactory.IMPLEMENTED_TYPES:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Unsupported vector_db_type '{candidate_type}'"
+                )
+            normalized_vector_db_type = candidate_type or None
         
         if repository_id == 0:
             # Create new repository
@@ -332,7 +389,12 @@ class RepositoryService:
             repo.create_date = datetime.now()
             
             # Use RepositoryService to create repository with silo
-            repo = RepositoryService.create_repository(repo, repo_data.embedding_service_id, db)
+            repo = RepositoryService.create_repository(
+                repo,
+                repo_data.embedding_service_id,
+                normalized_vector_db_type,
+                db
+            )
         else:
             # Update existing repository
             repo = RepositoryRepository.get_by_id(db, repository_id)
@@ -348,7 +410,12 @@ class RepositoryService:
                 repo.type = repo_data.type
             if repo_data.status is not None:
                 repo.status = repo_data.status
-            repo = RepositoryService.update_repository(repo, repo_data.embedding_service_id, db)
+            repo = RepositoryService.update_repository(
+                repo,
+                repo_data.embedding_service_id,
+                normalized_vector_db_type,
+                db
+            )
         
         return repo
 

@@ -14,6 +14,7 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields
 )
+from tools.vector_store_factory import VectorStoreFactory
 logger = get_logger(__name__)
 
 
@@ -130,6 +131,11 @@ class DomainService:
             
             # Get embedding services for form data
             embedding_services = DomainService.get_embedding_services_for_app(app_id, db)
+            vector_db_options = VectorStoreFactory.get_available_type_options()
+            if domain.silo and getattr(domain.silo, 'vector_db_type', None):
+                vector_db_type = domain.silo.vector_db_type
+            else:
+                vector_db_type = 'PGVECTOR'
             
             return DomainDetailSchema(
                 domain_id=domain.domain_id,
@@ -143,7 +149,9 @@ class DomainService:
                 silo_id=domain.silo_id,
                 url_count=url_count,
                 embedding_services=embedding_services,
-                embedding_service_id=embedding_service_id
+                embedding_service_id=embedding_service_id,
+                vector_db_type=vector_db_type,
+                vector_db_options=vector_db_options
             )
             
         except Exception as e:
@@ -203,19 +211,33 @@ class DomainService:
         if not base_url:
             raise ValidationError("Base URL cannot be empty")
         
+        raw_vector_db_type = domain_data.get('vector_db_type')
+        if raw_vector_db_type is not None:
+            if not isinstance(raw_vector_db_type, str):
+                raise ValidationError("vector_db_type must be a string")
+            raw_vector_db_type = raw_vector_db_type.strip().upper()
+            if not raw_vector_db_type:
+                raw_vector_db_type = None
+            elif raw_vector_db_type not in VectorStoreFactory.IMPLEMENTED_TYPES:
+                raise ValidationError(
+                    f"Unsupported vector_db_type '{raw_vector_db_type}'."
+                )
+
         domain_id = domain_data.get('domain_id')
         
         if not domain_id or domain_id == 0 or domain_id == '0':
             # Create new domain
-            return DomainService._create_new_domain(domain_data, embedding_service_id, name, base_url, db)
+            return DomainService._create_new_domain(domain_data, embedding_service_id, name, base_url, raw_vector_db_type, db)
         else:
             # Update existing domain
-            return DomainService._update_existing_domain(domain_id, domain_data, embedding_service_id, name, base_url, db)
+            return DomainService._update_existing_domain(domain_id, domain_data, embedding_service_id, name, base_url, raw_vector_db_type, db)
     
     @staticmethod
-    def _create_new_domain(domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, db: Session = None) -> int:
+    def _create_new_domain(domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, vector_db_type: Optional[str], db: Session = None) -> int:
         """Create a new domain with associated silo"""
         logger.info(f"Creating new domain: {name}")
+
+        resolved_vector_db_type = (vector_db_type or 'PGVECTOR').upper()
         
         # Create associated silo
         silo_data = {
@@ -225,7 +247,8 @@ class DomainService:
             'status': 'active',
             'app_id': domain_data['app_id'],
             'fixed_metadata': False,
-            'embedding_service_id': embedding_service_id
+            'embedding_service_id': embedding_service_id,
+            'vector_db_type': resolved_vector_db_type
         }
         silo = SiloService.create_or_update_silo(silo_data, SiloType.DOMAIN)
         
@@ -259,7 +282,7 @@ class DomainService:
         return created_domain.domain_id
     
     @staticmethod
-    def _update_existing_domain(domain_id: int, domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, db: Session) -> int:
+    def _update_existing_domain(domain_id: int, domain_data: dict, embedding_service_id: Optional[int], name: str, base_url: str, vector_db_type: Optional[str], db: Session) -> int:
         """Update an existing domain and its associated silo"""
         logger.info(f"Updating domain {domain_id}")
         domain = DomainService.get_domain(domain_id, db)
@@ -282,10 +305,25 @@ class DomainService:
             silo = SiloService.get_silo(domain.silo_id, db)
             if silo:
                 silo.embedding_service_id = embedding_service_id
+                if vector_db_type:
+                    silo.vector_db_type = vector_db_type
+                elif not silo.vector_db_type:
+                    silo.vector_db_type = 'PGVECTOR'
                 SiloRepository.update(silo, db)
                 logger.info(f"Successfully updated silo {domain.silo_id} embedding service")
             else:
                 logger.warning(f"Silo {domain.silo_id} not found for domain {domain_id}")
+
+        if domain.silo_id and vector_db_type and embedding_service_id is None:
+            silo = SiloService.get_silo(domain.silo_id, db)
+            if silo:
+                silo.vector_db_type = vector_db_type
+                SiloRepository.update(silo, db)
+        elif domain.silo_id and not vector_db_type:
+            silo = SiloService.get_silo(domain.silo_id, db)
+            if silo and not silo.vector_db_type:
+                silo.vector_db_type = 'PGVECTOR'
+                SiloRepository.update(silo, db)
         
         return updated_domain.domain_id
     

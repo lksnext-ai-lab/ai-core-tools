@@ -24,6 +24,7 @@ from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
+from tools.vector_store_factory import VectorStoreFactory
 
 logger = get_logger(__name__)
 
@@ -92,6 +93,10 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
         
         result = []
         for domain, url_count in domains_with_counts:
+            if domain.silo and getattr(domain.silo, 'vector_db_type', None):
+                domain_vector_db_type = domain.silo.vector_db_type
+            else:
+                domain_vector_db_type = 'PGVECTOR'
             result.append(DomainListItemSchema(
                 domain_id=domain.domain_id,
                 name=domain.name,
@@ -99,7 +104,8 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
                 base_url=domain.base_url,
                 created_at=domain.create_date,
                 url_count=url_count,
-                silo_id=domain.silo_id
+                silo_id=domain.silo_id,
+                vector_db_type=domain_vector_db_type
             ))
         
         return result
@@ -125,6 +131,8 @@ async def get_domain(app_id: int, domain_id: int, request: Request, db: Session 
     if domain_id == 0:
         # New domain - return empty template with embedding services
         embedding_services = DomainService.get_embedding_services_for_app(app_id, db)
+        vector_db_options = VectorStoreFactory.get_available_type_options()
+        default_vector_db_type = 'PGVECTOR'
         
         return DomainDetailSchema(
             domain_id=0,
@@ -138,7 +146,9 @@ async def get_domain(app_id: int, domain_id: int, request: Request, db: Session 
             silo_id=None,
             url_count=0,
             embedding_services=embedding_services,
-            embedding_service_id=None
+            embedding_service_id=None,
+            vector_db_type=default_vector_db_type,
+            vector_db_options=vector_db_options
         )
     
     # Existing domain
@@ -179,7 +189,8 @@ async def create_or_update_domain(
             'content_tag': domain_data.content_tag,
             'content_class': domain_data.content_class,
             'content_id': domain_data.content_id,
-            'app_id': app_id
+            'app_id': app_id,
+            'vector_db_type': domain_data.vector_db_type
         }
         
         # Create or update domain using service

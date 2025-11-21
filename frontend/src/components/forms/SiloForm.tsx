@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
 
+interface VectorDbOption {
+  code: string;
+  label: string;
+}
+
 // Define the Silo type for form data
 interface Silo {
   silo_id: number;
@@ -10,6 +15,12 @@ interface Silo {
   type?: string;
   created_at?: string;
   docs_count: number;
+  vector_db_type?: string;
+  metadata_definition_id?: number;
+  embedding_service_id?: number;
+  output_parsers?: { parser_id: number; name: string }[];
+  embedding_services?: { service_id: number; name: string; provider?: string }[];
+  vector_db_options?: VectorDbOption[];
 }
 
 // Define the form data type
@@ -19,6 +30,7 @@ interface SiloFormData {
   type?: string;
   output_parser_id?: number;
   embedding_service_id?: number;
+  vector_db_type?: string;
 }
 
 // Define the props for the component
@@ -36,15 +48,21 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
     description: '',
     type: 'CUSTOM', // Always CUSTOM for this interface
     output_parser_id: undefined,
-    embedding_service_id: undefined
+    embedding_service_id: undefined,
+    vector_db_type: 'PGVECTOR'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputParsers, setOutputParsers] = useState<any[]>([]);
   const [embeddingServices, setEmbeddingServices] = useState<any[]>([]);
+  const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
   const [loadingFormData, setLoadingFormData] = useState(true);
 
   const isEditing = !!silo && silo.silo_id !== 0;
+  let submitButtonLabel = isEditing ? 'Update Silo' : 'Create Silo';
+  if (isSubmitting) {
+    submitButtonLabel = 'Saving...';
+  }
 
   // Load form data (output parsers and embedding services)
   useEffect(() => {
@@ -53,15 +71,27 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
 
   // Initialize form with existing silo data
   useEffect(() => {
-    if (silo) {
-      setFormData({
-        name: silo.name || '',
-        description: silo.description || '',
-        type: 'CUSTOM', // Always CUSTOM for this interface
-        output_parser_id: undefined, // Will be loaded from API
-        embedding_service_id: undefined // Will be loaded from API
-      });
-    }
+    const defaultVectorType = (silo?.vector_db_type || 'PGVECTOR').toUpperCase();
+    const availableVectorDbOptions = silo?.vector_db_options ?? [];
+    const matchedVectorDbOption = availableVectorDbOptions.find(
+      (option) => option.code.toUpperCase() === defaultVectorType
+    );
+    const vectorDbTypeValue = matchedVectorDbOption?.code
+      || availableVectorDbOptions[0]?.code
+      || defaultVectorType
+      || 'PGVECTOR';
+
+    setVectorDbOptions(availableVectorDbOptions);
+
+    setFormData(prev => ({
+      ...prev,
+      name: silo?.name || '',
+      description: silo?.description || '',
+      type: 'CUSTOM',
+      output_parser_id: silo?.metadata_definition_id || undefined,
+      embedding_service_id: silo?.embedding_service_id || undefined,
+      vector_db_type: vectorDbTypeValue
+    }));
   }, [silo]);
 
   async function loadFormData() {
@@ -71,22 +101,34 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
       setLoadingFormData(true);
       setError(null);
       
+      const appIdNumber = parseInt(appId, 10);
+
       // Load output parsers and embedding services in parallel
       const [parsersResponse, servicesResponse] = await Promise.all([
-        apiService.getOutputParsers(parseInt(appId)),
-        apiService.getEmbeddingServices(parseInt(appId))
+        apiService.getOutputParsers(appIdNumber),
+        apiService.getEmbeddingServices(appIdNumber)
       ]);
-      
+
       setOutputParsers(parsersResponse);
       setEmbeddingServices(servicesResponse);
-      
-      // If editing, load the specific silo details
-      if (isEditing && silo) {
-        const siloDetails = await apiService.getSilo(parseInt(appId), silo.silo_id);
+
+      // Fetch vector database options only when they are not provided by the silo payload
+      if (vectorDbOptions.length === 0) {
+        const siloOptions = await apiService.getSiloOptions(appIdNumber);
+        const availableVectorDbOptions: VectorDbOption[] = siloOptions.vector_db_options ?? [];
+        setVectorDbOptions(availableVectorDbOptions);
+
         setFormData(prev => ({
           ...prev,
-          output_parser_id: siloDetails.metadata_definition_id || undefined,
-          embedding_service_id: siloDetails.embedding_service_id || undefined
+          vector_db_type: availableVectorDbOptions[0]?.code || prev.vector_db_type || 'PGVECTOR'
+        }));
+      }
+
+      // Default embedding service for new silo when only one available
+      if (!isEditing && servicesResponse.length === 1) {
+        setFormData(prev => ({
+          ...prev,
+          embedding_service_id: servicesResponse[0].service_id
         }));
       }
     } catch (err) {
@@ -99,9 +141,18 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+
+    let parsedValue: string | number | undefined = value === '' ? undefined : value;
+
+    if (name === 'embedding_service_id' || name === 'output_parser_id') {
+      parsedValue = value === '' ? undefined : parseInt(value, 10);
+    } else if (name === 'vector_db_type' && typeof value === 'string') {
+      parsedValue = value.toUpperCase();
+    }
+
     setFormData(prev => ({
       ...prev,
-      [name]: value === '' ? undefined : value
+      [name]: parsedValue
     }));
   };
 
@@ -114,10 +165,18 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
       return;
     }
 
+    if (!formData.vector_db_type) {
+      setError('Vector database selection is required');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError(null);
-      await onSubmit(formData);
+      await onSubmit({
+        ...formData,
+        vector_db_type: formData.vector_db_type.toUpperCase(),
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save silo');
     } finally {
@@ -236,6 +295,38 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
                 Required: Choose the embedding service for vector generation.
               </p>
             </div>
+
+            {/* Vector Database */}
+            <div>
+              <label htmlFor="vector_db_type" className="block text-sm font-medium text-gray-700 mb-2">
+                Vector Database <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="vector_db_type"
+                name="vector_db_type"
+                value={vectorDbOptions.length === 0 ? '' : formData.vector_db_type ?? ''}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                disabled={isSubmitting || vectorDbOptions.length === 0}
+              >
+                {vectorDbOptions.length === 0 && <option value="">No vector databases available</option>}
+                {vectorDbOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {vectorDbOptions.length === 0 ? (
+                <p className="mt-1 text-sm text-red-600">
+                  No vector databases available. Configure a silo backend before proceeding.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-500">
+                  Required: Select the storage engine that will persist vectors for this silo.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Error Message */}
@@ -269,7 +360,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
               {isSubmitting && (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
               )}
-              {isSubmitting ? 'Saving...' : (isEditing ? 'Update Silo' : 'Create Silo')}
+              {submitButtonLabel}
             </button>
           </div>
         </div>

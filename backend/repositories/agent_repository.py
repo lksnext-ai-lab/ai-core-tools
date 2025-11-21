@@ -217,6 +217,7 @@ class AgentRepository:
         silo_info = {
             "silo_id": silo.silo_id,
             "name": silo.name,
+            "vector_db_type": silo.vector_db_type,
             "metadata_definition": None
         }
         

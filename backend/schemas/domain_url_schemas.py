@@ -13,6 +13,7 @@ class DomainListItemSchema(BaseModel):
     created_at: Optional[datetime]
     url_count: int = 0
     silo_id: Optional[int] = None
+    vector_db_type: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -29,10 +30,12 @@ class DomainDetailSchema(BaseModel):
     created_at: Optional[datetime]
     silo_id: Optional[int] = None
     url_count: int = 0
+    vector_db_type: Optional[str] = None
     
     # Form data for editing
     embedding_services: List[Dict[str, Any]] = []
     embedding_service_id: Optional[int] = None
+    vector_db_options: List[Dict[str, Any]] = []
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,6 +49,7 @@ class CreateUpdateDomainSchema(BaseModel):
     content_class: Optional[str] = ""
     content_id: Optional[str] = ""
     embedding_service_id: Optional[int] = None
+    vector_db_type: Optional[str] = None
 
 
 # ==================== URL SCHEMAS ====================

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -33,11 +33,18 @@ class Repository(Base):
         return None
 
     def to_dict(self, include_relationships=False):
+        vector_db_type = None
+        if self.silo and getattr(self.silo, 'vector_db_type', None):
+            vector_db_type = self.silo.vector_db_type
+        else:
+            vector_db_type = 'PGVECTOR'
+
         data = {
             'repository_id': self.repository_id,
             'name': self.name,
             'type': self.type,
             'status': self.status,
+            'vector_db_type': vector_db_type,
             'app_id': self.app_id,
             'silo_id': self.silo_id
         }

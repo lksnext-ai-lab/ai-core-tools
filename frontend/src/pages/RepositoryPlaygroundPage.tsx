@@ -1,13 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
-
-// Define the metadata field type
-interface MetadataField {
-  name: string;
-  type: string;
-  description: string;
-}
+import SearchFilters from '../components/playground/SearchFilters';
+import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
 
 // Define the repository type
 interface Repository {
@@ -17,7 +12,9 @@ interface Repository {
   resources: any[];
   embedding_services: any[];
   embedding_service_id?: number;
-  metadata_fields?: MetadataField[];
+  metadata_fields?: SearchFilterMetadataField[];
+  vector_db_type?: string;
+  silo_id?: number;
 }
 
 interface SearchResult {
@@ -39,8 +36,8 @@ const RepositoryPlaygroundPage: React.FC = () => {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [repository, setRepository] = useState<Repository | null>(null);
-  const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [hasSearched, setHasSearched] = useState(false);
+  const [filterMetadata, setFilterMetadata] = useState<Record<string, unknown> | undefined>(undefined);
 
   useEffect(() => {
     if (appId && repositoryId) {
@@ -81,29 +78,8 @@ const RepositoryPlaygroundPage: React.FC = () => {
       setResults([]);
       setHasSearched(true);
 
-      // Build metadata filter object with proper type conversion
-      const filterMetadata: Record<string, any> = {};
-      Object.entries(metadataFilters).forEach(([fieldName, value]) => {
-        if (value.trim()) {
-          // Find the field type from metadata_fields
-          const field = repository?.metadata_fields?.find(f => f.name === fieldName);
-          let convertedValue: any = value.trim();
-          
-          // Convert value to the appropriate type
-          if (field) {
-            if (field.type === 'int') {
-              convertedValue = parseInt(value.trim());
-            } else if (field.type === 'float') {
-              convertedValue = parseFloat(value.trim());
-            } else if (field.type === 'bool') {
-              convertedValue = value.trim().toLowerCase() === 'true';
-            }
-            // For 'str' and 'date', keep as string
-          }
-          
-          filterMetadata[fieldName] = { $eq: convertedValue };
-        }
-      });
+      const hasFilters = filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
+      const searchFilters = hasFilters ? filterMetadata as Record<string, any> : undefined;
 
       // Use the repository search API with filters
       const response = await apiService.searchRepositoryDocuments(
@@ -111,7 +87,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
         parseInt(repositoryId!), 
         query,
         10,
-        Object.keys(filterMetadata).length > 0 ? filterMetadata : undefined
+        searchFilters
       );
       
       setResults(response.results || []);
@@ -119,7 +95,6 @@ const RepositoryPlaygroundPage: React.FC = () => {
     } catch (err) {
       console.error('Error searching repository:', err);
       setError('Failed to search repository');
-      setSearching(false);
     } finally {
       setSearching(false);
     }
@@ -130,12 +105,16 @@ const RepositoryPlaygroundPage: React.FC = () => {
     navigate(-1);
   };
 
-  const handleMetadataFilterChange = (fieldName: string, value: string) => {
-    setMetadataFilters(prev => ({
-      ...prev,
-      [fieldName]: value
-    }));
-  };
+  const handleFilterMetadataChange = useCallback((metadata: Record<string, unknown> | undefined) => {
+    setFilterMetadata(metadata);
+  }, []);
+
+  useEffect(() => {
+    const fields = repository?.metadata_fields;
+    if ((!fields || fields.length === 0) && filterMetadata !== undefined) {
+      setFilterMetadata(undefined);
+    }
+  }, [repository, filterMetadata]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -162,34 +141,12 @@ const RepositoryPlaygroundPage: React.FC = () => {
         <form onSubmit={handleSearch} className="space-y-4">
           {/* Metadata Filters */}
           {repository?.metadata_fields && repository.metadata_fields.length > 0 && (
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                <span className="mr-2">🔍</span>
-                <span>Filter by Metadata</span>
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {repository.metadata_fields.map((field) => (
-                  <div key={field.name}>
-                    <label htmlFor={`filter_${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
-                      {field.name}
-                      <span className="text-xs text-gray-500 ml-1">({field.type})</span>
-                    </label>
-                    <input
-                      type="text"
-                      id={`filter_${field.name}`}
-                      value={metadataFilters[field.name] || ''}
-                      onChange={(e) => handleMetadataFilterChange(field.name, e.target.value)}
-                      placeholder={`Filter by ${field.name}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      disabled={searching}
-                    />
-                    {field.description && (
-                      <p className="text-xs text-gray-500 mt-1">{field.description}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SearchFilters
+              metadataFields={repository.metadata_fields}
+              dbType={repository.vector_db_type?.toUpperCase()}
+              disabled={searching}
+              onFilterMetadataChange={handleFilterMetadataChange}
+            />
           )}
           
           <div>
