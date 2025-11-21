@@ -8,6 +8,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_mistralai import ChatMistralAI
 from mistralai import Mistral
 from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from models.ai_service import ProviderEnum
 from tools.outputParserTools import get_parser_model_by_id
@@ -95,6 +96,15 @@ def get_llm(agent, is_vision=False):
             endpoint=ai_service.endpoint,
             api_version=ai_service.api_version
         )
+    if ai_service.provider == ProviderEnum.Google.value:
+        google_kwargs = {
+            "model": ai_service.description,
+            "temperature": temperature,
+            "google_api_key": ai_service.api_key,
+        }
+        if ai_service.endpoint:
+            google_kwargs["client_options"] = {"api_endpoint": ai_service.endpoint}
+        return ChatGoogleGenerativeAI(**google_kwargs)
         
     raise ValueError(f"Proveedor de modelo no soportado: {ai_service.provider}")
 
