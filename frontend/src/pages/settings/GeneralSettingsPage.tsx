@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
+import Alert from '../../components/ui/Alert';
 
 function GeneralSettingsPage() {
   const { appId } = useParams();
@@ -99,33 +100,14 @@ function GeneralSettingsPage() {
 
   if (error) {
     return (
-      
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <span className="text-red-400 text-xl">⚠️</span>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">
-                  Error Loading Settings
-                </h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>{error}</p>
-                </div>
-                <div className="mt-4">
-                  <button
-                    onClick={loadAppData}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      
+      <div className="p-6">
+        <Alert 
+          type="error" 
+          title="Error Loading Settings" 
+          message={error}
+          onDismiss={loadAppData}
+        />
+      </div>
     );
   }
 
@@ -280,7 +262,7 @@ function GeneralSettingsPage() {
                     {saved && (
                       <div className="flex items-center text-green-600">
                         <span className="mr-2">✓</span>
-                        Settings saved successfully
+                        {' '}Settings saved successfully
                       </div>
                     )}
                   </div>

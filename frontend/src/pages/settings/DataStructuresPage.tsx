@@ -7,6 +7,8 @@ import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
+import Alert from '../../components/ui/Alert';
+import Table from '../../components/ui/Table';
 
 interface DataStructure {
   parser_id: number;
@@ -19,7 +21,7 @@ interface DataStructure {
 function DataStructuresPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, isAdmin, userRole } = useAppRole(appId);
+  const { isAdmin, userRole } = useAppRole(appId);
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -174,19 +176,9 @@ function DataStructuresPage() {
 
   if (error) {
     return (
-      
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-600">Error: {error}</p>
-            <button 
-              onClick={() => loadDataStructures()}
-              className="mt-2 text-red-800 hover:text-red-900 underline"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      
+      <div className="p-6">
+        <Alert type="error" message={error} onDismiss={() => loadDataStructures()} />
+      </div>
     );
   }
 
@@ -205,7 +197,7 @@ function DataStructuresPage() {
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
               <span className="mr-2">+</span>
-              Create Data Structure
+              {' '}Create Data Structure
             </button>
           )}
         </div>
@@ -214,94 +206,82 @@ function DataStructuresPage() {
         {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Data Structures Table */}
-        {dataStructures.length > 0 ? (
-          <div className="bg-white shadow rounded-lg overflow-visible">
-            <div className="overflow-x-auto overflow-visible">
-              <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fields
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {dataStructures.map((structure) => (
-                  <tr key={structure.parser_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-purple-400 text-xl mr-3">📊</span>
-                        <div>
-                            <div 
-                              className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
-                              onClick={() => handleEditStructure(structure.parser_id)}
-                            >
-                              {structure.name}
-                            </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 max-w-xs truncate">
-                        {structure.description || 'No description'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getFieldCountBadge(structure.field_count)}`}>
-                        {structure.field_count} field{structure.field_count !== 1 ? 's' : ''}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {isAdmin ? (
-                        <ActionDropdown
-                          actions={[
-                            {
-                              label: 'Edit',
-                              onClick: () => handleEditStructure(structure.parser_id),
-                              icon: '✏️',
-                              variant: 'primary'
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => handleDelete(structure),
-                              icon: '🗑️',
-                              variant: 'danger'
-                            }
-                          ]}
-                          size="sm"
-                        />
-                      ) : (
-                        <span className="text-gray-400 text-sm">View only</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Data Structures</h3>
-            <p className="text-gray-600 mb-6">
-              Create your first data structure to define schemas for structured data extraction.
-            </p>
+        <Table
+          data={dataStructures}
+          keyExtractor={(structure) => structure.parser_id.toString()}
+          columns={[
+            {
+              header: 'Name',
+              render: (structure) => (
+                <div className="flex items-center">
+                  <span className="text-purple-400 text-xl mr-3">📊</span>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                    onClick={() => void handleEditStructure(structure.parser_id)}
+                  >
+                    {structure.name}
+                  </button>
+                </div>
+              )
+            },
+            {
+              header: 'Description',
+              render: (structure) => (
+                <div className="text-sm text-gray-900 max-w-xs truncate">
+                  {structure.description || 'No description'}
+                </div>
+              ),
+              className: 'px-6 py-4'
+            },
+            {
+              header: 'Fields',
+              render: (structure) => (
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getFieldCountBadge(structure.field_count)}`}>
+                  {structure.field_count} field{structure.field_count !== 1 ? 's' : ''}
+                </span>
+              )
+            },
+            {
+              header: 'Created',
+              render: (structure) => structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A',
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            },
+            {
+              header: 'Actions',
+              render: (structure) => (
+                isAdmin ? (
+                  <ActionDropdown
+                    actions={[
+                      {
+                        label: 'Edit',
+                        onClick: () => { void handleEditStructure(structure.parser_id); },
+                        icon: '✏️',
+                        variant: 'primary'
+                      },
+                      {
+                        label: 'Delete',
+                        onClick: () => handleDelete(structure),
+                        icon: '🗑️',
+                        variant: 'danger'
+                      }
+                    ]}
+                    size="sm"
+                  />
+                ) : (
+                  <span className="text-gray-400 text-sm">View only</span>
+                )
+              )
+            }
+          ]}
+          emptyIcon="📊"
+          emptyMessage="No Data Structures"
+          emptySubMessage="Create your first data structure to define schemas for structured data extraction."
+          loading={loading}
+        />
+
+        {!loading && dataStructures.length === 0 && (
+          <div className="text-center py-6">
             <button 
               onClick={handleCreateStructure}
               className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"

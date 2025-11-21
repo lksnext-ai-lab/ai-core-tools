@@ -19,6 +19,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
+from scalar_fastapi import get_scalar_api_reference
 import os
 from config import CLIENT_CONFIG
 
@@ -187,6 +188,15 @@ async def internal_openapi():
 async def public_openapi():
     """OpenAPI JSON for public API"""
     return get_openapi_public()
+
+# ==================== SCALAR API REFERENCE ====================
+@app.get("/scalar", include_in_schema=False)
+async def scalar_html():
+    """Scalar API Reference documentation"""
+    return get_scalar_api_reference(
+        openapi_url=app.openapi_url,
+        title=f"{CLIENT_CONFIG.client_name} API Reference"
+    )
 
 @app.get("/")
 async def root():

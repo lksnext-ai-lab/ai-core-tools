@@ -8,6 +8,8 @@ import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
+import Alert from '../../components/ui/Alert';
+import Table from '../../components/ui/Table';
 
 interface APIKey {
   key_id: number;
@@ -21,7 +23,7 @@ interface APIKey {
 function APIKeysPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isOwner, isAdmin, userRole } = useAppRole(appId);
+  const { isAdmin, userRole } = useAppRole(appId);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -194,19 +196,9 @@ function APIKeysPage() {
 
   if (error) {
     return (
-      
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-600">Error: {error}</p>
-            <button 
-              onClick={() => loadAPIKeys()}
-              className="mt-2 text-red-800 hover:text-red-900 underline"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      
+      <div className="p-6">
+        <Alert type="error" message={error} onDismiss={() => loadAPIKeys()} />
+      </div>
     );
   }
 
@@ -225,7 +217,7 @@ function APIKeysPage() {
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
               <span className="mr-2">+</span>
-              Create New API Key
+              {' '}Create New API Key
             </button>
           )}
         </div>
@@ -234,108 +226,97 @@ function APIKeysPage() {
         {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
 
         {/* API Keys Table */}
-        {apiKeys.length > 0 ? (
-          <div className="bg-white shadow rounded-lg overflow-visible">
-            <div className="overflow-x-auto overflow-visible">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Key
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Used
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {apiKeys.map((apiKey) => (
-                    <tr key={apiKey.key_id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-blue-400 text-xl mr-3">🔑</span>
-                            <div 
-                              className="text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
-                              onClick={() => handleEditKey(apiKey.key_id)}
-                            >
-                              {apiKey.name}
-                            </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                          {maskApiKey(apiKey.key_preview)}
-                        </code>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {apiKey.last_used_at 
-                          ? new Date(apiKey.last_used_at).toLocaleDateString()
-                          : 'Never'
-                        }
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          apiKey.is_active 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {apiKey.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium relative">
-                        {isAdmin ? (
-                          <ActionDropdown
-                            actions={[
-                              {
-                                label: 'Edit',
-                                onClick: () => handleEditKey(apiKey.key_id),
-                                icon: '✏️',
-                                variant: 'primary'
-                              },
-                              {
-                                label: apiKey.is_active ? 'Deactivate' : 'Activate',
-                                onClick: () => handleToggle(apiKey.key_id),
-                                icon: apiKey.is_active ? '⏸️' : '▶️',
-                                variant: apiKey.is_active ? 'warning' : 'success'
-                              },
-                              {
-                                label: 'Delete',
-                                onClick: () => handleDelete(apiKey.key_id),
-                                icon: '🗑️',
-                                variant: 'danger'
-                              }
-                            ]}
-                            size="sm"
-                          />
-                        ) : (
-                          <span className="text-gray-400 text-sm">View only</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔑</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No API Keys</h3>
+        <Table
+          data={apiKeys}
+          keyExtractor={(apiKey) => apiKey.key_id.toString()}
+          columns={[
+            {
+              header: 'Name',
+              render: (apiKey) => (
+                <div className="flex items-center">
+                  <span className="text-blue-400 text-xl mr-3">🔑</span>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                    onClick={() => void handleEditKey(apiKey.key_id)}
+                  >
+                    {apiKey.name}
+                  </button>
+                </div>
+              )
+            },
+            {
+              header: 'Key',
+              render: (apiKey) => (
+                <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                  {maskApiKey(apiKey.key_preview)}
+                </code>
+              )
+            },
+            {
+              header: 'Created',
+              render: (apiKey) => apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A',
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            },
+            {
+              header: 'Last Used',
+              render: (apiKey) => apiKey.last_used_at ? new Date(apiKey.last_used_at).toLocaleDateString() : 'Never',
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            },
+            {
+              header: 'Status',
+              render: (apiKey) => (
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                  apiKey.is_active 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {apiKey.is_active ? 'Active' : 'Inactive'}
+                </span>
+              )
+            },
+            {
+              header: 'Actions',
+              className: 'relative',
+              render: (apiKey) => (
+                isAdmin ? (
+                  <ActionDropdown
+                    actions={[
+                      {
+                        label: 'Edit',
+                        onClick: () => { void handleEditKey(apiKey.key_id); },
+                        icon: '✏️',
+                        variant: 'primary'
+                      },
+                      {
+                        label: apiKey.is_active ? 'Deactivate' : 'Activate',
+                        onClick: () => { void handleToggle(apiKey.key_id); },
+                        icon: apiKey.is_active ? '⏸️' : '▶️',
+                        variant: apiKey.is_active ? 'warning' : 'success'
+                      },
+                      {
+                        label: 'Delete',
+                        onClick: () => { void handleDelete(apiKey.key_id); },
+                        icon: '🗑️',
+                        variant: 'danger'
+                      }
+                    ]}
+                    size="sm"
+                  />
+                ) : (
+                  <span className="text-gray-400 text-sm">View only</span>
+                )
+              )
+            }
+          ]}
+          emptyIcon="🔑"
+          emptyMessage="No API Keys"
+          emptySubMessage="Create your first API key to enable programmatic access to your application."
+          loading={loading}
+        />
+
+        {!loading && apiKeys.length === 0 && (
+          <div className="text-center py-6">
             <p className="text-gray-600 mb-6">
               Create your first API key to allow external applications to access your agents.
             </p>

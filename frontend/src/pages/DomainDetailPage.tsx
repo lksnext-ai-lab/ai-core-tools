@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
-import type { ActionItem } from '../components/ui/ActionDropdown';
+import Alert from '../components/ui/Alert';
 
 interface URL {
   url_id: number;
@@ -30,6 +30,107 @@ interface DomainDetail {
     name: string;
   }>;
 }
+
+// Helper function to format dates
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Helper function to get URL status
+const getUrlStatus = (url: URL, reindexingUrls: Set<number>) => {
+  if (reindexingUrls.has(url.url_id)) {
+    return {
+      text: 'Indexing...',
+      badge: 'bg-blue-100 text-blue-800',
+      icon: '⏳'
+    };
+  }
+  
+  switch (url.status) {
+    case 'indexed':
+      return {
+        text: 'Indexed',
+        badge: 'bg-green-100 text-green-800',
+        icon: '✅'
+      };
+    case 'indexing':
+      return {
+        text: 'Indexing',
+        badge: 'bg-blue-100 text-blue-800',
+        icon: '⏳'
+      };
+    case 'rejected':
+      return {
+        text: 'Rejected',
+        badge: 'bg-red-100 text-red-800',
+        icon: '❌'
+      };
+    case 'unindexed':
+      return {
+        text: 'Unindexed',
+        badge: 'bg-gray-100 text-gray-600',
+        icon: '🚫'
+      };
+    case 'pending':
+      return {
+        text: 'Pending',
+        badge: 'bg-yellow-100 text-yellow-800',
+        icon: '⏸️'
+      };
+    default:
+      return {
+        text: 'Not Indexed',
+        badge: 'bg-gray-100 text-gray-800',
+        icon: '⚪'
+      };
+  }
+};
+
+// Component for rendering loading state
+const LoadingView: React.FC = () => (
+  <div className="container mx-auto px-4 py-8">
+    <div className="flex justify-center items-center h-64">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+  </div>
+);
+
+// Component for rendering error state
+const ErrorView: React.FC<{ error: string; onBack: () => void }> = ({ error, onBack }) => (
+  <div className="container mx-auto px-4 py-8">
+    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+      <p className="font-medium">Error</p>
+      <p>{error}</p>
+    </div>
+    <button
+      onClick={onBack}
+      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+    >
+      Back to App
+    </button>
+  </div>
+);
+
+// Component for empty URL state
+const EmptyUrlsView: React.FC<{ onAddUrl: () => void }> = ({ onAddUrl }) => (
+  <div className="text-center py-12">
+    <div className="text-gray-400 text-6xl mb-4">🔗</div>
+    <h3 className="text-lg font-medium text-gray-900 mb-2">No URLs yet</h3>
+    <p className="text-gray-500 mb-6">Add your first URL to start indexing content</p>
+    <button
+      onClick={onAddUrl}
+      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+    >
+      Add First URL
+    </button>
+  </div>
+);
 
 const DomainDetailPage: React.FC = () => {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
@@ -277,125 +378,22 @@ const DomainDetailPage: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getUrlStatus = (url: URL) => {
-    if (reindexingUrls.has(url.url_id)) {
-      return {
-        text: 'Indexing...',
-        badge: 'bg-blue-100 text-blue-800',
-        icon: '⏳'
-      };
-    }
-    
-    switch (url.status) {
-      case 'indexed':
-        return {
-          text: 'Indexed',
-          badge: 'bg-green-100 text-green-800',
-          icon: '✅'
-        };
-      case 'indexing':
-        return {
-          text: 'Indexing',
-          badge: 'bg-blue-100 text-blue-800',
-          icon: '⏳'
-        };
-      case 'rejected':
-        return {
-          text: 'Rejected',
-          badge: 'bg-red-100 text-red-800',
-          icon: '❌'
-        };
-      case 'unindexed':
-        return {
-          text: 'Unindexed',
-          badge: 'bg-gray-100 text-gray-600',
-          icon: '🚫'
-        };
-      case 'pending':
-        return {
-          text: 'Pending',
-          badge: 'bg-yellow-100 text-yellow-800',
-          icon: '⏸️'
-        };
-      default:
-        return {
-          text: 'Not Indexed',
-          badge: 'bg-gray-100 text-gray-800',
-          icon: '⚪'
-        };
-    }
-  };
-
   return (
     <div className="p-6">
       {/* Success Message */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-          <div className="flex">
-            <span className="text-green-400 text-xl mr-3">✅</span>
-            <div>
-              <h3 className="text-sm font-medium text-green-800">Success</h3>
-              <p className="text-sm text-green-600 mt-1">{successMessage}</p>
-              <button 
-                onClick={() => setSuccessMessage(null)}
-                className="mt-2 text-sm text-green-600 hover:text-green-800 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {successMessage && <Alert type="success" message={successMessage} onDismiss={() => setSuccessMessage(null)} className="mb-6" />}
 
       {/* Error Message */}
-      {errorMessage && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{errorMessage}</p>
-              <button 
-                onClick={() => setErrorMessage(null)}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {errorMessage && <Alert type="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} className="mb-6" />}
 
-      {loading ? (
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
-        </div>
-      ) : error || !domain ? (
-        <div className="container mx-auto px-4 py-8">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            <p className="font-medium">Error</p>
-            <p>{error || 'Domain not found'}</p>
-          </div>
-          <button
-            onClick={() => navigate(`/apps/${appId}`)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            Back to App
-          </button>
-        </div>
-      ) : (
+      {loading && <LoadingView />}
+      {!loading && (error || !domain) && (
+        <ErrorView 
+          error={error || 'Domain not found'} 
+          onBack={() => navigate(`/apps/${appId}`)} 
+        />
+      )}
+      {!loading && !error && domain && (
         <div className="container mx-auto px-4 py-8">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
@@ -440,28 +438,20 @@ const DomainDetailPage: React.FC = () => {
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
                 >
                   <span className="mr-2">+</span>
-                  Add URL
+                  {' '}Add URL
                 </button>
               )}
             </div>
             
-            {urlsLoading ? (
+            {urlsLoading && (
               <div className="flex justify-center items-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
               </div>
-            ) : urls.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-gray-400 text-6xl mb-4">🔗</div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No URLs yet</h3>
-                <p className="text-gray-500 mb-6">Add your first URL to start indexing content</p>
-                <button
-                  onClick={() => setShowAddUrlModal(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-                >
-                  Add First URL
-                </button>
-              </div>
-            ) : (
+            )}
+            {!urlsLoading && urls.length === 0 && (
+              <EmptyUrlsView onAddUrl={() => setShowAddUrlModal(true)} />
+            )}
+            {!urlsLoading && urls.length > 0 && (
               <div className="overflow-x-auto overflow-visible">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -485,7 +475,7 @@ const DomainDetailPage: React.FC = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {urls.map((url) => {
-                      const status = getUrlStatus(url);
+                      const status = getUrlStatus(url, reindexingUrls);
                       return (
                         <tr key={url.url_id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -510,27 +500,27 @@ const DomainDetailPage: React.FC = () => {
                             actions={[
                               {
                                 label: 'View Content',
-                                onClick: () => handleViewContent(url),
+                                onClick: () => void handleViewContent(url),
                                 icon: '👁️',
                                 variant: 'success'
                               },
                               {
                                 label: 'Reindex URL',
-                                onClick: () => handleReindexUrl(url.url_id),
+                                onClick: () => void handleReindexUrl(url.url_id),
                                 icon: reindexingUrls.has(url.url_id) ? '⏳' : '🔄',
                                 variant: 'primary',
                                 disabled: reindexingUrls.has(url.url_id)
                               },
                               {
                                 label: 'Unindex URL',
-                                onClick: () => handleUnindexUrl(url),
+                                onClick: () => void handleUnindexUrl(url),
                                 icon: reindexingUrls.has(url.url_id) ? '⏳' : '🚫',
                                 variant: 'warning',
                                 disabled: reindexingUrls.has(url.url_id)
                               },
                               {
                                 label: 'Reject URL',
-                                onClick: () => handleRejectUrl(url),
+                                onClick: () => void handleRejectUrl(url),
                                 icon: reindexingUrls.has(url.url_id) ? '⏳' : '❌',
                                 variant: 'danger',
                                 disabled: reindexingUrls.has(url.url_id)
@@ -565,7 +555,7 @@ const DomainDetailPage: React.FC = () => {
           >
             <div className="p-6">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="url-path-input" className="block text-sm font-medium text-gray-700 mb-2">
                   URL Path
                 </label>
                 <div className="flex">
@@ -573,12 +563,13 @@ const DomainDetailPage: React.FC = () => {
                     {domain.base_url}
                   </span>
                   <input
+                    id="url-path-input"
                     type="text"
                     value={newUrl}
                     onChange={(e) => setNewUrl(e.target.value)}
                     className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="/page-path"
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddUrl()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
                   />
                 </div>
                 <p className="mt-2 text-sm text-gray-500">
@@ -762,12 +753,13 @@ const DomainDetailPage: React.FC = () => {
             size="xlarge"
           >
             <div className="p-6">
-              {loadingContent ? (
+              {loadingContent && (
                 <div className="flex justify-center items-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                   <span className="ml-3 text-gray-600">Loading content...</span>
                 </div>
-              ) : urlContent ? (
+              )}
+              {!loadingContent && urlContent && (
                 <div>
                   <div className="mb-4">
                     <h3 className="text-lg font-medium text-gray-900 mb-2">URL:</h3>
@@ -791,7 +783,8 @@ const DomainDetailPage: React.FC = () => {
                     )}
                   </div>
                 </div>
-              ) : (
+              )}
+              {!loadingContent && !urlContent && (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No content available</p>
                 </div>
