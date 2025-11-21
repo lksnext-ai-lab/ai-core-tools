@@ -22,7 +22,8 @@ const AI_PROVIDERS: ProviderConfig[] = [
   { value: 'Azure', name: 'Azure OpenAI' },
   { value: 'Anthropic', name: 'Anthropic' },
   { value: 'Custom', name: 'Custom/Ollama' },
-  { value: 'MistralAI', name: 'Mistral' }
+  { value: 'MistralAI', name: 'Mistral' },
+  { value: 'Google', name: 'Google' }
 ];
 
 const getAIProviderDefaults = (provider: string): ProviderDefaults => {
@@ -46,6 +47,10 @@ const getAIProviderDefaults = (provider: string): ProviderDefaults => {
     'MistralAI': {
       baseUrl: 'https://api.mistral.ai/v1',
       modelPlaceholder: 'mistral-large-latest, mistral-small-latest'
+    },
+    'Google': {
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      modelPlaceholder: 'gemini-2.0-flash'
     }
   };
   return defaults[provider] || { baseUrl: '', modelPlaceholder: '' };

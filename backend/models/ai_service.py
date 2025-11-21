@@ -9,6 +9,7 @@ class ProviderEnum(enum.Enum):
     MistralAI = "MistralAI"
     Azure = "Azure"
     Custom = "Custom"
+    Google = "Google"
 
 class AIService(BaseService):
     __tablename__ = 'AIService'
