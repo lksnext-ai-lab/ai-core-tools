@@ -15,10 +15,14 @@ class ClientConfig(BaseModel):
     
 def load_client_config() -> ClientConfig:
     """Load client configuration from environment variables"""
+    # Determine if OIDC is enabled based on AICT_LOGIN mode
+    login_mode = os.getenv('AICT_LOGIN', 'OIDC').upper()
+    oidc_enabled = (login_mode == 'OIDC')
+    
     return ClientConfig(
         client_id=os.getenv('CLIENT_ID', 'default'),
         client_name=os.getenv('CLIENT_NAME', 'Mattin AI'),
-        oidc_enabled=os.getenv('OIDC_ENABLED', 'true').lower() == 'true',
+        oidc_enabled=oidc_enabled,
         oidc_authority=os.getenv('OIDC_AUTHORITY'),
         oidc_client_id=os.getenv('OIDC_CLIENT_ID'),
         custom_domain=os.getenv('CUSTOM_DOMAIN')

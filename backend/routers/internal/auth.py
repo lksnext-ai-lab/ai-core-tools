@@ -2,7 +2,7 @@
 Authentication endpoints for development mode.
 
 This router provides endpoints for development authentication that bypass OIDC.
-These endpoints are only available when OIDC_ENABLED is false.
+These endpoints are only available when AICT_LOGIN is set to FAKE mode.
 """
 
 import os
@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from services.user_service import UserService
 from utils.dev_auth import generate_dev_token
+from utils.auth_config import AuthConfig
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Check if OIDC authentication is enabled (dev mode when false)
-OIDC_ENABLED = os.getenv('OIDC_ENABLED', 'true').lower() == 'true'
+# Load authentication configuration
+AuthConfig.load_config()
 
 router = APIRouter(tags=["auth"])
 
@@ -41,7 +42,7 @@ class DevLoginResponse(BaseModel):
     summary="Development mode login",
     description=(
         "Authenticate using email only (development mode). "
-        "Only works when OIDC_ENABLED=false and email exists in database."
+        "Only works when AICT_LOGIN=FAKE and email exists in database."
     ),
 )
 async def dev_login(
@@ -55,7 +56,7 @@ async def dev_login(
     It bypasses OIDC authentication and generates a simple JWT token.
     
     Security constraints:
-    - Only enabled when OIDC_ENABLED=false
+    - Only enabled when AICT_LOGIN=FAKE
     - User email must already exist in the database
     - Does not create new users (security boundary)
     
@@ -67,19 +68,19 @@ async def dev_login(
         JWT token and user information
         
     Raises:
-        HTTPException 503: If development mode is disabled
+        HTTPException 503: If FAKE login mode is not enabled
         HTTPException 401: If user email not found in database
     """
-    # Security check: Only allow in development mode (OIDC disabled)
-    if OIDC_ENABLED:
+    # Security check: Only allow in FAKE login mode
+    if AuthConfig.LOGIN_MODE != "FAKE":
         logger.warning(
-            "Dev login attempted while OIDC_ENABLED is true"
+            f"Dev login attempted while AICT_LOGIN={AuthConfig.LOGIN_MODE}"
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "Development login is not available. "
-                "This endpoint only works when OIDC_ENABLED is false."
+                "This endpoint only works when AICT_LOGIN=FAKE in environment variables."
             ),
         )
     

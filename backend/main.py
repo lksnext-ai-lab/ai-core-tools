@@ -55,14 +55,26 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan (startup and shutdown)"""
     # Startup
     try:
-        # Initialize EntraID provider
-        await initialize_provider()
+        # Load authentication configuration
+        AuthConfig.load_config()
         
-        # Override the default provider dependency
-        app.dependency_overrides[get_default_provider] = get_provider
+        # Only initialize EntraID provider if using OIDC mode
+        if AuthConfig.LOGIN_MODE == "OIDC":
+            logger.info("🔐 Initializing EntraID provider for OIDC authentication")
+            await initialize_provider()
+            
+            # Override the default provider dependency
+            app.dependency_overrides[get_default_provider] = get_provider
+            logger.info("✅ EntraID provider initialized successfully")
+        else:
+            logger.warning(
+                f"⚠️  Running in {AuthConfig.LOGIN_MODE} mode - "
+                "EntraID provider NOT initialized (development/testing only)"
+            )
         
         print("✅ Application startup complete")
     except Exception as e:
+        logger.error(f"❌ Error during startup: {e}", exc_info=True)
         print(f"❌ Error during startup: {e}")
         raise
     
@@ -70,9 +82,13 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     try:
-        await shutdown_provider()
+        # Only shutdown provider if it was initialized (OIDC mode)
+        if AuthConfig.LOGIN_MODE == "OIDC":
+            await shutdown_provider()
+            logger.info("✅ EntraID provider shutdown complete")
         print("✅ Application shutdown complete")
     except Exception as e:
+        logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
         print(f"❌ Error during shutdown: {e}")
 
 
@@ -87,7 +103,9 @@ app = FastAPI(
 # ==================== CORS MIDDLEWARE ====================
 
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-OIDC_ENABLED = os.getenv('OIDC_ENABLED', 'false').lower() == 'true'  # Default to false for local development
+
+# Load auth config to check login mode
+AuthConfig.load_config()
 
 cors_origins = [
     FRONTEND_URL,  # Main frontend URL from environment
@@ -97,7 +115,8 @@ cors_origins = [
     os.getenv('CORS_ORIGIN_DOCKER_ALT', 'http://127.0.0.1:3000'),  # Alternative localhost for Docker
 ]
 
-if not OIDC_ENABLED:
+# In non-OIDC modes (FAKE, etc.), allow additional dev ports for easier testing
+if AuthConfig.LOGIN_MODE != "OIDC":
     cors_origins.extend([
         os.getenv('CORS_ORIGIN_DEV_8080', 'http://localhost:8080'),  # Additional dev ports
         os.getenv('CORS_ORIGIN_DEV_8080_ALT', 'http://127.0.0.1:8080'),

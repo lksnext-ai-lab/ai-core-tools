@@ -84,16 +84,22 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         };
         setUser(userData);
       } else if (authService.isAuthenticated()) {
-        // Dev mode: token exists, set a minimal authenticated user
-        // Full user data will be set after login from the login response
-        setUser({
-          user_id: 0,
-          email: '',
-          name: '',
-          is_authenticated: true,
-          is_admin: false,
-          is_omniadmin: false
-        });
+        // Dev mode: token exists, fetch actual user data from backend
+        try {
+          const userData = await authService.getCurrentUser();
+          setUser({
+            user_id: userData.user_id,
+            email: userData.email,
+            name: userData.name,
+            is_authenticated: true,
+            is_admin: userData.is_admin || userData.is_omniadmin,
+            is_omniadmin: userData.is_omniadmin
+          });
+        } catch (error) {
+          console.error('Failed to fetch user data in dev mode during refresh:', error);
+          // If fetch fails, clear user
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -158,16 +164,29 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           };
           setUser(userData);
         } else if (authService.isAuthenticated()) {
-          // Dev mode: token exists, set a minimal authenticated user
-          // Full user data should have been set by login
-          setUser({
-            user_id: 0,
-            email: '',
-            name: '',
-            is_authenticated: true,
-            is_admin: false,
-            is_omniadmin: false
-          });
+          // Dev mode: token exists, fetch actual user data from backend
+          try {
+            const userData = await authService.getCurrentUser();
+            setUser({
+              user_id: userData.user_id,
+              email: userData.email,
+              name: userData.name,
+              is_authenticated: true,
+              is_admin: userData.is_admin || userData.is_omniadmin,
+              is_omniadmin: userData.is_omniadmin
+            });
+          } catch (error) {
+            console.error('Failed to fetch user data in dev mode:', error);
+            // Fallback to minimal user if fetch fails
+            setUser({
+              user_id: 0,
+              email: '',
+              name: '',
+              is_authenticated: true,
+              is_admin: false,
+              is_omniadmin: false
+            });
+          }
         } else {
           // No OIDC user and no token means not authenticated
           setUser(null);

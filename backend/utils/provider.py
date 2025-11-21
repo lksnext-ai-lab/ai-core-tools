@@ -3,6 +3,9 @@ Identity Provider Initialization and Management
 
 This module provides singleton access to the EntraID provider instance
 and manages its lifecycle for dependency injection in FastAPI.
+
+The provider is only initialized when AICT_LOGIN=OIDC mode is active.
+In FAKE login mode, the provider is not needed and won't be initialized.
 """
 
 import os
@@ -23,17 +26,25 @@ def get_entra_config() -> EntraIDConfig:
         EntraIDConfig instance with settings from environment
         
     Raises:
-        ValueError: If required environment variables are missing
+        ValueError: If required environment variables are missing when AICT_LOGIN=OIDC
     """
     tenant_id = os.getenv("ENTRA_TENANT_ID")
     client_id = os.getenv("ENTRA_CLIENT_ID")
     client_secret = os.getenv("ENTRA_CLIENT_SECRET")
     
     if not tenant_id or not client_id or not client_secret:
-        raise ValueError(
-            "Missing required EntraID configuration. "
-            "Set ENTRA_TENANT_ID, ENTRA_CLIENT_ID, and ENTRA_CLIENT_SECRET"
-        )
+        # Check if we're in FAKE login mode - if so, provide helpful error
+        login_mode = os.getenv('AICT_LOGIN', 'OIDC').upper()
+        if login_mode == 'FAKE':
+            raise ValueError(
+                "EntraID provider initialization attempted in FAKE login mode. "
+                "This should not happen - check application startup logic."
+            )
+        else:
+            raise ValueError(
+                "Missing required EntraID configuration for OIDC authentication. "
+                "Set ENTRA_TENANT_ID, ENTRA_CLIENT_ID, and ENTRA_CLIENT_SECRET environment variables."
+            )
     
     # Determine token type
     token_type_str = os.getenv("ENTRA_TOKEN_TYPE", "ID_TOKEN").upper()
