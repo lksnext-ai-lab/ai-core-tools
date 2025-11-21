@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai-core-tools"
-version = "0.3.7"
+version = "0.3.8"
 description = "Mattin AI is a comprehensive AI toolbox that provides a wide range of artificial intelligence capabilities and tools."
 authors = ["Aritz Galdos", "Mikel Lonbide"]
 readme = "README.md"
