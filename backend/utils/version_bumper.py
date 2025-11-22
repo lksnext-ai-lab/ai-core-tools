@@ -21,7 +21,7 @@ class InvalidVersionError(VersionBumperError):
     """Raised when version format is invalid"""
     pass
 
-class FileNotFoundError(VersionBumperError):
+class ProjectFileNotFoundError(VersionBumperError):
     """Raised when pyproject.toml is not found"""
     pass
 
@@ -133,14 +133,14 @@ def read_current_version() -> str:
         Current version string
         
     Raises:
-        FileNotFoundError: If pyproject.toml is not found
+        ProjectFileNotFoundError: If pyproject.toml is not found
         InvalidVersionError: If version is not found in pyproject.toml
     """
     try:
         pyproject_path = get_project_root() / "pyproject.toml"
         
         if not pyproject_path.exists():
-            raise FileNotFoundError(
+            raise ProjectFileNotFoundError(
                 f"pyproject.toml not found at {pyproject_path}"
             )
         
@@ -174,14 +174,14 @@ def write_new_version(new_version: str) -> None:
         new_version: New version string to write
         
     Raises:
-        FileNotFoundError: If pyproject.toml is not found
+        ProjectFileNotFoundError: If pyproject.toml is not found
         InvalidVersionError: If version location is not found in pyproject.toml
     """
     try:
         pyproject_path = get_project_root() / "pyproject.toml"
         
         if not pyproject_path.exists():
-            raise FileNotFoundError(
+            raise ProjectFileNotFoundError(
                 f"pyproject.toml not found at {pyproject_path}"
             )
         
