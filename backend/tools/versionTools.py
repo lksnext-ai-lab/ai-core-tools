@@ -3,7 +3,6 @@ LangChain tools for version management.
 Provides tools for reading and bumping semantic versions in the project.
 """
 from langchain_core.tools import tool
-from typing import Literal
 from utils.version_bumper import (
     read_current_version,
     bump_project_version,

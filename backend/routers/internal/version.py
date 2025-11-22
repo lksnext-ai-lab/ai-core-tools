@@ -48,7 +48,7 @@ async def get_app_version(
                     summary="Bump application version",
                     tags=["System"],
                     response_model=VersionBumpResponseSchema,
-                    status_code=status.HTTP_200_OK)
+                    status_code=status.HTTP_200_OK)  # 200 OK: updating existing version field, not creating new resource
 async def bump_app_version(
     request: VersionBumpRequestSchema,
     version_service: VersionService = Depends(get_version_service)
@@ -60,6 +60,9 @@ async def bump_app_version(
     - **patch**: For backward-compatible bug fixes (0.3.7 -> 0.3.8)
     - **minor**: For new backward-compatible features (0.3.7 -> 0.4.0)
     - **major**: For incompatible API changes (0.3.7 -> 1.0.0)
+    
+    Returns 200 OK as this is an update operation on an existing version field,
+    not creation of a new resource (which would be 201 Created).
     
     Requires authentication and appropriate permissions.
     """

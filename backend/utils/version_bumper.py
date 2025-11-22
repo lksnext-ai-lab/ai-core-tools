@@ -188,7 +188,10 @@ def write_new_version(new_version: str) -> None:
         with open(pyproject_path, "r") as f:
             pyproject = toml.load(f)
         
-        # Update version in appropriate location
+        # Update version in appropriate location(s)
+        # Note: If both Poetry and PEP 621 formats exist, both are updated
+        # to maintain consistency. This is the expected behavior for projects
+        # that support multiple packaging tools.
         version_updated = False
         
         if "tool" in pyproject and "poetry" in pyproject["tool"]:
