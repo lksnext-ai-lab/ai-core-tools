@@ -257,7 +257,7 @@ class Agent(Base):
 
 ### Schema Example (Pydantic)
 ```python
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -270,8 +270,9 @@ class AgentCreate(AgentBase):
     service_id: Optional[int] = None
     app_id: int
     
-    @validator('name')
-    def name_must_not_be_empty(cls, v):
+    @field_validator('name')
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError('Name cannot be empty')
         return v
@@ -282,8 +283,7 @@ class AgentResponse(AgentBase):
     service_id: Optional[int] = None
     app_id: int
     
-    class Config:
-        from_attributes = True  # Pydantic v2: replaces orm_mode from v1 (changed in 2023)
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 standard
 ```
 
 ### Repository Example
