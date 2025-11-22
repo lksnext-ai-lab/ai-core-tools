@@ -283,7 +283,7 @@ class AgentResponse(AgentBase):
     app_id: int
     
     class Config:
-        from_attributes = True  # Replaces orm_mode in Pydantic v2
+        from_attributes = True  # Pydantic v2: replaces orm_mode from v1 (changed in 2023)
 ```
 
 ### Repository Example
@@ -348,20 +348,20 @@ class AgentService:
         agent = AgentRepository.get_by_id(db, agent_id)
         if not agent:
             return None
-        return AgentResponse.from_orm(agent)
+        return AgentResponse.model_validate(agent)  # Pydantic v2
     
     def get_agents_by_app(self, db: Session, app_id: int) -> List[AgentResponse]:
         """Get all agents for an app"""
         agents = AgentRepository.get_by_app_id(db, app_id)
-        return [AgentResponse.from_orm(agent) for agent in agents]
+        return [AgentResponse.model_validate(agent) for agent in agents]  # Pydantic v2
     
     def create_agent(self, db: Session, agent_data: AgentCreate) -> AgentResponse:
         """Create new agent with validation"""
         # Business logic here (validation, transformations, etc.)
         
-        agent = Agent(**agent_data.dict())
+        agent = Agent(**agent_data.model_dump())  # Pydantic v2: use model_dump()
         created_agent = AgentRepository.create(db, agent)
-        return AgentResponse.from_orm(created_agent)
+        return AgentResponse.model_validate(created_agent)  # Pydantic v2
     
     def update_agent(
         self, 
@@ -375,11 +375,11 @@ class AgentService:
             return None
         
         # Update fields
-        for key, value in agent_data.dict(exclude_unset=True).items():
+        for key, value in agent_data.model_dump(exclude_unset=True).items():  # Pydantic v2
             setattr(agent, key, value)
         
         updated_agent = AgentRepository.update(db, agent)
-        return AgentResponse.from_orm(updated_agent)
+        return AgentResponse.model_validate(updated_agent)  # Pydantic v2
     
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
@@ -679,10 +679,11 @@ app = FastAPI(lifespan=lifespan)
 
 ### SQLAlchemy Async Session
 ```python
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-ASYNC_DATABASE_URL = "postgresql+psycopg://user:pass@localhost/db"
+ASYNC_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://user:pass@localhost/db")
 async_engine = create_async_engine(ASYNC_DATABASE_URL)
 AsyncSessionLocal = sessionmaker(
     async_engine, 
