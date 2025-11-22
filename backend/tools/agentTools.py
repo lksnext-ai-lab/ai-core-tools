@@ -5,6 +5,8 @@ from models.silo import Silo, SiloType
 from langchain_core.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
+from tools.ai.dateTimeTools import get_current_date
+from tools.ai.fileTools import fetch_file_in_base64
 from typing import Any, Optional, Dict, List
 from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
@@ -19,9 +21,7 @@ from langchain.callbacks.tracers import LangChainTracer
 from langsmith import Client
 from langsmith.run_helpers import traceable
 import json
-import base64
 import asyncio
-from datetime import datetime
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 
@@ -513,13 +513,3 @@ def get_retriever_tool(silo: Silo, search_params=None):
         )
     return None
 
-@tool
-def get_current_date():
-    """This tool is useful to get the current date."""
-    return datetime.now().strftime("%Y-%m-%d")
-
-@tool
-def fetch_file_in_base64(file_path: str):
-    """This tool is useful to get the file in base64 format."""
-    with open(file_path, "rb") as file:
-        return base64.b64encode(file.read()).decode("utf-8")
