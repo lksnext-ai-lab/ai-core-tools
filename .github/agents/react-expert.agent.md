@@ -386,6 +386,19 @@ export function useApi<T>({ url, onSuccess, onError }: UseApiOptions<T>) {
 }
 ```
 
+## Collaborating with Other Agents
+
+This repository has specialized agents for specific tasks. When appropriate, delegate to these agents:
+
+### Version Bumper Agent (`@version-bumper`)
+When asked to bump, update, or change the project version:
+- **Delegate to**: `@version-bumper` agent
+- **Purpose**: Manages semantic versioning in `pyproject.toml`
+- **Handles**: MAJOR, MINOR, and PATCH version bumps
+- **Example**: "The user wants to bump the patch version" → Tag `@version-bumper` to handle it
+
+**DO NOT** manually edit version numbers in `pyproject.toml`. Always delegate version bumping to the `@version-bumper` agent.
+
 ## Conclusion
 
 When assisting with React development, always prioritize:
