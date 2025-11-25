@@ -397,19 +397,19 @@ Type the app name to confirm: "${app.name}"`;
                 actions={[
                   {
                     label: 'Open Dashboard',
-                    onClick: () => { window.location.href = `/apps/${app.app_id}`; },
+                    onClick: () => { globalThis.location.href = `/apps/${app.app_id}`; },
                     icon: '📊',
                     variant: 'primary'
                   },
                   {
                     label: 'Manage Agents',
-                    onClick: () => { window.location.href = `/apps/${app.app_id}/agents`; },
+                    onClick: () => { globalThis.location.href = `/apps/${app.app_id}/agents`; },
                     icon: '🤖',
                     variant: 'secondary'
                   },
                   {
                     label: 'App Settings',
-                    onClick: () => { window.location.href = `/apps/${app.app_id}/settings`; },
+                    onClick: () => { globalThis.location.href = `/apps/${app.app_id}/settings`; },
                     icon: '⚙️',
                     variant: 'secondary'
                   },

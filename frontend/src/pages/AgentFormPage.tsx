@@ -139,7 +139,7 @@ function AgentFormPage() {
               className="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
             >
               <span className="mr-2">⚙️</span>
-              Configure AI Services
+              {' '}Configure AI Services
             </button>
           </div>
         </div>
@@ -293,7 +293,7 @@ function AgentFormPage() {
     }
   };
 
-  const isNewAgent = parseInt(agentId || '0') === 0;
+  const isNewAgent = Number.parseInt(agentId || '0') === 0;
 
   if (loading) {
     return (
@@ -496,7 +496,7 @@ function AgentFormPage() {
                     min="1"
                     max="100"
                     value={formData.memory_max_messages}
-                    onChange={(e) => handleInputChange('memory_max_messages', parseInt(e.target.value))}
+                    onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
                   <p className="text-xs text-gray-500 mt-2">
@@ -515,7 +515,7 @@ function AgentFormPage() {
                     max="32000"
                     step="100"
                     value={formData.memory_max_tokens}
-                    onChange={(e) => handleInputChange('memory_max_tokens', parseInt(e.target.value))}
+                    onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
                   <p className="text-xs text-gray-500 mt-2">
@@ -616,7 +616,7 @@ function AgentFormPage() {
               </div>
               
               {/* No AI Services Warning */}
-              {agent && agent.ai_services.length === 0 && renderNoAIServicesWarning(true)}
+              {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
 
               <div className="space-y-6">
                 <div>

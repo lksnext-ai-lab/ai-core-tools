@@ -14,11 +14,30 @@ interface Conversation {
 }
 
 interface ConversationSidebarProps {
-  agentId: number;
-  currentConversationId?: number | null;
-  onConversationSelect: (conversationId: number) => void;
-  onNewConversation: () => void;
-  onReloadRequest?: () => void;
+  readonly agentId: number;
+  readonly currentConversationId?: number | null;
+  readonly onConversationSelect: (conversationId: number) => void;
+  readonly onNewConversation: () => void;
+  readonly onReloadRequest?: () => void;
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Ahora';
+  if (diffMins < 60) return `Hace ${diffMins}m`;
+  if (diffHours < 24) return `Hace ${diffHours}h`;
+  if (diffDays < 7) return `Hace ${diffDays}d`;
+
+  return date.toLocaleDateString('es-ES', { 
+    day: 'numeric', 
+    month: 'short' 
+  });
 }
 
 export default function ConversationSidebar({
@@ -86,25 +105,6 @@ export default function ConversationSidebar({
       console.error('Error updating conversation title:', err);
       alert('Error al actualizar título');
     }
-  }
-
-  function formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Ahora';
-    if (diffMins < 60) return `Hace ${diffMins}m`;
-    if (diffHours < 24) return `Hace ${diffHours}h`;
-    if (diffDays < 7) return `Hace ${diffDays}d`;
-    
-    return date.toLocaleDateString('es-ES', { 
-      day: 'numeric', 
-      month: 'short' 
-    });
   }
 
   if (isCollapsed) {

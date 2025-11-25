@@ -67,7 +67,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         enabled: true,
         authority: config.authProps.oidc.authority,
         clientId: config.authProps.oidc.client_id,
-        redirectUri: `${window.location.origin}${config.authProps.oidc.callbackPath || '/callback'}`,
+        redirectUri: `${globalThis.location.origin}${config.authProps.oidc.callbackPath || '/callback'}`,
         scope: config.authProps.oidc.scope || 'openid profile email'
       } : undefined
     } : { type: 'session' as const },
