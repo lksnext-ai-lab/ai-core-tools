@@ -275,7 +275,6 @@ function CollaborationPage() {
   };
 
   const isOwner = currentUserRole === 'owner';
-  const isAdmin = currentUserRole === 'administrator';
 
   if (loading) {
     return (
@@ -315,26 +314,6 @@ function CollaborationPage() {
         </div>
       </div>
     );
-  } else if (isAdmin) {
-    inviteCollaboratorSection = (
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <span className="text-purple-400 text-xl">ℹ️</span>
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-purple-800">
-              Administrator Access
-            </h3>
-            <div className="mt-2 text-sm text-purple-700">
-              <p>
-                You have administrator access to this app. Only the app owner can manage collaborators.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   } else {
     inviteCollaboratorSection = (
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -344,11 +323,11 @@ function CollaborationPage() {
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-yellow-800">
-              Editor Access
+              Collaborator Access
             </h3>
             <div className="mt-2 text-sm text-yellow-700">
               <p>
-                You have editor access to this app. Only the app owner can invite new collaborators.
+                You have collaborator access to this app. Only the app owner can invite new collaborators.
               </p>
             </div>
           </div>
