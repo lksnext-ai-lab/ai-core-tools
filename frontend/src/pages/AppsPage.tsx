@@ -422,7 +422,7 @@ Type the app name to confirm: "${app.name}"`;
                     icon: '⚙️',
                     variant: 'secondary'
                   },
-                  ...(app.role === 'editor' ? [{
+                  ...(app.role !== 'owner' ? [{
                     label: 'Leave App',
                     onClick: () => handleLeaveApp(app),
                     icon: '🚪',
