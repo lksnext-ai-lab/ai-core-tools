@@ -186,8 +186,11 @@ function CollaborationPage() {
         const myCollaboration = response.find((c: Collaborator) => c.user_id === user?.user_id);
         if (myCollaboration?.role === 'administrator') {
           setCurrentUserRole('administrator');
-        } else {
+        } else if (myCollaboration?.role === 'editor') {
           setCurrentUserRole('editor');
+        }
+        else {
+          setCurrentUserRole('viewer');
         }
       }
     } catch (err) {
@@ -264,6 +267,8 @@ function CollaborationPage() {
         return 'bg-indigo-100 text-indigo-800';
       case 'editor':
         return 'bg-blue-100 text-blue-800';
+      case 'viewer':
+        return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }

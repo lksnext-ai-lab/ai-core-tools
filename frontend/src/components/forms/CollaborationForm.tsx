@@ -48,7 +48,6 @@ function CollaborationForm({
     }
   };
 
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Error Message */}
@@ -82,12 +81,15 @@ function CollaborationForm({
           >
             <option value="editor">Editor</option>
             <option value="administrator">Administrador</option>
+            <option value="viewer">Viewer</option>
           </select>
-          <div className="text-sm text-gray-600 mt-2">
-            {role === "editor"
-              ? "Editors can view and edit app content, agents, and settings. They cannot invite other users or manage collaborators."
-              : "Administrators have same benefits as owners but can change the role of other collaborators."}
-          </div>
+            <div className="text-sm text-gray-600 mt-2">
+              {(() => {
+                if (role === "editor") return "Editors can view and edit app content, agents, and settings. They cannot invite other users or manage collaborators.";
+                if (role === "administrator") return "Administrators have same benefits as owners but can change the role of other collaborators.";
+                return "Viewers can view app content and analytics but cannot modify settings or manage collaborators.";
+              })()}
+            </div>
         </div>
 
 

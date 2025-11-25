@@ -253,11 +253,20 @@ Type the app name to confirm: "${app.name}"`;
                   </span>
                 );
               }
-              return (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                  {' '}Editor
+              if (app.role === 'editor') {              
+                return (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    {' '}Editor
                 </span>
-              );
+                );
+              }
+              if (app.role === 'viewer') {              
+                return (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    {' '}Viewer
+                </span>
+                );
+              }
             }
           },
           {
