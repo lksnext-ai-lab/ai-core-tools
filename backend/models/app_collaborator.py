@@ -10,6 +10,7 @@ class CollaborationRole(enum.Enum):
     EDITOR = "editor"
     VIEWER = "viewer"
 
+
 class CollaborationStatus(enum.Enum):
     PENDING = "pending"
     ACCEPTED = "accepted"
