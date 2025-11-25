@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 
 export interface ActionItem {
   label: string;
@@ -40,11 +40,9 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     if (!open && onClose) onClose();
   } : setInternalIsOpen;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isOpen && !position) {
-      setTimeout(() => {
-        setDropdownStyle(calculateRegularDropdownStyle());
-      }, 0);
+      setDropdownStyle(calculateRegularDropdownStyle());
     }
   }, [isOpen, position]);
 
@@ -196,6 +194,16 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     setIsOpen(!isOpen);
   };
 
+  const getDropdownStyle = () => {
+    if (position) {
+      return calculateDropdownStyle();
+    }
+    if (Object.keys(dropdownStyle).length > 0) {
+      return dropdownStyle;
+    }
+    return { position: 'fixed', visibility: 'hidden' } as React.CSSProperties;
+  };
+
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
       {/* Trigger Button - only show if no external position */}
@@ -225,7 +233,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
         <div 
           ref={menuRef}
           className="w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
-          style={position ? calculateDropdownStyle() : dropdownStyle}
+          style={getDropdownStyle()}
         >
           <div className="py-1">
             {actions.map((action, index) => (
