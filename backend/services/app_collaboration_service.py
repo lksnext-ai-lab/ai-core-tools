@@ -188,7 +188,16 @@ class AppCollaborationService:
         try:
             collaboration = self.repo.get_collaboration_by_id(invitation_id)
             
-            if not collaboration or collaboration.user_id != user_id or collaboration.status != CollaborationStatus.PENDING:
+            if not collaboration:
+                logger.warning(f"Invitation {invitation_id} not found")
+                return False
+            
+            if int(collaboration.user_id) != int(user_id):
+                logger.warning(f"Invitation {invitation_id} belongs to user {collaboration.user_id}, not {user_id}")
+                return False
+                
+            if collaboration.status != CollaborationStatus.PENDING:
+                logger.warning(f"Invitation {invitation_id} status is {collaboration.status}, not PENDING")
                 return False
             
             update_data = {}
@@ -200,6 +209,7 @@ class AppCollaborationService:
             elif action == 'decline':
                 update_data = {'status': CollaborationStatus.DECLINED}
             else:
+                logger.warning(f"Invalid action {action} for invitation {invitation_id}")
                 return False
             
             self.repo.update_collaboration(collaboration, update_data)

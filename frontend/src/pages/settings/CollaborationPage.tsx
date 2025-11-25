@@ -75,7 +75,7 @@ function CollaborationPage() {
     
     try {
       // Get app data to find owner info
-      const appData = await apiService.getApp(parseInt(appId));
+      const appData = await apiService.getApp(Number.parseInt(appId));
       const ownerId = appData.owner_id;
       const ownerEmail = appData.owner_email;
       const ownerName = appData.owner_name;
@@ -182,7 +182,7 @@ function CollaborationPage() {
         setCurrentUserRole('owner');
       } else {
         // Check if user is administrator by getting collaborators
-        const response = await apiService.getCollaborators(parseInt(appId));
+        const response = await apiService.getCollaborators(Number.parseInt(appId));
         const myCollaboration = response.find((c: Collaborator) => c.user_id === user?.user_id);
         if (myCollaboration?.role === 'administrator') {
           setCurrentUserRole('administrator');
@@ -477,6 +477,7 @@ function CollaborationPage() {
                         >
                           <option value="editor">Editor</option>
                           <option value="administrator">Administrator</option>
+                          <option value="viewer">Viewer</option>
                         </select>
                       )}
                       {member.role !== 'owner' && (

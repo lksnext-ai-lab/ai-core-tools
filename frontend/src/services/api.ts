@@ -99,11 +99,11 @@ class ApiService {
   }
 
   async getPendingInvitations() {
-    return this.request('/auth/pending-invitations');
+    return this.request('/internal/auth/pending-invitations');
   }
 
   async respondToInvitation(invitationId: number, action: 'accept' | 'decline') {
-    return this.request(`/auth/invitations/${invitationId}/respond`, {
+    return this.request(`/internal/auth/invitations/${invitationId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ action }),
     });

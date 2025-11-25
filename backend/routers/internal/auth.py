@@ -9,11 +9,17 @@ import os
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import List, Optional
+from datetime import datetime
 from db.database import get_db
 from services.user_service import UserService
+from services.app_collaboration_service import AppCollaborationService
 from utils.dev_auth import generate_dev_token
 from utils.auth_config import AuthConfig
 from utils.logger import get_logger
+from lks_idprovider import AuthContext
+from .auth_utils import get_current_user_oauth
+from schemas.apps_schemas import InvitationResponseSchema
 
 logger = get_logger(__name__)
 
@@ -34,6 +40,76 @@ class DevLoginResponse(BaseModel):
     expires_at: str
     token_type: str
     user: dict
+
+
+class PendingInvitationSchema(BaseModel):
+    """Schema for pending invitations"""
+    id: int
+    app_id: int
+    app_name: str
+    inviter_email: str
+    inviter_name: Optional[str]
+    invited_at: datetime
+    role: str
+
+
+@router.get(
+    "/pending-invitations",
+    response_model=List[PendingInvitationSchema],
+    summary="Get pending invitations",
+    description="Get all pending collaboration invitations for the current user",
+)
+async def get_pending_invitations(
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+):
+    """Get pending invitations for the current user"""
+    user_id = auth_context.identity.id
+    collaboration_service = AppCollaborationService(db)
+    
+    invitations = collaboration_service.get_user_pending_invitations(user_id)
+    
+    result = []
+    for inv in invitations:
+        result.append(PendingInvitationSchema(
+            id=inv.id,
+            app_id=inv.app_id,
+            app_name=inv.app.name if inv.app else "Unknown App",
+            inviter_email=inv.inviter.email if inv.inviter else "Unknown",
+            inviter_name=inv.inviter.name if inv.inviter else "Unknown",
+            invited_at=inv.invited_at,
+            role=inv.role.value
+        ))
+    
+    return result
+
+
+@router.post(
+    "/invitations/{invitation_id}/respond",
+    summary="Respond to invitation",
+    description="Accept or decline a collaboration invitation",
+)
+async def respond_to_invitation(
+    invitation_id: int,
+    response: InvitationResponseSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+):
+    """Respond to a collaboration invitation"""
+    user_id = auth_context.identity.id
+    collaboration_service = AppCollaborationService(db)
+    
+    success = collaboration_service.respond_to_invitation(
+        invitation_id, user_id, response.action
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to respond to invitation. It may not exist, belong to you, or be pending."
+        )
+    
+    return {"success": True, "message": f"Invitation {response.action}ed successfully"}
 
 
 @router.post(
