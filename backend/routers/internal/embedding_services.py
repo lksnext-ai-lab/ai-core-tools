@@ -10,6 +10,7 @@ from schemas.embedding_service_schemas import (
     CreateUpdateEmbeddingServiceSchema
 )
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database dependency
 from db.database import get_db
@@ -36,14 +37,12 @@ embedding_services_router = APIRouter()
 async def list_embedding_services(
     app_id: int, 
     db: Session = Depends(get_db),
+    role: AppRole = Depends(require_min_role("viewer")),
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     List all embedding services for a specific app.
     """
-    user_id = int(auth_context.identity.id)
-    
-    # TODO: Add app access validation
     
     try:
         return EmbeddingServiceService.get_embedding_services_list(db, app_id)
@@ -63,14 +62,12 @@ async def get_embedding_service(
     app_id: int, 
     service_id: int, 
     db: Session = Depends(get_db),
+    role: AppRole = Depends(require_min_role("administrator")),
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Get detailed information about a specific embedding service.
     """
-    user_id = int(auth_context.identity.id)
-    
-    # TODO: Add app access validation
     
     try:
         service_detail = EmbeddingServiceService.get_embedding_service_detail(db, app_id, service_id)
@@ -101,12 +98,12 @@ async def create_or_update_embedding_service(
     service_id: int,
     service_data: CreateUpdateEmbeddingServiceSchema,
     db: Session = Depends(get_db),
+    role: AppRole = Depends(require_min_role("administrator")),
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Create a new embedding service or update an existing one.
-    """    
-    # TODO: Add app access validation
+    """
     
     try:
         service = EmbeddingServiceService.create_or_update_embedding_service(
@@ -138,13 +135,12 @@ async def delete_embedding_service(
     app_id: int, 
     service_id: int, 
     db: Session = Depends(get_db),
+    role: AppRole = Depends(require_min_role("administrator")),
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """
     Delete an embedding service.
     """
-    
-    # TODO: Add app access validation
     
     try:
         success = EmbeddingServiceService.delete_embedding_service(db, app_id, service_id)
