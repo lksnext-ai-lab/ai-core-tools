@@ -107,6 +107,104 @@ export default function ConversationSidebar({
     }
   }
 
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="p-4 text-center text-red-600">
+          <p>{error}</p>
+          <button 
+            onClick={loadConversations}
+            className="mt-2 text-sm text-blue-600 hover:underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+
+    if (conversations.length === 0) {
+      return (
+        <div className="p-6 text-center text-gray-500">
+          <svg className="w-16 h-16 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <p className="text-sm">No hay conversaciones aún</p>
+          <p className="text-xs text-gray-400 mt-1">Crea una nueva para empezar</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="divide-y divide-gray-200">
+        {conversations.map((conversation) => {
+          const isActive = conversation.conversation_id === currentConversationId;
+          const isDeleteConfirming = deleteConfirm === conversation.conversation_id;
+
+          return (
+            <button
+              key={conversation.conversation_id}
+              onClick={() => onConversationSelect(conversation.conversation_id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  onConversationSelect(conversation.conversation_id);
+                }
+              }}
+              className={`w-full text-left p-4 cursor-pointer transition-colors ${
+                isActive 
+                  ? 'bg-blue-50 border-l-4 border-blue-600' 
+                  : 'hover:bg-gray-100 border-l-4 border-transparent'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h4 className={`text-sm font-medium truncate ${
+                    isActive ? 'text-blue-900' : 'text-gray-900'
+                  }`}>
+                    {conversation.title}
+                  </h4>
+
+                  {conversation.last_message && (
+                    <p className="text-xs text-gray-500 truncate mt-1">
+                      {conversation.last_message}
+                    </p>
+                  )}
+
+                  <div className="flex items-center space-x-2 mt-2 text-xs text-gray-400">
+                    <span>{formatDate(conversation.updated_at)}</span>
+                    <span>•</span>
+                    <span>{conversation.message_count} mensajes</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
+                  className={`ml-2 p-1 rounded transition-colors ${
+                    isDeleteConfirming 
+                      ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                      : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                  }`}
+                  title={isDeleteConfirming ? 'Clic de nuevo para confirmar' : 'Eliminar conversación'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (isCollapsed) {
     return (
       <div className="w-12 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4">
@@ -157,84 +255,7 @@ export default function ConversationSidebar({
 
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        ) : error ? (
-          <div className="p-4 text-center text-red-600">
-            <p>{error}</p>
-            <button 
-              onClick={loadConversations}
-              className="mt-2 text-sm text-blue-600 hover:underline"
-            >
-              Reintentar
-            </button>
-          </div>
-        ) : conversations.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">
-            <svg className="w-16 h-16 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <p className="text-sm">No hay conversaciones aún</p>
-            <p className="text-xs text-gray-400 mt-1">Crea una nueva para empezar</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {conversations.map((conversation) => {
-              const isActive = conversation.conversation_id === currentConversationId;
-              const isDeleteConfirming = deleteConfirm === conversation.conversation_id;
-              
-              return (
-                <div
-                  key={conversation.conversation_id}
-                  onClick={() => onConversationSelect(conversation.conversation_id)}
-                  className={`p-4 cursor-pointer transition-colors ${
-                    isActive 
-                      ? 'bg-blue-50 border-l-4 border-blue-600' 
-                      : 'hover:bg-gray-100 border-l-4 border-transparent'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h4 className={`text-sm font-medium truncate ${
-                        isActive ? 'text-blue-900' : 'text-gray-900'
-                      }`}>
-                        {conversation.title}
-                      </h4>
-                      
-                      {conversation.last_message && (
-                        <p className="text-xs text-gray-500 truncate mt-1">
-                          {conversation.last_message}
-                        </p>
-                      )}
-                      
-                      <div className="flex items-center space-x-2 mt-2 text-xs text-gray-400">
-                        <span>{formatDate(conversation.updated_at)}</span>
-                        <span>•</span>
-                        <span>{conversation.message_count} mensajes</span>
-                      </div>
-                    </div>
-                    
-                    <button
-                      onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
-                      className={`ml-2 p-1 rounded transition-colors ${
-                        isDeleteConfirming 
-                          ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                          : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-                      }`}
-                      title={isDeleteConfirming ? 'Clic de nuevo para confirmar' : 'Eliminar conversación'}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {renderContent()}
       </div>
       
       {/* Footer */}
