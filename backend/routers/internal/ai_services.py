@@ -33,7 +33,7 @@ AI_SERVICE_NOT_FOUND_ERROR = "AI service not found"
 async def list_ai_services(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -57,7 +57,7 @@ async def get_ai_service(
     app_id: int, 
     service_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
