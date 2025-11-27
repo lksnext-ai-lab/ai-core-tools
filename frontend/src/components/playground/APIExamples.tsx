@@ -21,7 +21,7 @@ function APIExamples({ appId, agentId, agentName, agentType = 'agent', hasSilo =
   const [selectedExample, setSelectedExample] = useState('curl');
 
   const baseUrl = window.location.origin; // Use current domain
-  const endpoint = `${baseUrl}/public/v1/app/${appId}/call/${agentId}`;
+  const endpoint = `${baseUrl}/public/v1/app/${appId}/chat/${agentId}/call`;
 
   // Generate request body based on agent capabilities
   const getRequestBodyExample = () => {
@@ -83,10 +83,13 @@ function APIExamples({ appId, agentId, agentName, agentType = 'agent', hasSilo =
 
   const capabilityComments = getCapabilityComments();
 
+  // Generate Windows-compatible JSON (escape double quotes)
+  const requestBodyJsonWindows = requestBodyJson.replace(/"/g, '\\"');
+
   const examples: CodeExample[] = [
     {
       id: 'curl',
-      title: 'cURL',
+      title: 'cURL (Linux/Mac)',
       language: 'bash',
       code: `${capabilityComments}
 curl -X POST "${endpoint}" \\
@@ -95,8 +98,39 @@ curl -X POST "${endpoint}" \\
   -d '${requestBodyJson}'
 
 # Reset conversation
-curl -X POST "${baseUrl}/public/v1/app/${appId}/reset/${agentId}" \\
+curl -X POST "${baseUrl}/public/v1/app/${appId}/chat/${agentId}/reset" \\
   -H "X-API-KEY: your-api-key"`
+    },
+    {
+      id: 'curl-windows',
+      title: 'cURL (Windows)',
+      language: 'powershell',
+      code: `${capabilityComments.replace(/# /g, '# ')}
+# PowerShell requires curl.exe (not the curl alias)
+curl.exe -X POST "${endpoint}" ^
+  -H "X-API-KEY: your-api-key" ^
+  -H "Content-Type: application/json" ^
+  -d "${requestBodyJsonWindows}"
+
+# Reset conversation
+curl.exe -X POST "${baseUrl}/public/v1/app/${appId}/chat/${agentId}/reset" ^
+  -H "X-API-KEY: your-api-key"
+
+# Alternative: Using PowerShell native Invoke-RestMethod
+$headers = @{
+    "X-API-KEY" = "your-api-key"
+    "Content-Type" = "application/json"
+}
+
+$body = @{
+    message = "Your question here"
+    conversation_id = "optional-conversation-id"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "${endpoint}" -Method POST -Headers $headers -Body $body
+
+# Reset conversation (PowerShell)
+Invoke-RestMethod -Uri "${baseUrl}/public/v1/app/${appId}/chat/${agentId}/reset" -Method POST -Headers @{"X-API-KEY" = "your-api-key"}`
     },
     {
       id: 'python',
@@ -113,7 +147,7 @@ AGENT_ID = ${agentId}
 
 def call_agent(message, conversation_id=None${hasSilo ? ', search_params=None' : ''}${agentType === 'ocr_agent' ? ', attachments=None' : ''}):
     """Call ${agentName}${agentType === 'ocr_agent' ? ' (OCR Agent)' : hasSilo ? ' (RAG-enabled)' : ''}"""
-    url = f"{BASE_URL}/public/v1/app/{APP_ID}/call/{AGENT_ID}"
+    url = f"{BASE_URL}/public/v1/app/{APP_ID}/chat/{AGENT_ID}/call"
     
     headers = {
         "X-API-KEY": API_KEY,
@@ -182,7 +216,7 @@ const AGENT_ID = ${agentId};
  * Call ${agentName}${agentType === 'ocr_agent' ? ' (OCR Agent)' : hasSilo ? ' (RAG-enabled)' : ''}
  */
 async function callAgent(message, options = {}) {
-  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/call/\${AGENT_ID}\`;
+  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/chat/\${AGENT_ID}/call\`;
   
   const payload = { message };
   
@@ -223,7 +257,7 @@ async function callAgent(message, options = {}) {
  * Reset conversation for ${agentName}
  */
 async function resetConversation() {
-  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/reset/\${AGENT_ID}\`;
+  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/chat/\${AGENT_ID}/reset\`;
   
   try {
     const response = await fetch(url, {
@@ -289,7 +323,7 @@ const AGENT_ID = ${agentId};
  * Call ${agentName}${agentType === 'ocr_agent' ? ' (OCR Agent)' : hasSilo ? ' (RAG-enabled)' : ''}
  */
 async function callAgent(message, options = {}) {
-  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/call/\${AGENT_ID}\`;
+  const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/chat/\${AGENT_ID}/call\`;
   
   const payload = { message };
   
