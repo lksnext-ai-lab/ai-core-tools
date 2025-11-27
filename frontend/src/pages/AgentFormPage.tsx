@@ -198,7 +198,7 @@ function AgentFormPage() {
         service_id: response.service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
-        temperature: response.temperature || DEFAULT_AGENT_TEMPERATURE,
+        temperature: response.temperature ?? DEFAULT_AGENT_TEMPERATURE,
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         // OCR-specific fields
