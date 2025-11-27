@@ -1,87 +1,134 @@
+# ============================================================================
+# MATTIN AI - Docker Compose
+# ============================================================================
+# Inicio rápido:
+#   1. cp .env.docker.example .env
+#   2. Edita .env con tus claves de API
+#   3. docker-compose up -d
+#
+# Servicios:
+#   - Backend (FastAPI): http://localhost:8000
+#   - Frontend (React):  http://localhost:3000
+#   - PostgreSQL:        localhost:5432
+# ============================================================================
+
 services:
-
-  # Backend FastAPI service
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: ia-core-tools-backend
-    ports:
-      - "8000:8000"
-    environment:
-      - SQLALCHEMY_DATABASE_URI=postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - DATABASE_USER=${DATABASE_USER}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
-      - DATABASE_NAME=${DATABASE_NAME}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - AICT_OMNIADMINS=${AICT_OMNIADMINS}
-      - AICT_MODE=${AICT_MODE}
-      - OIDC_ENABLED=${OIDC_ENABLED}
-      - JWT_ALGORITHM=${JWT_ALGORITHM}
-      - JWT_EXPIRATION_HOURS=${JWT_EXPIRATION_HOURS}
-      - REPO_BASE_FOLDER=${REPO_BASE_FOLDER}
-    volumes:
-      - ./backend/data:/aict_backend/data
-      - ./backend/logs:/aict_backend/logs
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-network
-    restart: unless-stopped
-
-  # Frontend React service
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    container_name: ia-core-tools-frontend
-    ports:
-      - "3000:80"
-    environment:
-      - NODE_ENV=production
-      - VITE_API_URL=http://localhost:8000
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    restart: unless-stopped
-
-  # PostgreSQL with pgvector extension
+  # --------------------------------------------------------------------------
+  # PostgreSQL con pgvector
+  # --------------------------------------------------------------------------
   postgres:
     image: pgvector/pgvector:pg17
-    container_name: iacore_postgres
-    ports:
-      - "${DATABASE_PORT:-5432}:5432"
+    container_name: mattin-postgres
     environment:
-      - POSTGRES_DB=${DATABASE_NAME}
-      - POSTGRES_USER=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      POSTGRES_DB: ${DATABASE_NAME:-mattin_ai}
+      POSTGRES_USER: ${DATABASE_USER:-mattin}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-mattin_secure_2024}
+      POSTGRES_INITDB_ARGS: --encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
     networks:
-      app-network:
-        aliases:
-          - postgres
+      - mattin-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-mattin} -d ${DATABASE_NAME:-mattin_ai}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     restart: unless-stopped
 
+  # --------------------------------------------------------------------------
+  # Backend FastAPI
+  # --------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mattin-backend
+    environment:
+      # Database - usa el servicio postgres de Docker
+      SQLALCHEMY_DATABASE_URI: postgresql://${DATABASE_USER:-mattin}:${DATABASE_PASSWORD:-mattin_secure_2024}@postgres:5432/${DATABASE_NAME:-mattin_ai}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: ${DATABASE_USER:-mattin}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-mattin_secure_2024}
+      DATABASE_NAME: ${DATABASE_NAME:-mattin_ai}
+      
+      # Autenticación
+      AICT_LOGIN: ${AICT_LOGIN:-FAKE}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-24}
+      
+      # Entra ID (solo si AICT_LOGIN=OIDC)
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
+      
+      # URLs
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      
+      # Claves API de IA
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      
+      # Configuración de la aplicación
+      AICT_MODE: ${AICT_MODE:-SELF-HOSTED}
+      AICT_OMNIADMINS: ${AICT_OMNIADMINS:-admin@example.com}
+      REPO_BASE_FOLDER: ${REPO_BASE_FOLDER:-./data/repositories}
+      
+      # LangSmith (opcional)
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
+    volumes:
+      - ./backend/data:/aict_backend/data
+      - ./backend/logs:/aict_backend/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mattin-network
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Frontend React (Nginx)
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Variables de build-time para Vite
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: mattin-frontend
+    environment:
+      # Variables de runtime (para generate-config.sh)
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+      VITE_OIDC_ENABLED: ${VITE_OIDC_ENABLED:-false}
+      VITE_OIDC_AUTHORITY: ${VITE_OIDC_AUTHORITY:-}
+      VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:-}
+      VITE_OIDC_REDIRECT_URI: ${VITE_OIDC_REDIRECT_URI:-http://localhost:3000/auth/success}
+      VITE_OIDC_SCOPE: ${VITE_OIDC_SCOPE:-openid profile email}
+      VITE_OIDC_AUDIENCE: ${VITE_OIDC_AUDIENCE:-}
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - mattin-network
+    restart: unless-stopped
+
+# ----------------------------------------------------------------------------
+# Redes y Volúmenes
+# ----------------------------------------------------------------------------
 networks:
-  app-network:
+  mattin-network:
     driver: bridge
 
 volumes:

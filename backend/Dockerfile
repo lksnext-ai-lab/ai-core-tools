@@ -1,4 +1,12 @@
-# Multi-stage build para reducir tamaño final
+# ============================================================================
+# MATTIN AI - Backend Dockerfile
+# ============================================================================
+# Multi-stage build para optimizar el tamaño de la imagen
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Stage 1: Builder (instalar dependencias)
+# ----------------------------------------------------------------------------
 FROM python:3.11-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,32 +24,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar Poetry con la versión que funciona
+# Instalar Poetry
 RUN pip install --no-cache-dir "poetry>=1.4.0,<2.0.0"
 
-COPY pyproject.toml ./
-COPY poetry.lock ./
+# Copiar archivos de dependencias
+COPY pyproject.toml poetry.lock ./
 
-# Generar requirements.txt usando Poetry y crear ambiente virtual limpio
+# Instalar dependencias de producción
 RUN poetry config virtualenvs.create false && \
     poetry install --only=main --no-interaction --no-ansi --no-cache
 
-# Imagen final más pequeña
+# ----------------------------------------------------------------------------
+# Stage 2: Production
+# ----------------------------------------------------------------------------
 FROM python:3.11-slim
+
+# Metadatos
+LABEL maintainer="LKS Next"
+LABEL description="Mattin AI Backend API"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/aict_backend
 
-ENV AICT_MODE=SELF-HOSTED \
-    OIDC_ENABLED=true \
-    JWT_ALGORITHM=HS256 \
-    JWT_EXPIRATION_HOURS=24 \
-    FRONTEND_URL=http://localhost:5173
-
 WORKDIR /aict_backend
 
-# Instalar solo dependencias de runtime necesarias (ordenadas alfabéticamente)
+# Instalar dependencias de runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libmariadb3 \
@@ -54,7 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copiar código de la aplicación (excluding .env files via .dockerignore)
+# Copiar código de la aplicación
 COPY backend/ /aict_backend/
 COPY alembic /alembic/
 COPY alembic.ini /alembic.ini
@@ -70,12 +78,12 @@ RUN mkdir -p /aict_backend/data/repositories \
     find /aict_backend -name "*.pyc" -delete && \
     find /aict_backend -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
+# Puerto expuesto
 EXPOSE 8000
 
-# Healthcheck más eficiente
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
-WORKDIR /aict_backend
-
+# Comando de inicio: ejecutar migraciones y luego la aplicación
 CMD ["sh", "-c", "cd / && python -m alembic upgrade head && cd /aict_backend && python -m uvicorn main:app --host=0.0.0.0 --port=8000 --workers 4 --limit-concurrency 100"]

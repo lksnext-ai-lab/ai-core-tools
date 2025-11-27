@@ -52,9 +52,10 @@ class AuthConfig:
         cls.GOOGLE_DISCOVERY_URL = os.getenv('GOOGLE_DISCOVERY_URL', cls.GOOGLE_DISCOVERY_URL)
         cls.GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', cls.GOOGLE_REDIRECT_URI)
                
-        cls.ENTRAID_CLIENT_ID = os.getenv('ENTRA_CLIENT_ID')
-        cls.ENTRAID_CLIENT_SECRET = os.getenv('ENTRA_CLIENT_SECRET')
-        cls.ENTRAID_TENANT_ID = os.getenv('ENTRA_TENANT_ID')
+        cls.ENTRA_CLIENT_ID = os.getenv('ENTRA_CLIENT_ID')
+        cls.ENTRA_CLIENT_SECRET = os.getenv('ENTRA_CLIENT_SECRET')
+        cls.ENTRA_TENANT_ID = os.getenv('ENTRA_TENANT_ID')
+        cls.ENTRA_REDIRECT_URI = os.getenv('ENTRA_REDIRECT_URI', 'http://localhost:8000/auth/callback')
         # Common Configuration
         cls.FRONTEND_URL = os.getenv('FRONTEND_URL', cls.FRONTEND_URL)
         
@@ -119,7 +120,7 @@ class AuthConfig:
                 logger.info("[OK] Google OAuth is properly configured")
             elif cls.OAUTH_PROVIDER == 'ENTRAID':
                 logger.info("[OK] EntraID (Azure AD) OAuth is properly configured")
-                logger.info(f"   Tenant ID: {cls.ENTRAID_TENANT_ID}")
+                logger.info(f"   Tenant ID: {cls.ENTRA_TENANT_ID}")
         else:
             if not cls.OIDC_ENABLED:
                 logger.warning(f"[WARN] {cls.OAUTH_PROVIDER} OAuth not configured, running in DEVELOPMENT MODE (OIDC_ENABLED=false) with test tokens")
@@ -131,7 +132,7 @@ class AuthConfig:
                 if cls.OAUTH_PROVIDER == 'GOOGLE':
                     logger.error("   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables")
                 elif cls.OAUTH_PROVIDER == 'ENTRAID':
-                    logger.error("   Set ENTRAID_CLIENT_ID, ENTRAID_CLIENT_SECRET, and ENTRAID_TENANT_ID environment variables")
+                    logger.error("   Set ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET, and ENTRA_TENANT_ID environment variables")
                 logger.error("   Or set OIDC_ENABLED=false for development mode testing")
     
     @classmethod
@@ -140,7 +141,7 @@ class AuthConfig:
         if cls.OAUTH_PROVIDER == 'GOOGLE':
             return bool(cls.GOOGLE_CLIENT_ID and cls.GOOGLE_CLIENT_SECRET)
         elif cls.OAUTH_PROVIDER == 'ENTRAID':
-            return bool(cls.ENTRAID_CLIENT_ID and cls.ENTRAID_CLIENT_SECRET and cls.ENTRAID_TENANT_ID)
+            return bool(cls.ENTRA_CLIENT_ID and cls.ENTRA_CLIENT_SECRET and cls.ENTRA_TENANT_ID)
         return False
     
     @classmethod
@@ -176,8 +177,8 @@ class AuthConfig:
         if cls.OAUTH_PROVIDER == 'GOOGLE':
             summary["redirect_uri"] = cls.GOOGLE_REDIRECT_URI
         elif cls.OAUTH_PROVIDER == 'ENTRAID':
-            summary["redirect_uri"] = cls.ENTRAID_REDIRECT_URI
-            summary["tenant_id"] = cls.ENTRAID_TENANT_ID
+            summary["redirect_uri"] = cls.ENTRA_REDIRECT_URI
+            summary["tenant_id"] = cls.ENTRA_TENANT_ID
         
         return summary
 

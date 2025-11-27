@@ -14,10 +14,11 @@ function LoginPage() {
   const auth = useAuth();
 
   // Determine if OIDC is enabled based on config
-  // Try runtime config first, then fall back to build-time env var
+  // Runtime config takes priority over build-time env var
   const runtimeConfig = (window as any).__RUNTIME_CONFIG__;
-  const oidcEnabled = runtimeConfig?.VITE_OIDC_ENABLED === 'true' || 
-                      import.meta.env.VITE_OIDC_ENABLED === 'true';
+  const oidcEnabled = runtimeConfig?.VITE_OIDC_ENABLED !== undefined
+    ? runtimeConfig.VITE_OIDC_ENABLED === 'true'
+    : import.meta.env.VITE_OIDC_ENABLED === 'true';
 
   // Get the intended destination or default to /apps
   const from = location.state?.from?.pathname || '/apps';
