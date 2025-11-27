@@ -3,6 +3,9 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
+import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
 // ...existing code...
 interface Silo {
@@ -17,6 +20,9 @@ interface Silo {
 
 function SilosPage() {
   const { appId } = useParams();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
+  
   const [silos, setSilos] = useState<Silo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,14 +123,18 @@ function SilosPage() {
           <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
           <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
         </div>
-        <Link 
-          to={`/apps/${appId}/silos/new`}
-          className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
-        >
-          <span aria-hidden="true" className="mr-2">+</span>
-          <span>Create Silo</span>
-        </Link>
+        {canEdit && (
+          <Link 
+            to={`/apps/${appId}/silos/new`}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
+          >
+            <span aria-hidden="true" className="mr-2">+</span>
+            <span>Create Silo</span>
+          </Link>
+        )}
       </div>
+
+      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
 
       {/* Silos List */}
       {silos.length === 0 ? (
@@ -134,13 +144,15 @@ function SilosPage() {
           <p className="text-gray-600 mb-4">
             Create your first silo to start storing and searching documents with vector embeddings.
           </p>
-          <Link 
-            to={`/apps/${appId}/silos/new`}
-            className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
-          >
-            <span aria-hidden="true" className="mr-2">+</span>
-            <span>Create Your First Silo</span>
-          </Link>
+          {canEdit && (
+            <Link 
+              to={`/apps/${appId}/silos/new`}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
+            >
+              <span aria-hidden="true" className="mr-2">+</span>
+              <span>Create Your First Silo</span>
+            </Link>
+          )}
         </div>
       ) : (
         <Table
@@ -211,18 +223,20 @@ function SilosPage() {
                       icon: '🎮',
                       variant: 'warning'
                     },
-                    {
-                      label: 'Edit',
-                      onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
-                      icon: '✏️',
-                      variant: 'primary'
-                    },
-                    {
-                      label: 'Delete',
-                      onClick: () => { void handleDelete(silo.silo_id); },
-                      icon: '🗑️',
-                      variant: 'danger'
-                    }
+                    ...(canEdit ? [
+                      {
+                        label: 'Edit',
+                        onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
+                        icon: '✏️',
+                        variant: 'primary' as const
+                      },
+                      {
+                        label: 'Delete',
+                        onClick: () => { void handleDelete(silo.silo_id); },
+                        icon: '🗑️',
+                        variant: 'danger' as const
+                      }
+                    ] : [])
                   ]}
                   size="sm"
                 />

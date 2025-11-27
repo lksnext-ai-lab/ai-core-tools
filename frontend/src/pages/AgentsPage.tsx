@@ -4,6 +4,9 @@ import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
+import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
 // Define the Agent type
 interface Agent {
@@ -31,6 +34,9 @@ interface App {
 function AgentsPage() {
   const { appId } = useParams();
   const navigate = useNavigate();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
+  
   const [agents, setAgents] = useState<Agent[]>([]);
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,14 +152,18 @@ function AgentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
           <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
         </div>
-        <button 
-          onClick={handleCreateAgent}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-        >
-          <span className="mr-2">+</span>
-          {' '}Create Agent
-        </button>
+        {canEdit && (
+          <button 
+            onClick={handleCreateAgent}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+          >
+            <span className="mr-2">+</span>
+            {' '}Create Agent
+          </button>
+        )}
       </div>
+
+      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
 
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
@@ -272,18 +282,20 @@ function AgentsPage() {
                     icon: '🎮',
                     variant: 'warning'
                   },
-                  {
-                    label: 'Edit',
-                    onClick: () => handleEditAgent(agent.agent_id),
-                    icon: '✏️',
-                    variant: 'primary'
-                  },
-                  {
-                    label: 'Delete',
-                    onClick: () => handleDeleteAgent(agent),
-                    icon: '🗑️',
-                    variant: 'danger'
-                  }
+                  ...(canEdit ? [
+                    {
+                      label: 'Edit',
+                      onClick: () => handleEditAgent(agent.agent_id),
+                      icon: '✏️',
+                      variant: 'primary' as const
+                    },
+                    {
+                      label: 'Delete',
+                      onClick: () => handleDeleteAgent(agent),
+                      icon: '🗑️',
+                      variant: 'danger' as const
+                    }
+                  ] : [])
                 ]}
                 size="sm"
               />
@@ -296,7 +308,7 @@ function AgentsPage() {
         loading={loading}
       />
 
-      {!loading && agents.length === 0 && (
+      {!loading && canEdit && agents.length === 0 && (
         <div className="text-center py-6">
           <button 
             onClick={handleCreateAgent}

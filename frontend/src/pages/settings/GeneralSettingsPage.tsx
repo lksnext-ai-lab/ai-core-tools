@@ -2,9 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
+import { useAppRole } from '../../hooks/useAppRole';
+import { AppRole } from '../../types/roles';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
 function GeneralSettingsPage() {
   const { appId } = useParams();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  
   const [formData, setFormData] = useState({
     name: '',
     langsmith_api_key: '',
@@ -12,14 +18,10 @@ function GeneralSettingsPage() {
     max_file_size_mb: 0,
     agent_cors_origins: ''
   });
-  const [userRole, setUserRole] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Check if user is owner or administrator (can edit) or just an editor (read-only)
-  const isAdmin = userRole === 'owner' || userRole === 'administrator';
 
   // Load app data on mount
   useEffect(() => {
@@ -42,7 +44,6 @@ function GeneralSettingsPage() {
         max_file_size_mb: app.max_file_size_mb || 0,
         agent_cors_origins: app.agent_cors_origins || ''
       });
-      setUserRole(app.user_role || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load app data');
       console.error('Error loading app data:', err);
@@ -119,16 +120,7 @@ function GeneralSettingsPage() {
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-gray-900">General Settings</h2>
             <p className="text-gray-600">Configure basic app settings and integrations</p>
-            {!isAdmin && (
-              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <div className="flex items-center">
-                  <span className="text-amber-500 text-lg mr-2">🔒</span>
-                  <p className="text-sm text-amber-700">
-                    <strong>Read-only mode:</strong> Only app owners and administrators can modify these settings. You have {userRole} access.
-                  </p>
-                </div>
-              </div>
-            )}
+            {!canEdit && <ReadOnlyBanner userRole={userRole} />}
           </div>
 
           {/* Settings Form */}
@@ -147,7 +139,7 @@ function GeneralSettingsPage() {
                     value={formData.name}
                     onChange={handleChange}
                     required
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter app name"
                   />
@@ -164,7 +156,7 @@ function GeneralSettingsPage() {
                     name="langsmith_api_key"
                     value={formData.langsmith_api_key}
                     onChange={handleChange}
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter Langsmith API key"
                   />
@@ -185,7 +177,7 @@ function GeneralSettingsPage() {
                     value={formData.agent_rate_limit}
                     onChange={handleChange}
                     min="0"
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter agent rate limit"
                     />
@@ -206,7 +198,7 @@ function GeneralSettingsPage() {
                     value={formData.max_file_size_mb}
                     onChange={handleChange}
                     min="0"
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter maximum file size in MB (0 = no limit)"
                     />
@@ -226,7 +218,7 @@ function GeneralSettingsPage() {
                     name="agent_cors_origins"
                     value={formData.agent_cors_origins}
                     onChange={handleChange}
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
                     />
@@ -256,7 +248,7 @@ function GeneralSettingsPage() {
               )}
 
               {/* Submit Button - Only show for admins */}
-              {isAdmin && (
+              {canEdit && (
                 <div className="mt-6 flex items-center justify-between">
                   <div className="flex items-center">
                     {saved && (

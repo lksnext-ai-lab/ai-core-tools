@@ -17,6 +17,7 @@ from schemas.apps_schemas import (
 )
 from schemas.common_schemas import MessageResponseSchema
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import nested routers for app-specific resources
 from .agents import agents_router
@@ -230,6 +231,7 @@ async def list_apps(
 async def get_app(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -338,6 +340,7 @@ async def update_app(
     app_id: int,
     app_data: UpdateAppSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
@@ -400,6 +403,7 @@ async def update_app(
 async def delete_app(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("owner")),
     db: Session = Depends(get_db)
 ):
     """
@@ -441,6 +445,7 @@ async def delete_app(
 async def leave_app(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """

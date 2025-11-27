@@ -5,6 +5,9 @@ import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
+import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
 interface Domain {
   domain_id: number;
@@ -18,6 +21,9 @@ interface Domain {
 
 function DomainsPage() {
   const { appId } = useParams<{ appId: string }>();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
+  
   const navigate = useNavigate();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,14 +120,18 @@ function DomainsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
           <p className="text-gray-600">Web scraping domains for content extraction</p>
         </div>
-        <button
-          onClick={() => navigate(`/apps/${appId}/domains/new`)}
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-        >
-          <span className="mr-2">+</span>
-          {' '}Create Domain
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => navigate(`/apps/${appId}/domains/new`)}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
+          >
+            <span className="mr-2">+</span>
+            {' '}Create Domain
+          </button>
+        )}
       </div>
+
+      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
 
       {/* Domains List */}
       <Table
@@ -179,18 +189,20 @@ function DomainsPage() {
                     icon: '🔗',
                     variant: 'warning'
                   },
-                  {
-                    label: 'Edit',
-                    onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
-                    icon: '✏️',
-                    variant: 'primary'
-                  },
-                  {
-                    label: 'Delete',
-                    onClick: () => handleDeleteDomain(domain),
-                    icon: '🗑️',
-                    variant: 'danger'
-                  }
+                  ...(canEdit ? [
+                    {
+                      label: 'Edit',
+                      onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
+                      icon: '✏️',
+                      variant: 'primary' as const
+                    },
+                    {
+                      label: 'Delete',
+                      onClick: () => handleDeleteDomain(domain),
+                      icon: '🗑️',
+                      variant: 'danger' as const
+                    }
+                  ] : [])
                 ]}
                 size="sm"
               />
@@ -203,7 +215,7 @@ function DomainsPage() {
         loading={loading}
       />
 
-      {!loading && (!domains || domains.length === 0) && (
+      {!loading && (!domains || domains.length === 0) && canEdit && (
         <div className="text-center py-6">
           <button
             onClick={() => navigate(`/apps/${appId}/domains/new`)}
