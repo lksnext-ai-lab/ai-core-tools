@@ -73,7 +73,7 @@ class AgentService:
             service_id=getattr(agent, 'service_id', None),
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
-            temperature=getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE) or DEFAULT_AGENT_TEMPERATURE,
+            temperature=agent.temperature if agent.temperature is not None else DEFAULT_AGENT_TEMPERATURE,
             tool_ids=associations['tool_ids'],
             mcp_config_ids=associations['mcp_ids'],
             created_at=agent.create_date,
