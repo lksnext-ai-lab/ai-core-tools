@@ -163,7 +163,7 @@ function AgentsPage() {
         )}
       </div>
 
-      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
@@ -183,12 +183,18 @@ function AgentsPage() {
                 </div>
                 <div className="ml-4">
                   <div className="text-sm font-medium text-gray-900">
-                    <Link 
-                      to={`/apps/${appId}/agents/${agent.agent_id}`} 
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                    >
-                      {agent.name}
-                    </Link>
+                    {canEdit ? (
+                      <Link 
+                        to={`/apps/${appId}/agents/${agent.agent_id}`} 
+                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                      >
+                        {agent.name}
+                      </Link>
+                    ) : (
+                      <span className="text-sm font-medium text-gray-900">
+                        {agent.name}
+                      </span>
+                    )}
                   </div>
                   {agent.is_tool && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">

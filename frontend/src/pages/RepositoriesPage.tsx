@@ -150,7 +150,7 @@ const RepositoriesPage: React.FC = () => {
         )}
       </div>
 
-      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Repositories List */}
       <Table
@@ -160,17 +160,10 @@ const RepositoriesPage: React.FC = () => {
           {
             header: 'Name',
             render: (repository) => (
-              <div 
-                className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
+              <button 
+                type="button"
+                className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors w-full text-left"
                 onClick={() => handleManageResources(repository.repository_id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleManageResources(repository.repository_id);
-                  }
-                }}
               >
                 <div className="flex-shrink-0 h-10 w-10">
                   <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
@@ -182,7 +175,7 @@ const RepositoriesPage: React.FC = () => {
                     {repository.name}
                   </div>
                 </div>
-              </div>
+              </button>
             )
           },
           {

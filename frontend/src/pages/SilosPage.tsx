@@ -134,7 +134,7 @@ function SilosPage() {
         )}
       </div>
 
-      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Silos List */}
       {silos.length === 0 ? (
@@ -170,12 +170,18 @@ function SilosPage() {
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
-                      <Link
-                        to={`/apps/${appId}/silos/${silo.silo_id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                      >
-                        {silo.name}
-                      </Link>
+                      {canEdit ? (
+                        <Link
+                          to={`/apps/${appId}/silos/${silo.silo_id}`}
+                          className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                        >
+                          {silo.name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-medium text-gray-900">
+                          {silo.name}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

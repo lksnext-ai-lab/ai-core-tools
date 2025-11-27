@@ -48,7 +48,34 @@ class ApiService {
         // Don't redirect - let the app handle auth state via ProtectedRoute
         throw new Error('Authentication required');
       }
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+
+      // Try to parse error message from response
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+      
+      try {
+        const errorData = await response.json();
+        if (errorData) {
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          } else if (errorData.detail) {
+            errorMessage = typeof errorData.detail === 'string' 
+              ? errorData.detail 
+              : JSON.stringify(errorData.detail);
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        }
+      } catch (error) {
+        // Log error for debugging but continue to check status code
+        console.debug('Failed to parse error response JSON:', error);
+        
+        // Failed to parse JSON, check for specific status codes
+        if (response.status === 403) {
+          errorMessage = "You do not have permission to perform this action.";
+        }
+      }
+
+      throw new Error(errorMessage);
     }
 
     return response.json();

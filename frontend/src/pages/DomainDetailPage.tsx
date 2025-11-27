@@ -416,7 +416,7 @@ const DomainDetailPage: React.FC = () => {
             </button>
           </div>
 
-          {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+          {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
           {/* Scraping Configuration */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">

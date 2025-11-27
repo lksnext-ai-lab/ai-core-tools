@@ -178,7 +178,7 @@ function MCPConfigsPage() {
         </div>
         
         {/* Read-only banner for non-admins */}
-        {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+        {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
         {/* Configs Table */}
         <Table
@@ -190,13 +190,19 @@ function MCPConfigsPage() {
               render: (config) => (
                 <div className="flex items-center">
                   <span className="text-purple-400 text-xl mr-3">🔌</span>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
-                    onClick={() => void handleEditConfig(config.config_id)}
-                  >
-                    {config.name}
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      onClick={() => void handleEditConfig(config.config_id)}
+                    >
+                      {config.name}
+                    </button>
+                  ) : (
+                    <span className="text-sm font-medium text-gray-900">
+                      {config.name}
+                    </span>
+                  )}
                 </div>
               )
             },

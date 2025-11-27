@@ -131,7 +131,7 @@ function DomainsPage() {
         )}
       </div>
 
-      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+            {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Domains List */}
       <Table
@@ -149,12 +149,18 @@ function DomainsPage() {
                 </div>
                 <div className="ml-4">
                   <div className="text-sm font-medium text-gray-900">
-                    <Link
-                      to={`/apps/${appId}/domains/${domain.domain_id}`}
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                    >
-                      {domain.name}
-                    </Link>
+                    {canEdit ? (
+                      <Link
+                        to={`/apps/${appId}/domains/${domain.domain_id}`}
+                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                      >
+                        {domain.name}
+                      </Link>
+                    ) : (
+                      <span className="text-sm font-medium text-gray-900">
+                        {domain.name}
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-500">{domain.description}</div>
                 </div>

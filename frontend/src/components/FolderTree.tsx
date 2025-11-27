@@ -22,6 +22,7 @@ interface FolderTreeProps {
   onFolderRename?: (folderId: number, currentName: string) => void;
   onFolderDelete?: (folderId: number, folderName: string) => void;
   onFolderMove?: (folderId: number, currentParentId?: number) => void;
+  canEdit?: boolean;
 }
 
 interface FolderNodeProps {
@@ -35,6 +36,7 @@ interface FolderNodeProps {
   openDropdown: number | null;
   onToggleDropdown: (folderId: number, e: React.MouseEvent) => void;
   dropdownRefs: React.MutableRefObject<{ [key: number]: HTMLDivElement | null }>;
+  canEdit?: boolean;
 }
 
 const FolderNode: React.FC<FolderNodeProps> = ({
@@ -47,7 +49,8 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   selectedFolderId,
   openDropdown,
   onToggleDropdown,
-  dropdownRefs
+  dropdownRefs,
+  canEdit = true
 }) => {
   const hasChildren = folder.subfolders && folder.subfolders.length > 0;
   const isSelected = selectedFolderId === folder.folder_id;
@@ -98,19 +101,21 @@ const FolderNode: React.FC<FolderNodeProps> = ({
           )}
 
           {/* Dropdown Menu Button */}
-          <button
-            onClick={(e) => onToggleDropdown(folder.folder_id, e)}
-            className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
-            title="Folder actions"
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-            </svg>
-          </button>
+          {canEdit && (
+            <button
+              onClick={(e) => onToggleDropdown(folder.folder_id, e)}
+              className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
+              title="Folder actions"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Dropdown Menu */}
-        {openDropdown === folder.folder_id && (
+        {canEdit && openDropdown === folder.folder_id && (
           <div
             ref={(el) => { dropdownRefs.current[folder.folder_id] = el; }}
             className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
@@ -195,6 +200,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
   onFolderRename,
   onFolderDelete,
   onFolderMove,
+  canEdit = true
 }) => {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -317,19 +323,21 @@ const FolderTree: React.FC<FolderTreeProps> = ({
             <span className="text-sm font-medium">Repository Root</span>
 
             {/* Dropdown Menu Button for Root */}
-            <button
-              onClick={(e) => toggleDropdown(0, e)}
-              className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
-              title="Root folder actions"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-              </svg>
-            </button>
+            {canEdit && (
+              <button
+                onClick={(e) => toggleDropdown(0, e)}
+                className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
+                title="Root folder actions"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Dropdown Menu for Root */}
-          {openDropdown === 0 && (
+          {canEdit && openDropdown === 0 && (
             <div
               ref={(el) => { dropdownRefs.current[0] = el; }}
               className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
@@ -365,6 +373,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
               openDropdown={openDropdown}
               onToggleDropdown={toggleDropdown}
               dropdownRefs={dropdownRefs}
+              canEdit={canEdit}
             />
           ))}
         </div>

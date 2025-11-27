@@ -321,7 +321,7 @@ function CollaborationPage() {
           <p className="text-gray-600">Manage team access and permissions for this app</p>
         </div>
 
-        {!canManage && <ReadOnlyBanner userRole={userRole} />}
+        {!canManage && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
         {inviteCollaboratorSection}
 

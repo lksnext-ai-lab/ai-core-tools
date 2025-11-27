@@ -4,6 +4,9 @@ import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import FolderTree from '../components/FolderTree';
 import Alert from '../components/ui/Alert';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
+import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
 interface Resource {
   resource_id: number;
@@ -33,6 +36,9 @@ interface RepositoryDetail {
 
 const RepositoryDetailPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
+  
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -129,9 +135,9 @@ const RepositoryDetailPage: React.FC = () => {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error uploading files:', err);
-      setError('Failed to upload files');
+      setError(err.message || 'Failed to upload files');
     } finally {
       setUploading(false);
     }
@@ -435,20 +441,24 @@ const RepositoryDetailPage: React.FC = () => {
           >
             🔍 Search
           </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-          >
-            {uploading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : (
-              <span>📁</span>
-            )}
-            Upload Files
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+            >
+              {uploading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <span>📁</span>
+              )}
+              Upload Files
+            </button>
+          )}
         </div>
       </div>
+
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Hidden file input */}
       <input
@@ -476,6 +486,7 @@ const RepositoryDetailPage: React.FC = () => {
             onFolderRename={handleRenameFolder}
             onFolderDelete={handleDeleteFolder}
             onFolderMove={handleMoveFolder}
+            canEdit={canEdit}
           />
         </div>
 
@@ -502,12 +513,14 @@ const RepositoryDetailPage: React.FC = () => {
                 <p className="text-gray-600 mb-4">
                   {selectedFolderId === null ? 'Upload your first document to get started' : 'Upload files to this folder'}
                 </p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-                >
-                  Upload Files
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                  >
+                    Upload Files
+                  </button>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-gray-200">
@@ -526,13 +539,15 @@ const RepositoryDetailPage: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleMoveResource(resource)}
-                    className="p-2 text-gray-400 hover:text-purple-600 transition-colors"
-                    title="Move file"
-                  >
-                    ↔️
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => handleMoveResource(resource)}
+                      className="p-2 text-gray-400 hover:text-purple-600 transition-colors"
+                      title="Move file"
+                    >
+                      ↔️
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDownloadResource(resource)}
                     className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
@@ -540,13 +555,15 @@ const RepositoryDetailPage: React.FC = () => {
                   >
                     ⬇️
                   </button>
-                  <button
-                    onClick={() => handleDeleteResource(resource)}
-                    className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                    title="Delete file"
-                  >
-                    🗑️
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => handleDeleteResource(resource)}
+                      className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                      title="Delete file"
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
               </div>
                 ))}

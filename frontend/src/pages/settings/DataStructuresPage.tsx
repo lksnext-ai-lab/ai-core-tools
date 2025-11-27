@@ -205,7 +205,7 @@ function DataStructuresPage() {
         </div>
         
         {/* Read-only banner for non-admins */}
-        {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+        {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
         {/* Data Structures Table */}
         <Table
@@ -217,13 +217,19 @@ function DataStructuresPage() {
               render: (structure) => (
                 <div className="flex items-center">
                   <span className="text-purple-400 text-xl mr-3">📊</span>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
-                    onClick={() => void handleEditStructure(structure.parser_id)}
-                  >
-                    {structure.name}
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      onClick={() => void handleEditStructure(structure.parser_id)}
+                    >
+                      {structure.name}
+                    </button>
+                  ) : (
+                    <span className="text-sm font-medium text-gray-900">
+                      {structure.name}
+                    </span>
+                  )}
                 </div>
               )
             },

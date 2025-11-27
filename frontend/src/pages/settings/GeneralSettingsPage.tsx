@@ -120,7 +120,7 @@ function GeneralSettingsPage() {
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-gray-900">General Settings</h2>
             <p className="text-gray-600">Configure basic app settings and integrations</p>
-            {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+            {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
           </div>
 
           {/* Settings Form */}

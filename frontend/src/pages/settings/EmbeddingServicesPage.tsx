@@ -84,14 +84,18 @@ function EmbeddingServicesPage() {
         )}
       </div>
 
-      {!canEdit && <ReadOnlyBanner userRole={userRole} />}
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
       <Table
         data={services}
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           { header: 'Name', render: (service: EmbeddingService) => (
-            <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>{service.name}</button>
+            canEdit ? (
+              <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>{service.name}</button>
+            ) : (
+              <span className="text-sm font-medium text-gray-900">{service.name}</span>
+            )
           ) },
           { header: 'Model', accessor: 'model_name' },
           { header: 'Provider', render: (service: EmbeddingService) => (
