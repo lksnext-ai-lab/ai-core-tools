@@ -57,7 +57,7 @@ async def get_ai_service(
     app_id: int, 
     service_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """

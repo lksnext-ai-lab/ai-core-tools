@@ -10,6 +10,7 @@ from services.api_key_service import APIKeyService
 # Import schemas and auth
 from schemas.api_key_schemas import APIKeyListItemSchema, APIKeyDetailSchema, CreateUpdateAPIKeySchema, APIKeyCreateResponseSchema
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database dependency
 from db.database import get_db
@@ -36,13 +37,12 @@ api_key_service = APIKeyService()
 async def list_api_keys(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     List all API keys for a specific app.
     """
-    
-    # TODO: Add app access validation
     
     try:
         return api_key_service.get_api_keys_list(db, app_id)
@@ -62,14 +62,13 @@ async def get_api_key(
     app_id: int, 
     key_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific API key.
     Note: The actual key value is only shown once upon creation.
     """
-    
-    # TODO: Add app access validation
     
     try:
         api_key_detail = api_key_service.get_api_key_detail(db, app_id, key_id)
@@ -100,14 +99,14 @@ async def create_or_update_api_key(
     key_id: int,
     api_key_data: CreateUpdateAPIKeySchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Create a new API key or update an existing one.
     """
     user_id = auth_context.identity.id
-    
-    # TODO: Add app access validation
+
     
     try:
         if key_id == 0:
@@ -145,13 +144,12 @@ async def delete_api_key(
     app_id: int, 
     key_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Delete an API key.
     """
-    
-    # TODO: Add app access validation
     
     try:
         deleted = api_key_service.delete_api_key(db, app_id, key_id)
@@ -180,13 +178,12 @@ async def toggle_api_key(
     app_id: int, 
     key_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Toggle the active status of an API key.
     """
-    
-    # TODO: Add app access validation
     
     try:
         message = api_key_service.toggle_api_key(db, app_id, key_id)

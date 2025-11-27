@@ -4,6 +4,9 @@ import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
+import { useAppRole } from '../../hooks/useAppRole';
+import { AppRole } from '../../types/roles';
+import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 
@@ -35,7 +38,10 @@ function CollaborationPage() {
   const [appOwner, setAppOwner] = useState<AppOwner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canManage = hasMinRole(AppRole.ADMINISTRATOR);
+  const isOwner = userRole === AppRole.OWNER;
 
   // Load collaborators and app info from cache or API
   useEffect(() => {
@@ -43,7 +49,6 @@ function CollaborationPage() {
       await loadCollaborators(); // This will also load owner info
     };
     loadData();
-    checkUserRole();
   }, [appId]);
 
   // Combine owner and collaborators whenever they change
@@ -172,33 +177,6 @@ function CollaborationPage() {
     }
   }
 
-  async function checkUserRole() {
-    if (!appId) return;
-    
-    try {
-      // Get app details to check if current user is owner
-      const app = await apiService.getApp(parseInt(appId));
-      if (app.owner_id === user?.user_id) {
-        setCurrentUserRole('owner');
-      } else {
-        // Check if user is administrator by getting collaborators
-        const response = await apiService.getCollaborators(Number.parseInt(appId));
-        const myCollaboration = response.find((c: Collaborator) => c.user_id === user?.user_id);
-        if (myCollaboration?.role === 'administrator') {
-          setCurrentUserRole('administrator');
-        } else if (myCollaboration?.role === 'editor') {
-          setCurrentUserRole('editor');
-        }
-        else {
-          setCurrentUserRole('viewer');
-        }
-      }
-    } catch (err) {
-      console.error('Error checking user role:', err);
-      setCurrentUserRole('editor'); // Default to editor if we can't determine
-    }
-  }
-
   async function handleInviteUser(email: string, role: string) {
     if (!appId) return;
 
@@ -274,8 +252,6 @@ function CollaborationPage() {
     }
   };
 
-  const isOwner = currentUserRole === 'owner';
-
   if (loading) {
     return (
       
@@ -295,9 +271,9 @@ function CollaborationPage() {
     );
   }
 
-  // Invite New Collaborator - Only show to owners
+  // Invite New Collaborator - Only show to admins/owners
   let inviteCollaboratorSection;
-  if (isOwner) {
+  if (canManage) {
     inviteCollaboratorSection = (
       <div className="bg-white shadow rounded-lg">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -306,7 +282,7 @@ function CollaborationPage() {
             {' '}Invite Collaborator
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Invite users to collaborate on this app as editors. They'll receive an email invitation.
+            Invite users to collaborate on this app. They'll receive an email invitation.
           </p>
         </div>
         <div className="p-6">
@@ -327,7 +303,7 @@ function CollaborationPage() {
             </h3>
             <div className="mt-2 text-sm text-yellow-700">
               <p>
-                You have collaborator access to this app. Only the app owner can invite new collaborators.
+                You have collaborator access to this app. Only administrators can invite new collaborators.
               </p>
             </div>
           </div>
@@ -342,8 +318,10 @@ function CollaborationPage() {
         {/* Header */}
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Collaboration</h2>
-          <p className="text-gray-600">Manage who can access and edit this app</p>
+          <p className="text-gray-600">Manage team access and permissions for this app</p>
         </div>
+
+        {!canManage && <ReadOnlyBanner userRole={userRole} />}
 
         {inviteCollaboratorSection}
 
@@ -355,7 +333,7 @@ function CollaborationPage() {
               Team Members ({allMembers.length})
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              {isOwner ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
+              {canManage ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
             </p>
           </div>
           
@@ -441,7 +419,7 @@ function CollaborationPage() {
                 ),
                 className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
               },
-              ...(isOwner ? [{
+              ...(canManage ? [{
                 header: 'Actions',
                 render: (member: Collaborator) => (
                   member.role === 'owner' ? (
@@ -476,7 +454,7 @@ function CollaborationPage() {
             rowClassName={(member) => member.role === 'owner' ? "bg-blue-50" : "hover:bg-gray-50"}
             emptyIcon="👥"
             emptyMessage="No Collaborators Yet"
-            emptySubMessage={isOwner 
+            emptySubMessage={canManage 
               ? "This app doesn't have any collaborators. Invite users above to start sharing."
               : "This app doesn't have any other collaborators yet."}
             loading={loading}

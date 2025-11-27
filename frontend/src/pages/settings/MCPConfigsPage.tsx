@@ -10,11 +10,13 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import type { MCPConfig } from '../../core/types';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { AppRole } from '../../types/roles';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isAdmin, userRole } = useAppRole(appId);
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
   const [configs, setConfigs] = useState<MCPConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +166,7 @@ function MCPConfigsPage() {
             <h2 className="text-xl font-semibold text-gray-900">MCP Configs</h2>
             <p className="text-gray-600">Manage Model Context Protocol server configurations</p>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <button 
               onClick={handleCreateConfig}
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -176,7 +178,7 @@ function MCPConfigsPage() {
         </div>
         
         {/* Read-only banner for non-admins */}
-        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
+        {!canEdit && <ReadOnlyBanner userRole={userRole} />}
 
         {/* Configs Table */}
         <Table
@@ -216,7 +218,7 @@ function MCPConfigsPage() {
               header: 'Actions',
               className: 'relative',
               render: (config) => (
-                isAdmin ? (
+                canEdit ? (
                   <ActionDropdown
                     actions={[
                       {
@@ -246,7 +248,7 @@ function MCPConfigsPage() {
           loading={loading}
         />
 
-        {!loading && configs.length === 0 && isAdmin && (
+        {!loading && configs.length === 0 && canEdit && (
           <div className="text-center py-6">
             <button 
               onClick={handleCreateConfig}
