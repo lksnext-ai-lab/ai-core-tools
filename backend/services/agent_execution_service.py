@@ -839,55 +839,73 @@ class AgentExecutionService:
                 app_config = get_app_config()
                 tmp_base_folder = app_config['TMP_BASE_FOLDER']
                 
+                # Check for PUBLIC_API_URL environment variable (Production Mode)
+                public_api_url = os.getenv('PUBLIC_API_URL')
+                
                 for img in image_files:
-                    # Use Base64 for local development to avoid localhost URL issues
-                    try:
-                        file_path = img.get('file_path', '')
-                        # Construct full path
-                        full_path = os.path.join(tmp_base_folder, file_path)
+                    file_path = img.get('file_path', '')
+                    if not file_path:
+                        logger.warning(f"Image file has no file_path: {img}")
+                        continue
                         
-                        if os.path.exists(full_path):
-                            import base64
-                            import mimetypes
+                    # Ensure forward slashes
+                    file_path = file_path.replace('\\', '/')
+                    if file_path.startswith('/'):
+                        file_path = file_path[1:]
+                    
+                    # If PUBLIC_API_URL is set, use it (Production Mode)
+                    if public_api_url:
+                        # Remove trailing slash if present
+                        if public_api_url.endswith('/'):
+                            public_api_url = public_api_url[:-1]
                             
-                            mime_type, _ = mimetypes.guess_type(full_path)
-                            if not mime_type:
-                                mime_type = "image/jpeg"
-                                
-                            with open(full_path, "rb") as image_file:
-                                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                                
-                            data_url = f"data:{mime_type};base64,{encoded_string}"
-                            logger.info(f"Adding image to message as base64 (length: {len(encoded_string)})")
-                            
-                            content.append({
-                                "type": "image_url",
-                                "image_url": {"url": data_url}
-                            })
-                        else:
-                            # Fallback to URL if file not found locally (should not happen)
-                            # Ensure forward slashes
-                            file_path = file_path.replace('\\', '/')
-                            if file_path.startswith('/'):
-                                file_path = file_path[1:]
-                                
-                            url = f"http://localhost:8000/static/{file_path}"
-                            logger.warning(f"Image file not found at {full_path}, falling back to URL: {url}")
-                            content.append({
-                                "type": "image_url",
-                                "image_url": {"url": url}
-                            })
-                    except Exception as e:
-                        logger.error(f"Error processing image for base64: {e}")
-                        # Fallback to URL
-                        file_path = img.get('file_path', '').replace('\\', '/')
-                        if file_path.startswith('/'):
-                            file_path = file_path[1:]
-                        url = f"http://localhost:8000/static/{file_path}"
+                        url = f"{public_api_url}/static/{file_path}"
+                        logger.info(f"Adding image to message using public URL: {url}")
                         content.append({
                             "type": "image_url",
                             "image_url": {"url": url}
                         })
+                    else:
+                        # Fallback to Base64 (Development Mode)
+                        # Use Base64 for local development to avoid localhost URL issues
+                        try:
+                            # Construct full path
+                            full_path = os.path.join(tmp_base_folder, file_path)
+                            
+                            if os.path.exists(full_path):
+                                import base64
+                                import mimetypes
+                                
+                                mime_type, _ = mimetypes.guess_type(full_path)
+                                if not mime_type:
+                                    mime_type = "image/jpeg"
+                                    
+                                with open(full_path, "rb") as image_file:
+                                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                                    
+                                data_url = f"data:{mime_type};base64,{encoded_string}"
+                                logger.info(f"Adding image to message as base64 (length: {len(encoded_string)})")
+                                
+                                content.append({
+                                    "type": "image_url",
+                                    "image_url": {"url": data_url}
+                                })
+                            else:
+                                # Fallback to URL if file not found locally (should not happen)
+                                url = f"http://localhost:8000/static/{file_path}"
+                                logger.warning(f"Image file not found at {full_path}, falling back to URL: {url}")
+                                content.append({
+                                    "type": "image_url",
+                                    "image_url": {"url": url}
+                                })
+                        except Exception as e:
+                            logger.error(f"Error processing image for base64: {e}")
+                            # Fallback to URL
+                            url = f"http://localhost:8000/static/{file_path}"
+                            content.append({
+                                "type": "image_url",
+                                "image_url": {"url": url}
+                            })
                 
                 message_payload = HumanMessage(content=content)
             else:
