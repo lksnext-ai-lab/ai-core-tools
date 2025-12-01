@@ -21,6 +21,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from scalar_fastapi import get_scalar_api_reference
 import os
+from fastapi.staticfiles import StaticFiles
 from config import CLIENT_CONFIG
 
 from models.app import App
@@ -98,6 +99,15 @@ app = FastAPI(
     version=os.getenv('APP_VERSION', '0.2.37'),
     lifespan=lifespan
 )
+
+# Mount static files for uploads
+# This allows accessing uploaded images via URL (e.g. for multimodal models)
+# We mount the TMP_BASE_FOLDER (default: data/tmp) to /static
+from utils.config import get_app_config
+app_config = get_app_config()
+tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
+os.makedirs(tmp_base_folder, exist_ok=True)
+app.mount("/static", StaticFiles(directory=tmp_base_folder), name="static")
 
 
 # ==================== CORS MIDDLEWARE ====================

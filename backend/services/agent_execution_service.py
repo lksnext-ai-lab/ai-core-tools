@@ -1,5 +1,7 @@
 import os
 import asyncio
+import ast
+import json
 from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
@@ -151,6 +153,20 @@ class AgentExecutionService:
                 from services.conversation_service import ConversationService
                 # Get last message preview (truncate response if too long)
                 last_message_preview = parsed_response[:200] if isinstance(parsed_response, str) else str(parsed_response)[:200]
+                
+                # Clean message for preview if it's a list (multimodal)
+                # This ensures the conversation list shows clean text instead of JSON structure
+                if isinstance(parsed_response, list):
+                    try:
+                        text_parts = []
+                        for item in parsed_response:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
+                        if text_parts:
+                            last_message_preview = " ".join(text_parts)[:200]
+                    except Exception:
+                        pass
+                
                 # Increment by 2 (user message + agent response)
                 ConversationService.increment_message_count(
                     db=db,
@@ -433,7 +449,52 @@ class AgentExecutionService:
                     from services.agent_cache_service import CheckpointerCacheService
                     history = await CheckpointerCacheService.get_conversation_history_async(agent_id, session.id)
                     logger.info(f"Retrieved {len(history)} messages for agent {agent_id}, session {session.id}")
-                    return history
+                    
+                    # Clean history for frontend display (handle multimodal content)
+                    cleaned_history = []
+                    for msg in history:
+                        if not isinstance(msg, dict):
+                            continue
+                            
+                        content = msg.get("content")
+                        parsed_content = content
+
+                        # Some backends store the content as a string representation of the list
+                        if isinstance(content, str):
+                            stripped_content = content.strip()
+                            if stripped_content.startswith("[") and "type" in stripped_content:
+                                try:
+                                    parsed_content = json.loads(stripped_content)
+                                except json.JSONDecodeError:
+                                    try:
+                                        parsed_content = ast.literal_eval(stripped_content)
+                                    except (ValueError, SyntaxError):
+                                        parsed_content = content
+                        
+                        # If content is a list (multimodal structure), extract the text for display
+                        if isinstance(parsed_content, list):
+                            text_parts = []
+                            has_image = False
+                            for item in parsed_content:
+                                if isinstance(item, dict):
+                                    if item.get("type") == "text":
+                                        text_parts.append(item.get("text", ""))
+                                    elif item.get("type") == "image_url":
+                                        has_image = True
+                            
+                            display_text = " ".join(text_parts)
+                            # If we have an image but no text (or just whitespace), add a placeholder
+                            if not display_text.strip() and has_image:
+                                display_text = "[Imagen adjunta]"
+                                
+                            # Create a copy to avoid modifying the original cache
+                            clean_msg = msg.copy()
+                            clean_msg["content"] = display_text
+                            cleaned_history.append(clean_msg)
+                        else:
+                            cleaned_history.append(msg)
+                            
+                    return cleaned_history
             
             return []
             
@@ -697,20 +758,30 @@ class AgentExecutionService:
             
             # Enhance message with file contents if files were uploaded
             enhanced_message = message
+            image_files = []
+            
             if processed_files:
                 #TODO: we should move this to class initialization? It is repeated in many places.
                 # Get TMP_BASE_FOLDER from config
                 app_config = get_app_config()
                 tmp_base_folder = app_config['TMP_BASE_FOLDER']
-                enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
-                enhanced_message += "\n\n[Attached files:]"
+                
+                # Separate images from text files
+                text_files_msg = ""
                 for file_data in processed_files:
-                    enhanced_message += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+                    if file_data.get('type') == 'image':
+                        image_files.append(file_data)
+                    else:
+                        text_files_msg += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+                
+                if text_files_msg:
+                    enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
+                    enhanced_message += "\n\n[Attached files:]" + text_files_msg
             
             # Wrap all async operations in a single event loop to avoid conflicts
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
             result_text = asyncio.run(self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
             ))
             
             return result_text
@@ -728,7 +799,8 @@ class AgentExecutionService:
         message: str,
         search_params: Dict = None,
         session_id_for_cache: str = None,
-        user_context: Dict = None
+        user_context: Dict = None,
+        image_files: List[Dict] = None
     ) -> str:
         """Async helper to execute agent with MCP client in same event loop"""
         from tools.agentTools import create_agent, prepare_agent_config
@@ -758,7 +830,70 @@ class AgentExecutionService:
             
             # Execute the agent in the SAME event loop as where MCP client was created
             formatted_user_message = fresh_agent.prompt_template.format(question=message)
-            result = await agent_chain.ainvoke({"messages": [HumanMessage(content=formatted_user_message)]}, config=config)
+            
+            # Construct message content
+            if image_files:
+                content = [{"type": "text", "text": formatted_user_message}]
+                
+                # Get TMP_BASE_FOLDER from config
+                app_config = get_app_config()
+                tmp_base_folder = app_config['TMP_BASE_FOLDER']
+                
+                for img in image_files:
+                    # Use Base64 for local development to avoid localhost URL issues
+                    try:
+                        file_path = img.get('file_path', '')
+                        # Construct full path
+                        full_path = os.path.join(tmp_base_folder, file_path)
+                        
+                        if os.path.exists(full_path):
+                            import base64
+                            import mimetypes
+                            
+                            mime_type, _ = mimetypes.guess_type(full_path)
+                            if not mime_type:
+                                mime_type = "image/jpeg"
+                                
+                            with open(full_path, "rb") as image_file:
+                                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                                
+                            data_url = f"data:{mime_type};base64,{encoded_string}"
+                            logger.info(f"Adding image to message as base64 (length: {len(encoded_string)})")
+                            
+                            content.append({
+                                "type": "image_url",
+                                "image_url": {"url": data_url}
+                            })
+                        else:
+                            # Fallback to URL if file not found locally (should not happen)
+                            # Ensure forward slashes
+                            file_path = file_path.replace('\\', '/')
+                            if file_path.startswith('/'):
+                                file_path = file_path[1:]
+                                
+                            url = f"http://localhost:8000/static/{file_path}"
+                            logger.warning(f"Image file not found at {full_path}, falling back to URL: {url}")
+                            content.append({
+                                "type": "image_url",
+                                "image_url": {"url": url}
+                            })
+                    except Exception as e:
+                        logger.error(f"Error processing image for base64: {e}")
+                        # Fallback to URL
+                        file_path = img.get('file_path', '').replace('\\', '/')
+                        if file_path.startswith('/'):
+                            file_path = file_path[1:]
+                        url = f"http://localhost:8000/static/{file_path}"
+                        content.append({
+                            "type": "image_url",
+                            "image_url": {"url": url}
+                        })
+                
+                message_payload = HumanMessage(content=content)
+            else:
+                message_payload = HumanMessage(content=formatted_user_message)
+            
+            result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
             
             # Extract the response from the result
             if isinstance(result, dict) and "messages" in result:

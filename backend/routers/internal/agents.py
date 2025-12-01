@@ -336,7 +336,8 @@ async def chat_with_agent(
                 file_ref = await file_service.upload_file(
                     file=upload_file,
                     agent_id=agent_id,
-                    user_context=user_context
+                    user_context=user_context,
+                    conversation_id=conversation_id
                 )
                 file_references.append(file_ref)
         

@@ -1,5 +1,7 @@
 import uuid
 import hashlib
+import ast
+import json
 from typing import List, Optional, Dict
 from numpy import isin
 from sqlalchemy.orm import Session
@@ -261,7 +263,46 @@ class ConversationService:
             session_id=conversation.session_id
         )
         
-        return history
+        if not history:
+            return []
+        
+        cleaned_history: List[Dict] = []
+        for msg in history:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            parsed_content = content
+            
+            if isinstance(content, str):
+                stripped_content = content.strip()
+                if stripped_content.startswith("[") and "type" in stripped_content:
+                    try:
+                        parsed_content = json.loads(stripped_content)
+                    except json.JSONDecodeError:
+                        try:
+                            parsed_content = ast.literal_eval(stripped_content)
+                        except (ValueError, SyntaxError):
+                            parsed_content = content
+            
+            if isinstance(parsed_content, list):
+                text_parts = []
+                has_image = False
+                for item in parsed_content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image_url":
+                            has_image = True
+                display_text = " ".join(text_parts).strip()
+                if not display_text and has_image:
+                    display_text = "[Imagen adjunta]"
+                clean_msg = msg.copy()
+                clean_msg["content"] = display_text or msg.get("content", "")
+                cleaned_history.append(clean_msg)
+            else:
+                cleaned_history.append(msg)
+        
+        return cleaned_history
     
     @staticmethod
     def increment_message_count(
