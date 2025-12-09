@@ -64,8 +64,8 @@ function DomainFormPage() {
       setLoading(true);
       setError(null);
       
-      const numericAppId = parseInt(appId, 10);
-      const domainIdNum = isNewDomain ? 0 : parseInt(domainId ?? '0', 10);
+      const numericAppId = Number.parseInt(appId, 10);
+      const domainIdNum = isNewDomain ? 0 : Number.parseInt(domainId ?? '0', 10);
       const response = await apiService.getDomain(numericAppId, domainIdNum);
 
       // Extract form data from response
@@ -122,8 +122,8 @@ function DomainFormPage() {
       setSaving(true);
       setError(null);
       
-      const numericAppId = parseInt(appId, 10);
-      const domainIdNum = isNewDomain ? 0 : parseInt(domainId ?? '0', 10);
+      const numericAppId = Number.parseInt(appId, 10);
+      const domainIdNum = isNewDomain ? 0 : Number.parseInt(domainId ?? '0', 10);
 
       if (isNewDomain) {
         await apiService.createDomain(numericAppId, domainIdNum, formData);
@@ -261,7 +261,7 @@ function DomainFormPage() {
             value={formData.embedding_service_id || ''}
             onChange={(e) => {
               const value = e.target.value;
-              handleInputChange('embedding_service_id', value ? parseInt(value, 10) : undefined);
+              handleInputChange('embedding_service_id', value ? Number.parseInt(value, 10) : undefined);
             }}
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
