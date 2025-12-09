@@ -12,21 +12,76 @@ class ApiService {
     return token;
   }
 
-  async request(endpoint: string, options: RequestInit = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    
-    const defaultHeaders: Record<string, string> = {};
+  private prepareHeaders(options: RequestInit): Record<string, string> {
+    const headers: Record<string, string> = {};
 
     // Only set Content-Type if not FormData (browser will set it automatically for FormData)
     if (!(options.body instanceof FormData)) {
-      defaultHeaders['Content-Type'] = 'application/json';
+      headers['Content-Type'] = 'application/json';
     }
 
     // Use token from auth service instead of hardcoded
     const token = this.getAuthToken();
     if (token) {
-      defaultHeaders['Authorization'] = `Bearer ${token}`;
+      headers['Authorization'] = `Bearer ${token}`;
     }
+
+    return headers;
+  }
+
+  private extractErrorMessage(errorData: any): string | null {
+    if (!errorData) return null;
+
+    if (errorData.error) {
+      return errorData.error;
+    }
+    if (errorData.detail) {
+      return typeof errorData.detail === 'string'
+        ? errorData.detail
+        : JSON.stringify(errorData.detail);
+    }
+    if (errorData.message) {
+      return errorData.message;
+    }
+    return null;
+  }
+
+  private async handleResponseError(response: Response): Promise<never> {
+    // Handle 401 Unauthorized - token expired or invalid
+    if (response.status === 401) {
+      // Clear invalid token
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_expires');
+
+      // Don't redirect - let the app handle auth state via ProtectedRoute
+      throw new Error('Authentication required');
+    }
+
+    // Try to parse error message from response
+    let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+
+    try {
+      const errorData = await response.json();
+      const extracted = this.extractErrorMessage(errorData);
+      if (extracted) {
+        errorMessage = extracted;
+      }
+    } catch (error) {
+      // Log error for debugging but continue to check status code
+      console.debug('Failed to parse error response JSON:', error);
+
+      // Failed to parse JSON, check for specific status codes
+      if (response.status === 403) {
+        errorMessage = "You do not have permission to perform this action.";
+      }
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  async request(endpoint: string, options: RequestInit = {}) {
+    const url = `${this.baseURL}${endpoint}`;
+    const defaultHeaders = this.prepareHeaders(options);
 
     const config: RequestInit = {
       headers: {
@@ -37,18 +92,9 @@ class ApiService {
     };
 
     const response = await fetch(url, config);
-    
+
     if (!response.ok) {
-      // Handle 401 Unauthorized - token expired or invalid
-      if (response.status === 401) {
-        // Clear invalid token
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_expires');
-        
-        // Don't redirect - let the app handle auth state via ProtectedRoute
-        throw new Error('Authentication required');
-      }
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      await this.handleResponseError(response);
     }
 
     return response.json();
@@ -99,11 +145,11 @@ class ApiService {
   }
 
   async getPendingInvitations() {
-    return this.request('/auth/pending-invitations');
+    return this.request('/internal/auth/pending-invitations');
   }
 
   async respondToInvitation(invitationId: number, action: 'accept' | 'decline') {
-    return this.request(`/auth/invitations/${invitationId}/respond`, {
+    return this.request(`/internal/auth/invitations/${invitationId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ action }),
     });
@@ -753,7 +799,8 @@ class ApiService {
 
   // ==================== CONVERSATION METHODS ====================
   async createConversation(agentId: number, title?: string) {
-    return this.request(`/internal/conversations?agent_id=${agentId}${title ? `&title=${encodeURIComponent(title)}` : ''}`, {
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    return this.request(`/internal/conversations?agent_id=${agentId}${titleParam}`, {
       method: 'POST',
     });
   }

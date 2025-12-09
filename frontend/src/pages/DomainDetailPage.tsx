@@ -4,6 +4,9 @@ import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
+import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
 interface URL {
   url_id: number;
@@ -118,23 +121,27 @@ const ErrorView: React.FC<{ error: string; onBack: () => void }> = ({ error, onB
 );
 
 // Component for empty URL state
-const EmptyUrlsView: React.FC<{ onAddUrl: () => void }> = ({ onAddUrl }) => (
+const EmptyUrlsView: React.FC<{ onAddUrl: () => void; canEdit: boolean }> = ({ onAddUrl, canEdit }) => (
   <div className="text-center py-12">
     <div className="text-gray-400 text-6xl mb-4">🔗</div>
     <h3 className="text-lg font-medium text-gray-900 mb-2">No URLs yet</h3>
     <p className="text-gray-500 mb-6">Add your first URL to start indexing content</p>
-    <button
-      onClick={onAddUrl}
-      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-    >
-      Add First URL
-    </button>
+    {canEdit && (
+      <button
+        onClick={onAddUrl}
+        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+      >
+        Add First URL
+      </button>
+    )}
   </div>
 );
 
 const DomainDetailPage: React.FC = () => {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
   const navigate = useNavigate();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
   
   const [domain, setDomain] = useState<DomainDetail | null>(null);
   const [urls, setUrls] = useState<URL[]>([]);
@@ -409,6 +416,8 @@ const DomainDetailPage: React.FC = () => {
             </button>
           </div>
 
+          {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
+
           {/* Scraping Configuration */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Scraping Configuration</h2>
@@ -432,7 +441,7 @@ const DomainDetailPage: React.FC = () => {
           <div className="bg-white border border-gray-200 rounded-lg">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-xl font-semibold text-gray-900">URLs ({urls.length})</h2>
-              {urls.length > 0 && (
+              {urls.length > 0 && canEdit && (
                 <button
                   onClick={() => setShowAddUrlModal(true)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -449,7 +458,7 @@ const DomainDetailPage: React.FC = () => {
               </div>
             )}
             {!urlsLoading && urls.length === 0 && (
-              <EmptyUrlsView onAddUrl={() => setShowAddUrlModal(true)} />
+              <EmptyUrlsView onAddUrl={() => setShowAddUrlModal(true)} canEdit={canEdit} />
             )}
             {!urlsLoading && urls.length > 0 && (
               <div className="overflow-x-auto overflow-visible">
@@ -504,33 +513,35 @@ const DomainDetailPage: React.FC = () => {
                                 icon: '👁️',
                                 variant: 'success'
                               },
-                              {
-                                label: 'Reindex URL',
-                                onClick: () => void handleReindexUrl(url.url_id),
-                                icon: reindexingUrls.has(url.url_id) ? '⏳' : '🔄',
-                                variant: 'primary',
-                                disabled: reindexingUrls.has(url.url_id)
-                              },
-                              {
-                                label: 'Unindex URL',
-                                onClick: () => void handleUnindexUrl(url),
-                                icon: reindexingUrls.has(url.url_id) ? '⏳' : '🚫',
-                                variant: 'warning',
-                                disabled: reindexingUrls.has(url.url_id)
-                              },
-                              {
-                                label: 'Reject URL',
-                                onClick: () => void handleRejectUrl(url),
-                                icon: reindexingUrls.has(url.url_id) ? '⏳' : '❌',
-                                variant: 'danger',
-                                disabled: reindexingUrls.has(url.url_id)
-                              },
-                              {
-                                label: 'Delete URL',
-                                onClick: () => handleDeleteUrl(url),
-                                icon: '🗑️',
-                                variant: 'danger'
-                              }
+                              ...(canEdit ? [
+                                {
+                                  label: 'Reindex URL',
+                                  onClick: () => void handleReindexUrl(url.url_id),
+                                  icon: reindexingUrls.has(url.url_id) ? '⏳' : '🔄',
+                                  variant: 'primary' as const,
+                                  disabled: reindexingUrls.has(url.url_id)
+                                },
+                                {
+                                  label: 'Unindex URL',
+                                  onClick: () => void handleUnindexUrl(url),
+                                  icon: reindexingUrls.has(url.url_id) ? '⏳' : '🚫',
+                                  variant: 'warning' as const,
+                                  disabled: reindexingUrls.has(url.url_id)
+                                },
+                                {
+                                  label: 'Reject URL',
+                                  onClick: () => void handleRejectUrl(url),
+                                  icon: reindexingUrls.has(url.url_id) ? '⏳' : '❌',
+                                  variant: 'danger' as const,
+                                  disabled: reindexingUrls.has(url.url_id)
+                                },
+                                {
+                                  label: 'Delete URL',
+                                  onClick: () => handleDeleteUrl(url),
+                                  icon: '🗑️',
+                                  variant: 'danger' as const
+                                }
+                              ] : [])
                             ]}
                             size="sm"
                           />

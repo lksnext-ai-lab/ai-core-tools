@@ -16,6 +16,7 @@ from schemas.common_schemas import MessageResponseSchema
 from .auth_utils import get_current_user_oauth
 from db.database import get_db
 from fastapi import Request
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
 from utils.logger import get_logger
@@ -42,7 +43,7 @@ async def get_root_folders(
     Get all root folders (parent_folder_id is None) for a repository.
     """
     current_user = await get_current_user_oauth(request, db)
-    user_id = auth_context.identity.id
+    user_id = current_user.identity.id
     
     logger.info(f"Get root folders - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
     
@@ -202,7 +203,8 @@ async def create_folder(
     repository_id: int,
     folder_data: CreateFolderSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Create a new folder in the repository.
@@ -255,7 +257,8 @@ async def update_folder(
     folder_id: int,
     folder_data: UpdateFolderSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Update a folder's name.
@@ -313,7 +316,8 @@ async def delete_folder(
     repository_id: int,
     folder_id: int,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Delete a folder and all its contents (subfolders and resources).
@@ -357,7 +361,8 @@ async def move_folder(
     folder_id: int,
     move_data: MoveFolderSchema,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Move a folder to a new parent folder.

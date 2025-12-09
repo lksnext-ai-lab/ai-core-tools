@@ -7,7 +7,8 @@ or development mode JWT tokens.
 
 import os
 import jwt
-from fastapi import HTTPException, status, Depends, Header
+from fastapi import HTTPException, status, Depends, Request, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from lks_idprovider_fastapi import get_auth_context
 from lks_idprovider.models.auth import AuthContext
@@ -21,6 +22,9 @@ from utils.auth_config import AuthConfig
 from typing import Optional
 
 logger = get_logger(__name__)
+
+# Shared HTTP bearer scheme for Swagger docs
+http_bearer_scheme = HTTPBearer(auto_error=False)
 
 # Load authentication configuration
 AuthConfig.load_config()
@@ -221,7 +225,8 @@ def get_current_user_oidc(
 
 
 def get_current_user_dev(
-    authorization: Optional[str] = Header(None),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(http_bearer_scheme),
     db: Session = Depends(get_db),
 ) -> AuthContext:
     """
@@ -236,7 +241,8 @@ def get_current_user_dev(
     - Checks user is_active status
     
     Args:
-        authorization: Authorization header with Bearer token
+        request: FastAPI request providing headers
+        credentials: Bearer token parsed by Swagger/HTTPBearer
         db: Database session
         
     Returns:
@@ -245,8 +251,16 @@ def get_current_user_dev(
     Raises:
         HTTPException: If token invalid, expired, or user not found
     """
+    authorization = None
+    if credentials and credentials.scheme and credentials.credentials:
+        authorization = f"{credentials.scheme} {credentials.credentials}"
+        logger.debug("Authorization extracted via HTTPBearer security dependency")
+    else:
+        authorization = request.headers.get("Authorization")
+        if authorization:
+            logger.debug("Authorization taken directly from headers")
+
     try:
-        # Extract token from Authorization header
         if not authorization:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

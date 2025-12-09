@@ -9,6 +9,7 @@ from schemas.output_parser_schemas import (
 )
 
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database dependency
 from db.database import get_db
@@ -35,13 +36,12 @@ output_parsers_router = APIRouter()
 async def list_output_parsers(
     app_id: int, 
     current_user: dict = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     List all output parsers (data structures) for a specific app.
     """
-    # TODO: Add app access validation
-    
     try:
         service = OutputParserService()
         return service.list_output_parsers(db, app_id)
@@ -61,13 +61,12 @@ async def get_output_parser(
     app_id: int, 
     parser_id: int, 
     current_user: dict = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific output parser including its fields.
-    """
-    # TODO: Add app access validation
-    
+    """  
     try:
         service = OutputParserService()
         result = service.get_output_parser_detail(db, app_id, parser_id)
@@ -98,13 +97,12 @@ async def create_or_update_output_parser(
     parser_id: int,
     parser_data: CreateUpdateOutputParserSchema,
     current_user: dict = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Create a new output parser or update an existing one.
     """
-    # TODO: Add app access validation
-    
     try:
         service = OutputParserService()
         parser = service.create_or_update_output_parser(db, app_id, parser_id, parser_data)
@@ -116,7 +114,7 @@ async def create_or_update_output_parser(
             )
         
         # Return updated parser (reuse the GET logic)
-        return await get_output_parser(app_id, parser.parser_id, current_user, db)
+        return await get_output_parser(app_id, parser.parser_id, current_user, role, db)
             
     except HTTPException:
         raise
@@ -134,13 +132,12 @@ async def delete_output_parser(
     app_id: int, 
     parser_id: int, 
     current_user: dict = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Delete an output parser.
     """
-    # TODO: Add app access validation
-    
     try:
         service = OutputParserService()
         success = service.delete_output_parser(db, app_id, parser_id)

@@ -9,6 +9,7 @@ import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { getProviderBadgeColor } from '../../components/ui/providerBadges';
+import { AppRole } from '../../types/roles';
 
 interface AIService {
   service_id: number;
@@ -21,7 +22,8 @@ interface AIService {
 function AIServicesPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isAdmin, userRole } = useAppRole(appId);
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
 
   const api = {
     getAll: (id: number) => import('../../services/api').then(m => m.apiService.getAIServices(id)),
@@ -75,14 +77,14 @@ function AIServicesPage() {
           <h2 className="text-xl font-semibold text-gray-900">AI Services</h2>
           <p className="text-gray-600">Manage language models and AI providers for your agents</p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
             <span className="mr-2">+</span>{' '}Add AI Service
           </button>
         )}
       </div>
 
-      {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
       <Table
         data={services}
@@ -91,9 +93,13 @@ function AIServicesPage() {
           {
             header: 'Name',
             render: (service: AIService) => (
-              <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
-                {service.name}
-              </button>
+              canEdit ? (
+                <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
+                  {service.name}
+                </button>
+              ) : (
+                <span className="text-sm font-medium text-gray-900">{service.name}</span>
+              )
             )
           },
           { header: 'Model', accessor: 'model_name' },
@@ -104,14 +110,14 @@ function AIServicesPage() {
           )},
           { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: AIService) => (
-            isAdmin ? (
+            canEdit ? (
               <ActionDropdown actions={[
                 { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' },
                 { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: '📋', variant: 'primary' },
                 { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: '🗑️', variant: 'danger' }
               ]} size="sm" />
             ) : (
-              <span className="text-gray-400 text-sm">View only</span>
+               <span className="text-gray-400 text-sm">View only</span>
             )
           ) }
         ]}
@@ -121,7 +127,7 @@ function AIServicesPage() {
         loading={loading}
       />
 
-      {!loading && services.length === 0 && isAdmin && (
+      {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
           <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Add First AI Service</button>
         </div>

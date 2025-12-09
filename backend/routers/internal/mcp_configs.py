@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 # Import schemas and auth
 from schemas.mcp_config_schemas import MCPConfigListItemSchema, MCPConfigDetailSchema, CreateUpdateMCPConfigSchema
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database and service
 from db.database import get_db
@@ -30,13 +31,12 @@ mcp_configs_router = APIRouter()
 async def list_mcp_configs(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     List all MCP configs for a specific app.
     """
-    
-    # TODO: Add app access validation
     
     try:
         return MCPConfigService.list_mcp_configs(db, app_id)
@@ -56,13 +56,12 @@ async def get_mcp_config(
     app_id: int, 
     config_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific MCP config.
     """
-    
-    # TODO: Add app access validation
     
     try:
         config_detail = MCPConfigService.get_mcp_config_detail(db, app_id, config_id)
@@ -93,12 +92,12 @@ async def create_or_update_mcp_config(
     config_id: int,
     config_data: CreateUpdateMCPConfigSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Create a new MCP config or update an existing one.
-    """    
-    # TODO: Add app access validation
+    """
     
     try:
         config = MCPConfigService.create_or_update_mcp_config(db, app_id, config_id, config_data)
@@ -110,7 +109,7 @@ async def create_or_update_mcp_config(
             )
         
         # Return updated config (reuse the GET logic)
-        return await get_mcp_config(app_id, config.config_id, auth_context, db)
+        return await get_mcp_config(app_id, config.config_id, auth_context, role, db)
         
     except HTTPException:
         raise
@@ -128,13 +127,12 @@ async def delete_mcp_config(
     app_id: int, 
     config_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Delete an MCP config.
     """
-    
-    # TODO: Add app access validation
     
     try:
         success = MCPConfigService.delete_mcp_config(db, app_id, config_id)

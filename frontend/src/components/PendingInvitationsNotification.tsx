@@ -19,16 +19,30 @@ function PendingInvitationsNotification() {
 
   useEffect(() => {
     loadPendingInvitations();
+    
+    // Poll for updates every 5 seconds to keep badge in sync with other tabs/pages
+    const interval = setInterval(loadPendingInvitations, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   async function loadPendingInvitations() {
     try {
-      //const response = await apiService.getPendingInvitations();
-      //setInvitations(response);
+      const response = await apiService.getPendingInvitations();
+      setInvitations(response);
     } catch (error) {
       console.error('Failed to load pending invitations:', error);
     }
   }
+
+  const toggleDetails = () => {
+    const newShowDetails = !showDetails;
+    setShowDetails(newShowDetails);
+    
+    // Refresh list when opening to ensure we don't show stale invitations
+    if (newShowDetails) {
+      loadPendingInvitations();
+    }
+  };
 
   async function handleInvitationResponse(invitationId: number, action: 'accept' | 'decline') {
     try {
@@ -61,7 +75,7 @@ function PendingInvitationsNotification() {
     <div className="relative">
       {/* Notification Bell */}
       <button
-        onClick={() => setShowDetails(!showDetails)}
+        onClick={toggleDetails}
         className="relative p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
         title={`${invitations.length} pending invitation${invitations.length !== 1 ? 's' : ''}`}
       >

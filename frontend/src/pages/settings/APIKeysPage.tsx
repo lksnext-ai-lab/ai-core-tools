@@ -7,6 +7,7 @@ import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
+import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
@@ -23,7 +24,8 @@ interface APIKey {
 function APIKeysPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
-  const { isAdmin, userRole } = useAppRole(appId);
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +213,7 @@ function APIKeysPage() {
             <h2 className="text-xl font-semibold text-gray-900">API Keys</h2>
             <p className="text-gray-600">Manage API keys for external application access</p>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <button 
               onClick={handleCreateKey}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
@@ -223,7 +225,7 @@ function APIKeysPage() {
         </div>
         
         {/* Read-only banner for non-admins */}
-        {!isAdmin && <ReadOnlyBanner userRole={userRole} />}
+        {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
         {/* API Keys Table */}
         <Table
@@ -235,13 +237,19 @@ function APIKeysPage() {
               render: (apiKey) => (
                 <div className="flex items-center">
                   <span className="text-blue-400 text-xl mr-3">🔑</span>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
-                    onClick={() => void handleEditKey(apiKey.key_id)}
-                  >
-                    {apiKey.name}
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      onClick={() => void handleEditKey(apiKey.key_id)}
+                    >
+                      {apiKey.name}
+                    </button>
+                  ) : (
+                    <span className="text-sm font-medium text-gray-900">
+                      {apiKey.name}
+                    </span>
+                  )}
                 </div>
               )
             },
@@ -279,7 +287,7 @@ function APIKeysPage() {
               header: 'Actions',
               className: 'relative',
               render: (apiKey) => (
-                isAdmin ? (
+                canEdit ? (
                   <ActionDropdown
                     actions={[
                       {

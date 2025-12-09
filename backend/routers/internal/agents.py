@@ -12,6 +12,7 @@ from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
+from routers.controls.role_authorization import require_min_role, AppRole
 
 from utils.logger import get_logger
 
@@ -37,6 +38,7 @@ def get_agent_service() -> AgentService:
 async def list_agents(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db),
     agent_service: AgentService = Depends(get_agent_service)
 ):
@@ -59,6 +61,7 @@ async def get_agent(
     app_id: int, 
     agent_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db),
     agent_service: AgentService = Depends(get_agent_service)
 ):
@@ -88,6 +91,7 @@ async def create_or_update_agent(
     agent_id: int,
     agent_data: CreateUpdateAgentSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
     db: Session = Depends(get_db),
     agent_service: AgentService = Depends(get_agent_service)
 ):
@@ -127,7 +131,7 @@ async def create_or_update_agent(
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
     
     # Return updated agent (reuse the GET logic)
-    return await get_agent(app_id, created_agent_id, auth_context, db, agent_service)
+    return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
 
 
 @agents_router.delete("/{agent_id}",
@@ -137,6 +141,7 @@ async def delete_agent(
     app_id: int, 
     agent_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
     db: Session = Depends(get_db),
     agent_service: AgentService = Depends(get_agent_service)
 ):

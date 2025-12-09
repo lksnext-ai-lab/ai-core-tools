@@ -42,6 +42,7 @@ import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
+import ProfilePage from '../pages/ProfilePage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -134,6 +135,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AppsPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/profile" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                      <ProfilePage />
                   </ProtectedLayoutRoute>
                 } />
 

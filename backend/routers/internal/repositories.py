@@ -12,6 +12,7 @@ from services.resource_service import ResourceService
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, RepositorySearchSchema
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls import enforce_file_size_limit
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database dependency
 from db.database import get_db
@@ -35,7 +36,8 @@ logger.info("Repositories router loaded successfully")
 async def list_repositories(
     app_id: int,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer"))
 ):
     """
     List all repositories for a specific app.
@@ -58,7 +60,8 @@ async def get_repository(
     app_id: int,
     repository_id: int,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer"))
 ):
     """
     Get detailed information about a specific repository including its resources.
@@ -79,7 +82,8 @@ async def create_or_update_repository(
     repository_id: int,
     repo_data: CreateUpdateRepositorySchema,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth) 
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Create a new repository or update an existing one.
@@ -100,7 +104,8 @@ async def delete_repository(
     app_id: int,
     repository_id: int,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Delete a repository and all its resources.
@@ -125,7 +130,8 @@ async def upload_resources(
     files: List[UploadFile] = File(...),
     folder_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Upload multiple resources to a repository.
@@ -158,7 +164,8 @@ async def move_resource(
     resource_id: int,
     new_folder_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Move a resource to a different folder within the same repository.
@@ -188,7 +195,8 @@ async def delete_resource(
     repository_id: int,
     resource_id: int,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Delete a specific resource from a repository.
@@ -218,7 +226,8 @@ async def download_resource(
     repository_id: int,
     resource_id: int,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer"))
 ):
     """
     Download a specific resource from a repository.

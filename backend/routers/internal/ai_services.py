@@ -12,6 +12,7 @@ from services.ai_service_service import AIServiceService
 # Import schemas and auth
 from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
 from utils.logger import get_logger
@@ -32,12 +33,12 @@ AI_SERVICE_NOT_FOUND_ERROR = "AI service not found"
 async def list_ai_services(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     List all AI services for a specific app.
     """    
-    # TODO: Add app access validation
     
     try:
         return AIServiceService.get_ai_services_by_app_id(db, app_id)
@@ -56,12 +57,12 @@ async def get_ai_service(
     app_id: int, 
     service_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific AI service.
     """    
-    # TODO: Add app access validation
     
     try:
         result = AIServiceService.get_ai_service_detail(db, app_id, service_id)
@@ -89,13 +90,12 @@ async def create_or_update_ai_service(
     service_id: int,
     service_data: CreateUpdateAIServiceSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Create a new AI service or update an existing one.
     """
-    
-    # TODO: Add app access validation
     
     try:
         result = AIServiceService.create_or_update_ai_service(db, app_id, service_id, service_data)
@@ -120,13 +120,13 @@ async def create_or_update_ai_service(
 async def copy_ai_service(
     app_id: int,
     service_id: int,
-    current_user: dict = Depends(get_current_user_oauth),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Copy an existing AI service.
     """
-    user_id = current_user["user_id"]
     try:
         result = AIServiceService.copy_ai_service(db, app_id, service_id)
         if result is None:
@@ -151,13 +151,12 @@ async def delete_ai_service(
     app_id: int, 
     service_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
     Delete an AI service.
     """
-    
-    # TODO: Add app access validation
     
     try:
         success = AIServiceService.delete_ai_service(db, app_id, service_id)

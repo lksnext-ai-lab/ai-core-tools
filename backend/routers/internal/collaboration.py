@@ -18,6 +18,7 @@ from schemas.apps_schemas import (
 )
 from schemas.common_schemas import MessageResponseSchema
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
 from utils.logger import get_logger
@@ -42,6 +43,7 @@ def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
 async def list_collaborators(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -94,6 +96,7 @@ async def invite_collaborator(
     app_id: int,
     invitation_data: InviteCollaboratorSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
@@ -172,6 +175,7 @@ async def update_collaborator_role(
     user_id: int,
     role_data: UpdateCollaboratorRoleSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """
@@ -217,6 +221,7 @@ async def remove_collaborator(
     app_id: int,
     user_id: int,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
 ):
     """

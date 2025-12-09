@@ -4,6 +4,9 @@ import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
+import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
 interface Repository {
   repository_id: number;
@@ -14,6 +17,9 @@ interface Repository {
 
 const RepositoriesPage: React.FC = () => {
   const { appId } = useParams<{ appId: string }>();
+  const { hasMinRole, userRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
+  
   const navigate = useNavigate();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,14 +139,18 @@ const RepositoriesPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
           <p className="text-gray-600">Manage your document repositories</p>
         </div>
-        <button
-          onClick={handleCreateRepository}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-        >
-          <span className="mr-2">+</span>
-          Create Repository
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleCreateRepository}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
+          >
+            <span className="mr-2">+</span>
+            Create Repository
+          </button>
+        )}
       </div>
+
+      {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Repositories List */}
       <Table
@@ -150,17 +160,10 @@ const RepositoriesPage: React.FC = () => {
           {
             header: 'Name',
             render: (repository) => (
-              <div 
-                className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
+              <button 
+                type="button"
+                className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors w-full text-left"
                 onClick={() => handleManageResources(repository.repository_id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleManageResources(repository.repository_id);
-                  }
-                }}
               >
                 <div className="flex-shrink-0 h-10 w-10">
                   <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
@@ -172,7 +175,7 @@ const RepositoriesPage: React.FC = () => {
                     {repository.name}
                   </div>
                 </div>
-              </div>
+              </button>
             )
           },
           {
@@ -192,30 +195,34 @@ const RepositoriesPage: React.FC = () => {
             render: (repository) => (
               <ActionDropdown
                 actions={[
-                  {
-                    label: 'Manage Resources',
-                    onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`),
-                    icon: '📁',
-                    variant: 'success'
-                  },
+                  ...(canEdit ? [
+                    {
+                      label: 'Manage Resources',
+                      onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`),
+                      icon: '📁',
+                      variant: 'success' as const
+                    }
+                  ] : []),
                   {
                     label: 'Playground',
                     onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`),
                     icon: '🎮',
                     variant: 'warning'
                   },
-                  {
-                    label: 'Edit',
-                    onClick: () => handleEditRepository(repository.repository_id),
-                    icon: '✏️',
-                    variant: 'primary'
-                  },
-                  {
-                    label: 'Delete',
-                    onClick: () => handleDeleteRepository(repository),
-                    icon: '🗑️',
-                    variant: 'danger'
-                  }
+                  ...(canEdit ? [
+                    {
+                      label: 'Edit',
+                      onClick: () => handleEditRepository(repository.repository_id),
+                      icon: '✏️',
+                      variant: 'primary' as const
+                    },
+                    {
+                      label: 'Delete',
+                      onClick: () => handleDeleteRepository(repository),
+                      icon: '🗑️',
+                      variant: 'danger' as const
+                    }
+                  ] : [])
                 ]}
                 size="sm"
               />
@@ -228,7 +235,7 @@ const RepositoriesPage: React.FC = () => {
         loading={loading}
       />
 
-      {!loading && repositories.length === 0 && (
+      {!loading && repositories.length === 0 && canEdit && (
         <div className="text-center py-6">
           <button
             onClick={handleCreateRepository}

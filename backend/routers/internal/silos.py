@@ -9,6 +9,7 @@ from schemas.silo_schemas import (
     SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema, SiloSearchSchema
 )
 from .auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 from db.database import get_db
 
@@ -29,6 +30,7 @@ silos_router = APIRouter()
 async def list_silos(
     app_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -55,6 +57,7 @@ async def get_silo(
     app_id: int, 
     silo_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -88,6 +91,7 @@ async def create_or_update_silo(
     silo_id: int,
     silo_data: CreateUpdateSiloSchema,
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
     db: Session = Depends(get_db)
 ):
     """
@@ -101,7 +105,7 @@ async def create_or_update_silo(
         
         # Return updated silo (reuse the GET logic)
         logger.info(f"Silo created/updated successfully: {silo.silo_id}, now getting details")
-        return await get_silo(app_id, silo.silo_id, auth_context, db)
+        return await get_silo(app_id, silo.silo_id, auth_context, role, db)
         
     except HTTPException:
         raise
@@ -120,6 +124,7 @@ async def delete_silo(
     app_id: int, 
     silo_id: int, 
     auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
     db: Session = Depends(get_db)
 ):
     """

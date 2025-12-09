@@ -18,6 +18,7 @@ from schemas.domain_url_schemas import (
     URLActionResponseSchema
 )
 from routers.internal.auth_utils import get_current_user_oauth
+from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database dependencies
 from db.database import get_db
@@ -81,7 +82,13 @@ def background_reindex_domain(domain_id: int):
                     summary="List domains",
                     tags=["Domains"],
                     response_model=List[DomainListItemSchema])
-async def list_domains(app_id: int, request: Request, db: Session = Depends(get_db), auth_context: AuthContext = Depends(get_current_user_oauth)):
+async def list_domains(
+    app_id: int, 
+    request: Request, 
+    db: Session = Depends(get_db), 
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer"))
+):
     """
     List all domains for a specific app.
     """
@@ -121,7 +128,14 @@ async def list_domains(app_id: int, request: Request, db: Session = Depends(get_
                     summary="Get domain details",
                     tags=["Domains"],
                     response_model=DomainDetailSchema)
-async def get_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db), auth_context: AuthContext = Depends(get_current_user_oauth)):
+async def get_domain(
+    app_id: int, 
+    domain_id: int, 
+    request: Request, 
+    db: Session = Depends(get_db), 
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer"))
+):
     """
     Get detailed information about a specific domain.
     """
@@ -171,7 +185,8 @@ async def create_or_update_domain(
     domain_data: CreateUpdateDomainSchema,
     request: Request,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Create a new domain or update an existing one.
@@ -197,7 +212,7 @@ async def create_or_update_domain(
         created_domain_id = DomainService.create_or_update_domain(data, domain_data.embedding_service_id, db)
         
         # Return updated domain (reuse the GET logic)
-        return await get_domain(app_id, created_domain_id, request, db)
+        return await get_domain(app_id, created_domain_id, request, db, auth_context, role)
         
     except Exception as e:
         logger.error(f"Error creating/updating domain: {str(e)}")
@@ -210,7 +225,14 @@ async def create_or_update_domain(
 @domains_router.delete("/{domain_id}",
                        summary="Delete domain",
                        tags=["Domains"])
-async def delete_domain(app_id: int, domain_id: int, request: Request, db: Session = Depends(get_db), auth_context: AuthContext = Depends(get_current_user_oauth)):
+async def delete_domain(
+    app_id: int, 
+    domain_id: int, 
+    request: Request, 
+    db: Session = Depends(get_db), 
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
+):
     """
     Delete a domain and its associated silo and URLs.
     """
@@ -249,7 +271,8 @@ async def list_domain_urls(
     db: Session = Depends(get_db),
     page: int = 1,
     per_page: int = 20,
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer"))
 ):
     """
     List URLs for a specific domain with pagination.
@@ -291,7 +314,8 @@ async def add_url_to_domain(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Add a new URL to a domain and scrape its content.
@@ -342,7 +366,8 @@ async def delete_url_from_domain(
     url_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Delete a URL from a domain and remove its indexed content.
@@ -378,7 +403,8 @@ async def reindex_url(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
 ):
     """
     Re-index content for a specific URL.
