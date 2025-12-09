@@ -859,7 +859,16 @@ class AgentExecutionService:
                         if public_api_url.endswith('/'):
                             public_api_url = public_api_url[:-1]
                             
-                        url = f"{public_api_url}/static/{file_path}"
+                        # Generate signed URL
+                        user_email = user_context.get('email') if user_context else None
+                        if user_email:
+                            from utils.security import generate_signature
+                            sig = generate_signature(file_path, user_email)
+                            url = f"{public_api_url}/static/{file_path}?user={user_email}&sig={sig}"
+                        else:
+                            # Fallback if no user context (should not happen in auth mode)
+                            url = f"{public_api_url}/static/{file_path}"
+                            
                         logger.info(f"Adding image to message using public URL: {url}")
                         content.append({
                             "type": "image_url",

@@ -320,6 +320,7 @@ async def chat_with_agent(
         # Create user context for OAuth user
         user_context = {
             "user_id": int(auth_context.identity.id),
+            "email": auth_context.identity.email,
             "oauth": True,
             "app_id": app_id,
             "token": jwt_token  # Add JWT token for MCP authentication
