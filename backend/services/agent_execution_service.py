@@ -839,8 +839,8 @@ class AgentExecutionService:
                 app_config = get_app_config()
                 tmp_base_folder = app_config['TMP_BASE_FOLDER']
                 
-                # Check for PUBLIC_API_URL environment variable (Production Mode)
-                public_api_url = os.getenv('PUBLIC_API_URL')
+                # Check for aict_base_url environment variable (Production Mode)
+                aict_base_url = os.getenv('AICT_BASE_URL')
                 
                 for img in image_files:
                     file_path = img.get('file_path', '')
@@ -853,21 +853,21 @@ class AgentExecutionService:
                     if file_path.startswith('/'):
                         file_path = file_path[1:]
                     
-                    # If PUBLIC_API_URL is set, use it (Production Mode)
-                    if public_api_url:
+                    # If aict_base_url is set, use it (Production Mode)
+                    if aict_base_url:
                         # Remove trailing slash if present
-                        if public_api_url.endswith('/'):
-                            public_api_url = public_api_url[:-1]
+                        if aict_base_url.endswith('/'):
+                            aict_base_url = aict_base_url[:-1]
                             
                         # Generate signed URL
                         user_email = user_context.get('email') if user_context else None
                         if user_email:
                             from utils.security import generate_signature
                             sig = generate_signature(file_path, user_email)
-                            url = f"{public_api_url}/static/{file_path}?user={user_email}&sig={sig}"
+                            url = f"{aict_base_url}/static/{file_path}?user={user_email}&sig={sig}"
                         else:
                             # Fallback if no user context (should not happen in auth mode)
-                            url = f"{public_api_url}/static/{file_path}"
+                            url = f"{aict_base_url}/static/{file_path}"
                             
                         logger.info(f"Adding image to message using public URL: {url}")
                         content.append({
