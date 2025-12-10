@@ -99,7 +99,8 @@ class AgentService:
             # New agent
             return type('Agent', (), {
                 'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': '', 
-                'type': 'agent', 'is_tool': False, 'create_date': None, 'request_count': 0
+                'type': 'agent', 'is_tool': False, 'create_date': None, 'request_count': 0,
+                'temperature': DEFAULT_AGENT_TEMPERATURE
             })()
         else:
             # Existing agent - determine if it's OCR agent or regular agent

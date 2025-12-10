@@ -1,4 +1,5 @@
 import logging
+import base64
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
@@ -125,14 +126,27 @@ def _build_mistral_llm(ai_service, temperature, is_vision):
 
 
 def _build_custom_llm(ai_service, temperature):
+    client_kwargs = {"verify": False}
+    headers = {}
+
+    if ai_service.api_key:
+        headers["Authorization"] = f"Bearer {ai_service.api_key}"
+
+    if ai_service.endpoint:
+        parsed = urlparse(ai_service.endpoint)
+        if parsed.username and parsed.password:
+            credentials = f"{parsed.username}:{parsed.password}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded_credentials}"
+
+    if headers:
+        client_kwargs["headers"] = headers
+
     service = ChatOllama(
         model=ai_service.description,
         temperature=temperature,
         base_url=ai_service.endpoint,
-        client_kwargs={
-            "verify": False,
-            "headers": {"Authorization": f"Bearer {ai_service.api_key}"},
-        },
+        client_kwargs=client_kwargs,
     )
     logger.info(f"Service: {service}")
     return service
