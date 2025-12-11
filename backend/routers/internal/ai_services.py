@@ -81,6 +81,33 @@ async def get_ai_service(
         )
 
 
+@ai_services_router.post("/test-connection",
+                         summary="Test AI service connection with config",
+                         tags=["AI Services"])
+async def test_ai_service_connection_with_config(
+    config: CreateUpdateAIServiceSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator"))
+):
+    """
+    Test connection to AI service using provided configuration.
+    """
+    try:
+        # Map schema fields to service fields
+        service_config = {
+            "provider": config.provider,
+            "description": config.model_name,
+            "api_key": config.api_key,
+            "endpoint": config.base_url
+        }
+        return AIServiceService.test_connection_with_config(service_config)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing AI service connection: {str(e)}"
+        )
+
+
 @ai_services_router.post("/{service_id}",
                          summary="Create or update AI service",
                          tags=["AI Services"],
@@ -173,4 +200,26 @@ async def delete_ai_service(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting AI service: {str(e)}"
+        )
+
+
+@ai_services_router.post("/{service_id}/test",
+                         summary="Test AI service connection",
+                         tags=["AI Services"])
+async def test_ai_service_connection(
+    app_id: int,
+    service_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """
+    Test connection to AI service.
+    """
+    try:
+        return AIServiceService.test_connection(db, app_id, service_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing AI service connection: {str(e)}"
         ) 

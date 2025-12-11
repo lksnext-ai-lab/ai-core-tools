@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import FormActions from './FormActions';
+import { apiService } from '../../services/api';
 
 export interface ServiceFormData {
   name: string;
@@ -49,6 +51,7 @@ function BaseServiceForm({
   formTitle,
   serviceType
 }: Readonly<BaseServiceFormProps>) {
+  const { appId } = useParams();
   const [formData, setFormData] = useState<ServiceFormData>({
     name: '',
     provider: '',
@@ -58,6 +61,8 @@ function BaseServiceForm({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [isTesting, setIsTesting] = useState(false);
 
   const isEditing = !!service && service.service_id !== 0;
 
@@ -90,6 +95,29 @@ function BaseServiceForm({
           base_url: defaults.baseUrl
         }));
       }
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!appId) return;
+    
+    setIsTesting(true);
+    setTestResult(null);
+    setError(null);
+    
+    try {
+      let result;
+      if (serviceType === 'AI') {
+        result = await apiService.testAIServiceConnectionWithConfig(parseInt(appId), formData);
+      } else {
+        // Embedding service test not implemented yet
+        result = { status: 'error', message: 'Testing not supported for this service type yet' };
+      }
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -126,6 +154,14 @@ function BaseServiceForm({
   };
 
   const currentProviderDefaults = formData.provider ? getProviderDefaults(formData.provider) : null;
+
+  const isApiKeyRequired = formData.provider !== 'Custom' && formData.provider !== 'Ollama';
+  const isValid = 
+    formData.name.trim() !== '' && 
+    formData.provider !== '' && 
+    formData.model_name.trim() !== '' && 
+    formData.base_url.trim() !== '' &&
+    (!isApiKeyRequired || formData.api_key.trim() !== '');
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -245,13 +281,58 @@ function BaseServiceForm({
           </p>
         </div>
 
-        {/* Form Actions */}
-        <FormActions
-          onCancel={onCancel}
-          isSubmitting={isSubmitting}
-          isEditing={isEditing}
-          submitButtonColor={serviceType === 'AI' ? 'blue' : 'green'}
-        />
+        {/* Test Result */}
+        {testResult && (
+          <div className={`p-3 rounded-lg border ${testResult.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className="text-xl">{testResult.status === 'success' ? '✅' : '❌'}</span>
+              </div>
+              <div className="ml-3 w-full">
+                <h3 className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>
+                  {testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
+                </h3>
+                <div className={`mt-1 text-sm ${testResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+                  {testResult.message}
+                </div>
+                {testResult.response && (
+                  <div className="mt-3">
+                    <h4 className="text-xs font-semibold text-green-800 uppercase tracking-wider mb-2">Response</h4>
+                    <div className="bg-white p-2 rounded border border-green-200 text-xs font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {testResult.response}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+          <div>
+            {serviceType === 'AI' && (
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={isTesting || isSubmitting}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border ${
+                  isTesting 
+                    ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {isTesting ? 'Testing...' : 'Test Connection'}
+              </button>
+            )}
+          </div>
+          <FormActions
+            onCancel={onCancel}
+            isSubmitting={isSubmitting}
+            isEditing={isEditing}
+            submitButtonColor={serviceType === 'AI' ? 'blue' : 'green'}
+            disabled={!isValid}
+          />
+        </div>
       </form>
     </div>
   );

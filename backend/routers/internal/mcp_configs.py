@@ -16,6 +16,8 @@ from services.mcp_config_service import MCPConfigService
 from utils.logger import get_logger
 
 
+import json
+
 MCP_CONFIG_NOT_FOUND_ERROR = "MCP config not found"
 
 logger = get_logger(__name__)
@@ -80,6 +82,34 @@ async def get_mcp_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving MCP config: {str(e)}"
+        )
+
+
+@mcp_configs_router.post("/test-connection",
+                         summary="Test MCP connection with provided config",
+                         tags=["MCP Configs"])
+async def test_mcp_connection_with_config(
+    app_id: int,
+    config_data: CreateUpdateMCPConfigSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """
+    Test connection to MCP server with provided config.
+    """
+    try:
+        # Parse the config string to a dict
+        try:
+            actual_config = json.loads(config_data.config)
+        except json.JSONDecodeError:
+             raise HTTPException(status_code=400, detail="Invalid JSON in config field")
+             
+        return await MCPConfigService.test_connection_with_config(actual_config)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing MCP connection: {str(e)}"
         )
 
 
@@ -151,4 +181,26 @@ async def delete_mcp_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting MCP config: {str(e)}"
+        )
+
+
+@mcp_configs_router.post("/{config_id}/test",
+                         summary="Test MCP connection",
+                         tags=["MCP Configs"])
+async def test_mcp_connection(
+    app_id: int,
+    config_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """
+    Test connection to MCP server and list tools.
+    """
+    try:
+        return await MCPConfigService.test_connection(db, app_id, config_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing MCP connection: {str(e)}"
         ) 

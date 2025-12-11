@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import json
 from schemas.mcp_config_schemas import MCPConfigListItemSchema, MCPConfigDetailSchema, CreateUpdateMCPConfigSchema
+from langchain_mcp_adapters.client import MultiServerMCPClient
+import asyncio
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 class MCPConfigService:
     @staticmethod
@@ -92,4 +97,57 @@ class MCPConfigService:
     @staticmethod
     def delete_mcp_config(db: Session, app_id: int, config_id: int) -> bool:
         """Delete an MCP config"""
-        return MCPConfigRepository.delete_by_id_and_app_id(db, config_id, app_id) 
+        return MCPConfigRepository.delete_by_id_and_app_id(db, config_id, app_id)
+
+    @staticmethod
+    async def test_connection(db: Session, app_id: int, config_id: int) -> dict:
+        """Test connection to MCP server and list tools"""
+        config = MCPConfigRepository.get_by_id_and_app_id(db, config_id, app_id)
+        if not config:
+            return {"status": "error", "message": "MCP config not found"}
+            
+        connection_config = config.to_connection_dict()
+        return await MCPConfigService.test_connection_with_config(connection_config)
+
+    @staticmethod
+    async def test_connection_with_config(connection_config: dict) -> dict:
+        """Test connection to MCP server with provided config"""
+        if not connection_config:
+             return {"status": "error", "message": "Invalid MCP configuration"}
+             
+        try:
+            # Create client
+            client = MultiServerMCPClient(connections=connection_config)
+            
+            # Get tools
+            tools = await client.get_tools()
+            
+            # Format tools for display
+            tool_list = []
+            for tool in tools:
+                args_schema = {}
+                if tool.args_schema:
+                    if hasattr(tool.args_schema, 'schema'):
+                        args_schema = tool.args_schema.schema()
+                    elif isinstance(tool.args_schema, dict):
+                        args_schema = tool.args_schema
+                    else:
+                        args_schema = str(tool.args_schema)
+
+                tool_list.append({
+                    "name": tool.name,
+                    "description": tool.description,
+                    "args": args_schema
+                })
+                
+            return {
+                "status": "success",
+                "message": f"Successfully connected. Found {len(tools)} tools.",
+                "tools": tool_list
+            }
+        except Exception as e:
+            logger.error(f"Error testing MCP connection: {str(e)}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }

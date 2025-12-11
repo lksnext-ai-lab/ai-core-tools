@@ -4,6 +4,10 @@ from repositories.ai_service_repository import AIServiceRepository
 from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
 from datetime import datetime
 from typing import List
+from tools.aiServiceTools import create_llm_from_service
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 class AIServiceService:
     
@@ -137,7 +141,56 @@ class AIServiceService:
         AIServiceRepository.delete(db, service)
         
         return True
-    
+
+    @staticmethod
+    def test_connection_with_config(config: dict) -> dict:
+        """Test connection to AI service using provided configuration"""
+        try:
+            # Create a mock object that mimics AIService model
+            class MockAIService:
+                def __init__(self, data):
+                    self.provider = data.get('provider')
+                    self.description = data.get('description') # Model name
+                    self.api_key = data.get('api_key')
+                    self.endpoint = data.get('endpoint')
+            
+            service = MockAIService(config)
+            
+            # Build LLM using shared tool
+            llm = create_llm_from_service(service, temperature=0)
+            
+            # Test invocation
+            response = llm.invoke("Hello")
+            
+            return {
+                "status": "success",
+                "message": "Successfully connected to AI service.",
+                "response": str(response.content)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error testing AI service connection: {str(e)}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+
+    @staticmethod
+    def test_connection(db: Session, app_id: int, service_id: int) -> dict:
+        """Test connection to AI service"""
+        service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        if not service:
+            return {"status": "error", "message": "AI service not found"}
+            
+        # Convert model to dict for the shared method
+        config = {
+            "provider": service.provider,
+            "description": service.description,
+            "api_key": service.api_key,
+            "endpoint": service.endpoint
+        }
+        
+        return AIServiceService.test_connection_with_config(config)
     @staticmethod
     def delete_by_app_id(app_id: int):
         """Delete all AI services for a specific app"""

@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import AIServiceForm from '../../components/forms/AIServiceForm';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -56,6 +57,27 @@ function AIServicesPage() {
     setEditingService,
   } = useServicesManager<AIService>(appId, api as any, cache as any);
 
+  const [testResult, setTestResult] = useState<any>(null);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testingServiceId, setTestingServiceId] = useState<number | null>(null);
+
+  async function handleTestConnection(serviceId: number) {
+    if (!appId) return;
+    setTestingServiceId(serviceId);
+    setTestResult(null);
+    setIsTestModalOpen(true);
+    
+    try {
+      const apiService = (await import('../../services/api')).apiService;
+      const result = await apiService.testAIServiceConnection(parseInt(appId), serviceId);
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
+    } finally {
+      setTestingServiceId(null);
+    }
+  }
+
   if (loading) return (
     <div className="p-6 text-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -112,6 +134,13 @@ function AIServicesPage() {
           { header: 'Actions', className: 'relative', render: (service: AIService) => (
             canEdit ? (
               <ActionDropdown actions={[
+                {
+                  label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
+                  onClick: () => void handleTestConnection(service.service_id),
+                  icon: testingServiceId === service.service_id ? '⏳' : '🔌',
+                  show: canEdit,
+                  disabled: testingServiceId === service.service_id
+                },
                 { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' },
                 { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: '📋', variant: 'primary' },
                 { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: '🗑️', variant: 'danger' }
@@ -147,6 +176,49 @@ function AIServicesPage() {
 
       <Modal isOpen={isModalOpen} onClose={handleClose} title={editingService ? 'Edit AI Service' : 'Create New AI Service'}>
         <AIServiceForm aiService={editingService} onSubmit={handleSave} onCancel={handleClose} />
+      </Modal>
+
+      {/* Test Result Modal */}
+      <Modal
+        isOpen={isTestModalOpen}
+        onClose={() => !testingServiceId && setIsTestModalOpen(false)}
+        title="Connection Test Result"
+      >
+        <div className="p-4">
+          {testingServiceId ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Testing connection to AI service...</p>
+            </div>
+          ) : testResult && (
+            <div>
+              <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                <strong>Status:</strong> {testResult.status === 'success' ? 'Success' : 'Error'}
+                <br />
+                <strong>Message:</strong> {testResult.message}
+              </div>
+              
+              {testResult.response && (
+                <div>
+                  <h4 className="font-semibold mb-2">Response:</h4>
+                  <div className="bg-gray-50 p-3 rounded border text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
+                    {testResult.response}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {!testingServiceId && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setIsTestModalOpen(false)}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

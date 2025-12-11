@@ -241,6 +241,19 @@ class ApiService {
     });
   }
 
+  async testAIServiceConnection(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/ai-services/${serviceId}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async testAIServiceConnectionWithConfig(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/ai-services/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // ==================== EMBEDDING SERVICES ====================
   async getEmbeddingServices(appId: number) {
     return this.request(`/internal/apps/${appId}/embedding-services/`);
@@ -296,6 +309,19 @@ class ApiService {
   async deleteMCPConfig(appId: number, configId: number) {
     return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async testMCPConnection(appId: number, configId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/${configId}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async testMCPConnectionWithConfig(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-configs/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

@@ -48,6 +48,34 @@ def get_output_parser(agent):
 # Legacy functions removed - now using create_agent from agentTools.py
 # This provides full tool support, MCP integration, and LangSmith tracing
 
+def create_llm_from_service(ai_service, temperature=0, is_vision=False):
+    """
+    Create an LLM instance from an AIService model
+    Args:
+        ai_service: AIService model instance
+        temperature: float
+        is_vision: boolean
+    """
+    provider_builders = {
+        ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temperature),
+        ProviderEnum.Anthropic.value: lambda: _build_anthropic_llm(ai_service, temperature),
+        ProviderEnum.MistralAI.value: lambda: _build_mistral_llm(ai_service, temperature, is_vision),
+        ProviderEnum.Custom.value: lambda: _build_custom_llm(ai_service, temperature),
+        ProviderEnum.Azure.value: lambda: _build_azure_llm(ai_service, temperature),
+        ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temperature),
+    }
+
+    # Handle case where provider might be an Enum object instead of string
+    provider = ai_service.provider
+    if hasattr(provider, 'value'):
+        provider = provider.value
+
+    builder = provider_builders.get(provider)
+    if builder is None:
+        raise ValueError(f"Proveedor de modelo no soportado: {provider}")
+
+    return builder()
+
 def get_llm(agent, is_vision=False):
     """
     Función base para obtener cualquier modelo LLM
@@ -67,20 +95,7 @@ def get_llm(agent, is_vision=False):
     from models.agent import DEFAULT_AGENT_TEMPERATURE
     temperature = getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE)
 
-    provider_builders = {
-        ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temperature),
-        ProviderEnum.Anthropic.value: lambda: _build_anthropic_llm(ai_service, temperature),
-        ProviderEnum.MistralAI.value: lambda: _build_mistral_llm(ai_service, temperature, is_vision),
-        ProviderEnum.Custom.value: lambda: _build_custom_llm(ai_service, temperature),
-        ProviderEnum.Azure.value: lambda: _build_azure_llm(ai_service, temperature),
-        ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temperature),
-    }
-
-    builder = provider_builders.get(ai_service.provider)
-    if builder is None:
-        raise ValueError(f"Proveedor de modelo no soportado: {ai_service.provider}")
-
-    return builder()
+    return create_llm_from_service(ai_service, temperature, is_vision)
 
 class MistralWrapper:
     def __init__(self, client, model_name):

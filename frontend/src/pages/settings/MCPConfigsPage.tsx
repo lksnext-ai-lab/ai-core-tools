@@ -22,11 +22,33 @@ function MCPConfigsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<any>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testingConfigId, setTestingConfigId] = useState<number | null>(null);
 
   // Load MCP configs from cache or API
   useEffect(() => {
     loadMCPConfigs();
   }, [appId]);
+
+  async function handleTestConnection(configId: number) {
+    if (!appId) return;
+    setTestingConfigId(configId);
+    setTestResult(null);
+    setIsTestModalOpen(true);
+    
+    try {
+      const result = await apiService.testMCPConnection(parseInt(appId), configId);
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Failed to test connection'
+      });
+    } finally {
+      setTestingConfigId(null);
+    }
+  }
 
   async function loadMCPConfigs() {
     if (!appId) return;
@@ -228,6 +250,13 @@ function MCPConfigsPage() {
                   <ActionDropdown
                     actions={[
                       {
+                        label: testingConfigId === config.config_id ? 'Testing...' : 'Test Connection',
+                        onClick: () => { void handleTestConnection(config.config_id); },
+                        icon: testingConfigId === config.config_id ? '⏳' : '🔌',
+                        show: canEdit,
+                        disabled: testingConfigId === config.config_id
+                      },
+                      {
                         label: 'Edit',
                         onClick: () => { void handleEditConfig(config.config_id); },
                         icon: '✏️',
@@ -306,6 +335,64 @@ function MCPConfigsPage() {
             onSubmit={handleSaveConfig}
             onCancel={handleCloseModal}
           />
+        </Modal>
+
+        {/* Test Result Modal */}
+        <Modal
+          isOpen={isTestModalOpen}
+          onClose={() => !testingConfigId && setIsTestModalOpen(false)}
+          title="Connection Test Result"
+        >
+          <div className="p-4">
+            {testingConfigId ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Testing connection to MCP server...</p>
+              </div>
+            ) : testResult && (
+              <div>
+                <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <strong>Status:</strong> {testResult.status === 'success' ? 'Success' : 'Error'}
+                  <br />
+                  <strong>Message:</strong> {testResult.message}
+                </div>
+                
+                {testResult.tools && testResult.tools.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Available Tools:</h4>
+                    <div className="max-h-60 overflow-y-auto border rounded">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {testResult.tools.map((tool: any, index: number) => (
+                            <tr key={index}>
+                              <td className="px-4 py-2 text-sm font-medium text-gray-900">{tool.name}</td>
+                              <td className="px-4 py-2 text-sm text-gray-500">{tool.description}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!testingConfigId && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setIsTestModalOpen(false)}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
         </Modal>
       </div>
     
