@@ -4,9 +4,9 @@ from repositories.mcp_config_repository import MCPConfigRepository
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
+import asyncio
 from schemas.mcp_config_schemas import MCPConfigListItemSchema, MCPConfigDetailSchema, CreateUpdateMCPConfigSchema
 from langchain_mcp_adapters.client import MultiServerMCPClient
-import asyncio
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -122,8 +122,6 @@ class MCPConfigService:
         client = None
         try:
             # Create client with timeout
-            import asyncio
-            
             # Create client
             client = MultiServerMCPClient(connections=connection_config)
             

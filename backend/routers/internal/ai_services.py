@@ -111,8 +111,10 @@ async def test_ai_service_connection_with_config(
                 result['response'] = str(result['response'])[:500] + '... (truncated)'
         
         return result
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error testing AI service connection (provider: {config.provider})")
+        logger.error(f"Error testing AI service connection (provider: {config.provider}): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing AI service connection: {str(e)}"

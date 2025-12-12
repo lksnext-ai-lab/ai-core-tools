@@ -6,6 +6,9 @@ from datetime import datetime
 from typing import List
 from tools.aiServiceTools import create_llm_from_service
 from utils.logger import get_logger
+import asyncio
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from langchain_core.runnables import RunnableConfig
 
 logger = get_logger(__name__)
 
@@ -173,15 +176,11 @@ class AIServiceService:
             llm = create_llm_from_service(service, temperature=0)
             
             # Test invocation with timeout
-            import asyncio
-            from concurrent.futures import TimeoutError as FuturesTimeoutError
-            from langchain_core.runnables import RunnableConfig
-            
             try:
                 # Add timeout to prevent hanging connections
                 config_with_timeout = RunnableConfig(timeout=30)
                 response = llm.invoke("Hello", config=config_with_timeout)
-            except (TimeoutError, FuturesTimeoutError, asyncio.TimeoutError) as timeout_err:
+            except (TimeoutError, FuturesTimeoutError, asyncio.TimeoutError):
                 return {
                     "status": "error",
                     "message": "Connection timeout: The AI service did not respond within 30 seconds"

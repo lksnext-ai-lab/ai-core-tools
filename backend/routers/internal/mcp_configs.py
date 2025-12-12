@@ -126,7 +126,7 @@ async def test_mcp_connection_with_config(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error testing MCP connection for app {app_id}")
+        logger.error(f"Error testing MCP connection for app {app_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing MCP connection: {str(e)}"
