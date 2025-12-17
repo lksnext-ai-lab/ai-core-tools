@@ -102,11 +102,31 @@ async def test_mcp_connection_with_config(
         # Parse the config string to a dict
         try:
             actual_config = json.loads(config_data.config)
-        except json.JSONDecodeError:
-             raise HTTPException(status_code=400, detail="Invalid JSON in config field")
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON in config field: {str(e)}"
+            )
+        
+        # Validate config structure
+        if not isinstance(actual_config, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Config must be a JSON object (dictionary)"
+            )
+        
+        if not actual_config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Config cannot be empty"
+            )
              
-        return await MCPConfigService.test_connection_with_config(actual_config)
+        result = await MCPConfigService.test_connection_with_config(actual_config)
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error testing MCP connection for app {app_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing MCP connection: {str(e)}"

@@ -94,14 +94,27 @@ async def test_ai_service_connection_with_config(
     """
     try:
         # Map schema fields to service fields
+        # Note: Do not log or expose api_key in any error messages
         service_config = {
             "provider": config.provider,
             "description": config.model_name,
             "api_key": config.api_key,
-            "endpoint": config.base_url
+            "endpoint": config.base_url,
+            "api_version": getattr(config, 'api_version', None)
         }
-        return AIServiceService.test_connection_with_config(service_config)
+        result = AIServiceService.test_connection_with_config(service_config)
+        
+        # Ensure we don't leak sensitive information in successful responses
+        if isinstance(result, dict) and 'response' in result:
+            # Truncate long responses to prevent excessive data return
+            if len(str(result.get('response', ''))) > 500:
+                result['response'] = str(result['response'])[:500] + '... (truncated)'
+        
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error testing AI service connection (provider: {config.provider}): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing AI service connection: {str(e)}"

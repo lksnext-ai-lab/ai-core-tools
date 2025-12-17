@@ -4,9 +4,9 @@ from repositories.mcp_config_repository import MCPConfigRepository
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
+import asyncio
 from schemas.mcp_config_schemas import MCPConfigListItemSchema, MCPConfigDetailSchema, CreateUpdateMCPConfigSchema
 from langchain_mcp_adapters.client import MultiServerMCPClient
-import asyncio
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -114,13 +114,25 @@ class MCPConfigService:
         """Test connection to MCP server with provided config"""
         if not connection_config:
              return {"status": "error", "message": "Invalid MCP configuration"}
+        
+        # Validate config structure
+        if not isinstance(connection_config, dict):
+            return {"status": "error", "message": "MCP configuration must be a dictionary"}
              
+        client = None
         try:
+            # Create client with timeout
             # Create client
             client = MultiServerMCPClient(connections=connection_config)
             
-            # Get tools
-            tools = await client.get_tools()
+            # Get tools with timeout
+            try:
+                tools = await asyncio.wait_for(client.get_tools(), timeout=30.0)
+            except asyncio.TimeoutError:
+                return {
+                    "status": "error",
+                    "message": "Connection timeout: MCP server did not respond within 30 seconds"
+                }
             
             # Format tools for display
             tool_list = []
@@ -151,3 +163,14 @@ class MCPConfigService:
                 "status": "error",
                 "message": str(e)
             }
+        finally:
+            # Cleanup: Close the client if it was created
+            if client is not None:
+                try:
+                    # Check if client has cleanup method
+                    if hasattr(client, 'close'):
+                        await client.close()
+                    elif hasattr(client, '__aexit__'):
+                        await client.__aexit__(None, None, None)
+                except Exception as cleanup_error:
+                    logger.warning(f"Error during MCP client cleanup: {str(cleanup_error)}")
