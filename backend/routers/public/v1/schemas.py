@@ -73,6 +73,10 @@ class DeleteDocsRequestSchema(BaseModel):
     """Schema for deleting documents"""
     ids: List[str]
 
+class DeleteByMetadataRequestSchema(BaseModel):
+    """Schema for deleting documents by metadata filter"""
+    filter_metadata: Dict[str, Any]
+
 class DocumentSchema(BaseModel):
     """Document schema"""
     page_content: str
