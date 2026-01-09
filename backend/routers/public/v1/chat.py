@@ -55,11 +55,15 @@ async def call_agent(
             db=db
         )
         
-        return AgentResponseSchema(
+        # result["response"] can be either str or dict (from Pydantic output parser)
+        # Pass it directly - Pydantic schema will handle Union[str, Dict] validation
+        response_data = AgentResponseSchema(
             response=result["response"],
             conversation_id=request.conversation_id or f"api_{agent_id}_{api_key[:8]}",
             usage=result["metadata"]
         )
+        logger.debug(f"Chat response prepared for agent {agent_id}, response type: {type(result['response']).__name__}")
+        return response_data
         
     except Exception as e:
         logger.error(f"Error in public chat endpoint: {str(e)}")
