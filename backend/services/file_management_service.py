@@ -62,7 +62,8 @@ class FileManagementService:
         self, 
         file: UploadFile, 
         agent_id: int,
-        user_context: Dict = None
+        user_context: Dict = None,
+        conversation_id: Optional[int] = None
     ) -> FileReference:
         """
         Upload file for agent consumption
@@ -71,6 +72,7 @@ class FileManagementService:
             file: Uploaded file
             agent_id: ID of the agent
             user_context: User context (api_key, user_id, etc.)
+            conversation_id: Optional conversation ID to organize files
             
         Returns:
             FileReference object
@@ -100,7 +102,7 @@ class FileManagementService:
                 self._files[session_key] = {}
             
             # Save file to disk for persistence (including original file)
-            await self._save_file_to_disk(session_key, file_id, file_ref, temp_path)
+            await self._save_file_to_disk(session_key, file_id, file_ref, temp_path, conversation_id)
             
             # Store file reference in session (after file_path is set)
             self._files[session_key][file_id] = file_ref
@@ -345,7 +347,7 @@ class FileManagementService:
         else:
             return f"agent_{agent_id}_anonymous"
 
-    async def _save_file_to_disk(self, session_key: str, file_id: str, file_ref: FileReference, original_file_path: str = None):
+    async def _save_file_to_disk(self, session_key: str, file_id: str, file_ref: FileReference, original_file_path: str = None, conversation_id: Optional[int] = None):
         """Save file reference to disk for persistence"""
         try:
             session_dir = os.path.join(self._persistent_dir, session_key)
@@ -366,14 +368,24 @@ class FileManagementService:
             if original_file_path and os.path.exists(original_file_path):
                 original_filename = os.path.basename(original_file_path)
                 original_extension = os.path.splitext(original_filename)[1]
-                original_file = os.path.join(session_dir, f"{file_id}{original_extension}")
+                
+                # Determine target directory
+                if conversation_id:
+                    target_dir = os.path.join(self._tmp_base_folder, "conversations", str(conversation_id))
+                else:
+                    target_dir = session_dir
+                
+                os.makedirs(target_dir, exist_ok=True)
+                
+                original_file = os.path.join(target_dir, f"{file_id}{original_extension}")
                 
                 import shutil
                 shutil.copy2(original_file_path, original_file)
                 
                 # Calculate relative path from TMP_BASE_FOLDER
                 relative_path = os.path.relpath(original_file, self._tmp_base_folder)
-                file_ref.file_path = relative_path
+                # Ensure forward slashes for URLs
+                file_ref.file_path = relative_path.replace(os.sep, '/')
                 
                 logger.info(f"Saved original file {original_filename} to {original_file} (relative: {relative_path})")
                 logger.info(f"FileReference file_path set to: {file_ref.file_path}")

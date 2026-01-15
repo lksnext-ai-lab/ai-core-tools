@@ -15,12 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from scalar_fastapi import get_scalar_api_reference
 import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from config import CLIENT_CONFIG
 
 from models.app import App
@@ -98,6 +100,32 @@ app = FastAPI(
     version=os.getenv('APP_VERSION', '0.2.37'),
     lifespan=lifespan
 )
+
+# Secure static files serving
+# This allows accessing uploaded images via URL (e.g. for multimodal models)
+# We serve files from TMP_BASE_FOLDER (default: data/tmp) at /static with signature verification
+from utils.config import get_app_config
+from utils.security import verify_signature
+
+app_config = get_app_config()
+tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
+os.makedirs(tmp_base_folder, exist_ok=True)
+
+@app.get("/static/{file_path:path}")
+async def get_static_file(file_path: str, user: str = None, sig: str = None):
+    # Verify signature
+    if not user or not sig or not verify_signature(file_path, user, sig):
+        raise HTTPException(status_code=403, detail="Invalid signature or missing parameters")
+    
+    # Prevent directory traversal
+    if ".." in file_path:
+        raise HTTPException(status_code=403, detail="Invalid path")
+
+    full_path = os.path.join(tmp_base_folder, file_path)
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    return FileResponse(full_path)
 
 
 # ==================== CORS MIDDLEWARE ====================
