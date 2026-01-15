@@ -292,6 +292,20 @@ class ResourceService:
             name = os.path.splitext(file.filename)[0]
             save_filename = file.filename
         
+        # Check if file with same name already exists in this folder
+        if db:
+            existing_resource = db.query(Resource).filter(
+                Resource.repository_id == repository_id,
+                Resource.folder_id == folder_id,
+                Resource.uri == save_filename
+            ).first()
+            
+            if existing_resource:
+                return {
+                    'filename': file.filename,
+                    'error': f"File '{save_filename}' already exists in this folder"
+                }
+        
         try:
             resource = Resource(
                 name=name, 
