@@ -93,9 +93,11 @@ function AgentPlaygroundPage() {
     
     try {
       // Create a new conversation
+      // Files are now managed per-conversation, so no need to clear them
+      // Each conversation has its own isolated file context
       const response = await apiService.createConversation(parseInt(agentId));
       setCurrentConversationId(response.conversation_id);
-      setConversationKey(prev => prev + 1); // Force remount to clear messages
+      setConversationKey(prev => prev + 1); // Force remount to clear messages and load new conversation's files
       setConversationReloadTrigger(prev => prev + 1); // Trigger conversation list reload
     } catch (error) {
       console.error('Error creating new conversation:', error);

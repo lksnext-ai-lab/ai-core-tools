@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Dict
 
 from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
@@ -23,6 +23,15 @@ CONVERSATION_NOT_FOUND = "Conversation not found"
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
 
+def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
+    """Convert AuthContext to user_context dict for service layer"""
+    return {
+        "user_id": int(auth_context.identity.id),
+        "email": auth_context.identity.email,
+        "oauth": True
+    }
+
+
 @router.post("", response_model=ConversationResponse)
 async def create_conversation(
     agent_id: int,
@@ -38,10 +47,12 @@ async def create_conversation(
         title: Optional title for the conversation
     """
     try:
+        user_context = _auth_context_to_dict(current_user)
+        
         conversation = ConversationService.create_conversation(
             db=db,
             agent_id=agent_id,
-            user_context=current_user,
+            user_context=user_context,
             title=title
         )
         return conversation
@@ -67,10 +78,12 @@ async def list_conversations(
         offset: Pagination offset
     """
     try:
+        user_context = _auth_context_to_dict(current_user)
+        
         conversations, total = ConversationService.list_conversations(
             db=db,
             agent_id=agent_id,
-            user_context=current_user,
+            user_context=user_context,
             limit=limit,
             offset=offset
         )
@@ -95,10 +108,12 @@ async def get_conversation(
     Args:
         conversation_id: ID of the conversation
     """
+    user_context = _auth_context_to_dict(current_user)
+    
     conversation = ConversationService.get_conversation(
         db=db,
         conversation_id=conversation_id,
-        user_context=current_user
+        user_context=user_context
     )
     
     if not conversation:
@@ -118,11 +133,13 @@ async def get_conversation_with_history(
     Args:
         conversation_id: ID of the conversation
     """
+    user_context = _auth_context_to_dict(current_user)
+    
     # Get conversation metadata
     conversation = ConversationService.get_conversation(
         db=db,
         conversation_id=conversation_id,
-        user_context=current_user
+        user_context=user_context
     )
     
     if not conversation:
@@ -132,7 +149,7 @@ async def get_conversation_with_history(
         history = await ConversationService.get_conversation_history(
             db=db,
             conversation_id=conversation_id,
-            user_context=current_user
+            user_context=user_context
         )
         
         return ConversationWithHistoryResponse(
@@ -158,10 +175,12 @@ async def update_conversation(
         conversation_id: ID of the conversation
         update_data: Update data
     """
+    user_context = _auth_context_to_dict(current_user)
+    
     conversation = ConversationService.update_conversation(
         db=db,
         conversation_id=conversation_id,
-        user_context=current_user,
+        user_context=user_context,
         update_data=update_data
     )
     
@@ -182,10 +201,12 @@ async def delete_conversation(
     Args:
         conversation_id: ID of the conversation
     """
+    user_context = _auth_context_to_dict(current_user)
+    
     success = await ConversationService.delete_conversation(
         db=db,
         conversation_id=conversation_id,
-        user_context=current_user
+        user_context=user_context
     )
     
     if not success:

@@ -636,9 +636,14 @@ class ApiService {
   }
 
   // ==================== FILE MANAGEMENT API ====================
-  async uploadFileForChat(appId: number, agentId: number, file: File) {
+  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null) {
     const formData = new FormData();
     formData.append('file', file);
+    
+    // Associate file with specific conversation if provided
+    if (conversationId) {
+      formData.append('conversation_id', conversationId.toString());
+    }
 
     return this.request(`/internal/apps/${appId}/agents/${agentId}/upload-file`, {
       method: 'POST',
@@ -646,12 +651,20 @@ class ApiService {
     });
   }
 
-  async listAttachedFiles(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/files`);
+  async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null) {
+    // Filter files by conversation if provided
+    const url = conversationId 
+      ? `/internal/apps/${appId}/agents/${agentId}/files?conversation_id=${conversationId}`
+      : `/internal/apps/${appId}/agents/${agentId}/files`;
+    return this.request(url);
   }
 
-  async removeAttachedFile(appId: number, agentId: number, fileId: string) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/files/${fileId}`, {
+  async removeAttachedFile(appId: number, agentId: number, fileId: string, conversationId?: number | null) {
+    // Include conversation_id for proper file lookup
+    const url = conversationId
+      ? `/internal/apps/${appId}/agents/${agentId}/files/${fileId}?conversation_id=${conversationId}`
+      : `/internal/apps/${appId}/agents/${agentId}/files/${fileId}`;
+    return this.request(url, {
       method: 'DELETE',
     });
   }

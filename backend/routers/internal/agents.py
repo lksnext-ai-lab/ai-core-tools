@@ -290,6 +290,7 @@ async def chat_with_agent(
     request: Request,
     message: str = Form(...),
     files: List[UploadFile] = File(None),
+    file_references: Optional[str] = Form(None),
     search_params: Optional[str] = Form(None),
     conversation_id: Optional[int] = Form(None),
     auth_context: AuthContext = Depends(get_current_user_oauth),
@@ -303,6 +304,7 @@ async def chat_with_agent(
         agent_id: ID of the agent
         message: User message
         files: Optional uploaded files
+        file_references: Optional JSON array of file_ids to include. If not provided, all files are included.
         search_params: Optional search parameters
         conversation_id: Optional conversation ID to continue existing conversation
     """
@@ -314,6 +316,16 @@ async def chat_with_agent(
                 parsed_search_params = json.loads(search_params)
             except json.JSONDecodeError:
                 logger.warning("Invalid search_params JSON")
+        
+        # Parse file_references if provided (for filtering which files to include)
+        parsed_file_references = None
+        if file_references:
+            try:
+                parsed_file_references = json.loads(file_references)
+                if not isinstance(parsed_file_references, list):
+                    parsed_file_references = None
+            except json.JSONDecodeError:
+                logger.warning("Invalid file_references JSON, ignoring")
         
         # Extract JWT token from Authorization header for MCP authentication
         auth_header = request.headers.get('Authorization', '')
@@ -333,43 +345,54 @@ async def chat_with_agent(
         
         # Process files using FileManagementService for persistence
         file_service = FileManagementService()
-        file_references = []
+        all_file_references = []
+        uploaded_file_ids = set()  # Track newly uploaded files to avoid duplicates
         
         # Add any new files uploaded with this message
         if files:
             for upload_file in files:
-                # Upload file to persistent storage
-                file_ref = await file_service.upload_file(
-                    file=upload_file,
-                    agent_id=agent_id,
-                    user_context=user_context,
-                    conversation_id=conversation_id
-                )
-                file_references.append(file_ref)
+                if upload_file.filename:  # Skip empty file slots
+                    # Upload file to persistent storage
+                    file_ref = await file_service.upload_file(
+                        file=upload_file,
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        conversation_id=conversation_id
+                    )
+                    all_file_references.append(file_ref)
+                    uploaded_file_ids.add(file_ref.file_id)
         
-        # Always include previously uploaded files for this session
+        # Get previously uploaded files for this session/conversation
         existing_files = await file_service.list_attached_files(
             agent_id=agent_id,
-            user_context=user_context
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None
         )
         
-        # Convert existing files to FileReference objects
+        # Filter existing files if file_references was provided
+        if parsed_file_references:
+            requested_file_ids = set(parsed_file_references)
+            existing_files = [f for f in existing_files if f['file_id'] in requested_file_ids]
+            logger.info(f"Filtered to {len(existing_files)} files based on file_references")
+        
+        # Convert existing files to FileReference objects (avoiding duplicates)
         for file_data in existing_files:
-            file_ref = FileReference(
-                file_id=file_data['file_id'],
-                filename=file_data['filename'],
-                file_type=file_data['file_type'],
-                content=file_data['content'],
-                file_path=file_data.get('file_path')
-            )
-            file_references.append(file_ref)
+            if file_data['file_id'] not in uploaded_file_ids:
+                file_ref = FileReference(
+                    file_id=file_data['file_id'],
+                    filename=file_data['filename'],
+                    file_type=file_data['file_type'],
+                    content=file_data['content'],
+                    file_path=file_data.get('file_path')
+                )
+                all_file_references.append(file_ref)
         
         # Use unified service layer with file references
         execution_service = AgentExecutionService(db)
         result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent_id,
             message=message,
-            file_references=file_references,
+            file_references=all_file_references,
             search_params=parsed_search_params,
             user_context=user_context,
             conversation_id=conversation_id,
@@ -484,12 +507,17 @@ async def upload_file_for_chat(
     app_id: int,
     agent_id: int,
     file: UploadFile = File(...),
+    conversation_id: Optional[int] = Form(None),
     auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db),
     _: None = Depends(enforce_file_size_limit)
 ):
     """
     Internal API: Upload file for chat (OAuth authentication)
+    
+    Args:
+        conversation_id: Optional conversation ID to associate the file with.
+                        If provided, file will be specific to that conversation.
     """
     try:
         # Create user context for OAuth user
@@ -504,7 +532,8 @@ async def upload_file_for_chat(
         file_ref = await file_service.upload_file(
             file=file,
             agent_id=agent_id,
-            user_context=user_context
+            user_context=user_context,
+            conversation_id=conversation_id
         )
         
         logger.info(f"File uploaded for agent {agent_id} by user {auth_context.identity.id}")
@@ -512,7 +541,14 @@ async def upload_file_for_chat(
             "success": True,
             "file_id": file_ref.file_id,
             "filename": file_ref.filename,
-            "file_type": file_ref.file_type
+            "file_type": file_ref.file_type,
+            # Visual feedback fields
+            "file_size_bytes": file_ref.file_size_bytes,
+            "file_size_display": FileReference.format_file_size(file_ref.file_size_bytes),
+            "processing_status": file_ref.processing_status,
+            "content_preview": file_ref.content_preview,
+            "has_extractable_content": file_ref.has_extractable_content,
+            "mime_type": file_ref.mime_type
         }
         
     except HTTPException:
@@ -528,11 +564,16 @@ async def upload_file_for_chat(
 async def list_attached_files(
     app_id: int,
     agent_id: int,
+    conversation_id: Optional[int] = None,
     auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Internal API: List attached files for chat (OAuth authentication)
+    
+    Args:
+        conversation_id: Optional conversation ID to filter files.
+                        If provided, only files for that conversation are returned.
     """
     try:
         # Create user context for OAuth user
@@ -546,10 +587,18 @@ async def list_attached_files(
         file_service = FileManagementService()
         files = await file_service.list_attached_files(
             agent_id=agent_id,
-            user_context=user_context
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None
         )
         
-        return {"files": files}
+        # Calculate total size for visual feedback
+        total_size = sum(f.get('file_size_bytes', 0) or 0 for f in files)
+        
+        return {
+            "files": files,
+            "total_size_bytes": total_size,
+            "total_size_display": FileReference.format_file_size(total_size)
+        }
         
     except Exception as e:
         logger.error(f"Error in list files endpoint: {str(e)}")
@@ -563,11 +612,15 @@ async def remove_attached_file(
     app_id: int,
     agent_id: int,
     file_id: str,
+    conversation_id: Optional[int] = None,
     auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db)
 ):
     """
     Internal API: Remove attached file (OAuth authentication)
+    
+    Args:
+        conversation_id: Optional conversation ID for conversation-specific files.
     """
     try:
         # Create user context for OAuth user
@@ -582,7 +635,8 @@ async def remove_attached_file(
         success = await file_service.remove_file(
             file_id=file_id,
             agent_id=agent_id,
-            user_context=user_context
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None
         )
         
         if success:
