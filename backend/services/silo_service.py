@@ -714,6 +714,61 @@ class SiloService:
         logger.info(f"Documentos eliminados correctamente del silo {silo_id}")
 
     @staticmethod
+    def delete_docs_by_metadata(silo_id: int, filter_metadata: Dict[str, Any], db: Session) -> int:
+        """
+        Delete documents from a silo using metadata filters.
+        
+        Args:
+            silo_id: ID of the silo
+            filter_metadata: Metadata filter dict (MongoDB-style, e.g., {"field": {"$eq": "value"}})
+            db: Database session
+            
+        Returns:
+            Number of documents deleted
+        """
+        logger.info(f"Deleting documents from silo {silo_id} with filter: {filter_metadata}")
+        
+        if not SiloService.check_silo_collection_exists(silo_id, db):
+            logger.warning(f"Collection for silo {silo_id} does not exist")
+            return 0
+
+        # Get silo within the session to ensure relationships are loaded
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo:
+            logger.error(f"Silo {silo_id} not found")
+            return 0
+
+        if not silo.embedding_service:
+            logger.warning(f"Silo {silo_id} has no embedding service configured")
+            return 0
+
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        
+        # First, find matching documents to count them
+        matching_docs = _get_vector_store(silo).search_similar_documents(
+            collection_name,
+            query=" ",  # Use empty query with metadata filter only
+            embedding_service=silo.embedding_service,
+            filter_metadata=filter_metadata,
+            k=1000  # Get up to 1000 matching docs
+        )
+        
+        doc_count = len(matching_docs)
+        
+        if doc_count == 0:
+            logger.info(f"No documents found matching the filter in silo {silo_id}")
+            return 0
+        
+        # Delete the matched documents using metadata filter
+        _get_vector_store(silo).delete_documents(
+            collection_name,
+            ids=filter_metadata,  # Pass metadata filter as dict
+            embedding_service=silo.embedding_service
+        )
+        logger.info(f"Successfully deleted {doc_count} document(s) from silo {silo_id}")
+        return doc_count
+
+    @staticmethod
     def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None, db: Session = None) -> List[Document]:
         # Get silo within the session to ensure relationships are loaded
         silo = SiloRepository.get_by_id(silo_id, db)

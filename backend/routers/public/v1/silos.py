@@ -19,6 +19,7 @@ from .schemas import (
     SingleDocumentIndexSchema,
     MultipleDocumentIndexSchema,
     DeleteDocsRequestSchema,
+    DeleteByMetadataRequestSchema,
     DocsResponseSchema,
     SiloSearchSchema,
     FileIndexResponseSchema
@@ -311,6 +312,47 @@ async def delete_docs_in_collection(
         logger.error(f"Error deleting documents: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting documents: {str(e)}")
 
+@silos_router.delete("/silos/{silo_id}/docs/delete-by-metadata",
+                     summary="Delete docs by metadata filter",
+                     tags=["Silos"],
+                     response_model=MessageResponseSchema)
+async def delete_docs_by_metadata(
+    app_id: int,
+    silo_id: int,
+    request: DeleteByMetadataRequestSchema,
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
+):
+    """Delete documents in a silo collection by metadata filter.
+    
+    The filter_metadata parameter should use MongoDB-style query operators.
+    Examples:
+    - {"resource_id": {"$eq": "123"}}
+    - {"url": {"$eq": "https://example.com"}}
+    - {"file_type": {"$eq": ".pdf"}}
+    """
+    # Validate API key for this app
+    validate_api_key_for_app(app_id, api_key)
+    
+    try:
+        # Validate that filter_metadata is not empty
+        if not request.filter_metadata:
+            raise HTTPException(status_code=400, detail="filter_metadata cannot be empty")
+        
+        # Delete documents using metadata filter
+        deleted_count = SiloService.delete_docs_by_metadata(
+            silo_id=silo_id,
+            filter_metadata=request.filter_metadata,
+            db=db
+        )
+        
+        return MessageResponseSchema(message=f"Successfully deleted {deleted_count} document(s)")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting documents by metadata: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting documents: {str(e)}")
+
 @silos_router.delete("/silos/{silo_id}/docs/delete/all",
                      summary="Delete all docs in collection",
                      tags=["Silos"],
@@ -381,29 +423,12 @@ async def index_file_document(
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
     
-    import tempfile
-    import os
-    from services.silo_service import SiloService
-    from repositories.silo_repository import SiloRepository
-    from db.database import db as db_obj
-    from tools.pgVectorTools import PGVectorTools
-    from services.silo_service import COLLECTION_PREFIX
-    
     temp_file_path = None
     try:
-        # Get silo to verify it exists and get embedding service
-        silo = SiloRepository.get_by_id(silo_id, db)
-        if not silo:
-            raise HTTPException(status_code=404, detail=f"Silo {silo_id} not found")
-        
-        if not silo.embedding_service:
-            raise HTTPException(status_code=400, detail=f"Silo {silo_id} has no embedding service configured")
-        
         # Parse metadata if provided
         metadata_dict = {}
         if metadata:
             try:
-                import json
                 metadata_dict = json.loads(metadata)
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON metadata: Will use empty dict!")
@@ -433,10 +458,14 @@ async def index_file_document(
         # Extract documents from file
         docs = SiloService.extract_documents_from_file(temp_file_path, file_extension, metadata_dict)
         
-        # Index documents using PGVector
-        collection_name = COLLECTION_PREFIX + str(silo_id)
-        pg_vector_tools = PGVectorTools(db_obj)
-        pg_vector_tools.index_documents(collection_name, docs, silo.embedding_service)
+        # Convert Document objects to dict format for index_multiple_content
+        documents_for_indexing = [
+            {'content': doc.page_content, 'metadata': doc.metadata}
+            for doc in docs
+        ]
+        
+        # Index documents through SiloService abstraction
+        SiloService.index_multiple_content(silo_id, documents_for_indexing, db)
         
         logger.info(f"Successfully indexed file {file.filename} in silo {silo_id}, {len(docs)} documents")
         

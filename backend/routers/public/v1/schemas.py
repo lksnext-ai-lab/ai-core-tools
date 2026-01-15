@@ -22,8 +22,8 @@ class ChatRequestSchema(BaseModel):
     conversation_id: Optional[str] = None
 
 class AgentResponseSchema(BaseModel):
-    """Agent response"""
-    response: str
+    """Agent response - supports both string responses and structured JSON from output parsers"""
+    response: Union[str, Dict[str, Any]]
     conversation_id: str
     usage: Optional[Dict[str, Any]] = None
 
@@ -72,6 +72,10 @@ class SiloSearchSchema(BaseModel):
 class DeleteDocsRequestSchema(BaseModel):
     """Schema for deleting documents"""
     ids: List[str]
+
+class DeleteByMetadataRequestSchema(BaseModel):
+    """Schema for deleting documents by metadata filter"""
+    filter_metadata: Dict[str, Any]
 
 class DocumentSchema(BaseModel):
     """Document schema"""

@@ -404,9 +404,11 @@ class ResourceService:
             "created_resources": [
                 {
                     "resource_id": r.resource_id,
-                    "name": r.name,
-                    "file_type": r.type or "unknown",
-                    "created_at": r.create_date
+                    "uri": r.uri,
+                    "repository_id": r.repository_id,
+                    "create_date": r.create_date,
+                    "size": None,
+                    "content_type": r.type or "unknown"
                 } for r in created_resources
             ],
             "failed_files": failed_files
