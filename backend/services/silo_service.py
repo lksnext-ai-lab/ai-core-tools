@@ -570,6 +570,10 @@ class SiloService:
 
             docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
 
+            if not docs:
+                logger.warning(f"No content extracted from resource {resource_with_relations.resource_id} ({resource_with_relations.uri}). The file may be empty or contain only images/scans without text.")
+                return
+
             embedding_service = resource_with_relations.repository.silo.embedding_service
             
             if not embedding_service:

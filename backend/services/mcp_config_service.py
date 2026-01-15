@@ -158,19 +158,16 @@ class MCPConfigService:
                 "tools": tool_list
             }
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             logger.error(f"Error testing MCP connection: {str(e)}")
+            logger.error(f"Full traceback: {error_details}")
             return {
                 "status": "error",
-                "message": str(e)
+                "message": str(e),
+                "details": error_details if logger.level <= 10 else None  # Include details in debug mode
             }
         finally:
-            # Cleanup: Close the client if it was created
-            if client is not None:
-                try:
-                    # Check if client has cleanup method
-                    if hasattr(client, 'close'):
-                        await client.close()
-                    elif hasattr(client, '__aexit__'):
-                        await client.__aexit__(None, None, None)
-                except Exception as cleanup_error:
-                    logger.warning(f"Error during MCP client cleanup: {str(cleanup_error)}")
+            # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient doesn't need manual cleanup
+            # The client is managed internally by the library
+            pass
