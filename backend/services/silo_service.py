@@ -1,6 +1,8 @@
 from typing import Optional, List, Dict, Any
 import os
 import json
+from models.media import Media
+from models.media_chunk import MediaChunk
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
@@ -587,6 +589,84 @@ class SiloService:
             raise
         finally:
             session.close()
+
+    @staticmethod
+    def index_media_chunk(chunk: MediaChunk, db: Session):
+        """
+        Index a single media chunk in the vector database
+        
+        Creates a Document with media-specific metadata and indexes it
+        in the silo's vector store collection
+        """
+        
+        # Get media with relationships loaded
+        media = chunk.media
+        if not media:
+            logger.error(f"Media not found for chunk {chunk.chunk_id}")
+            return
+        
+        # Get silo and collection name
+        collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
+        
+        # Build metadata
+        metadata = {
+            "repository_id": media.repository_id,
+            "media_id": media.media_id,
+            "chunk_id": chunk.chunk_id,
+            "chunk_index": chunk.chunk_index,
+            "start_time": chunk.start_time,
+            "end_time": chunk.end_time,
+            "source_type": media.source_type,
+            "source_url": media.source_url,
+            "language": media.language,
+            "silo_id": media.repository.silo_id,
+            "content_type": "media_chunk",  # Distinguish from document resources
+            "name": media.name
+        }
+        
+        # Add folder information if media is in a folder
+        if media.folder_id:
+            from services.folder_service import FolderService
+            folder_path = FolderService.get_folder_path(media.folder_id, db)
+            metadata["folder_id"] = media.folder_id
+            metadata["folder_path"] = folder_path
+        else:
+            metadata["folder_id"] = None
+            metadata["folder_path"] = ""
+        
+        # Create Document
+        doc = Document(
+            page_content=chunk.text,
+            metadata=metadata
+        )
+        
+        # Get embedding service
+        embedding_service = media.repository.silo.embedding_service
+        if not embedding_service:
+            logger.warning(f"Silo {media.repository.silo_id} has no embedding service, skipping indexing for chunk {chunk.chunk_id}")
+            return
+        
+        # Index in vector store
+        try:
+            _get_vector_store(media.repository.silo).index_documents(
+                collection_name,
+                [doc],
+                embedding_service
+            )
+            logger.info(f"Indexed media chunk {chunk.chunk_id} (media {media.media_id}) in silo {media.repository.silo_id}")
+        except Exception as e:
+            logger.error(f"Error indexing media chunk {chunk.chunk_id}: {str(e)}")
+            raise
+
+    @staticmethod
+    def delete_media(media: Media, db: Session):
+        """Delete all chunks for a media"""
+        collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
+        _get_vector_store(media.repository.silo).delete_documents(
+            collection_name,
+            ids={"media_id": {"$eq": media.media_id}},
+            embedding_service=media.repository.silo.embedding_service
+        )
 
     @staticmethod
     def delete_resource(resource: Resource):
