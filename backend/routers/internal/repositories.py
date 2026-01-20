@@ -256,7 +256,7 @@ async def download_resource(
         media_type='application/octet-stream'
     )
 
-# ==================== MEDIA SEARCH ====================
+# ==================== MEDIA MANAGEMENT ====================
 @repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse)
 async def upload_media(
     repository_id: int,
@@ -286,7 +286,7 @@ async def upload_media(
         
         return MediaUploadResponse(
             message=f"Uploaded {len(created_media)} media file(s)",
-            created_media=[MediaResponse.from_orm(m) for m in created_media],
+            created_media=[MediaResponse(**m.__dict__) for m in created_media],
             failed_files=failed_files
         )
     except Exception as e:

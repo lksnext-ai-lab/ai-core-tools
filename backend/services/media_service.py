@@ -96,7 +96,7 @@ class MediaService:
         
         # Trigger async processing
         from tasks.media_tasks import process_media_task
-        process_media_task.delay(media.media_id)
+        process_media_task(media.media_id)
         
         logger.info(f"Created media {media.media_id} from file upload: {file.filename}")
         return media

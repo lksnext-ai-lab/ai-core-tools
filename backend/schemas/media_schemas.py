@@ -13,7 +13,7 @@ class MediaResponse(BaseModel):
     language: Optional[str]
     status: str
     error_message: Optional[str]
-    created_at: datetime
+    create_date: datetime
     processed_at: Optional[datetime]
     folder_id: Optional[int]
 
@@ -25,6 +25,9 @@ class MediaUploadResponse(BaseModel):
     message: str
     created_media: List[MediaResponse]
     failed_files: List[dict]
+
+    class Config:
+        from_attributes = True
 
 class MediaStatusResponse(BaseModel):
     media_id: int
