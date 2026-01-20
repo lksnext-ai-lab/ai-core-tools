@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 # Import services
 from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
+from services.media_service import MediaService
 
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, RepositorySearchSchema
+from schemas.media_schemas import MediaResponse, MediaUploadResponse
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -24,7 +26,6 @@ repositories_router = APIRouter()
 
 # Debug log when router is loaded
 logger.info("Repositories router loaded successfully")
-
 
 
 # ==================== REPOSITORY MANAGEMENT ====================
@@ -255,6 +256,80 @@ async def download_resource(
         media_type='application/octet-stream'
     )
 
+# ==================== MEDIA SEARCH ====================
+@repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse)
+async def upload_media(
+    repository_id: int,
+    files: List[UploadFile] = File(...),
+    folder_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
+    """
+    Upload video/audio files for transcription and indexing
+    
+    Supported formats:
+    - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
+    - Audio: mp3, wav, m4a, aac, ogg, flac, wma
+    """
+    user_id = auth_context.identity.id
+    logger.info(f"Upload media - repository_id: {repository_id}, user_id: {user_id}, files: {len(files)}")
+    
+    try:
+        created_media, failed_files = await MediaService.upload_media_files(
+            repository_id=repository_id,
+            files=files,
+            folder_id=folder_id,
+            db=db,
+            user_context=auth_context
+        )
+        
+        return MediaUploadResponse(
+            message=f"Uploaded {len(created_media)} media file(s)",
+            created_media=[MediaResponse.from_orm(m) for m in created_media],
+            failed_files=failed_files
+        )
+    except Exception as e:
+        logger.error(f"Error uploading media: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@repositories_router.post("/{repository_id}/youtube", response_model=MediaResponse)
+async def add_youtube_video(
+    app_id: int,
+    repository_id: int,
+    url: str = Form(...),
+    folder_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
+    """
+    Add YouTube video for transcription and indexing
+    
+    The video will be:
+    1. Downloaded from YouTube
+    2. Audio extracted and normalized
+    3. Transcribed using Whisper
+    4. Chunked into segments
+    5. Indexed for RAG queries
+    """
+    user_id = auth_context.identity.id
+    logger.info(f"Add YouTube video - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}, url: {url}")
+
+    try:
+        media = await MediaService.create_media_from_youtube(
+            url=url,
+            repository_id=repository_id,
+            folder_id=folder_id,
+            db=db
+        )
+        return MediaResponse.from_orm(media)
+    except ValueError as e:
+        # Handle validation errors (invalid URL, duplicate)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error adding YouTube video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== REPOSITORY SEARCH ====================
 
