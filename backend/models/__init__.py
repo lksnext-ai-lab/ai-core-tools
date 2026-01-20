@@ -18,9 +18,12 @@ from .resource import Resource
 from .folder import Folder
 from .domain import Domain
 from .url import Url
+from .media import Media
+from .media_chunk import MediaChunk
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
-    'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url'
+    'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Media', 'MediaChunk'
 ] 
