@@ -98,6 +98,76 @@ class QdrantStore(VectorStoreInterface):
             embedding=embeddings
         )
     
+    def _convert_to_qdrant_filter(self, filter_metadata: Optional[Dict[str, Any]]):
+        """
+        Convert MongoDB-style filter to Qdrant Filter (Dict format).
+        Replicates logic from frontend SearchFilters.tsx buildQdrantFilter.
+        """
+        if not filter_metadata:
+            return None
+        
+        print("Converting filter metadata:", filter_metadata)
+            
+        # If it looks like a Qdrant filter already, return as is
+        if any(key in filter_metadata for key in ['must', 'should', 'must_not', 'filter']):
+            return filter_metadata
+
+        must_conditions = []
+        should_conditions = []
+        must_not_conditions = []
+
+        def _get_key(key):
+            return key if key.startswith("metadata.") else f"metadata.{key}"
+
+        def _process_condition(key, val, target_list):
+            q_key = _get_key(key)
+            
+            if isinstance(val, dict):
+                for op, op_val in val.items():
+                    if op == "$eq":
+                        target_list.append({"key": q_key, "match": {"value": op_val}})
+                    elif op == "$ne":
+                        must_not_conditions.append({"key": q_key, "match": {"value": op_val}})
+                    elif op in ["$gt", "$gte", "$lt", "$lte"]:
+                         # Strip $ from operator name for range dict: $gt -> gt
+                        target_list.append({"key": q_key, "range": {op[1:]: op_val}})
+                    elif op == "$in":
+                        target_list.append({"key": q_key, "match": {"any": op_val}})
+                    elif op == "$nin":
+                        must_not_conditions.append({"key": q_key, "match": {"any": op_val}})
+            else:
+                # Direct value implies equality
+                target_list.append({"key": q_key, "match": {"value": val}})
+
+        # Handle explicit top-level operators
+        if "$or" in filter_metadata and isinstance(filter_metadata["$or"], list):
+            for condition in filter_metadata["$or"]:
+                if isinstance(condition, dict):
+                    for k, v in condition.items():
+                        _process_condition(k, v, should_conditions)
+        
+        if "$and" in filter_metadata and isinstance(filter_metadata["$and"], list):
+            for condition in filter_metadata["$and"]:
+                if isinstance(condition, dict):
+                    for k, v in condition.items():
+                        _process_condition(k, v, must_conditions)
+
+        # Handle flat metadata fields (implicit AND)
+        for k, v in filter_metadata.items():
+            if k not in ["$or", "$and"]:
+                _process_condition(k, v, must_conditions)
+
+        # Construct result dictionary - avoid empty lists
+        qdrant_filter = {}
+        if must_conditions:
+            qdrant_filter["must"] = must_conditions
+        if should_conditions:
+            qdrant_filter["should"] = should_conditions
+        if must_not_conditions:
+            qdrant_filter["must_not"] = must_not_conditions
+            
+        return qdrant_filter if qdrant_filter else None
+    
     def index_documents(
         self, 
         collection_name: str, 
@@ -181,11 +251,14 @@ class QdrantStore(VectorStoreInterface):
             if ids is None:
                 logger.warning("No valid metadata filter provided for Qdrant deletion; skipping")
                 return
+            
+            # Translate metadata filter if needed
+            qdrant_filter = self._convert_to_qdrant_filter(ids)
 
             # Search and get IDs
             results = self.client.scroll(
                 collection_name=collection_name,
-                scroll_filter=ids,
+                scroll_filter=qdrant_filter,
                 limit=1000,
                 with_payload=False,
                 with_vectors=False
@@ -235,16 +308,28 @@ class QdrantStore(VectorStoreInterface):
             List of Document objects with similarity scores in metadata
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
-        
         # Handle empty queries
         if not query or (isinstance(query, str) and not query.strip()):
             query = " "  # Use a space as minimal query
+        
+        # Translate metadata filter if needed
+        qdrant_filter_dict = self._convert_to_qdrant_filter(filter_metadata)
+        
+        # Convert dict to Qdrant Filter model if not None
+        qdrant_filter = None
+        if qdrant_filter_dict:
+            try:
+                from qdrant_client import models as rest
+                qdrant_filter = rest.Filter.model_validate(qdrant_filter_dict)
+            except ImportError:
+                # Fallback to passing the dict if models can't be imported
+                qdrant_filter = qdrant_filter_dict
         
         # Perform similarity search with scores
         results_with_scores = vector_store.similarity_search_with_score(
             query,
             k=k,
-            filter=filter_metadata
+            filter=qdrant_filter
         )
         
         # Convert results to include score in metadata
