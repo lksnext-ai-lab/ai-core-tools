@@ -1,6 +1,6 @@
 import whisper
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -19,12 +19,13 @@ class TranscriptionService:
         return cls._model
     
     @staticmethod
-    def transcribe_audio(audio_path: str) -> dict:
+    def transcribe_audio(audio_path: str, language: Optional[str] = None) -> dict:
         """
         Transcribe audio file using Whisper
         
         Args:
             audio_path: Path to audio file (preferably WAV, 16kHz, mono)
+            language: Force language (e.g., 'es', 'en', 'fr'). None for auto-detect.
         
         Returns:
             {
@@ -37,14 +38,18 @@ class TranscriptionService:
         try:
             model = TranscriptionService._get_model()
             
-            logger.info(f"Transcribing audio: {audio_path}")
+            logger.info(f"Transcribing audio: {audio_path}, language: {language or 'auto-detect'}")
             
+            if language == '':
+                language = None
+
             # Transcribe with word-level timestamps
             result = model.transcribe(
                 audio_path,
                 task='transcribe',
                 verbose=False,
-                word_timestamps=True
+                word_timestamps=True,
+                language=language  # None = auto-detect, or force language
             )
             
             # Extract segments with timestamps
@@ -74,14 +79,15 @@ class TranscriptionService:
             raise
     
     @staticmethod
-    def create_chunks(segments: List[dict], min_window: int = 30, max_window: int = 120) -> List[dict]:
+    def create_chunks(segments: List[dict], min_window: int = 30, max_window: int = 120, overlap: int = 0) -> List[dict]:
         """
-        Group segments into chunks based on time windows
+        Group segments into chunks based on time windows with optional overlap
         
         Args:
             segments: List of segments from transcription
             min_window: Minimum chunk duration in seconds (default 30s)
             max_window: Maximum chunk duration in seconds (default 120s)
+            overlap: Overlap duration in seconds between chunks (default 0s, recommended 5-10s)
         
         Returns:
             List of chunks: [{'text': str, 'start_time': float, 'end_time': float}]
@@ -106,10 +112,25 @@ class TranscriptionService:
             
             # If adding this segment would exceed max_window, save current chunk and start new one
             if potential_duration > max_window and current_chunk['text']:
-                chunks.append(current_chunk.copy())
+                chunks.append({
+                    'text': current_chunk['text'],
+                    'start_time': float(current_chunk['start_time']),
+                    'end_time': float(current_chunk['end_time'])
+                })
+                
+                # Start new chunk with overlap
+                overlap_start = max(current_chunk['end_time'] - overlap, current_chunk['start_time'])
+                
+                # Find segments that fall within overlap period
+                overlap_text = ''
+                if overlap > 0:
+                    for prev_seg in segments:
+                        if prev_seg['start'] >= overlap_start and prev_seg['end'] <= current_chunk['end_time']:
+                            overlap_text += ' ' + prev_seg['text'].strip()
+                
                 current_chunk = {
-                    'text': segment_text,
-                    'start_time': segment['start'],
+                    'text': overlap_text.strip() + (' ' + segment_text if overlap_text else segment_text),
+                    'start_time': overlap_start if overlap > 0 else segment['start'],
                     'end_time': segment['end']
                 }
             else:
@@ -125,16 +146,36 @@ class TranscriptionService:
                 
                 # End chunk if we hit a natural break (sentence ending) and min duration met
                 if chunk_duration >= min_window and segment_text.rstrip().endswith(('.', '!', '?')):
-                    chunks.append(current_chunk.copy())
+                    chunks.append({
+                        'text': current_chunk['text'],
+                        'start_time': float(current_chunk['start_time']),
+                        'end_time': float(current_chunk['end_time'])
+                    })
+                    
+                    # Start new chunk with overlap
+                    overlap_start = max(current_chunk['end_time'] - overlap, current_chunk['start_time'])
+                    
+                    # Find segments that fall within overlap period
+                    overlap_text = ''
+                    if overlap > 0:
+                        for prev_seg in segments:
+                            if prev_seg['start'] >= overlap_start and prev_seg['end'] <= current_chunk['end_time']:
+                                overlap_text += ' ' + prev_seg['text'].strip()
+                    
                     current_chunk = {
-                        'text': '',
-                        'start_time': segment['end'],
+                        'text': overlap_text.strip(),
+                        'start_time': overlap_start if overlap > 0 else segment['end'],
                         'end_time': segment['end']
                     }
         
         # Add final chunk if it has content
         if current_chunk['text']:
-            chunks.append(current_chunk)
+            chunks.append({
+                'text': current_chunk['text'],
+                'start_time': float(current_chunk['start_time']),
+                'end_time': float(current_chunk['end_time'])
+            })
         
-        logger.info(f"Created {len(chunks)} chunks from {len(segments)} segments")
+        logger.info(f"Created {len(chunks)} chunks from {len(segments)} segments (overlap: {overlap}s)")
         return chunks
+    

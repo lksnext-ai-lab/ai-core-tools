@@ -259,9 +259,14 @@ async def download_resource(
 # ==================== MEDIA MANAGEMENT ====================
 @repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse)
 async def upload_media(
+    app_id: int,
     repository_id: int,
     files: List[UploadFile] = File(...),
     folder_id: Optional[int] = Form(None),
+    forced_language: Optional[str] = Form(None),
+    chunk_min_duration: Optional[int] = Form(None),
+    chunk_max_duration: Optional[int] = Form(None),
+    chunk_overlap: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
@@ -271,9 +276,15 @@ async def upload_media(
     Supported formats:
     - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
     - Audio: mp3, wav, m4a, aac, ogg, flac, wma
+
+    Configuration:
+    - forced_language: Force transcription language (e.g., 'es', 'en', 'fr'). Leave empty for auto-detect.
+    - chunk_min_duration: Minimum chunk duration in seconds (default: 30)
+    - chunk_max_duration: Maximum chunk duration in seconds (default: 120)
+    - chunk_overlap: Overlap between chunks in seconds (default: 0, recommended: 5-10)
     """
     user_id = auth_context.identity.id
-    logger.info(f"Upload media - repository_id: {repository_id}, user_id: {user_id}, files: {len(files)}")
+    logger.info(f"Upload media - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}, files: {len(files)}")
     
     try:
         created_media, failed_files = await MediaService.upload_media_files(
@@ -281,7 +292,11 @@ async def upload_media(
             files=files,
             folder_id=folder_id,
             db=db,
-            user_context=auth_context
+            user_context=auth_context,
+            forced_language=forced_language,
+            chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration,
+            chunk_overlap=chunk_overlap
         )
         
         return MediaUploadResponse(
@@ -300,6 +315,10 @@ async def add_youtube_video(
     repository_id: int,
     url: str = Form(...),
     folder_id: Optional[int] = Form(None),
+    forced_language: Optional[str] = Form(None),
+    chunk_min_duration: Optional[int] = Form(None),
+    chunk_max_duration: Optional[int] = Form(None),
+    chunk_overlap: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
@@ -312,6 +331,12 @@ async def add_youtube_video(
     3. Transcribed using Whisper
     4. Chunked into segments
     5. Indexed for RAG queries
+
+    Configuration:
+    - forced_language: Force transcription language (e.g., 'es', 'en', 'fr'). Leave empty for auto-detect.
+    - chunk_min_duration: Minimum chunk duration in seconds (default: 30)
+    - chunk_max_duration: Maximum chunk duration in seconds (default: 120)
+    - chunk_overlap: Overlap between chunks in seconds (default: 0, recommended: 5-10)
     """
     user_id = auth_context.identity.id
     logger.info(f"Add YouTube video - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}, url: {url}")
@@ -321,9 +346,13 @@ async def add_youtube_video(
             url=url,
             repository_id=repository_id,
             folder_id=folder_id,
-            db=db
+            db=db,
+            forced_language=forced_language,
+            chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration,
+            chunk_overlap=chunk_overlap
         )
-        return MediaResponse.from_orm(media)
+        return MediaResponse(**media.__dict__)
     except ValueError as e:
         # Handle validation errors (invalid URL, duplicate)
         raise HTTPException(status_code=400, detail=str(e))

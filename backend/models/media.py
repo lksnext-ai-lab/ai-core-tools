@@ -15,6 +15,10 @@ class Media(Base):
     file_path = Column(String(500), nullable=True)
     duration = Column(Float, nullable=True)
     language = Column(String(45), nullable=True)
+    forced_language = Column(String(10), nullable=True)
+    chunk_min_duration = Column(Integer, nullable=True)  # in seconds
+    chunk_max_duration = Column(Integer, nullable=True)  # in seconds
+    chunk_overlap = Column(Integer, nullable=True)  # in seconds
     status = Column(String(45), default='pending')
     error_message = Column(Text, nullable=True)
     create_date = Column(DateTime, default=datetime.now)

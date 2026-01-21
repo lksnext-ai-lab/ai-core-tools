@@ -61,24 +61,32 @@ def process_media_task(self, media_id: int):
         media.status = 'transcribing'
         db.commit()
         
-        transcription = TranscriptionService.transcribe_audio(audio_path)
+        transcription = TranscriptionService.transcribe_audio(
+            audio_path,
+            language=media.forced_language  # Use forced language if specified
+        )
         
         # Update media with transcription metadata
         media.language = transcription['language']
-        media.duration = int(transcription['duration'])
+        media.duration = float(transcription['duration'])
         db.commit()
         
         logger.info(f"Transcribed media {media_id}: {len(transcription['segments'])} segments, language: {transcription['language']}")
         
-        # Step 4: Create chunks
-        chunks_data = TranscriptionService.create_chunks(transcription['segments'])
+        # Step 4: Create chunks with custom configuration
+        chunks_data = TranscriptionService.create_chunks(
+            transcription['segments'],
+            min_window=media.chunk_min_duration or 30,
+            max_window=media.chunk_max_duration or 120,
+            overlap=media.chunk_overlap or 0
+        )
         
         for idx, chunk_data in enumerate(chunks_data):
             chunk = MediaChunk(
                 media_id=media_id,
                 text=chunk_data['text'],
-                start_time=float(chunk_data['start_time']),
-                end_time=float(chunk_data['end_time']),
+                start_time=chunk_data['start_time'],
+                end_time=chunk_data['end_time'],
                 chunk_index=idx
             )
             db.add(chunk)

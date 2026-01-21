@@ -20,7 +20,11 @@ class MediaService:
         files: List[UploadFile],
         folder_id: Optional[int],
         db: Session,
-        user_context
+        user_context,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None
     ) -> Tuple[List[Media], List[dict]]:
         """
         Upload multiple media files
@@ -41,7 +45,11 @@ class MediaService:
                     file=file,
                     repository_id=repository_id,
                     folder_id=folder_id,
-                    db=db
+                    db=db,
+                    forced_language=forced_language,
+                    chunk_min_duration=chunk_min_duration,
+                    chunk_max_duration=chunk_max_duration,
+                    chunk_overlap=chunk_overlap
                 )
                 created_media.append(media)
             except Exception as e:
@@ -58,7 +66,11 @@ class MediaService:
         file: UploadFile,
         repository_id: int,
         folder_id: Optional[int],
-        db: Session
+        db: Session,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None
     ) -> Media:
         """Create media from uploaded file"""
         file_extension = os.path.splitext(file.filename)[1].lower()
@@ -74,7 +86,11 @@ class MediaService:
             repository_id=repository_id,
             folder_id=folder_id,
             source_type='upload',
-            status='pending'
+            status='pending',
+            forced_language=forced_language,
+            chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration,
+            chunk_overlap=chunk_overlap
         )
         
         db.add(media)
@@ -106,7 +122,11 @@ class MediaService:
         url: str,
         repository_id: int,
         folder_id: Optional[int],
-        db: Session
+        db: Session,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None
     ) -> Media:
         """Create media from YouTube URL"""
         import re
@@ -141,7 +161,11 @@ class MediaService:
             folder_id=folder_id,
             source_type='youtube',
             source_url=url,
-            status='pending'
+            status='pending',
+            forced_language=forced_language,
+            chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration,
+            chunk_overlap=chunk_overlap
         )
         
         db.add(media)
