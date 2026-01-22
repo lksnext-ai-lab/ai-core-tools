@@ -1,3 +1,4 @@
+from schemas.media_schemas import MediaResponse
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -38,6 +39,7 @@ class RepositoryDetailSchema(BaseModel):
     vector_db_type: Optional[str] = None
     vector_db_options: List[Dict[str, Any]] = []
     metadata_fields: Optional[List[MetadataFieldSchema]] = []
+    media: List[MediaResponse] = []
     
     model_config = ConfigDict(from_attributes=True)
 

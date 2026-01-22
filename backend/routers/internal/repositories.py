@@ -256,6 +256,7 @@ async def download_resource(
         media_type='application/octet-stream'
     )
 
+
 # ==================== MEDIA MANAGEMENT ====================
 @repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse)
 async def upload_media(
@@ -298,7 +299,7 @@ async def upload_media(
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap
         )
-        
+
         return MediaUploadResponse(
             message=f"Uploaded {len(created_media)} media file(s)",
             created_media=[MediaResponse(**m.__dict__) for m in created_media],
@@ -307,7 +308,6 @@ async def upload_media(
     except Exception as e:
         logger.error(f"Error uploading media: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @repositories_router.post("/{repository_id}/youtube", response_model=MediaResponse)
 async def add_youtube_video(
@@ -352,6 +352,7 @@ async def add_youtube_video(
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap
         )
+
         return MediaResponse(**media.__dict__)
     except ValueError as e:
         # Handle validation errors (invalid URL, duplicate)
@@ -359,6 +360,84 @@ async def add_youtube_video(
     except Exception as e:
         logger.error(f"Error adding YouTube video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@repositories_router.get("/{repository_id}/media", response_model=List[MediaResponse])
+async def list_media(
+    app_id: int,
+    repository_id: int,
+    folder_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
+    """List all media in repository"""
+    from models.media import Media
+    
+    query = db.query(Media).filter(Media.repository_id == repository_id)
+    
+    if folder_id is not None:
+        if folder_id == 0:
+            query = query.filter(Media.folder_id.is_(None))
+        else:
+            query = query.filter(Media.folder_id == folder_id)
+    
+    media_list = query.order_by(Media.create_date.desc()).all()
+    return [MediaResponse(**{k: v for k, v in m.__dict__.items() if not k.startswith('_')}) for m in media_list]
+
+@repositories_router.post("/{repository_id}/media/{media_id}/move",
+                         summary="Move media to different folder",
+                         tags=["Media"])
+async def move_media(
+    app_id: int,
+    repository_id: int,
+    media_id: int,
+    new_folder_id: Optional[int] = Form(default=None),
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor"))
+):
+    """
+    Move a resource to a different folder within the same repository.
+    """
+    user_id = int(auth_context.identity.id)
+    
+    logger.info(f"Move media endpoint called - app_id: {app_id}, repository_id: {repository_id}, media_id: {media_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
+    
+    # TODO: Add app access validation
+
+    # Use MediaService to handle the business logic
+    result = MediaService.move_media_to_folder(
+        app_id=app_id,
+        media_id=media_id,
+        repository_id=repository_id,
+        new_folder_id=new_folder_id,
+        db=db
+    )
+    
+    return result
+
+@repositories_router.delete("/{repository_id}/media/{media_id}")
+async def delete_media(
+    app_id: int,
+    repository_id: int,
+    media_id: int,
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(get_current_user_oauth)
+):
+    """
+    Delete a media file and all derived data (chunks, transcripts, embeddings).
+    """
+    user_id = int(auth_context.identity.id)
+
+    logger.info(f"Delete media endpoint called - app_id={app_id}, repository_id={repository_id}, media_id={media_id}, user_id={user_id}")
+
+    result = MediaService.delete_media(
+        app_id=app_id,
+        repository_id=repository_id,
+        media_id=media_id,
+        db=db
+    )
+
+    return result
 
 # ==================== REPOSITORY SEARCH ====================
 
