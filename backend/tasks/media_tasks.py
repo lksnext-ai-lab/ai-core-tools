@@ -63,7 +63,9 @@ def process_media_task(self, media_id: int):
         
         transcription = TranscriptionService.transcribe_audio(
             audio_path,
-            language=media.forced_language  # Use forced language if specified
+            language=media.forced_language,  # Use forced language if specified
+            ai_service_id=media.transcription_service_id,
+            db=db
         )
         
         # Update media with transcription metadata

@@ -252,6 +252,12 @@ class RepositoryService:
             vector_db_options = VectorStoreFactory.get_available_type_options()
             embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
             embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
+            
+            # Get AI services for media transcription
+            from repositories.ai_service_repository import AIServiceRepository
+            ai_services_query = AIServiceRepository.get_by_app_id(db, app_id)
+            ai_services = [{"service_id": s.service_id, "name": s.name} for s in ai_services_query]
+            
             return RepositoryDetailSchema(
                 repository_id=0,
                 name="",
@@ -264,7 +270,8 @@ class RepositoryService:
                 metadata_fields=[],
                 vector_db_type='PGVECTOR',
                 vector_db_options=vector_db_options,
-                media=[]
+                media=[],
+                ai_services=ai_services
             )
         
         # Existing repository
@@ -291,6 +298,11 @@ class RepositoryService:
         # Get embedding services for form data
         embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
         embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
+        
+        # Get AI services for media transcription
+        from repositories.ai_service_repository import AIServiceRepository
+        ai_services_query = AIServiceRepository.get_by_app_id(db, app_id)
+        ai_services = [{"service_id": s.service_id, "name": s.name} for s in ai_services_query]
         
         # Get folders for the repository
         from services.folder_service import FolderService
@@ -361,7 +373,8 @@ class RepositoryService:
             metadata_fields=metadata_fields,
             vector_db_type=vector_db_type,
             vector_db_options=vector_db_options,
-            media=media_list
+            media=media_list,
+            ai_services=ai_services
         )
 
     @staticmethod

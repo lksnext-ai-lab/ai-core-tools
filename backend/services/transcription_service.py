@@ -1,7 +1,10 @@
 import whisper
 import os
 from typing import List, Dict, Optional
+from sqlalchemy.orm import Session
 from utils.logger import get_logger
+from tools.transcriptionTools import get_transcription_from_service
+from repositories.ai_service_repository import AIServiceRepository
 
 logger = get_logger(__name__)
 
@@ -19,13 +22,20 @@ class TranscriptionService:
         return cls._model
     
     @staticmethod
-    def transcribe_audio(audio_path: str, language: Optional[str] = None) -> dict:
+    def transcribe_audio(
+        audio_path: str, 
+        language: Optional[str] = None,
+        db: Session = None,
+        ai_service_id: Optional[int] = None
+    ) -> dict:
         """
-        Transcribe audio file using Whisper
+        Transcribe audio file using Whisper (OpenAI API or local model)
         
         Args:
-            audio_path: Path to audio file (preferably WAV, 16kHz, mono)
+            audio_path: Path to audio file
             language: Force language (e.g., 'es', 'en', 'fr'). None for auto-detect.
+            db: Database session (optional, for service config lookup)
+            ai_service_id: AI Service ID with Whisper configuration (optional)
         
         Returns:
             {
@@ -36,9 +46,18 @@ class TranscriptionService:
             }
         """
         try:
+            # If AI service is provided, use the configured transcription method (OpenAI)
+            if db and ai_service_id:
+                logger.info(f"Using AI Service {ai_service_id} for transcription")
+                ai_service = AIServiceRepository.get_by_id(db, ai_service_id)
+                
+                if ai_service:
+                    return get_transcription_from_service(ai_service, audio_path, language)
+            
+            # Fallback to local Whisper model with environment configuration
             model = TranscriptionService._get_model()
             
-            logger.info(f"Transcribing audio: {audio_path}, language: {language or 'auto-detect'}")
+            logger.info(f"Transcribing audio with local Whisper: {audio_path}, language: {language or 'auto-detect'}")
             
             if language == '':
                 language = None
@@ -71,7 +90,7 @@ class TranscriptionService:
                 'text': result.get('text', '').strip()
             }
             
-            logger.info(f"Transcription complete: {len(segments)} segments, {duration:.2f}s, language: {transcription_data['language']}")
+            logger.info(f"Local Whisper transcription complete: {len(segments)} segments, {duration:.2f}s, language: {transcription_data['language']}")
             return transcription_data
             
         except Exception as e:
