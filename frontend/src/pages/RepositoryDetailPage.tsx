@@ -137,6 +137,7 @@ const RepositoryDetailPage: React.FC = () => {
         }
       } catch (err) {
         console.error('Polling error:', err);
+        stopPolling(mediaId);
       }
     }, 3000);
     
@@ -162,7 +163,7 @@ const RepositoryDetailPage: React.FC = () => {
       setRepository(data);
       
       // Start polling for processing media
-      data.media?.forEach((m: any) => {
+      data.media?.forEach((m: Media) => {
         if (m.status !== 'ready' && m.status !== 'error') {
           startPolling(m.media_id);
         }

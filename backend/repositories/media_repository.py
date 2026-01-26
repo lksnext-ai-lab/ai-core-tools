@@ -17,7 +17,7 @@ class MediaRepository:
     @staticmethod
     def get_by_repository_id(repository_id: int, db: Session) -> List[Media]:
         return db.query(Media).filter(Media.repository_id == repository_id).all()
-    
+
     @staticmethod
     def update_status(media_id: int, status: str, db: Session):
         """Update media status"""

@@ -1,6 +1,6 @@
 import os
 from typing import List, Tuple, Optional
-from fastapi import UploadFile
+from fastapi import UploadFile, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from models.media import Media
@@ -21,6 +21,7 @@ class MediaService:
         folder_id: Optional[int],
         transcription_service_id: int,
         db: Session,
+        background_tasks: BackgroundTasks, 
         user_context,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
@@ -48,6 +49,7 @@ class MediaService:
                     folder_id=folder_id,
                     transcription_service_id=transcription_service_id,
                     db=db,
+                    background_tasks=background_tasks, 
                     forced_language=forced_language,
                     chunk_min_duration=chunk_min_duration,
                     chunk_max_duration=chunk_max_duration,
@@ -166,6 +168,7 @@ class MediaService:
         folder_id: Optional[int],
         transcription_service_id: int,
         db: Session,
+        background_tasks: BackgroundTasks,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
@@ -210,9 +213,9 @@ class MediaService:
         db.commit()
         db.refresh(media)
         
-        # Trigger async processing
-        from tasks.media_tasks import process_media_task
-        process_media_task(media.media_id)
+        # Schedule background task
+        from tasks.media_tasks import process_media_task_sync
+        background_tasks.add_task(process_media_task_sync, media.media_id)
         
         logger.info(f"Created media {media.media_id} from file upload: {file.filename}")
         return media

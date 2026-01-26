@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
 from typing import List, Optional
 import os
 import logging
@@ -15,6 +15,7 @@ from schemas.media_schemas import MediaResponse, MediaUploadResponse
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
+from repositories.media_repository import MediaRepository
 
 # Import database dependency
 from db.database import get_db
@@ -262,6 +263,7 @@ async def download_resource(
 async def upload_media(
     app_id: int,
     repository_id: int,
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     folder_id: Optional[int] = Form(None),
     transcription_service_id: int = Form(...),
@@ -270,7 +272,7 @@ async def upload_media(
     chunk_max_duration: Optional[int] = Form(None),
     chunk_overlap: Optional[int] = Form(None),
     db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    auth_context: AuthContext = Depends(get_current_user_oauth),
 ):
     """
     Upload video/audio files for transcription and indexing
@@ -295,6 +297,7 @@ async def upload_media(
             folder_id=folder_id,
             transcription_service_id=transcription_service_id,
             db=db,
+            background_tasks=background_tasks,
             user_context=auth_context,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
@@ -418,6 +421,18 @@ async def move_media(
     )
     
     return result
+
+@repositories_router.get("/{repository_id}/media/{media_id}", response_model=MediaResponse)
+async def get_media_status(
+    app_id: int,
+    repository_id: int,
+    media_id: int,
+    db: Session = Depends(get_db)
+):
+    media = MediaRepository.get_by_id(media_id, db)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return media
 
 @repositories_router.delete("/{repository_id}/media/{media_id}")
 async def delete_media(
