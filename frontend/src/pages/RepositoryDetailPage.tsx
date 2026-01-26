@@ -164,7 +164,7 @@ const RepositoryDetailPage: React.FC = () => {
       
       // Start polling for processing media
       data.media?.forEach((m: Media) => {
-        if (m.status !== 'ready' && m.status !== 'error') {
+        if (m.status !== 'ready' && m.status !== 'error' && !pollingIntervals.has(m.media_id)) {  // Add check
           startPolling(m.media_id);
         }
       });
@@ -523,6 +523,8 @@ const RepositoryDetailPage: React.FC = () => {
     if (!mediaToDelete) return;
 
     try {
+      stopPolling(mediaToDelete.media_id);  // Add this - stop polling before delete
+      
       await apiService.deleteMedia(
         parseInt(appId!),
         parseInt(repositoryId!),
