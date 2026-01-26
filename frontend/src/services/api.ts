@@ -436,12 +436,13 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }) {
+  }, transcriptionServiceId?: number) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     
     files.forEach(file => formData.append('files', file));
     if (folderId) formData.append('folder_id', folderId.toString());
+    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
     if (config?.forced_language) formData.append('forced_language', config.forced_language);
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
@@ -480,13 +481,14 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }) {
+  }, transcriptionServiceId?: number) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     const token = this.getAuthToken();
 
     formData.append('url', url);
     if (folderId) formData.append('folder_id', folderId.toString());
+    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
     if (config?.forced_language) formData.append('forced_language', config.forced_language);
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());

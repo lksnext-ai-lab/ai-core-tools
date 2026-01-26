@@ -33,8 +33,12 @@ interface RepositoryDetail {
     service_id: number;
     name: string;
   }>;
+  ai_services: Array<{
+    service_id: number;
+    name: string;
+  }>;
   media: Media[];
-  }
+}
 
   interface Media {
     media_id: number;
@@ -88,6 +92,7 @@ const RepositoryDetailPage: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const [pollingIntervals, setPollingIntervals] = useState<Map<number, NodeJS.Timeout>>(new Map());
+  const [selectedTranscriptionServiceId, setSelectedTranscriptionServiceId] = useState<number | null>(null);
   const [mediaConfig, setMediaConfig] = useState({
     forced_language: '',
     chunk_min_duration: 30,
@@ -237,7 +242,8 @@ const RepositoryDetailPage: React.FC = () => {
           parseInt(repositoryId!),
           mediaFiles,
           selectedFolderId || undefined,
-          mediaConfig
+          mediaConfig,
+          selectedTranscriptionServiceId || undefined
         );
         
         if (result.failed_files?.length > 0) {
@@ -252,7 +258,8 @@ const RepositoryDetailPage: React.FC = () => {
           parseInt(repositoryId!),
           youtubeUrl,
           selectedFolderId || undefined,
-          mediaConfig
+          mediaConfig,
+          selectedTranscriptionServiceId || undefined
         );
       }
       
@@ -645,7 +652,10 @@ const RepositoryDetailPage: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setShowMediaUploadModal(true)}
+                onClick={() => {
+                  setSelectedTranscriptionServiceId(null);
+                  setShowMediaUploadModal(true);
+                }}
                 disabled={uploading}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               >
@@ -1153,7 +1163,12 @@ const RepositoryDetailPage: React.FC = () => {
       {/* Media Upload Modal */}
       <Modal
         isOpen={showMediaUploadModal}
-        onClose={() => setShowMediaUploadModal(false)}
+        onClose={() => {
+          setShowMediaUploadModal(false);
+          setMediaFiles([]);
+          setYoutubeUrl('');
+          setSelectedTranscriptionServiceId(null);
+        }}
         title="Upload Media"
       >
         <div className="space-y-4">
@@ -1213,6 +1228,28 @@ const RepositoryDetailPage: React.FC = () => {
             <h3 className="font-medium mb-3">Processing Options</h3>
             
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transcription Service *</label>
+                {!repository?.ai_services || repository.ai_services.length === 0 ? (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                    No transcription services available. Please create an AI service.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedTranscriptionServiceId || ''}
+                    onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="">-- Select a Transcription Service --</option>
+                    {repository.ai_services.map(service => (
+                      <option key={service.service_id} value={service.service_id}>
+                        {service.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Language (optional)</label>
                 <select
@@ -1276,7 +1313,10 @@ const RepositoryDetailPage: React.FC = () => {
             </button>
             <button
               onClick={handleMediaUpload}
-              disabled={uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl}
+              disabled={
+                selectedTranscriptionServiceId === null ||
+                (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl)
+              }
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
             >
               {uploading ? 'Uploading...' : 'Upload'}
