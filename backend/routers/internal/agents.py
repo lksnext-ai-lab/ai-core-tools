@@ -68,7 +68,13 @@ async def get_agent(
     """
     Get detailed information about a specific agent plus form data for editing.
     """
-    # App access validation would be implemented here
+    
+    # Validate that agent belongs to the specified app
+    if getattr(agent_detail, 'app_id', None) != app_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=AGENT_NOT_FOUND_ERROR
+        )
     
     # Get agent details using service
     agent_detail = agent_service.get_agent_detail(db, app_id, agent_id)
