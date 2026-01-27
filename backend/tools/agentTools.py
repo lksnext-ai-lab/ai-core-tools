@@ -314,14 +314,44 @@ class IACTTool(BaseTool):
             if retriever_tool is not None:
                 tools.append(retriever_tool)
         
-        # Use system_prompt as state_modifier
-        state_modifier = SystemMessage(content=agent.system_prompt) if agent.system_prompt else None
+        # Create a prompt function that properly injects the system_prompt
+        def agent_tool_prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
+            """Prepare messages for the agent tool, ensuring system prompt is included."""
+            history = state.get("messages", [])
+            
+            # Apply hybrid memory management if agent has memory enabled
+            if agent.has_memory:
+                try:
+                    history = MemoryManagementService.apply_hybrid_strategy(
+                        messages=history,
+                        max_messages=agent.memory_max_messages or 20,
+                        max_tokens=agent.memory_max_tokens
+                    )
+                    
+                    # Log memory statistics
+                    stats = MemoryManagementService.get_memory_stats(history)
+                    logger.info(f"Memory stats for agent tool {agent.agent_id} ({self.name}): {stats}")
+                    
+                except Exception as e:
+                    logger.error(f"Error applying memory management for agent tool {self.name}: {e}. Using unmodified history.")
+            
+            # Build final message list
+            messages = []
+            
+            # Add system prompt if available
+            if agent.system_prompt:
+                messages.append(SystemMessage(content=agent.system_prompt))
+            
+            # Add conversation history
+            messages.extend(history)
+            
+            return messages
 
         self.react_agent = create_react_agent(
-            self.llm, 
-            tools, 
-            debug=False,
-            state_modifier=state_modifier
+            model=self.llm, 
+            tools=tools, 
+            prompt=agent_tool_prompt,
+            debug=False
         )
 
     def _run(self, query: str, *args, **kwargs) -> str:
