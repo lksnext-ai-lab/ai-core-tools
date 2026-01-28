@@ -8,6 +8,7 @@ class App(Base):
     __tablename__ = 'App'
     app_id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    slug = Column(String(100), unique=True, nullable=True)  # URL-safe identifier, system-wide unique
     agent_rate_limit = Column(Integer, default=0)
     max_file_size_mb = Column(Integer, default=0)
     agent_cors_origins = Column(String(1000))
@@ -32,6 +33,7 @@ class App(Base):
     silos = relationship('Silo', back_populates='app', lazy=True)
     ai_services = relationship('AIService', back_populates='app', lazy=True)
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
+    mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     
     def get_user_role(self, user_id):
         """Get the role of a user in this app"""

@@ -57,4 +57,8 @@ WEAVIATE_URL = os.getenv('WEAVIATE_URL')
 WEAVIATE_API_KEY = os.getenv('WEAVIATE_API_KEY')
 
 # Chroma Configuration (future support)
-CHROMA_PERSIST_DIR = os.getenv('CHROMA_PERSIST_DIR', './chroma_db') 
+CHROMA_PERSIST_DIR = os.getenv('CHROMA_PERSIST_DIR', './chroma_db')
+
+# MCP Server Configuration
+# Base URL for generating MCP endpoint URLs (e.g., https://your-domain.com)
+MCP_BASE_URL = os.getenv('MCP_BASE_URL', 'http://localhost:8000') 

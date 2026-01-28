@@ -43,6 +43,9 @@ import StatsPage from '../pages/admin/StatsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
 import ProfilePage from '../pages/ProfilePage';
+import MCPServersPage from '../pages/MCPServersPage';
+import MCPServerFormPage from '../pages/MCPServerFormPage';
+import MCPServerDetailPage from '../pages/MCPServerDetailPage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -230,6 +233,31 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     <ProtectedLayoutRoute {...commonLayoutProps}>
                       <DomainDetailPage />
                     </ProtectedLayoutRoute>
+                } />
+
+                {/* MCP Servers routes */}
+                <Route path="/apps/:appId/mcp-servers" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MCPServersPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/mcp-servers/new" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MCPServerFormPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/mcp-servers/:serverId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MCPServerDetailPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/mcp-servers/:serverId/edit" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MCPServerFormPage />
+                  </ProtectedLayoutRoute>
                 } />
 
                 {/* App-specific settings routes */}

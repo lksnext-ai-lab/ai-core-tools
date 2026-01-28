@@ -184,6 +184,10 @@ class ApiService {
     });
   }
 
+  async getAgentMCPUsage(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
+  }
+
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string) {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
       method: 'POST',
@@ -322,6 +326,50 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/mcp-configs/test-connection`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // ==================== MCP SERVERS (Expose Agents as MCP Tools) ====================
+  async getMCPServers(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/`);
+  }
+
+  async getMCPServer(appId: number, serverId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`);
+  }
+
+  async createMCPServer(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMCPServer(appId: number, serverId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMCPServer(appId: number, serverId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getMCPServerToolAgents(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/tool-agents`);
+  }
+
+  async getAppSlugInfo(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/slug/info`);
+  }
+
+  async updateAppSlug(appId: number, slug: string) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/slug`, {
+      method: 'PUT',
+      body: JSON.stringify({ slug }),
     });
   }
 

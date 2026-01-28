@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import json
 
 from services.agent_service import AgentService
+from services.mcp_server_service import MCPServerService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
@@ -138,8 +139,8 @@ async def create_or_update_agent(
                      summary="Delete agent",
                      tags=["Agents"])
 async def delete_agent(
-    app_id: int, 
-    agent_id: int, 
+    app_id: int,
+    agent_id: int,
     auth_context: AuthContext = Depends(get_current_user_oauth),
     role: AppRole = Depends(require_min_role("editor")),
     db: Session = Depends(get_db),
@@ -149,7 +150,7 @@ async def delete_agent(
     Delete an agent.
     """
     # App access validation would be implemented here
-    
+
     # Check if agent exists
     agent = agent_service.get_agent(db, agent_id)
     if not agent:
@@ -157,7 +158,7 @@ async def delete_agent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=AGENT_NOT_FOUND_ERROR
         )
-    
+
     # Delete agent
     success = agent_service.delete_agent(db, agent_id)
     if not success:
@@ -165,8 +166,42 @@ async def delete_agent(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete agent"
         )
-    
+
     return {"message": "Agent deleted successfully"}
+
+
+@agents_router.get("/{agent_id}/mcp-usage",
+                   summary="Get MCP servers using this agent",
+                   tags=["Agents"])
+async def get_agent_mcp_usage(
+    app_id: int,
+    agent_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+    agent_service: AgentService = Depends(get_agent_service)
+):
+    """
+    Get list of MCP servers that use this agent.
+    Used to warn users before unmarking an agent as tool or deleting it.
+    """
+    # Check if agent exists
+    agent = agent_service.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=AGENT_NOT_FOUND_ERROR
+        )
+
+    # Get MCP servers using this agent
+    servers = MCPServerService.get_mcp_servers_using_agent(db, agent_id)
+
+    return {
+        "agent_id": agent_id,
+        "is_tool": agent.is_tool,
+        "mcp_servers": servers,
+        "used_in_mcp_servers": len(servers) > 0
+    }
 
 
 @agents_router.post("/{agent_id}/update-prompt",

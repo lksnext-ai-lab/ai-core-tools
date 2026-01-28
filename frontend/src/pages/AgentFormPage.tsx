@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
+import type { AgentMCPUsage } from '../core/types';
 
 // Define the Agent types
 interface Agent {
@@ -117,6 +118,8 @@ function AgentFormPage() {
   const navigate = useNavigate();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mcpUsage, setMcpUsage] = useState<AgentMCPUsage | null>(null);
+  const [showMcpWarning, setShowMcpWarning] = useState(false);
 
   // Helper function to render the "No AI Services" warning banner
   const renderNoAIServicesWarning = (isOcrAgent: boolean) => {
@@ -176,13 +179,13 @@ function AgentFormPage() {
 
   async function loadAgentData() {
     if (!appId || !agentId) return;
-    
+
     try {
       setLoading(true);
       setError(null);
       const response = await apiService.getAgent(parseInt(appId), parseInt(agentId));
       setAgent(response);
-      
+
       // Initialize form data
       setFormData({
         name: response.name || '',
@@ -206,9 +209,19 @@ function AgentFormPage() {
         vision_system_prompt: response.vision_system_prompt || '',
         text_system_prompt: response.text_system_prompt || ''
       });
-      
+
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
+
+      // Load MCP usage for existing agents
+      if (parseInt(agentId) !== 0) {
+        try {
+          const usage = await apiService.getAgentMCPUsage(parseInt(appId), parseInt(agentId));
+          setMcpUsage(usage);
+        } catch (usageErr) {
+          console.error('Error loading MCP usage:', usageErr);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
       console.error('Error loading agent data:', err);
@@ -426,19 +439,72 @@ function AgentFormPage() {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Agent Capabilities</h3>
               </div>
-              
+
+              {/* MCP Warning Dialog */}
+              {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <div className="flex items-start">
+                    <span className="text-amber-500 text-xl mr-3">!</span>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-amber-900 mb-2">
+                        This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length !== 1 ? 's' : ''}
+                      </h4>
+                      <p className="text-sm text-amber-800 mb-2">
+                        Unmarking this agent as a tool will make it unavailable in the following MCP servers:
+                      </p>
+                      <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
+                        {mcpUsage.mcp_servers.map(s => (
+                          <li key={s.server_id}>{s.server_name}</li>
+                        ))}
+                      </ul>
+                      <div className="flex space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleInputChange('is_tool', false);
+                            setShowMcpWarning(false);
+                          }}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          Unmark as Tool Anyway
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowMcpWarning(false)}
+                          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex items-center p-4 bg-gray-50 rounded-xl">
                   <input
                     id="is_tool"
                     type="checkbox"
                     checked={formData.is_tool}
-                    onChange={(e) => handleInputChange('is_tool', e.target.checked)}
+                    onChange={(e) => {
+                      // If unmarking as tool and agent is used in MCP servers, show warning
+                      if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                        setShowMcpWarning(true);
+                      } else {
+                        handleInputChange('is_tool', e.target.checked);
+                      }
+                    }}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <div className="ml-3">
                     <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
                     <p className="text-xs text-gray-500">Can be used by other agents</p>
+                    {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                      <p className="text-xs text-purple-600 mt-1">
+                        Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length !== 1 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
 
