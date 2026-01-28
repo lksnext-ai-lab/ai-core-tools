@@ -9,13 +9,11 @@ from typing import Any, Dict, Optional
 from datetime import datetime
 import json
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from models.mcp_server import MCPServer, MCPServerAgent
-from models.agent import Agent
+from models.mcp_server import MCPServer
 from services.agent_execution_service import AgentExecutionService
-from db.database import SessionLocal
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
