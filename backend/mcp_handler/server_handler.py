@@ -6,7 +6,6 @@ Supports JSON-RPC 2.0 over HTTP with Streamable HTTP transport.
 """
 
 from typing import Any, Dict, Optional
-from datetime import datetime
 import json
 
 from fastapi import HTTPException
