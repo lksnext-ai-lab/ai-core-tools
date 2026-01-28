@@ -1,5 +1,5 @@
 from typing import Optional, List
-from models.mcp_server import MCPServer, MCPServerAgent
+from models.mcp_server import MCPServer
 from models.agent import Agent
 from models.app import App
 from repositories.mcp_server_repository import MCPServerRepository, AppSlugRepository
