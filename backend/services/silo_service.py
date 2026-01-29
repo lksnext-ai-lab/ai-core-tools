@@ -2,7 +2,6 @@ from typing import Optional, List, Dict, Any
 import os
 import json
 from models.media import Media
-from models.media_chunk import MediaChunk
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
@@ -22,6 +21,7 @@ from utils.error_handlers import (
 )
 from schemas.silo_schemas import SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema
 from repositories.silo_repository import SiloRepository
+from services.folder_service import FolderService
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
@@ -525,6 +525,80 @@ class SiloService:
                 session.close()
 
     @staticmethod
+    def update_media_metadata(media: Media, db_session: Session = None):
+        """
+        Update only the metadata of media chunks in the vector database without re-indexing content.
+        Updates folder information for all chunks belonging to this media.
+        
+        Args:
+            media: Media instance with updated folder information
+            db_session: Optional database session
+        """
+        try:
+            if db_session:
+                session = db_session
+            else:
+                session = SessionLocal()
+            
+            # Get media with relations
+            media_with_relations = session.query(Media).filter(
+                Media.media_id == media.media_id
+            ).first()
+            
+            if not media_with_relations:
+                logger.error(f"Media {media.media_id} not found for metadata update")
+                return
+            
+            logger.info(f"Updating metadata for media {media.media_id}, folder_id: {media_with_relations.folder_id}")
+            
+            collection_name = COLLECTION_PREFIX + str(media_with_relations.repository.silo_id)
+            
+            # Prepare updated metadata fields
+            metadata_updates = {
+                "source_type": media_with_relations.source_type,
+                "source_url": media_with_relations.source_url,
+                "language": media_with_relations.language,
+                "name": media_with_relations.name
+            }
+            
+            # Add folder information
+            if media_with_relations.folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(media_with_relations.folder_id, session)
+                metadata_updates["folder_id"] = media_with_relations.folder_id
+                metadata_updates["folder_path"] = folder_path
+            else:
+                metadata_updates["folder_id"] = None
+                metadata_updates["folder_path"] = ""
+            
+            # Update all chunks for this media in vector database
+            update_query = text("""
+                UPDATE langchain_pg_embedding 
+                SET cmetadata = cmetadata || CAST(:metadata_updates AS jsonb)
+                WHERE collection_id = (
+                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
+                )
+                AND cmetadata->>'media_id' = :media_id
+                AND cmetadata->>'content_type' = 'media_chunk'
+            """)
+
+            session.execute(update_query, {
+                'metadata_updates': json.dumps(metadata_updates),
+                'collection_name': collection_name,
+                'media_id': str(media.media_id)
+            })
+            session.commit()
+            
+            logger.info(f"Updated metadata for all chunks of media {media.media_id} in collection {collection_name}")
+            
+        except Exception as e:
+            logger.error(f"Error updating media metadata: {str(e)}")
+            raise
+        finally:
+            if not db_session:
+                session.close()
+
+    @staticmethod
     def index_resource(resource: Resource):
         # For resource operations, we need a fresh session since this might be called from other contexts
         session = SessionLocal()
@@ -591,71 +665,84 @@ class SiloService:
             session.close()
 
     @staticmethod
-    def index_media_chunk(chunk: MediaChunk, db: Session):
+    def index_media_chunk(chunk: dict, media: Media, db: Session = None):
         """
-        Index a single media chunk in the vector database
-        
-        Creates a Document with media-specific metadata and indexes it
-        in the silo's vector store collection
+        Index a single media chunk in the vector database using chunk data dict and the Media instance.
+
+        `chunk` should be a dict with keys: `text`, `start_time`, `end_time`, `chunk_index` and optionally `chunk_id`.
+        The chunk information will be stored inside the embedding metadata (no DB row required).
         """
-        
-        # Get media with relationships loaded
-        media = chunk.media
         if not media:
-            logger.error(f"Media not found for chunk {chunk.chunk_id}")
+            logger.error("Media not provided for chunk indexing")
             return
-        
-        # Get silo and collection name
+
         collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
-        
-        # Build metadata
+
+        # Build metadata from chunk dict and media
         metadata = {
             "repository_id": media.repository_id,
             "media_id": media.media_id,
-            "chunk_id": chunk.chunk_id,
-            "chunk_index": chunk.chunk_index,
-            "start_time": chunk.start_time,
-            "end_time": chunk.end_time,
+            "silo_id": media.repository.silo_id,
+            "content_type": "media_chunk",
+            
+            # Chunk-specific data
+            "chunk_index": chunk.get('chunk_index'),
+            "start_time": chunk.get('start_time'),
+            "end_time": chunk.get('end_time'),
+            "duration": chunk.get('end_time', 0) - chunk.get('start_time', 0),
+            
+            # Media file information
+            "name": media.name,
             "source_type": media.source_type,
             "source_url": media.source_url,
             "language": media.language,
-            "silo_id": media.repository.silo_id,
-            "content_type": "media_chunk",  # Distinguish from document resources
-            "name": media.name
+            "file_type": os.path.splitext(media.file_path)[1].lower() if media.file_path else None,
+            "source": media.file_path,
+            
+            # Folder information
+            "folder_id": media.folder_id,
+            "folder_path": FolderService.get_folder_path(media.folder_id, db) if media.folder_id else "",
+            
+            # Reference path (similar to resource 'ref')
+            "ref": os.path.join(
+                str(media.repository_id),
+                FolderService.get_folder_path(media.folder_id, db) if media.folder_id else "",
+                f"{media.media_id}{os.path.splitext(media.file_path)[1]}" if media.file_path else ""
+            ).replace("\\", "/"),
+            
+            # Media metadata
+            "media_duration": media.duration
         }
-        
+
         # Add folder information if media is in a folder
         if media.folder_id:
-            from services.folder_service import FolderService
             folder_path = FolderService.get_folder_path(media.folder_id, db)
             metadata["folder_id"] = media.folder_id
             metadata["folder_path"] = folder_path
         else:
             metadata["folder_id"] = None
             metadata["folder_path"] = ""
-        
-        # Create Document
+
+        # Create Document and index
         doc = Document(
-            page_content=chunk.text,
+            page_content=chunk.get('text', ''),
             metadata=metadata
         )
-        
-        # Get embedding service
+
         embedding_service = media.repository.silo.embedding_service
         if not embedding_service:
-            logger.warning(f"Silo {media.repository.silo_id} has no embedding service, skipping indexing for chunk {chunk.chunk_id}")
+            logger.warning(f"Silo {media.repository.silo_id} has no embedding service, skipping indexing for media {media.media_id}")
             return
-        
-        # Index in vector store
+
         try:
             _get_vector_store(media.repository.silo).index_documents(
                 collection_name,
                 [doc],
                 embedding_service
             )
-            logger.info(f"Indexed media chunk {chunk.chunk_id} (media {media.media_id}) in silo {media.repository.silo_id}")
+            logger.info(f"Indexed media chunk (media {media.media_id}) in silo {media.repository.silo_id}")
         except Exception as e:
-            logger.error(f"Error indexing media chunk {chunk.chunk_id}: {str(e)}")
+            logger.error(f"Error indexing media chunk for media {media.media_id}: {str(e)}")
             raise
 
     @staticmethod

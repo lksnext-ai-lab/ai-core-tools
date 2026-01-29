@@ -514,7 +514,7 @@ class ApiService {
 
     console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
 
-    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/youtube`, {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/youtube`, {
       method: 'POST',
       headers: headers,
       body: formData,

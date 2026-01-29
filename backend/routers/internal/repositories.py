@@ -314,7 +314,7 @@ async def upload_media(
         logger.error(f"Error uploading media: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@repositories_router.post("/{repository_id}/youtube", response_model=MediaResponse)
+@repositories_router.post("/{repository_id}/media/youtube", response_model=MediaResponse)
 async def add_youtube_video(
     app_id: int,
     background_tasks: BackgroundTasks,

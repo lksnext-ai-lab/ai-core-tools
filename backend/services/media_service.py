@@ -65,6 +65,74 @@ class MediaService:
         
         return created_media, failed_files
     
+    # @staticmethod
+    # def move_media_to_folder(
+    #     app_id: int,
+    #     media_id: int,
+    #     repository_id: int,
+    #     new_folder_id: Optional[int],
+    #     db: Session
+    # ) -> dict:
+    #     """
+    #     Move a media item to a different folder within the same repository.
+    #     """
+
+    #     try:
+    #         logger.info(
+    #             f"Move media service called - app_id: {app_id}, media_id: {media_id}, "
+    #             f"repository_id: {repository_id}, new_folder_id: {new_folder_id}"
+    #         )
+
+    #         # Convert 0 to None for root folder
+    #         if new_folder_id == 0:
+    #             new_folder_id = None
+
+    #         # Get the media
+    #         media = (
+    #             db.query(Media)
+    #             .filter(Media.media_id == media_id)
+    #             .one_or_none()
+    #         )
+
+    #         if not media:
+    #             raise ValueError(f"Media {media_id} not found")
+
+    #         # Validate repository ownership
+    #         if media.repository_id != repository_id:
+    #             raise ValueError(
+    #                 f"Media {media_id} does not belong to repository {repository_id}"
+    #             )
+
+    #         # Validate target folder if provided
+    #         if new_folder_id is not None:
+    #             from services.folder_service import FolderService
+    #             if not FolderService.validate_folder_access(
+    #                 new_folder_id, repository_id, db
+    #             ):
+    #                 raise ValueError(
+    #                     f"Folder {new_folder_id} does not belong to repository {repository_id}"
+    #                 )
+
+    #         # Update database record
+    #         media.folder_id = new_folder_id
+    #         db.add(media)
+    #         db.commit()
+
+    #         logger.info(
+    #             f"Updated media {media_id} folder_id to {new_folder_id}"
+    #         )
+
+    #         return {
+    #             "success": True,
+    #             "message": "Media moved successfully",
+    #             "media_id": media_id,
+    #             "new_folder_id": new_folder_id,
+    #         }
+
+    #     except Exception as e:
+    #         logger.error(f"Error moving media {media_id}: {str(e)}")
+    #         raise ValueError(f"Failed to move media: {str(e)}")
+
     @staticmethod
     def move_media_to_folder(
         app_id: int,
@@ -75,58 +143,81 @@ class MediaService:
     ) -> dict:
         """
         Move a media item to a different folder within the same repository.
+        Updates file system location (media + audio), database record, and re-indexes in vector DB.
         """
-
         try:
-            logger.info(
-                f"Move media service called - app_id: {app_id}, media_id: {media_id}, "
-                f"repository_id: {repository_id}, new_folder_id: {new_folder_id}"
-            )
-
             # Convert 0 to None for root folder
             if new_folder_id == 0:
                 new_folder_id = None
 
             # Get the media
-            media = (
-                db.query(Media)
-                .filter(Media.media_id == media_id)
-                .one_or_none()
-            )
-
+            media = db.query(Media).filter(Media.media_id == media_id).one_or_none()
             if not media:
                 raise ValueError(f"Media {media_id} not found")
 
             # Validate repository ownership
             if media.repository_id != repository_id:
-                raise ValueError(
-                    f"Media {media_id} does not belong to repository {repository_id}"
-                )
+                raise ValueError(f"Media {media_id} does not belong to repository {repository_id}")
 
             # Validate target folder if provided
             if new_folder_id is not None:
                 from services.folder_service import FolderService
-                if not FolderService.validate_folder_access(
-                    new_folder_id, repository_id, db
-                ):
-                    raise ValueError(
-                        f"Folder {new_folder_id} does not belong to repository {repository_id}"
-                    )
+                if not FolderService.validate_folder_access(new_folder_id, repository_id, db):
+                    raise ValueError(f"Folder {new_folder_id} does not belong to repository {repository_id}")
 
-            # Update database record
+            # Get old paths
+            old_media_path = media.file_path
+            if not old_media_path:
+                raise ValueError(f"Could not determine current path for media {media_id}")
+            
+            base_path = os.path.splitext(old_media_path)[0]
+            old_audio_path = f"{base_path}_audio.wav"
+
+            # Build new paths
+            repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
+            media_filename = os.path.basename(old_media_path)
+            audio_filename = os.path.basename(old_audio_path)
+            
+            if new_folder_id:
+                from services.folder_service import FolderService
+                folder_path = FolderService.get_folder_path(new_folder_id, db)
+                new_media_path = os.path.join(repository_path, folder_path, media_filename)
+                new_audio_path = os.path.join(repository_path, folder_path, audio_filename)
+            else:
+                new_media_path = os.path.join(repository_path, media_filename)
+                new_audio_path = os.path.join(repository_path, audio_filename)
+
+            # Create target directory if needed
+            os.makedirs(os.path.dirname(new_media_path), exist_ok=True)
+
+            # Move media file
+            import shutil
+            shutil.move(old_media_path, new_media_path)
+            logger.info(f"Moved media file from {old_media_path} to {new_media_path}")
+
+            # Move audio file if exists
+            if os.path.exists(old_audio_path):
+                shutil.move(old_audio_path, new_audio_path)
+                logger.info(f"Moved audio file from {old_audio_path} to {new_audio_path}")
+
+            # Update database
             media.folder_id = new_folder_id
+            media.file_path = new_media_path
             db.add(media)
             db.commit()
+            logger.info(f"Updated media {media_id} folder_id to {new_folder_id}")
 
-            logger.info(
-                f"Updated media {media_id} folder_id to {new_folder_id}"
-            )
+            # Update metadata in vector database
+            from services.silo_service import SiloService
+            SiloService.update_media_metadata(media, db)
+            logger.info(f"Updated metadata for media {media_id} with new folder information")
 
             return {
                 "success": True,
                 "message": "Media moved successfully",
                 "media_id": media_id,
                 "new_folder_id": new_folder_id,
+                "new_path": new_media_path
             }
 
         except Exception as e:
@@ -200,7 +291,7 @@ class MediaService:
         db.flush()  # Get media_id without committing
         
         # Save file
-        media_folder = os.path.join(REPO_BASE_FOLDER, str(repository_id), 'media')
+        media_folder = os.path.join(REPO_BASE_FOLDER, str(repository_id))
         os.makedirs(media_folder, exist_ok=True)
         
         file_path = os.path.join(media_folder, f"{media.media_id}{file_extension}")

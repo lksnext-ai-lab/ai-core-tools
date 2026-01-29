@@ -2,7 +2,6 @@ from celery import shared_task
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from models.media import Media
-from models.media_chunk import MediaChunk
 from db.database import SessionLocal
 from services.transcription_service import TranscriptionService
 from services.silo_service import SiloService
@@ -200,29 +199,20 @@ def process_media_task_sync(media_id: int):
             max_window=media.chunk_max_duration or 120,
             overlap=media.chunk_overlap or 0
         )
-        
-        for idx, chunk_data in enumerate(chunks_data):
-            chunk = MediaChunk(
-                media_id=media_id,
-                text=chunk_data['text'],
-                start_time=chunk_data['start_time'],
-                end_time=chunk_data['end_time'],
-                chunk_index=idx
-            )
-            db.add(chunk)
-        
-        db.commit()
-        logger.info(f"Created {len(chunks_data)} chunks for media {media_id}")
-        
-        # Step 5: Index chunks
+
+        logger.info(f"Created {len(chunks_data)} chunks (in-memory) for media {media_id}")
+        logger.info(f"First chunk sample: {chunks_data[0] if chunks_data else 'NO CHUNKS'}")
+
+        # Step 5: Index chunks directly without creating DB rows
         media.status = 'indexing'
         db.commit()
-        
-        chunks = db.query(MediaChunk).filter(MediaChunk.media_id == media_id).all()
-        for chunk in chunks:
-            SiloService.index_media_chunk(chunk, db)
-        
-        logger.info(f"Indexed {len(chunks)} chunks for media {media_id}")
+
+        for idx, chunk_data in enumerate(chunks_data):
+            # enrich with index and optional chunk_id (no DB id available)
+            chunk_data['chunk_index'] = idx
+            SiloService.index_media_chunk(chunk_data, media, db)
+
+        logger.info(f"Indexed {len(chunks_data)} chunks for media {media_id}")
         
         # Step 6: Mark as ready
         media.status = 'ready'
@@ -244,10 +234,6 @@ def process_media_task_sync(media_id: int):
         except Exception as update_error:
             logger.error(f"Failed to update error status: {str(update_error)}")
         
-        # Retry logic for transient errors
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
-        
     finally:
         db.close()
 
@@ -263,7 +249,7 @@ def _download_youtube(url: str, media_id: int, repo_id: int) -> str:
     Returns:
         Path to downloaded video file
     """
-    output_dir = os.path.join(REPO_BASE_FOLDER, str(repo_id), 'media')
+    output_dir = os.path.join(REPO_BASE_FOLDER, str(repo_id))
     os.makedirs(output_dir, exist_ok=True)
     
     output_path = os.path.join(output_dir, f"{media_id}.%(ext)s")
@@ -306,7 +292,7 @@ def _extract_audio(video_path: str, media_id: int, repo_id: int) -> str:
     Returns:
         Path to normalized audio file (WAV, 16kHz, mono)
     """
-    output_dir = os.path.join(REPO_BASE_FOLDER, str(repo_id), 'media')
+    output_dir = os.path.join(REPO_BASE_FOLDER, str(repo_id))
     audio_path = os.path.join(output_dir, f"{media_id}_audio.wav")
     
     try:

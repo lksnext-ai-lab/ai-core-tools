@@ -28,7 +28,6 @@ class Media(Base):
     # Relationships
     repository = relationship('Repository', back_populates='media', foreign_keys=[repository_id])
     folder = relationship('Folder', back_populates='media', foreign_keys=[folder_id])
-    chunks = relationship('MediaChunk', back_populates='media', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f"<Media(media_id={self.media_id}, name='{self.name}', status='{self.status}')>"
