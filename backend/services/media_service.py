@@ -227,6 +227,7 @@ class MediaService:
         folder_id: Optional[int],
         transcription_service_id: int,
         db: Session,
+        background_tasks: BackgroundTasks,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
@@ -277,9 +278,9 @@ class MediaService:
         db.commit()
         db.refresh(media)
         
-        # Trigger async processing
-        from tasks.media_tasks import process_media_task
-        process_media_task(media.media_id)
+        # Schedule background task
+        from tasks.media_tasks import process_media_task_sync
+        background_tasks.add_task(process_media_task_sync, media.media_id)
         
         logger.info(f"Created media {media.media_id} from YouTube URL: {url}")
         return media

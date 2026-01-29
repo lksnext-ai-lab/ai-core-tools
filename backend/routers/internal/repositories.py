@@ -317,6 +317,7 @@ async def upload_media(
 @repositories_router.post("/{repository_id}/youtube", response_model=MediaResponse)
 async def add_youtube_video(
     app_id: int,
+    background_tasks: BackgroundTasks,
     repository_id: int,
     url: str = Form(...),
     folder_id: Optional[int] = Form(None),
@@ -354,6 +355,7 @@ async def add_youtube_video(
             folder_id=folder_id,
             transcription_service_id=transcription_service_id,
             db=db,
+            background_tasks=background_tasks,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
