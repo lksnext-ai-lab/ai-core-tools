@@ -6,6 +6,9 @@ from sqlalchemy import and_
 from models.media import Media
 from utils.logger import get_logger
 
+from repositories.media_repository import MediaRepository
+from services.silo_service import SiloService
+
 REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
 logger = get_logger(__name__)
 
@@ -235,22 +238,33 @@ class MediaService:
 
         logger.info(f"Delete media service called - app_id: {app_id}, repository_id: {repository_id}, media_id: {media_id}")
         
-        media = db.query(Media).filter(Media.media_id == media_id).first()
+        media = MediaRepository.get_by_id(media_id, db)
         if not media:
-            raise ValueError(f"Media with ID {media_id} not found")
+            logger.warning(f"Media {media_id} not found for deletion")
+            return False
         
-        # Delete associated file
-        if media.file_path and os.path.exists(media.file_path):
-            os.remove(media.file_path)
-            logger.info(f"Deleted media file at {media.file_path}")
-        
-        # Delete media record
-        db.delete(media)
-        db.commit()
-        logger.info(f"Deleted media record with ID {media_id}")
+        try:
+            # Delete from silo first
+            SiloService.delete_media(media)
+            logger.info(f"Media {media_id} deleted from silo")
+            
+            # Delete file from disk
+            if media.file_path and os.path.exists(media.file_path):
+                os.remove(media.file_path)
+                logger.info(f"File {media.file_path} deleted from disk")
+            
+            # Delete from database
+            MediaRepository.delete(media, db)
+            MediaRepository.commit(db)
+            logger.info(f"Media {media_id} deleted from database")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting media {media_id}: {str(e)}")
+            MediaRepository.rollback(db)
+            return False
 
-        logger.info(f"Media {media_id} deleted successfully")
-        return {"message": "Media deleted successfully"}
 
     @staticmethod
     async def create_media_from_file(

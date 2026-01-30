@@ -746,14 +746,43 @@ class SiloService:
             raise
 
     @staticmethod
-    def delete_media(media: Media, db: Session):
+    def delete_media(media: Media):
         """Delete all chunks for a media"""
+        logger.info(f"Eliminando media {media.media_id} del silo {media.repository.silo_id}")
         collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
         _get_vector_store(media.repository.silo).delete_documents(
             collection_name,
             ids={"media_id": {"$eq": media.media_id}},
             embedding_service=media.repository.silo.embedding_service
         )
+
+        logger.info(f"Eliminando recurso {media.media_id} del silo {media.repository.silo_id}")
+        collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
+        
+        # For resource operations, we need a fresh session since this might be called from other contexts
+        session = SessionLocal()
+        try:
+            # Load silo within the session to avoid detached instance issues
+            silo = SiloRepository.get_by_id(media.repository.silo_id, session)
+            if not silo:
+                logger.error(f"Silo no encontrado para la media {media.media_id}")
+                return
+
+            # Check if silo has embedding service
+            if not silo.embedding_service:
+                logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {media.source.resource_id}")
+                return
+
+            _get_vector_store(silo).delete_documents(
+                collection_name,
+                ids={"media_id": {"$eq": media.media_id}},
+                embedding_service=silo.embedding_service
+            )
+        except Exception as e:
+            logger.error(f"Error deleting resource {media.source.resource_id} from vector store: {str(e)}")
+            # Don't raise the exception - allow the media to be deleted from database and disk
+        finally:
+            session.close()
 
     @staticmethod
     def delete_resource(resource: Resource):

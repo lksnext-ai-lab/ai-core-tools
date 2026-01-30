@@ -19,6 +19,16 @@ class MediaRepository:
         return db.query(Media).filter(Media.repository_id == repository_id).all()
 
     @staticmethod
+    def commit(db: Session) -> None:
+        """
+        Commit the current transaction
+        
+        Args:
+            db: Database session
+        """
+        db.commit()
+
+    @staticmethod
     def update_status(media_id: int, status: str, db: Session):
         """Update media status"""
         media = db.query(Media).filter(Media.media_id == media_id).first()
