@@ -250,8 +250,12 @@ class MediaService:
             
             # Delete file from disk
             if media.file_path and os.path.exists(media.file_path):
+                audio_path = os.path.splitext(media.file_path)[0] + "_audio.wav"
                 os.remove(media.file_path)
                 logger.info(f"File {media.file_path} deleted from disk")
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+                    logger.info(f"Audio file {audio_path} deleted from disk")
             
             # Delete from database
             MediaRepository.delete(media, db)

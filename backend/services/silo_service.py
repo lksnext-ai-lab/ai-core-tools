@@ -748,14 +748,6 @@ class SiloService:
     @staticmethod
     def delete_media(media: Media):
         """Delete all chunks for a media"""
-        logger.info(f"Eliminando media {media.media_id} del silo {media.repository.silo_id}")
-        collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
-        _get_vector_store(media.repository.silo).delete_documents(
-            collection_name,
-            ids={"media_id": {"$eq": media.media_id}},
-            embedding_service=media.repository.silo.embedding_service
-        )
-
         logger.info(f"Eliminando recurso {media.media_id} del silo {media.repository.silo_id}")
         collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
         
