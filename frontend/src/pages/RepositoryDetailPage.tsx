@@ -91,7 +91,7 @@ const RepositoryDetailPage: React.FC = () => {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
-  const [pollingIntervals, setPollingIntervals] = useState<Map<number, NodeJS.Timeout>>(new Map());
+  const pollingIntervalsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const [selectedTranscriptionServiceId, setSelectedTranscriptionServiceId] = useState<number | null>(null);
   const [mediaConfig, setMediaConfig] = useState({
     forced_language: '',
@@ -116,12 +116,12 @@ const RepositoryDetailPage: React.FC = () => {
 
   useEffect(() => {
     return () => {
-      pollingIntervals.forEach(interval => clearInterval(interval));
+      pollingIntervalsRef.current.forEach(interval => clearInterval(interval));
     };
-  }, [pollingIntervals]);
+  }, []);
 
   const startPolling = (mediaId: number) => {
-    if (pollingIntervals.has(mediaId)) return;
+    if (pollingIntervalsRef.current.has(mediaId)) return;
     
     const interval = setInterval(async () => {
       try {
@@ -141,18 +141,14 @@ const RepositoryDetailPage: React.FC = () => {
       }
     }, 3000);
     
-    setPollingIntervals(prev => new Map(prev).set(mediaId, interval));
+    pollingIntervalsRef.current.set(mediaId, interval);
   };
 
   const stopPolling = (mediaId: number) => {
-    const interval = pollingIntervals.get(mediaId);
+    const interval = pollingIntervalsRef.current.get(mediaId);
     if (interval) {
       clearInterval(interval);
-      setPollingIntervals(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(mediaId);
-        return newMap;
-      });
+      pollingIntervalsRef.current.delete(mediaId);
     }
   };
 
@@ -164,7 +160,7 @@ const RepositoryDetailPage: React.FC = () => {
       
       // Start polling for processing media
       data.media?.forEach((m: Media) => {
-        if (m.status !== 'ready' && m.status !== 'error' && !pollingIntervals.has(m.media_id)) {  // Add check
+        if (m.status !== 'ready' && m.status !== 'error' && !pollingIntervalsRef.current.has(m.media_id)) {
           startPolling(m.media_id);
         }
       });
