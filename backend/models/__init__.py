@@ -25,6 +25,6 @@ __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
     'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
-    'Media'
+    'Media',
     'MCPServer', 'MCPServerAgent'
 ] 
