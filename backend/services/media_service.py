@@ -114,35 +114,35 @@ class MediaService:
     #             ):
     #                 raise ValueError(
     #                     f"Folder {new_folder_id} does not belong to repository {repository_id}"
-    #                 )
 
-    #         # Update database record
-    #         media.folder_id = new_folder_id
-    #         db.add(media)
-    #         db.commit()
 
-    #         logger.info(
-    #             f"Updated media {media_id} folder_id to {new_folder_id}"
-    #         )
 
-    #         return {
-    #             "success": True,
-    #             "message": "Media moved successfully",
-    #             "media_id": media_id,
-    #             "new_folder_id": new_folder_id,
-    #         }
 
-    #     except Exception as e:
-    #         logger.error(f"Error moving media {media_id}: {str(e)}")
-    #         raise ValueError(f"Failed to move media: {str(e)}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     @staticmethod
     def move_media_to_folder(
-        app_id: int,
-        media_id: int,
-        repository_id: int,
-        new_folder_id: Optional[int],
-        db: Session
+    app_id: int,
+    media_id: int,
+    repository_id: int,
+    new_folder_id: Optional[int],
+    db: Session
     ) -> dict:
         """
         Move a media item to a different folder within the same repository.
