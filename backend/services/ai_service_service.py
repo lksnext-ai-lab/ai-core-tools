@@ -218,7 +218,7 @@ class AIServiceService:
             # Initialize OpenAI client
             client = OpenAI(api_key=service.api_key)
             
-            logger.info(f"Testing Whisper connection with API key ending in ...{service.api_key[-8:]}")
+            logger.info("Testing Whisper connection using configured API key")
             
             # Test by listing models (lightweight API call)
             models = client.models.list()
