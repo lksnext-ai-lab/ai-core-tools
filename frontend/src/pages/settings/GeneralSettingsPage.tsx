@@ -10,7 +10,7 @@ function GeneralSettingsPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     langsmith_api_key: '',
@@ -23,16 +23,27 @@ function GeneralSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // App slug state (separate from main form since it uses different endpoint)
+  const [slugData, setSlugData] = useState({
+    slug: '',
+    mcp_base_url: ''
+  });
+  const [slugInput, setSlugInput] = useState('');
+  const [savingSlug, setSavingSlug] = useState(false);
+  const [slugSaved, setSlugSaved] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+
   // Load app data on mount
   useEffect(() => {
     if (appId) {
       loadAppData();
+      loadSlugData();
     }
   }, [appId]);
 
   async function loadAppData() {
     if (!appId) return;
-    
+
     try {
       setLoading(true);
       setError(null);
@@ -49,6 +60,45 @@ function GeneralSettingsPage() {
       console.error('Error loading app data:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadSlugData() {
+    if (!appId) return;
+
+    try {
+      const data = await apiService.getAppSlugInfo(parseInt(appId));
+      setSlugData({
+        slug: data.slug || '',
+        mcp_base_url: data.mcp_base_url || ''
+      });
+      setSlugInput(data.slug || '');
+    } catch (err) {
+      console.error('Error loading slug data:', err);
+    }
+  }
+
+  async function handleSlugSubmit(e?: React.FormEvent | React.MouseEvent) {
+    e?.preventDefault();
+    if (!appId || !slugInput.trim()) return;
+
+    setSavingSlug(true);
+    setSlugError(null);
+
+    try {
+      const data = await apiService.updateAppSlug(parseInt(appId), slugInput.trim());
+      setSlugData({
+        slug: data.slug || '',
+        mcp_base_url: data.mcp_base_url || ''
+      });
+      setSlugInput(data.slug || '');
+      setSlugSaved(true);
+      setTimeout(() => setSlugSaved(false), 3000);
+    } catch (err) {
+      setSlugError(err instanceof Error ? err.message : 'Failed to update slug');
+      console.error('Error updating slug:', err);
+    } finally {
+      setSavingSlug(false);
     }
   }
 
@@ -143,6 +193,49 @@ function GeneralSettingsPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Enter app name"
                   />
+                </div>
+
+                {/* App Slug */}
+                <div>
+                  <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-2">
+                    App Slug
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      id="slug"
+                      value={slugInput}
+                      onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      disabled={!canEdit}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="my-app"
+                      pattern="[a-z0-9-]+"
+                    />
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={handleSlugSubmit}
+                        disabled={savingSlug || !slugInput.trim()}
+                        className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center text-sm whitespace-nowrap"
+                      >
+                        {savingSlug && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        )}
+                        {savingSlug ? 'Saving...' : 'Update Slug'}
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500">
+                    URL-friendly identifier for your app. Use lowercase letters, numbers, and hyphens only.
+                  </p>
+                  {slugSaved && (
+                    <p className="mt-1 text-sm text-green-600 flex items-center">
+                      <span className="mr-1">✓</span> Slug saved successfully
+                    </p>
+                  )}
+                  {slugError && (
+                    <p className="mt-1 text-sm text-red-600">{slugError}</p>
+                  )}
                 </div>
 
                 {/* Langsmith API Key */}
@@ -275,6 +368,27 @@ function GeneralSettingsPage() {
 
           {/* Info Sections */}
           <div className="mt-8 space-y-6">
+            {/* App Slug Info */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <span className="text-gray-400 text-xl">🏷️</span>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-gray-800">
+                    About App Slug
+                  </h3>
+                  <div className="mt-2 text-sm text-gray-700">
+                    <p>
+                      The app slug is a unique, URL-friendly identifier for your app.
+                      It's used in various endpoints including MCP server URLs to make them more readable
+                      (e.g., <code className="bg-gray-200 px-1 rounded text-xs">/mcp/v1/my-app/my-server</code> instead of using numeric IDs).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Langsmith Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex">
@@ -287,7 +401,7 @@ function GeneralSettingsPage() {
                   </h3>
                   <div className="mt-2 text-sm text-blue-700">
                     <p>
-                      Langsmith provides monitoring, tracing, and debugging capabilities for your AI agents. 
+                      Langsmith provides monitoring, tracing, and debugging capabilities for your AI agents.
                       Connect your Langsmith account to track agent performance and troubleshoot issues.
                     </p>
                   </div>

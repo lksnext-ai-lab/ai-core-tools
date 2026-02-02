@@ -14,36 +14,59 @@ class CountResponseSchema(BaseModel):
 
 # ==================== AGENT CHAT SCHEMAS ====================
 
-class ChatRequestSchema(BaseModel):
-    """Chat request payload"""
-    message: str
-    attachments: Optional[List[Dict[str, Any]]] = None
-    search_params: Optional[Dict[str, Any]] = None
-    conversation_id: Optional[str] = None
+# Note: Chat endpoint now uses Form data instead of JSON body for multipart/form-data support
+# Parameters: message, files, file_references, search_params, conversation_id
 
 class AgentResponseSchema(BaseModel):
-    """Agent response"""
-    response: str
+    """Agent response - supports both string responses and structured JSON from output parsers"""
+    response: Union[str, Dict[str, Any]]
     conversation_id: str
     usage: Optional[Dict[str, Any]] = None
 
 # ==================== FILE OPERATION SCHEMAS ====================
 
 class FileAttachmentSchema(BaseModel):
-    """File attachment info"""
-    file_reference: str
+    """File attachment info with visual feedback data"""
+    file_id: str
     filename: str
-    size: int
-    content_type: str
+    file_type: str
+    uploaded_at: Optional[str] = None
+    # Visual feedback fields
+    file_size_bytes: Optional[int] = None
+    file_size_display: Optional[str] = None  # Human readable size (e.g., "2.5 MB")
+    processing_status: Optional[str] = None  # "uploaded", "processing", "ready", "error"
+    content_preview: Optional[str] = None  # First 200 chars of extracted content
+    has_extractable_content: Optional[bool] = None  # True if text was extracted
+    mime_type: Optional[str] = None
+    conversation_id: Optional[str] = None  # Associated conversation if any
 
 class AttachFileResponseSchema(BaseModel):
-    """File attachment response"""
-    file_reference: str
+    """File attachment response with visual feedback data"""
+    success: bool
+    file_id: str
+    filename: str
+    file_type: str
     message: str
+    # Conversation context (for memory-enabled agents)
+    conversation_id: Optional[str] = None  # ID of the conversation the file is attached to
+    # Visual feedback fields
+    file_size_bytes: Optional[int] = None
+    file_size_display: Optional[str] = None  # Human readable size (e.g., "2.5 MB")
+    processing_status: str = "ready"  # "uploaded", "processing", "ready", "error"
+    content_preview: Optional[str] = None  # First 200 chars of extracted content
+    has_extractable_content: bool = False  # True if text was extracted
+    mime_type: Optional[str] = None
 
 class ListFilesResponseSchema(BaseModel):
     """List of attached files"""
     files: List[FileAttachmentSchema]
+    total_size_bytes: Optional[int] = None
+    total_size_display: Optional[str] = None
+
+class DetachFileResponseSchema(BaseModel):
+    """File detachment response"""
+    success: bool
+    message: str
 
 # ==================== OCR SCHEMAS ====================
 
@@ -72,6 +95,10 @@ class SiloSearchSchema(BaseModel):
 class DeleteDocsRequestSchema(BaseModel):
     """Schema for deleting documents"""
     ids: List[str]
+
+class DeleteByMetadataRequestSchema(BaseModel):
+    """Schema for deleting documents by metadata filter"""
+    filter_metadata: Dict[str, Any]
 
 class DocumentSchema(BaseModel):
     """Document schema"""

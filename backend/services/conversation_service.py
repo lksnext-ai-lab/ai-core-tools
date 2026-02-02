@@ -1,5 +1,7 @@
 import uuid
 import hashlib
+import ast
+import json
 from typing import List, Optional, Dict
 from numpy import isin
 from sqlalchemy.orm import Session
@@ -46,6 +48,12 @@ class ConversationService:
         user_id = user_context.get('user_id')
         api_key = user_context.get('api_key')
         api_key_hash = None
+        
+        # For API key users, user_id is a string like "apikey_xxx" 
+        # The database expects an integer, so we set it to None for API key users
+        # They are identified by api_key_hash instead
+        if isinstance(user_id, str) and (user_id.startswith('apikey_') or not user_id.isdigit()):
+            user_id = None
         
         if api_key:
             # Hash the API key for tracking (without storing the actual key)
@@ -127,15 +135,24 @@ class ConversationService:
         # Build query with user filtering
         query = db.query(Conversation).filter(Conversation.agent_id == agent_id)
         
-        # Filter by user
-        user_id = user_context.identity.id
-        
-        if user_id:
+        # Filter by user - handle both AuthContext and dict
+        if isinstance(user_context, AuthContext):
+            user_id = int(user_context.identity.id)
             query = query.filter(Conversation.user_id == user_id)
         elif isinstance(user_context, dict) and user_context.get('api_key'):
+            # API key users are identified by api_key_hash, not user_id
             api_key = user_context.get('api_key')
             api_key_hash = hashlib.md5(api_key.encode()).hexdigest()
             query = query.filter(Conversation.api_key_hash == api_key_hash)
+        elif isinstance(user_context, dict) and user_context.get('user_id'):
+            # OAuth user via dict context
+            user_id = user_context.get('user_id')
+            # Ensure it's a valid integer user_id, not an API key string
+            if isinstance(user_id, int) or (isinstance(user_id, str) and user_id.isdigit()):
+                query = query.filter(Conversation.user_id == int(user_id))
+            else:
+                # Invalid user_id format
+                return [], 0
         else:
             # No valid user context
             return [], 0
@@ -261,7 +278,102 @@ class ConversationService:
             session_id=conversation.session_id
         )
         
-        return history
+        if not history:
+            return []
+        
+        cleaned_history: List[Dict] = []
+        for msg in history:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            parsed_content = content
+            
+            if isinstance(content, str):
+                stripped_content = content.strip()
+                if stripped_content.startswith("[") and "type" in stripped_content:
+                    try:
+                        parsed_content = json.loads(stripped_content)
+                    except json.JSONDecodeError:
+                        try:
+                            parsed_content = ast.literal_eval(stripped_content)
+                        except (ValueError, SyntaxError):
+                            parsed_content = content
+            
+            if isinstance(parsed_content, list):
+                text_parts = []
+                has_image = False
+                for item in parsed_content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image_url":
+                            has_image = True
+                display_text = " ".join(text_parts).strip()
+                # Clean attached file content from multimodal text
+                display_text = ConversationService._clean_attached_files_content(display_text)
+                if not display_text and has_image:
+                    display_text = "[Imagen adjunta]"
+                clean_msg = msg.copy()
+                clean_msg["content"] = display_text or msg.get("content", "")
+                cleaned_history.append(clean_msg)
+            else:
+                # Clean attached file content from simple text messages
+                clean_msg = msg.copy()
+                if isinstance(parsed_content, str):
+                    clean_msg["content"] = ConversationService._clean_attached_files_content(parsed_content)
+                cleaned_history.append(clean_msg)
+        
+        return cleaned_history
+    
+    @staticmethod
+    def _clean_attached_files_content(text: str) -> str:
+        """
+        Remove attached file content from message text.
+        The agent execution service appends file content like:
+        [Attached files:]
+        --- File: filename.pdf ---
+        (full content here)
+        --- End of filename.pdf ---
+        
+        This should not be shown in the conversation history UI.
+        
+        Args:
+            text: Message text that may contain attached file content
+            
+        Returns:
+            Cleaned text without the file content
+        """
+        if not text:
+            return text
+        
+        # Check for attached files marker
+        files_marker = "\n\n[Attached files:]"
+        base_folder_marker = "\n\nFiles base folder is:"
+        
+        # Find the earliest marker position
+        marker_pos = -1
+        has_files = False
+        
+        # Check for files base folder marker (appears before [Attached files:])
+        base_pos = text.find(base_folder_marker)
+        if base_pos != -1:
+            marker_pos = base_pos
+            has_files = True
+        
+        # Check for [Attached files:] marker
+        files_pos = text.find(files_marker)
+        if files_pos != -1:
+            if marker_pos == -1 or files_pos < marker_pos:
+                marker_pos = files_pos
+            has_files = True
+        
+        if has_files and marker_pos != -1:
+            # Return only the original message (before file content)
+            cleaned = text[:marker_pos].strip()
+            # Add indicator that files were attached
+            return cleaned + " 📎"
+        
+        return text
     
     @staticmethod
     def increment_message_count(
@@ -305,20 +417,27 @@ class ConversationService:
         Returns:
             True if user has access, False otherwise
         """
+        # Check API key user first (they have user_id as string like "apikey_xxx")
+        if isinstance(user_context, dict) and user_context.get('api_key'):
+            api_key_hash = hashlib.md5(user_context['api_key'].encode()).hexdigest()
+            if conversation.api_key_hash == api_key_hash:
+                return True
+            return False
+        
+        # Check OAuth user (AuthContext or dict with integer user_id)
         if isinstance(user_context, AuthContext):
             user_id = int(user_context.identity.id)
         else:
             user_id = user_context.get('user_id')
-
-        # Check OAuth user
+            # Ensure it's a valid integer
+            if isinstance(user_id, str):
+                if user_id.isdigit():
+                    user_id = int(user_id)
+                else:
+                    return False
+        
         if user_id and conversation.user_id == user_id:
             return True
-        
-        # Check API key user
-        if  isinstance(user_context, dict) and user_context.get('api_key'):
-            api_key_hash = hashlib.md5(user_context['api_key'].encode()).hexdigest()
-            if conversation.api_key_hash == api_key_hash:
-                return True
         
         return False
 

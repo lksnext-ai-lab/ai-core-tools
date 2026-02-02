@@ -13,25 +13,128 @@ logger = get_logger(__name__)
 
 
 class FileReference:
-    """Represents a file reference for agent consumption"""
+    """Represents a file reference for agent consumption with visual feedback data"""
     
-    def __init__(self, file_id: str, filename: str, file_type: str, content: str, file_path: str = None):
+    # MIME type mapping
+    MIME_TYPES = {
+        "pdf": "application/pdf",
+        "text": "text/plain",
+        "image": "image/jpeg",  # Default, will be overridden based on extension
+        "document": "application/msword",
+        "unknown": "application/octet-stream"
+    }
+    
+    IMAGE_MIME_TYPES = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".bmp": "image/bmp",
+        ".webp": "image/webp"
+    }
+    
+    def __init__(
+        self, 
+        file_id: str, 
+        filename: str, 
+        file_type: str, 
+        content: str, 
+        file_path: str = None,
+        file_size_bytes: int = None,
+        conversation_id: str = None
+    ):
         self.file_id = file_id
         self.filename = filename
         self.file_type = file_type
         self.content = content
         self.file_path = file_path  # Relative path to TMP_BASE_FOLDER
+        self.file_size_bytes = file_size_bytes
+        self.conversation_id = conversation_id
         self.uploaded_at = datetime.utcnow()
+        
+        # Determine MIME type
+        self.mime_type = self._get_mime_type()
+        
+        # Calculate processing status and content info
+        self.processing_status = self._get_processing_status()
+        self.has_extractable_content = self._has_extractable_content()
+        self.content_preview = self._get_content_preview()
+    
+    def _get_mime_type(self) -> str:
+        """Get MIME type based on file type and extension"""
+        if self.file_type == "image":
+            ext = os.path.splitext(self.filename)[1].lower() if self.filename else ""
+            return self.IMAGE_MIME_TYPES.get(ext, "image/jpeg")
+        return self.MIME_TYPES.get(self.file_type, "application/octet-stream")
+    
+    def _get_processing_status(self) -> str:
+        """Determine processing status based on content and file type"""
+        if not self.content:
+            return "error"
+        if self.content.startswith("Error"):
+            return "error"
+        # Images are always "ready" - they're sent directly to vision models
+        # No text extraction needed for images
+        if self.file_type == "image":
+            return "ready"
+        # Documents (.doc, .docx) don't have text extraction implemented yet
+        if "not implemented" in self.content.lower():
+            return "uploaded"  # File uploaded but not fully processed
+        return "ready"
+    
+    def _has_extractable_content(self) -> bool:
+        """Check if meaningful content was extracted"""
+        if not self.content:
+            return False
+        # Check for placeholder messages
+        placeholder_indicators = [
+            "not implemented",
+            "Error processing",
+            "Image file:",
+            "Document file:",
+            "File:"
+        ]
+        return not any(indicator in self.content for indicator in placeholder_indicators)
+    
+    def _get_content_preview(self, max_length: int = 200) -> Optional[str]:
+        """Get preview of extracted content"""
+        if not self.has_extractable_content:
+            return None
+        if len(self.content) <= max_length:
+            return self.content
+        return self.content[:max_length] + "..."
+    
+    @staticmethod
+    def format_file_size(size_bytes: int) -> str:
+        """Format file size to human readable string"""
+        if size_bytes is None:
+            return "Unknown"
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.2f} MB"
+        else:
+            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
+        """Convert to dictionary with visual feedback data"""
         return {
             "file_id": self.file_id,
             "filename": self.filename,
             "file_type": self.file_type,
             "content": self.content,
             "file_path": self.file_path,
-            "uploaded_at": self.uploaded_at.isoformat()
+            "uploaded_at": self.uploaded_at.isoformat(),
+            # Visual feedback fields
+            "file_size_bytes": self.file_size_bytes,
+            "file_size_display": self.format_file_size(self.file_size_bytes),
+            "processing_status": self.processing_status,
+            "content_preview": self.content_preview,
+            "has_extractable_content": self.has_extractable_content,
+            "mime_type": self.mime_type,
+            "conversation_id": self.conversation_id
         }
 
 
@@ -62,7 +165,8 @@ class FileManagementService:
         self, 
         file: UploadFile, 
         agent_id: int,
-        user_context: Dict = None
+        user_context: Dict = None,
+        conversation_id: Optional[int] = None
     ) -> FileReference:
         """
         Upload file for agent consumption
@@ -71,6 +175,7 @@ class FileManagementService:
             file: Uploaded file
             agent_id: ID of the agent
             user_context: User context (api_key, user_id, etc.)
+            conversation_id: Optional conversation ID to organize files
             
         Returns:
             FileReference object
@@ -86,21 +191,30 @@ class FileManagementService:
             # Determine file type
             file_type = self._get_file_type(file.filename)
             
-            # Process file based on type
-            content, temp_path = await self._process_file_content(file, file_type)
+            # Process file based on type (also returns file size)
+            content, temp_path, file_size = await self._process_file_content(file, file_type)
             
-            # Create file reference (file_path will be set later)
-            file_ref = FileReference(file_id, file.filename, file_type, content)
+            # Create file reference with visual feedback data
+            file_ref = FileReference(
+                file_id=file_id,
+                filename=file.filename,
+                file_type=file_type,
+                content=content,
+                file_path=None,  # Will be set by _save_file_to_disk
+                file_size_bytes=file_size,
+                conversation_id=str(conversation_id) if conversation_id else None
+            )
             
-            # Create session key for this agent and user
-            session_key = self._get_session_key(agent_id, user_context)
+            # Create session key for this agent, user, and conversation
+            # conversation_id ensures files are isolated per conversation
+            session_key = self._get_session_key(agent_id, user_context, str(conversation_id) if conversation_id else None)
             
             # Initialize session if not exists
             if session_key not in self._files:
                 self._files[session_key] = {}
             
             # Save file to disk for persistence (including original file)
-            await self._save_file_to_disk(session_key, file_id, file_ref, temp_path)
+            await self._save_file_to_disk(session_key, file_id, file_ref, temp_path, conversation_id)
             
             # Store file reference in session (after file_path is set)
             self._files[session_key][file_id] = file_ref
@@ -165,21 +279,23 @@ class FileManagementService:
     async def list_attached_files(
         self, 
         agent_id: int, 
-        user_context: Dict = None
+        user_context: Dict = None,
+        conversation_id: str = None
     ) -> List[Dict[str, Any]]:
         """
-        List attached files for a user session
+        List attached files for a user session, optionally filtered by conversation.
         
         Args:
             agent_id: ID of the agent
             user_context: User context
+            conversation_id: Optional conversation ID for conversation-specific files
             
         Returns:
             List of file references
         """
         try:
-            # Get session key for this agent and user
-            session_key = self._get_session_key(agent_id, user_context)
+            # Get session key for this agent, user, and optionally conversation
+            session_key = self._get_session_key(agent_id, user_context, conversation_id)
             
             # Load files for this session if not already loaded
             if session_key not in self._files:
@@ -203,22 +319,24 @@ class FileManagementService:
         self, 
         file_id: str, 
         agent_id: int,
-        user_context: Dict = None
+        user_context: Dict = None,
+        conversation_id: str = None
     ) -> bool:
         """
-        Remove attached file
+        Remove attached file from a session (optionally conversation-specific).
         
         Args:
             file_id: File ID to remove
             agent_id: ID of the agent
             user_context: User context
+            conversation_id: Optional conversation ID for conversation-specific files
             
         Returns:
             True if removed successfully
         """
         try:
-            # Get session key for this agent and user
-            session_key = self._get_session_key(agent_id, user_context)
+            # Get session key for this agent, user, and optionally conversation
+            session_key = self._get_session_key(agent_id, user_context, conversation_id)
             
             # Load files for this session if not already loaded
             if session_key not in self._files:
@@ -270,7 +388,7 @@ class FileManagementService:
         """Get file type from file path"""
         return self._get_file_type(os.path.basename(file_path))
     
-    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str]:
+    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str, int]:
         """
         Process file content based on file type
         
@@ -279,79 +397,132 @@ class FileManagementService:
             file_type: Type of file
             
         Returns:
-            Tuple of (processed_content, temp_file_path)
+            Tuple of (processed_content, temp_file_path, file_size_bytes)
         """
         try:
-            # Save file temporarily
-            temp_path = await self._save_uploaded_file(file)
+            # Save file temporarily and get size
+            temp_path, file_size = await self._save_uploaded_file_with_size(file)
             
             try:
                 if file_type == "pdf":
                     # Use existing PDF tools
                     content = extract_text_from_pdf(temp_path)
-                    return content, temp_path
+                    return content, temp_path, file_size
                 
                 elif file_type == "text":
                     # Read text files
                     with open(temp_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                    return content, temp_path
+                    return content, temp_path, file_size
                 
                 elif file_type == "image":
                     # For images, return basic info (in production, use OCR)
                     content = f"Image file: {file.filename} (OCR processing not implemented)"
-                    return content, temp_path
+                    return content, temp_path, file_size
                 
                 elif file_type == "document":
                     # For documents, return basic info (in production, use document processing)
                     content = f"Document file: {file.filename} (Document processing not implemented)"
-                    return content, temp_path
+                    return content, temp_path, file_size
                 
                 else:
                     # For unknown types, return basic info
                     content = f"File: {file.filename} (type: {file_type})"
-                    return content, temp_path
+                    return content, temp_path, file_size
                     
             except Exception as e:
                 logger.error(f"Error processing file content: {str(e)}")
-                return f"Error processing file: {str(e)}", temp_path
+                return f"Error processing file: {str(e)}", temp_path, file_size
                     
         except Exception as e:
             logger.error(f"Error processing file content: {str(e)}")
-            return f"Error processing file: {str(e)}", None
+            return f"Error processing file: {str(e)}", None, 0
     
-    async def _save_uploaded_file(self, file: UploadFile) -> str:
-        """Save uploaded file to temporary location"""
+    async def _save_uploaded_file_with_size(self, file: UploadFile) -> tuple[str, int]:
+        """Save uploaded file to temporary location and return path with file size"""
         # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=self._temp_dir)
         
         try:
-            # Write file content
+            # Write file content and track size
             content = await file.read()
+            file_size = len(content)
             temp_file.write(content)
             temp_file.flush()
             
-            return temp_file.name
+            return temp_file.name, file_size
         finally:
             temp_file.close()
     
-    def _get_session_key(self, agent_id: int, user_context: Dict = None) -> str:
-        """Generate session key for agent and user combination"""
+    async def _save_uploaded_file(self, file: UploadFile) -> str:
+        """Save uploaded file to temporary location (legacy method for compatibility)"""
+        path, _ = await self._save_uploaded_file_with_size(file)
+        return path
+    
+    def _get_session_key(self, agent_id: int, user_context: Dict = None, conversation_id: str = None) -> str:
+        """
+        Generate session key for agent, user, and optionally conversation combination.
+        
+        When conversation_id is provided, files are isolated to that specific conversation.
+        This allows users to have separate file contexts for different conversations with the same agent.
+        
+        Args:
+            agent_id: ID of the agent
+            user_context: User context (api_key, user_id, etc.)
+            conversation_id: Optional conversation ID for conversation-specific file isolation
+            
+        Returns:
+            Session key string
+        """
         if user_context:
             user_id = user_context.get('user_id', 'anonymous')
             app_id = user_context.get('app_id', 'default')
-            return f"agent_{agent_id}_user_{user_id}_app_{app_id}"
+            # Check if conversation_id is in user_context or passed explicitly
+            conv_id = conversation_id or user_context.get('conversation_id')
+            
+            if conv_id:
+                # Conversation-specific file storage
+                return f"agent_{agent_id}_user_{user_id}_app_{app_id}_conv_{conv_id}"
+            else:
+                # Global agent session (files shared across all conversations)
+                return f"agent_{agent_id}_user_{user_id}_app_{app_id}"
         else:
             return f"agent_{agent_id}_anonymous"
 
-    async def _save_file_to_disk(self, session_key: str, file_id: str, file_ref: FileReference, original_file_path: str = None):
+    async def _save_file_to_disk(self, session_key: str, file_id: str, file_ref: FileReference, original_file_path: str = None, conversation_id: Optional[int] = None):
         """Save file reference to disk for persistence"""
         try:
             session_dir = os.path.join(self._persistent_dir, session_key)
             os.makedirs(session_dir, exist_ok=True)
             
-            # Save file metadata
+            # Save original file FIRST (to set file_path before saving metadata)
+            if original_file_path and os.path.exists(original_file_path):
+                original_filename = os.path.basename(original_file_path)
+                original_extension = os.path.splitext(original_filename)[1]
+                
+                # Determine target directory
+                if conversation_id:
+                    target_dir = os.path.join(self._tmp_base_folder, "conversations", str(conversation_id))
+                else:
+                    target_dir = session_dir
+                
+                os.makedirs(target_dir, exist_ok=True)
+                
+                original_file = os.path.join(target_dir, f"{file_id}{original_extension}")
+                
+                import shutil
+                shutil.copy2(original_file_path, original_file)
+                
+                # Calculate relative path from TMP_BASE_FOLDER
+                relative_path = os.path.relpath(original_file, self._tmp_base_folder)
+                # Ensure forward slashes for URLs
+                file_ref.file_path = relative_path.replace(os.sep, '/')
+                
+                logger.info(f"Saved original file {original_filename} to {original_file} (relative: {relative_path})")
+                logger.info(f"FileReference file_path set to: {file_ref.file_path}")
+            
+            # Save file metadata AFTER setting file_path
             metadata_file = os.path.join(session_dir, f"{file_id}.json")
             with open(metadata_file, 'w') as f:
                 import json
@@ -361,22 +532,6 @@ class FileManagementService:
             content_file = os.path.join(session_dir, f"{file_id}.content")
             with open(content_file, 'w', encoding='utf-8') as f:
                 f.write(file_ref.content)
-            
-            # Save original file if provided
-            if original_file_path and os.path.exists(original_file_path):
-                original_filename = os.path.basename(original_file_path)
-                original_extension = os.path.splitext(original_filename)[1]
-                original_file = os.path.join(session_dir, f"{file_id}{original_extension}")
-                
-                import shutil
-                shutil.copy2(original_file_path, original_file)
-                
-                # Calculate relative path from TMP_BASE_FOLDER
-                relative_path = os.path.relpath(original_file, self._tmp_base_folder)
-                file_ref.file_path = relative_path
-                
-                logger.info(f"Saved original file {original_filename} to {original_file} (relative: {relative_path})")
-                logger.info(f"FileReference file_path set to: {file_ref.file_path}")
                 
             logger.info(f"Saved file {file_id} to disk: {session_dir}")
             
@@ -413,13 +568,15 @@ class FileManagementService:
                             with open(content_file, 'r', encoding='utf-8') as f:
                                 content = f.read()
                             
-                            # Recreate FileReference
+                            # Recreate FileReference with visual feedback data
                             file_ref = FileReference(
-                                metadata['file_id'],
-                                metadata['filename'],
-                                metadata['file_type'],
-                                content,
-                                metadata.get('file_path')  # Load file path from metadata
+                                file_id=metadata['file_id'],
+                                filename=metadata['filename'],
+                                file_type=metadata['file_type'],
+                                content=content,
+                                file_path=metadata.get('file_path'),
+                                file_size_bytes=metadata.get('file_size_bytes'),
+                                conversation_id=metadata.get('conversation_id')
                             )
                             
                             # If file_path is missing, try to regenerate it

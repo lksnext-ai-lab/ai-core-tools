@@ -43,6 +43,12 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      path: '/apps/:appId/mcp-servers',
+      name: 'MCP Servers',
+      icon: '🔌',
+      section: 'appNavigation'
+    },
+    {
       path: '/apps/:appId/settings',
       name: 'App Settings',
       icon: '⚙️',

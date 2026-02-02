@@ -15,12 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from scalar_fastapi import get_scalar_api_reference
 import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from config import CLIENT_CONFIG
 
 from models.app import App
@@ -40,6 +42,7 @@ from models.url import Url
 
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
+from routers.mcp import mcp_router
 from utils.provider import initialize_provider, shutdown_provider, get_provider
 from lks_idprovider_fastapi.dependencies import get_default_provider
 
@@ -99,6 +102,43 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Secure static files serving
+# This allows accessing uploaded images via URL (e.g. for multimodal models)
+# We serve files from TMP_BASE_FOLDER (default: data/tmp) at /static with signature verification
+from utils.config import get_app_config
+from utils.security import verify_signature
+
+app_config = get_app_config()
+tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
+os.makedirs(tmp_base_folder, exist_ok=True)
+
+@app.get("/static/{file_path:path}")
+async def get_static_file(file_path: str, user: str = None, sig: str = None):
+    # Verify signature
+    if not user or not sig or not verify_signature(file_path, user, sig):
+        raise HTTPException(status_code=403, detail="Invalid signature or missing parameters")
+    
+    # Prevent directory traversal - check for .. sequences
+    if ".." in file_path:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    
+    # Strip leading slashes to prevent absolute path injection
+    # os.path.join("data/tmp", "/etc/passwd") would return "/etc/passwd" otherwise
+    file_path = file_path.lstrip("/\\")
+    
+    # Build full path and resolve to absolute
+    full_path = os.path.abspath(os.path.join(tmp_base_folder, file_path))
+    base_path = os.path.abspath(tmp_base_folder)
+    
+    # Verify the resolved path is within the allowed directory
+    if not full_path.startswith(base_path + os.sep) and full_path != base_path:
+        raise HTTPException(status_code=403, detail="Invalid path")
+
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    return FileResponse(full_path)
+
 
 # ==================== CORS MIDDLEWARE ====================
 
@@ -135,6 +175,7 @@ app.add_middleware(
 # Mount routers - clean structure with no nesting
 app.include_router(internal_router, prefix="/internal")
 app.include_router(public_v1_router, prefix="/public/v1")
+app.include_router(mcp_router, prefix="/mcp/v1", tags=["MCP"])
 
 # Add client config endpoint
 @app.get("/api/internal/client-config")

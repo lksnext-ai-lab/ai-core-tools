@@ -79,6 +79,9 @@ class PGVectorStore(VectorStoreInterface):
             documents: List of LangChain Document objects to index
             embedding_service: Service to generate embeddings
         """
+        if not documents:
+            return
+            
         vector_store = self._get_vector_store(collection_name, embedding_service)
         vector_store.add_documents(documents)
     

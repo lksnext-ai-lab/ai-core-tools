@@ -184,6 +184,10 @@ class ApiService {
     });
   }
 
+  async getAgentMCPUsage(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
+  }
+
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string) {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
       method: 'POST',
@@ -322,6 +326,50 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/mcp-configs/test-connection`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // ==================== MCP SERVERS (Expose Agents as MCP Tools) ====================
+  async getMCPServers(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/`);
+  }
+
+  async getMCPServer(appId: number, serverId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`);
+  }
+
+  async createMCPServer(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMCPServer(appId: number, serverId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMCPServer(appId: number, serverId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getMCPServerToolAgents(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/tool-agents`);
+  }
+
+  async getAppSlugInfo(appId: number) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/slug/info`);
+  }
+
+  async updateAppSlug(appId: number, slug: string) {
+    return this.request(`/internal/apps/${appId}/mcp-servers/slug`, {
+      method: 'PUT',
+      body: JSON.stringify({ slug }),
     });
   }
 
@@ -754,9 +802,14 @@ class ApiService {
   }
 
   // ==================== FILE MANAGEMENT API ====================
-  async uploadFileForChat(appId: number, agentId: number, file: File) {
+  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null) {
     const formData = new FormData();
     formData.append('file', file);
+    
+    // Associate file with specific conversation if provided
+    if (conversationId) {
+      formData.append('conversation_id', conversationId.toString());
+    }
 
     return this.request(`/internal/apps/${appId}/agents/${agentId}/upload-file`, {
       method: 'POST',
@@ -764,12 +817,20 @@ class ApiService {
     });
   }
 
-  async listAttachedFiles(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/files`);
+  async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null) {
+    // Filter files by conversation if provided
+    const url = conversationId 
+      ? `/internal/apps/${appId}/agents/${agentId}/files?conversation_id=${conversationId}`
+      : `/internal/apps/${appId}/agents/${agentId}/files`;
+    return this.request(url);
   }
 
-  async removeAttachedFile(appId: number, agentId: number, fileId: string) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/files/${fileId}`, {
+  async removeAttachedFile(appId: number, agentId: number, fileId: string, conversationId?: number | null) {
+    // Include conversation_id for proper file lookup
+    const url = conversationId
+      ? `/internal/apps/${appId}/agents/${agentId}/files/${fileId}?conversation_id=${conversationId}`
+      : `/internal/apps/${appId}/agents/${agentId}/files/${fileId}`;
+    return this.request(url, {
       method: 'DELETE',
     });
   }
