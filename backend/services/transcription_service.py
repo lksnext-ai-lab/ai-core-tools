@@ -1,6 +1,6 @@
 import whisper
 import os
-from typing import List, Dict, Optional
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from utils.logger import get_logger
 from tools.transcriptionTools import get_transcription_from_service
