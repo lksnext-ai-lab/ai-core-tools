@@ -9,7 +9,7 @@ services:
       - "6333:6333"  # REST API
       - "6334:6334"  # gRPC API (optional, for better performance)
     volumes:
-      - ./qdrant_storage:/qdrant/storage:z
+      - qdrant_data:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=INFO
@@ -36,4 +36,4 @@ networks:
     driver: bridge
 
 volumes:
-  qdrant_storage:
+  qdrant_data:
