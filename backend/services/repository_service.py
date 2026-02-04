@@ -310,7 +310,6 @@ class RepositoryService:
         
         # Get media for the repository
         media_query = db.query(Media).filter(Media.repository_id == repository_id).all()
-        print(f"Found {len(media_query)} media items for repository {repository_id}")
         media_list = []
         for m in media_query:
             media_dict = {
