@@ -766,7 +766,7 @@ class SiloService:
 
             # Check if silo has embedding service
             if not silo.embedding_service:
-                logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {media.source.resource_id}")
+                logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for media {media.media_id}")
                 return
 
             _get_vector_store(silo).delete_documents(
