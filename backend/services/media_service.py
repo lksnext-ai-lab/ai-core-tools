@@ -68,74 +68,6 @@ class MediaService:
         
         return created_media, failed_files
     
-    # @staticmethod
-    # def move_media_to_folder(
-    #     app_id: int,
-    #     media_id: int,
-    #     repository_id: int,
-    #     new_folder_id: Optional[int],
-    #     db: Session
-    # ) -> dict:
-    #     """
-    #     Move a media item to a different folder within the same repository.
-    #     """
-
-    #     try:
-    #         logger.info(
-    #             f"Move media service called - app_id: {app_id}, media_id: {media_id}, "
-    #             f"repository_id: {repository_id}, new_folder_id: {new_folder_id}"
-    #         )
-
-    #         # Convert 0 to None for root folder
-    #         if new_folder_id == 0:
-    #             new_folder_id = None
-
-    #         # Get the media
-    #         media = (
-    #             db.query(Media)
-    #             .filter(Media.media_id == media_id)
-    #             .one_or_none()
-    #         )
-
-    #         if not media:
-    #             raise ValueError(f"Media {media_id} not found")
-
-    #         # Validate repository ownership
-    #         if media.repository_id != repository_id:
-    #             raise ValueError(
-    #                 f"Media {media_id} does not belong to repository {repository_id}"
-    #             )
-
-    #         # Validate target folder if provided
-    #         if new_folder_id is not None:
-    #             from services.folder_service import FolderService
-    #             if not FolderService.validate_folder_access(
-    #                 new_folder_id, repository_id, db
-    #             ):
-    #                 raise ValueError(
-    #                     f"Folder {new_folder_id} does not belong to repository {repository_id}"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     @staticmethod
     def move_media_to_folder(
     app_id: int,
@@ -193,16 +125,31 @@ class MediaService:
             # Create target directory if needed
             os.makedirs(os.path.dirname(new_media_path), exist_ok=True)
 
-            # Move media file
-            import shutil
-            shutil.move(old_media_path, new_media_path)
-            logger.info(f"Moved media file from {old_media_path} to {new_media_path}")
+            # Move files with rollback on failure
+            media_moved = False
+            audio_moved = False
+            
+            try:
+                import shutil
+                shutil.move(old_media_path, new_media_path)
+                media_moved = True
+                logger.info(f"Moved media file from {old_media_path} to {new_media_path}")
 
-            # Move audio file if exists
-            if os.path.exists(old_audio_path):
-                shutil.move(old_audio_path, new_audio_path)
-                logger.info(f"Moved audio file from {old_audio_path} to {new_audio_path}")
+                if os.path.exists(old_audio_path):
+                    shutil.move(old_audio_path, new_audio_path)
+                    audio_moved = True
+                    logger.info(f"Moved audio file from {old_audio_path} to {new_audio_path}")
 
+            except Exception as e:
+                # Rollback: move files back if partially completed
+                if media_moved:
+                    shutil.move(new_media_path, old_media_path)
+                    logger.warning(f"Rolled back media file move")
+                if audio_moved:
+                    shutil.move(new_audio_path, old_audio_path)
+                    logger.warning(f"Rolled back audio file move")
+                raise ValueError(f"Failed to move files: {str(e)}")
+        
             # Update database
             media.folder_id = new_folder_id
             media.file_path = new_media_path
