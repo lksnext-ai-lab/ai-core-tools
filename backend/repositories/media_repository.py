@@ -29,6 +29,16 @@ class MediaRepository:
         db.commit()
 
     @staticmethod
+    def rollback(db: Session) -> None:
+        """
+        Rollback the current transaction
+        
+        Args:
+            db: Database session
+        """
+        db.rollback()
+
+    @staticmethod
     def update_status(media_id: int, status: str, db: Session):
         """Update media status"""
         media = db.query(Media).filter(Media.media_id == media_id).first()
