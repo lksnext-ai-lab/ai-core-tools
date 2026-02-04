@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 from services.silo_service import SiloService
 from models.silo import SiloType
 from models.media import Media
-from schemas.media_schemas import MediaResponse
 from services.output_parser_service import OutputParserService
 from repositories.repository_repository import RepositoryRepository
 from repositories.resource_repository import ResourceRepository
