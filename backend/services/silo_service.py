@@ -775,7 +775,7 @@ class SiloService:
                 embedding_service=silo.embedding_service
             )
         except Exception as e:
-            logger.error(f"Error deleting resource {media.source.resource_id} from vector store: {str(e)}")
+            logger.error(f"Error deleting media {media.media_id} from vector store: {str(e)}")
             # Don't raise the exception - allow the media to be deleted from database and disk
         finally:
             session.close()
