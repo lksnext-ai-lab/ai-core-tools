@@ -489,30 +489,20 @@ class ApiService {
     const headers: Record<string, string> = {};
     
     files.forEach(file => formData.append('files', file));
-    if (folderId) formData.append('folder_id', folderId.toString());
-    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
-    if (config?.forced_language) formData.append('forced_language', config.forced_language);
-    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
-    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
-    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
     
-    // Add folder_id if provided
-    if (folderId) formData.append('folder_id', folderId.toString());
-    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
-    if (config?.forced_language) formData.append('forced_language', config.forced_language);
-    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
-    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
-    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
-    
-    // Add folder_id if provided
     if (folderId !== undefined && folderId !== null) {
       formData.append('folder_id', folderId.toString());
       console.log('API: Added folder_id to FormData:', folderId);
     } else {
       console.log('API: No folder_id provided or folderId is null/undefined');
     }
+    
+    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
 
-    // Get the auth token manually for this request
     const token = this.getAuthToken();
     console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
         
@@ -527,11 +517,11 @@ class ApiService {
 
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media`, {
       method: 'POST',
-      headers: headers, // Only set Authorization, let browser handle Content-Type for FormData
+      headers: headers,
       body: formData,
     });
   }
-
+  
   async addYouTube(appId: number, repositoryId: number, url: string, folderId?: number, config?: {
     forced_language?: string;
     chunk_min_duration?: number;
@@ -541,6 +531,7 @@ class ApiService {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     const token = this.getAuthToken();
+    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
 
     formData.append('url', url);
     if (folderId !== undefined && folderId !== null) {
@@ -557,6 +548,7 @@ class ApiService {
         
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+      console.log('API: Authorization header set for upload');
     } else {
       console.log('API: WARNING - No token found for upload request');
     }
