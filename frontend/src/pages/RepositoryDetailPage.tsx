@@ -565,10 +565,6 @@ const RepositoryDetailPage: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  console.log('Repository:', repository);
-  console.log('Media:', repository?.media);
-  console.log('Filtered media:', filteredMedia);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
