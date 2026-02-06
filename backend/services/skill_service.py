@@ -59,7 +59,7 @@ class SkillService:
         app_id: int,
         skill_id: int,
         skill_data: CreateUpdateSkillSchema
-    ) -> Skill:
+    ) -> Optional[Skill]:
         """Create a new skill or update an existing one"""
         if skill_id == 0:
             # Create new skill
