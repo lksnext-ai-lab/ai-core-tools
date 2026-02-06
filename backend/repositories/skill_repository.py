@@ -49,3 +49,26 @@ class SkillRepository:
             SkillRepository.delete(db, skill)
             return True
         return False
+
+    @staticmethod
+    def get_valid_skill_ids_for_app(db: Session, skill_ids: set, app_id: int) -> set:
+        """Get skill IDs that exist and belong to the specified app
+        
+        Args:
+            db: Database session
+            skill_ids: Set of skill IDs to validate
+            app_id: App ID to check ownership against
+            
+        Returns:
+            Set of valid skill IDs that exist and belong to the app
+        """
+        if not skill_ids:
+            return set()
+        
+        # Query to find skills that exist and belong to the app
+        valid_skills = db.query(Skill.skill_id).filter(
+            Skill.skill_id.in_(skill_ids),
+            Skill.app_id == app_id
+        ).all()
+        
+        return {skill.skill_id for skill in valid_skills}
