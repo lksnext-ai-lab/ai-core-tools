@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from models.agent import Agent, AgentTool, AgentSkill
 from models.ocr_agent import OCRAgent
 from models.silo import Silo
-from models.skill import Skill
 from models.output_parser import OutputParser
 from repositories.agent_repository import AgentRepository
 from repositories.output_parser_repository import OutputParserRepository
