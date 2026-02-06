@@ -38,7 +38,7 @@ function SettingsLayout({ children }: SettingsLayoutProps) {
           >
             <span className="mr-2">🔌</span>MCP Configs
           </Link>
-          
+
           <Link
             to={`/apps/${appId}/settings/api-keys`}
             className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors ${isActive('api-keys')}`}

@@ -1,15 +1,17 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from models.agent import Agent, AgentMCP, AgentTool
+from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.ocr_agent import OCRAgent
 from models.ai_service import AIService
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
+from models.skill import Skill
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
+from repositories.skill_repository import SkillRepository
 
 
 class AgentRepository:
@@ -126,7 +128,28 @@ class AgentRepository:
     def delete_agent_mcp_association(db: Session, association: AgentMCP) -> None:
         """Delete an agent MCP association"""
         db.delete(association)
-    
+
+    @staticmethod
+    def get_agent_skill_associations(db: Session, agent_id: int) -> List[AgentSkill]:
+        """Get all skill associations for an agent"""
+        return db.query(AgentSkill).filter(AgentSkill.agent_id == agent_id).all()
+
+    @staticmethod
+    def delete_agent_skill_association(db: Session, association: AgentSkill) -> None:
+        """Delete an agent skill association"""
+        db.delete(association)
+
+    @staticmethod
+    def create_agent_skill_association(db: Session, agent_id: int, skill_id: int, description: Optional[str] = None) -> AgentSkill:
+        """Create a new agent skill association"""
+        association = AgentSkill(
+            agent_id=agent_id,
+            skill_id=skill_id,
+            description=description
+        )
+        db.add(association)
+        return association
+
     @staticmethod
     def create_agent_tool_association(db: Session, agent_id: int, tool_id: int, description: Optional[str] = None) -> AgentTool:
         """Create a new agent tool association"""
@@ -195,7 +218,12 @@ class AgentRepository:
     def get_mcp_configs_by_app_id(db: Session, app_id: int) -> List[MCPConfig]:
         """Get all MCP configs for a specific app"""
         return MCPConfigRepository.get_all_by_app_id(db, app_id)
-    
+
+    @staticmethod
+    def get_skills_by_app_id(db: Session, app_id: int) -> List[Skill]:
+        """Get all skills for a specific app"""
+        return SkillRepository.get_all_by_app_id(db, app_id)
+
     @staticmethod
     def get_silo_by_id(db: Session, silo_id: int) -> Optional[Silo]:
         """Get silo by ID"""
@@ -269,27 +297,36 @@ class AgentRepository:
         # Get MCP configs
         mcp_configs = AgentRepository.get_mcp_configs_by_app_id(db, app_id)
         mcp_configs_list = [{"config_id": c.config_id, "name": c.name} for c in mcp_configs]
-        
+
+        # Get skills
+        skills = AgentRepository.get_skills_by_app_id(db, app_id)
+        skills_list = [{"skill_id": s.skill_id, "name": s.name, "description": s.description} for s in skills]
+
         return {
             'ai_services': ai_services_list,
             'silos': silos_list,
             'output_parsers': output_parsers_list,
             'tools': tools_list,
-            'mcp_configs': mcp_configs_list
+            'mcp_configs': mcp_configs_list,
+            'skills': skills_list
         }
     
     @staticmethod
     def get_agent_associations_dict(db: Session, agent_id: int) -> Dict[str, List]:
         """Get agent's current associations as a dictionary"""
         if agent_id == 0:
-            return {'tool_ids': [], 'mcp_ids': []}
-        
+            return {'tool_ids': [], 'mcp_ids': [], 'skill_ids': []}
+
         # Get tool associations
         tool_assocs = AgentRepository.get_agent_tool_associations(db, agent_id)
         agent_tool_ids = [assoc.tool_id for assoc in tool_assocs]
-        
+
         # Get MCP associations
         mcp_assocs = AgentRepository.get_agent_mcp_associations(db, agent_id)
         agent_mcp_ids = [assoc.config_id for assoc in mcp_assocs]
-        
-        return {'tool_ids': agent_tool_ids, 'mcp_ids': agent_mcp_ids}
+
+        # Get skill associations
+        skill_assocs = AgentRepository.get_agent_skill_associations(db, agent_id)
+        agent_skill_ids = [assoc.skill_id for assoc in skill_assocs]
+
+        return {'tool_ids': agent_tool_ids, 'mcp_ids': agent_mcp_ids, 'skill_ids': agent_skill_ids}

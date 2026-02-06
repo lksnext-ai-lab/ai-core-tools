@@ -132,7 +132,7 @@ async def call_agent(
         
         # For agents WITH memory: ensure we have a conversation_id
         # This ensures files and memory are always linked to the same conversation
-        effective_conversation_id = conversation_id
+        effective_conversation_id = conversation_id or "temp"  # Default for agents without memory
         db_conversation_id = None  # Integer ID for database operations
         
         if agent.has_memory:

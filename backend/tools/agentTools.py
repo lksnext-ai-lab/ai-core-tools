@@ -24,6 +24,7 @@ import json
 import asyncio
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
+from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
 
 logger = get_logger(__name__)
 
@@ -166,10 +167,17 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         
         # Build final message list
         messages = []
-        
+
+        # Build system prompt with optional skills section
+        system_prompt_content = agent.system_prompt
+        if hasattr(agent, 'skill_associations') and agent.skill_associations:
+            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+            if skills_section:
+                system_prompt_content = system_prompt_content + "\n" + skills_section
+
         # Add system messages for every turn
         messages.extend([
-            SystemMessage(content=agent.system_prompt),
+            SystemMessage(content=system_prompt_content),
             SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
         ])
         
@@ -206,7 +214,14 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)
         # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
         mcp_client = None
-    
+
+    # Add skill loader tool if agent has skills
+    if hasattr(agent, 'skill_associations') and agent.skill_associations:
+        skill_tool = create_skill_loader_tool(agent.skill_associations)
+        if skill_tool:
+            tools.append(skill_tool)
+            logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")
+
     if pydantic_model:
         # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
         structured_prompt = f"Given the conversation, generate a response following this format: {format_instructions}"
@@ -337,14 +352,19 @@ class IACTTool(BaseTool):
             
             # Build final message list
             messages = []
-            
-            # Add system prompt if available
+
+            # Add system prompt if available, with optional skills section
             if agent.system_prompt:
-                messages.append(SystemMessage(content=agent.system_prompt))
-            
+                system_prompt_content = agent.system_prompt
+                if hasattr(agent, 'skill_associations') and agent.skill_associations:
+                    skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+                    if skills_section:
+                        system_prompt_content = system_prompt_content + "\n" + skills_section
+                messages.append(SystemMessage(content=system_prompt_content))
+
             # Add conversation history
             messages.extend(history)
-            
+
             return messages
 
         self.react_agent = create_react_agent(

@@ -1,8 +1,9 @@
 from typing import Optional
 from sqlalchemy.orm import Session, joinedload, selectinload
-from models.agent import Agent, AgentTool
+from models.agent import Agent, AgentTool, AgentSkill
 from models.ocr_agent import OCRAgent
 from models.silo import Silo
+from models.skill import Skill
 from models.output_parser import OutputParser
 from repositories.agent_repository import AgentRepository
 from repositories.output_parser_repository import OutputParserRepository
@@ -34,6 +35,8 @@ class AgentExecutionRepository:
             joinedload(Agent.ai_service),
             joinedload(Agent.output_parser),
             joinedload(Agent.app),
+            # Skill associations with nested skill data
+            selectinload(Agent.skill_associations).joinedload(AgentSkill.skill),
             # Tool agents and their relationships (critical for IACTTool)
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.ai_service),
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.silo),
