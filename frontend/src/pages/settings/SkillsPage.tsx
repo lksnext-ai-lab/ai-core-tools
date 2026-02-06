@@ -251,7 +251,7 @@ function SkillsPage() {
         loading={loading}
       />
 
-      {!loading && skills.length === 0 && canEdit && (
+      {skills.length === 0 && canEdit && (
         <div className="text-center py-6">
           <button
             onClick={handleCreateSkill}
