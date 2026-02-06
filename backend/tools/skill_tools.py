@@ -54,17 +54,31 @@ def create_skill_loader_tool(skill_associations: List[AgentSkill]):
     Returns:
         A LangChain tool that can load skill instructions by name
     """
-    # Build a map of skill names (lowercase) to Skill objects
+    # Build a map of normalized skill names to Skill objects
     skill_map = {}
     for assoc in skill_associations:
-        if assoc.skill:
-            skill_map[assoc.skill.name.lower()] = assoc.skill
+        if not assoc.skill:
+            continue
+        skill = assoc.skill
+        normalized_name = skill.name.lower().strip()
+        existing_skill = skill_map.get(normalized_name)
+        if existing_skill is not None and existing_skill is not skill:
+            logger.warning(
+                "Duplicate skill name detected after normalization: '%s'. "
+                "Keeping existing skill '%s' and ignoring new skill '%s'.",
+                normalized_name,
+                getattr(existing_skill, "name", repr(existing_skill)),
+                getattr(skill, "name", repr(skill)),
+            )
+            continue
+        skill_map[normalized_name] = skill
 
     if not skill_map:
         logger.info("No skills available for this agent")
         return None
 
-    available_skills = ", ".join(skill_map.keys())
+    # Use original skill names for display to the user
+    available_skills = ", ".join(sorted({skill.name for skill in skill_map.values()}))
     logger.info(f"Creating skill loader tool with {len(skill_map)} skills: {available_skills}")
 
     @tool
