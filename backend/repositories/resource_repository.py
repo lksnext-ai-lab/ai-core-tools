@@ -125,3 +125,30 @@ class ResourceRepository:
         """
         from repositories.repository_repository import RepositoryRepository
         return RepositoryRepository.get_by_id(db, repository_id)
+    
+    @staticmethod
+    def check_uri_conflict(db: Session, repository_id: int, folder_id: Optional[int], uri: str) -> bool:
+        """
+        Check if a resource URI already exists in the same folder
+        
+        Args:
+            db: Database session
+            repository_id: Repository ID
+            folder_id: Folder ID (None for root level)
+            uri: Resource URI to check
+            
+        Returns:
+            True if URI conflict exists, False otherwise
+        """
+        # Handle NULL comparison properly for folder_id
+        folder_filter = (
+            Resource.folder_id.is_(None)
+            if folder_id is None
+            else Resource.folder_id == folder_id
+        )
+        
+        return db.query(Resource).filter(
+            Resource.repository_id == repository_id,
+            folder_filter,
+            Resource.uri == uri
+        ).first() is not None
