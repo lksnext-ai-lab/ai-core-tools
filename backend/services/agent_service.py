@@ -4,6 +4,7 @@ from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
+from repositories.skill_repository import SkillRepository
 
 class AgentService:
 
@@ -297,7 +298,11 @@ class AgentService:
         existing_skills = {assoc.skill_id: assoc for assoc in AgentRepository.get_agent_skill_associations(db, agent_id)}
 
         # Convert skill_ids to set of integers
-        valid_skill_ids = {int(id) for id in skill_ids if id}
+        requested_skill_ids = {int(id) for id in skill_ids if id}
+        
+        # Validate that skills exist and belong to the same app as the agent
+        # This prevents cross-app associations and FK errors
+        valid_skill_ids = SkillRepository.get_valid_skill_ids_for_app(db, requested_skill_ids, agent.app_id)
 
         # Remove associations that are no longer needed
         for skill_id in existing_skills.keys():
