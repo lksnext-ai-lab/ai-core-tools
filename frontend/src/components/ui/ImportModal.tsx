@@ -10,6 +10,11 @@ interface ImportModalProps {
   onImport: (file: File, conflictMode: ConflictMode, newName?: string) => Promise<ImportResponse>;
   componentType: ComponentType;
   componentLabel: string; // e.g., "AI Service", "Embedding Service"
+  // Optional: For silo imports that need embedding service selection
+  requiresEmbeddingServiceSelection?: boolean;
+  availableEmbeddingServices?: Array<{ id: number; name: string }>;
+  selectedEmbeddingServiceId?: number;
+  onEmbeddingServiceChange?: (id: number) => void;
 }
 
 export type ConflictMode = 'fail' | 'rename' | 'override';
@@ -60,6 +65,10 @@ function ImportModal({
   onImport,
   componentType,
   componentLabel,
+  requiresEmbeddingServiceSelection = false,
+  availableEmbeddingServices = [],
+  selectedEmbeddingServiceId,
+  onEmbeddingServiceChange,
 }: ImportModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [conflictMode, setConflictMode] = useState<ConflictMode>('fail');
@@ -229,6 +238,40 @@ function ImportModal({
           </div>
         )}
 
+        {/* Embedding Service Selection (for silos without bundled service) */}
+        {requiresEmbeddingServiceSelection && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-start">
+              <span className="text-yellow-600 mr-2 text-lg">⚠️</span>
+              <p className="text-sm text-yellow-800">
+                This silo requires an embedding service, but none is bundled in the export file.
+                Please select an existing embedding service to use:
+              </p>
+            </div>
+            <FormSelect
+              label="Embedding Service"
+              id="embedding-service-select"
+              value={selectedEmbeddingServiceId?.toString() || ''}
+              onChange={(e) => {
+                const id = parseInt(e.target.value, 10);
+                if (onEmbeddingServiceChange && !isNaN(id)) {
+                  onEmbeddingServiceChange(id);
+                }
+              }}
+              options={[
+                { value: '', label: 'Select an embedding service...' },
+                ...availableEmbeddingServices.map((svc) => ({
+                  value: svc.id.toString(),
+                  label: svc.name,
+                })),
+              ]}
+              disabled={importing}
+              required
+              helpText="The selected embedding service will be used for vectorizing documents in this silo."
+            />
+          </div>
+        )}
+
         {/* Error Display */}
         {error && (
           <Alert type="error" message={error} onDismiss={() => setError(null)} />
@@ -299,6 +342,7 @@ function ImportModal({
           submitLabel={importing ? 'Importing...' : 'Import'}
           cancelLabel={importResult?.success ? 'Close' : 'Cancel'}
           showCancel={!importing}
+          submitDisabled={!selectedFile || (requiresEmbeddingServiceSelection && !selectedEmbeddingServiceId)}
         />
       </form>
     </Modal>

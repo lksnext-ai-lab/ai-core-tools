@@ -739,6 +739,67 @@ class ApiService {
     });
   }
 
+  async exportSilo(appId: number, siloId: number, includeDependencies: boolean = true): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/export?include_dependencies=${includeDependencies}`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importSilo(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string,
+    selectedEmbeddingServiceId?: number
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/silos/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    if (selectedEmbeddingServiceId !== undefined) {
+      url += `&selected_embedding_service_id=${selectedEmbeddingServiceId}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',

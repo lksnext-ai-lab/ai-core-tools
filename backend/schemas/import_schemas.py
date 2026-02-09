@@ -50,6 +50,7 @@ class ValidateImportResponseSchema(BaseModel):
     existing_id: Optional[int] = None
     warnings: List[str] = []
     missing_dependencies: List[str] = []  # e.g., "AI Service: GPT-4 not found"
+    requires_embedding_service_selection: bool = False  # For silos without bundled service
 
 
 class ImportSummarySchema(BaseModel):

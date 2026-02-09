@@ -94,11 +94,12 @@ class ExportSiloSchema(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     type: str
-    vector_db_type: str
+    vector_db_type: Optional[str] = "UNKNOWN"  # Default for silos without configured vector DB
     embedding_service_name: Optional[str] = None  # Reference by name
-    collection_name: Optional[str] = None
+    metadata_definition_name: Optional[str] = None  # Reference to OutputParser
+    fixed_metadata: bool = False
     description: Optional[str] = None
-    # Exclude: vectors, embeddings (heavy data)
+    # Exclude: vectors, embeddings (heavy data), collection_name (auto-generated)
 
 
 # ==================== DOMAIN ====================
@@ -207,6 +208,7 @@ class SiloExportFileSchema(BaseModel):
     metadata: ExportMetadataSchema
     silo: ExportSiloSchema
     embedding_service: Optional[ExportEmbeddingServiceSchema] = None
+    output_parser: Optional[ExportOutputParserSchema] = None
 
 
 class RepositoryExportFileSchema(BaseModel):

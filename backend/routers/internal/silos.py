@@ -1,13 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
-from typing import List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, File, Query
+from fastapi.responses import JSONResponse
+from typing import List, Dict, Any, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
+import json
 
 from services.silo_service import SiloService
+from services.silo_export_service import SiloExportService
+from services.silo_import_service import SiloImportService
 
 from schemas.silo_schemas import (
     SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema, SiloSearchSchema
 )
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import SiloExportFileSchema
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -22,6 +28,73 @@ logger = get_logger(__name__)
 silos_router = APIRouter()
 
 # ==================== SILO MANAGEMENT ====================
+
+@silos_router.post(
+    "/import",
+    summary="Import Silo",
+    tags=["Silos", "Export/Import"],
+    response_model=ImportResponseSchema,
+    status_code=status.HTTP_201_CREATED
+)
+async def import_silo(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    selected_embedding_service_id: Optional[int] = Query(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """Import Silo from JSON file.
+    
+    Note: If embedding service is not bundled in the export file,
+    you must provide selected_embedding_service_id.
+    """
+    try:
+        # Parse file
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = SiloExportFileSchema(**file_data)
+        
+        # Validate import
+        import_service = SiloImportService(db)
+        validation = import_service.validate_import(export_data, app_id)
+        
+        # Check if embedding service selection is required but not provided
+        if validation.requires_embedding_service_selection:
+            if selected_embedding_service_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Embedding service selection required. "
+                        "This silo requires an embedding service but none is bundled. "
+                        "Please provide selected_embedding_service_id parameter."
+                    )
+                )
+        
+        # Import
+        summary = import_service.import_silo(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name,
+            selected_embedding_service_id
+        )
+        
+        return ImportResponseSchema(
+            success=True,
+            message=f"Silo '{summary.component_name}' imported successfully",
+            summary=summary
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
+
 
 @silos_router.get("/", 
                   summary="List silos",
@@ -149,6 +222,52 @@ async def delete_silo(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting silo: {str(e)}"
         )
+
+
+@silos_router.post(
+    "/{silo_id}/export",
+    summary="Export Silo",
+    tags=["Silos", "Export/Import"],
+    status_code=status.HTTP_200_OK
+)
+async def export_silo(
+    app_id: int,
+    silo_id: int,
+    include_dependencies: bool = Query(True, description="Bundle dependencies (embedding service, output parser)"),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export Silo configuration to JSON file.
+    
+    Note: Exports silo STRUCTURE only (no vector embeddings).
+    Vector data must be regenerated after import by uploading documents.
+    """
+    try:
+        export_service = SiloExportService(db)
+        export_data = export_service.export_silo(
+            silo_id,
+            app_id,
+            getattr(auth_context, 'user_id', None),
+            include_dependencies
+        )
+        
+        filename = f"{export_data.silo.name.replace(' ', '_')}_silo.json"
+        
+        return JSONResponse(
+            content=export_data.model_dump(mode='json'),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except ValueError as e:
+        logger.warning(f"Export failed: {str(e)}")
+        if "not found" in str(e):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+        else:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
+
 
 # ==================== SILO PLAYGROUND ====================
 
