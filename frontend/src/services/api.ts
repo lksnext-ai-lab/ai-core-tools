@@ -443,6 +443,63 @@ class ApiService {
     });
   }
 
+  async exportMCPConfig(appId: number, configId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/mcp-configs/${configId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importMCPConfig(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/mcp-configs/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== MCP SERVERS (Expose Agents as MCP Tools) ====================
   async getMCPServers(appId: number) {
     return this.request(`/internal/apps/${appId}/mcp-servers/`);

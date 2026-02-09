@@ -79,13 +79,11 @@ class ExportOutputParserSchema(BaseModel):
 
 
 class ExportMCPConfigSchema(BaseModel):
-    """MCP Configuration export schema"""
+    """MCP Configuration export schema (sanitized)"""
 
     name: str = Field(..., min_length=1, max_length=255)
-    url: str
-    config_json: Optional[str] = None
-    server_type: Optional[str] = None
     description: Optional[str] = None
+    config: Optional[str] = None  # JSON string (sanitized - no auth tokens)
 
 
 # ==================== SILO ====================
