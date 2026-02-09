@@ -249,13 +249,12 @@ function MCPConfigsPage() {
                 canEdit ? (
                   <ActionDropdown
                     actions={[
-                      {
+                      ...(canEdit ? [{
                         label: testingConfigId === config.config_id ? 'Testing...' : 'Test Connection',
                         onClick: () => { void handleTestConnection(config.config_id); },
                         icon: testingConfigId === config.config_id ? '⏳' : '🔌',
-                        show: canEdit,
                         disabled: testingConfigId === config.config_id
-                      },
+                      }] : []),
                       {
                         label: 'Edit',
                         onClick: () => { void handleEditConfig(config.config_id); },
