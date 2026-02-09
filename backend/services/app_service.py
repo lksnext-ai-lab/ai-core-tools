@@ -59,6 +59,8 @@ class AppService:
         from .mcp_config_service import MCPConfigService
         from .resource_service import ResourceService
         from .url_service import UrlService
+        from .skill_service import SkillService
+        from .mcp_server_service import MCPServerService
         
         # Get the app
         app = self.app_repo.get_by_id(app_id)
@@ -89,8 +91,20 @@ class AppService:
             for agent in agents:
                 logger.info(f"Deleting agent {agent.agent_id}: {agent.name}")
                 agent_service.delete_agent(self.db, agent.agent_id)
-            
-            # 2. Delete resources (they depend on repositories)
+
+            # 2. Delete skills (after agents, since agents may reference skills)
+            skills = self.app_repo.get_skills_by_app_id(app_id)
+            for skill in skills:
+                logger.info(f"Deleting skill {skill.skill_id}: {skill.name}")
+                SkillService.delete_skill(self.db, app_id, skill.skill_id)
+
+            # 3. Delete MCP servers (after agents, since they may expose agents)
+            mcp_servers = self.app_repo.get_mcp_servers_by_app_id(app_id)
+            for server in mcp_servers:
+                logger.info(f"Deleting MCP server {server.server_id}: {server.name}")
+                MCPServerService.delete_mcp_server(self.db, app_id, server.server_id)
+
+            # 4. Delete resources (they depend on repositories)
             repositories = self.app_repo.get_repositories_by_app_id(app_id)
             for repository in repositories:
                 resources = resource_service.get_resources_by_repo_id(repository.repository_id, self.db)
@@ -98,7 +112,7 @@ class AppService:
                     logger.info(f"Deleting resource {resource.resource_id}: {resource.name}")
                     resource_service.delete_resource(resource.resource_id, self.db)
             
-            # 3. Delete URLs (they depend on domains)
+            # 5. Delete URLs (they depend on domains)
             domains = self.app_repo.get_domains_by_app_id(app_id)
             for domain in domains:
                 urls = self.app_repo.get_urls_by_domain_id(domain.domain_id)
@@ -106,59 +120,59 @@ class AppService:
                     logger.info(f"Deleting URL {url.url_id}: {url.url}")
                     url_service.delete_url(url.url_id, domain.domain_id, self.db)
             
-            # 4. Delete repositories (they depend on silos)
+            # 6. Delete repositories (they depend on silos)
             for repository in repositories:
                 logger.info(f"Deleting repository {repository.repository_id}: {repository.name}")
                 repository_service.delete_repository(repository, self.db)
             
-            # 5. Delete domains (they depend on silos)
+            # 7. Delete domains (they depend on silos)
             for domain in domains:
                 logger.info(f"Deleting domain {domain.domain_id}: {domain.name}")
                 domain_service.delete_domain(domain.domain_id, self.db)
             
-            # 6. Delete silos (they depend on embedding services and output parsers)
+            # 8. Delete silos (they depend on embedding services and output parsers)
             silos = self.app_repo.get_silos_by_app_id(app_id)
             for silo in silos:
                 logger.info(f"Deleting silo {silo.silo_id}: {silo.name}")
                 silo_service.delete_silo(silo.silo_id, self.db)
             
-            # 7. Delete output parsers
+            # 9. Delete output parsers
             output_parsers = self.app_repo.get_output_parsers_by_app_id(app_id)
             for parser in output_parsers:
                 logger.info(f"Deleting output parser {parser.parser_id}: {parser.name}")
                 output_parser_service.delete_output_parser(self.db, app_id, parser.parser_id)
             
-            # 8. Delete MCP configs
+            # 10. Delete MCP configs
             mcp_configs = self.app_repo.get_mcp_configs_by_app_id(app_id)
             for config in mcp_configs:
                 logger.info(f"Deleting MCP config {config.config_id}: {config.name}")
                 mcp_config_service.delete_mcp_config(self.db, app_id, config.config_id)
             
-            # 9. Delete API keys
+            # 11. Delete API keys
             api_keys = self.app_repo.get_api_keys_by_app_id(app_id)
             for api_key in api_keys:
                 logger.info(f"Deleting API key {api_key.key_id}: {api_key.name}")
                 api_key_service.delete_api_key(self.db, app_id, api_key.key_id)
             
-            # 10. Delete AI services
+            # 12. Delete AI services
             ai_services = self.app_repo.get_ai_services_by_app_id(app_id)
             for service in ai_services:
                 logger.info(f"Deleting AI service {service.service_id}: {service.name}")
                 ai_service_service.delete_ai_service(self.db, app_id, service.service_id)
             
-            # 11. Delete embedding services
+            # 13. Delete embedding services
             embedding_services = self.app_repo.get_embedding_services_by_app_id(app_id)
             for service in embedding_services:
                 logger.info(f"Deleting embedding service {service.service_id}: {service.name}")
                 embedding_service_service.delete_embedding_service(self.db, app_id, service.service_id)
             
-            # 12. Delete collaborations
+            # 14. Delete collaborations
             collaborations = self.collaboration_repo.get_collaborations_by_app(app_id)
             for collab in collaborations:
                 logger.info(f"Deleting collaboration {collab.id}")
                 self.collaboration_repo.delete_collaboration(collab)
             
-            # 13. Finally, delete the app
+            # 15. Finally, delete the app
             success = self.app_repo.delete(app)
             
             if success:

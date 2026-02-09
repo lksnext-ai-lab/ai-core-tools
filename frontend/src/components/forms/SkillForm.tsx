@@ -60,6 +60,11 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
       return;
     }
 
+    if (!formData.description.trim()) {
+      setError('Skill description is required');
+      return;
+    }
+
     if (!formData.content.trim()) {
       setError('Skill content is required');
       return;
@@ -102,14 +107,14 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
           required
         />
         <p className="mt-1 text-xs text-gray-500">
-          A short, descriptive name for the skill (used when calling load_skill)
+          A short, descriptive name for the skill
         </p>
       </div>
 
       {/* Description Field */}
       <div>
         <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-          Description
+          Description <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
@@ -120,9 +125,10 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500"
           placeholder="e.g., Best practices for reviewing code quality"
           disabled={isSubmitting}
+          required
         />
         <p className="mt-1 text-xs text-gray-500">
-          A brief description of what this skill does
+          The agent sees this description to decide when the skill is relevant
         </p>
       </div>
 
@@ -164,8 +170,8 @@ When reviewing code, follow these steps...
           </div>
           <div className="ml-3 text-sm text-blue-700">
             <p>
-              <strong>Tip:</strong> Write clear, actionable instructions. The agent will receive these
-              instructions when it calls <code className="bg-blue-100 px-1 rounded">load_skill("{formData.name || 'skill-name'}")</code>.
+              <strong>Tip:</strong> The <strong>description</strong> helps the agent recognize when to use this skill.
+              The <strong>instructions</strong> below are loaded on-demand when the skill is activated.
             </p>
           </div>
         </div>
@@ -175,6 +181,7 @@ When reviewing code, follow these steps...
       <FormActions
         onCancel={onCancel}
         isSubmitting={isSubmitting}
+        isEditing={isEditing}
         submitLabel={isEditing ? 'Update Skill' : 'Create Skill'}
       />
     </form>
