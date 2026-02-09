@@ -1,16 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi.responses import JSONResponse
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+import json
 
 # Import database dependency
 from db.database import get_db
 
 # Import services
 from services.ai_service_service import AIServiceService
+from services.ai_service_export_service import AIServiceExportService
+from services.ai_service_import_service import AIServiceImportService
 
 # Import schemas and auth
 from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import AIServiceExportFileSchema
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -49,36 +55,7 @@ async def list_ai_services(
         )
 
 
-@ai_services_router.get("/{service_id}",
-                        summary="Get AI service details",
-                        tags=["AI Services"],
-                        response_model=AIServiceDetailSchema)
-async def get_ai_service(
-    app_id: int, 
-    service_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
-):
-    """
-    Get detailed information about a specific AI service.
-    """    
-    
-    try:
-        result = AIServiceService.get_ai_service_detail(db, app_id, service_id)
-        if result is None and service_id != 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=AI_SERVICE_NOT_FOUND_ERROR
-            )
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving AI service: {str(e)}"
-        )
+# ==================== STATIC ROUTES (must come before /{service_id}) ====================
 
 
 @ai_services_router.post("/test-connection",
@@ -118,6 +95,86 @@ async def test_ai_service_connection_with_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing AI service connection: {str(e)}"
+        )
+
+
+@ai_services_router.post(
+    "/import",
+    summary="Import AI Service",
+    tags=["AI Services", "Export/Import"],
+    response_model=ImportResponseSchema,
+    status_code=status.HTTP_201_CREATED
+)
+async def import_ai_service(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """Import AI Service from JSON file."""
+    try:
+        # Parse file
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = AIServiceExportFileSchema(**file_data)
+        
+        # Import
+        import_service = AIServiceImportService(db)
+        summary = import_service.import_ai_service(
+            export_data,
+            app_id,
+            getattr(auth_context, 'user_id', None),
+            conflict_mode,
+            new_name
+        )
+        
+        return ImportResponseSchema(
+            success=True,
+            message=f"AI Service '{summary.component_name}' imported successfully",
+            summary=summary
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
+
+
+# ==================== DYNAMIC ROUTES (with {service_id} parameter) ====================
+
+
+@ai_services_router.get("/{service_id}",
+                        summary="Get AI service details",
+                        tags=["AI Services"],
+                        response_model=AIServiceDetailSchema)
+async def get_ai_service(
+    app_id: int, 
+    service_id: int, 
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed information about a specific AI service.
+    """    
+    
+    try:
+        result = AIServiceService.get_ai_service_detail(db, app_id, service_id)
+        if result is None and service_id != 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=AI_SERVICE_NOT_FOUND_ERROR
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving AI service: {str(e)}"
         )
 
 
@@ -235,4 +292,46 @@ async def test_ai_service_connection(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing AI service connection: {str(e)}"
-        ) 
+        )
+
+
+# ==================== EXPORT/IMPORT ENDPOINTS ====================
+
+
+@ai_services_router.post(
+    "/{service_id}/export",
+    summary="Export AI Service",
+    tags=["AI Services", "Export/Import"],
+    status_code=status.HTTP_200_OK
+)
+async def export_ai_service(
+    app_id: int,
+    service_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export AI Service configuration to JSON file."""
+    try:
+        export_service = AIServiceExportService(db)
+        export_data = export_service.export_ai_service(
+            service_id,
+            app_id,
+            getattr(auth_context, 'user_id', None)
+        )
+        
+        filename = f"{export_data.ai_service.name.replace(' ', '_')}_ai_service.json"
+        
+        return JSONResponse(
+            content=export_data.model_dump(mode='json'),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except ValueError as e:
+        logger.warning(f"Export failed: {str(e)}")
+        if "not found" in str(e):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+        else:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
