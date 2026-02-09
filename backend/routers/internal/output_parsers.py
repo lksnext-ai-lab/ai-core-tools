@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi.responses import JSONResponse
+from lks_idprovider import AuthContext
+from typing import List, Optional
 from sqlalchemy.orm import Session
+import json
 
 from schemas.output_parser_schemas import (
     OutputParserListItemSchema,
     OutputParserDetailSchema,
     CreateUpdateOutputParserSchema
 )
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import OutputParserExportFileSchema
 
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -14,8 +19,10 @@ from routers.controls.role_authorization import require_min_role, AppRole
 # Import database dependency
 from db.database import get_db
 
-# Import service
+# Import services
 from services.output_parser_service import OutputParserService
+from services.output_parser_export_service import OutputParserExportService
+from services.output_parser_import_service import OutputParserImportService
 
 # Import logger
 from utils.logger import get_logger
@@ -51,6 +58,63 @@ async def list_output_parsers(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving output parsers: {str(e)}"
         )
+
+
+# ==================== STATIC ROUTES (without {{parser_id}} parameter) ====================
+
+
+@output_parsers_router.post(
+    "/import",
+    summary="Import Output Parser",
+    tags=["Output Parsers", "Export/Import"],
+    response_model=ImportResponseSchema,
+    status_code=status.HTTP_201_CREATED
+)
+async def import_output_parser(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """Import Output Parser from JSON file."""
+    try:
+        # Parse file
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = OutputParserExportFileSchema(**file_data)
+        
+        # Import
+        import_service = OutputParserImportService(db)
+        summary = import_service.import_output_parser(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name
+        )
+        
+        return ImportResponseSchema(
+            success=True,
+            message=f"Output Parser '{summary.component_name}' imported successfully",
+            summary=summary
+        )
+    except json.JSONDecodeError as e:
+        logger.warning(f"Invalid JSON: {str(e)}")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid JSON file")
+    except ValueError as e:
+        logger.warning(f"Import failed: {str(e)}")
+        if "already exists" in str(e):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        else:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid data: {str(e)}")
+    except Exception as e:
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
+
+
+# ==================== DYNAMIC ROUTES (with {{parser_id}} parameter) ====================
 
 
 @output_parsers_router.get("/{parser_id}",
@@ -156,4 +220,46 @@ async def delete_output_parser(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting output parser: {str(e)}"
-        ) 
+        )
+
+
+# ==================== EXPORT/IMPORT ENDPOINTS ====================
+
+
+@output_parsers_router.post(
+    "/{parser_id}/export",
+    summary="Export Output Parser",
+    tags=["Output Parsers", "Export/Import"],
+    status_code=status.HTTP_200_OK
+)
+async def export_output_parser(
+    app_id: int,
+    parser_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export Output Parser configuration to JSON file."""
+    try:
+        export_service = OutputParserExportService(db)
+        export_data = export_service.export_output_parser(
+            parser_id,
+            app_id,
+            getattr(auth_context, 'user_id', None)
+        )
+        
+        filename = f"{export_data.output_parser.name.replace(' ', '_')}_output_parser.json"
+        
+        return JSONResponse(
+            content=export_data.model_dump(mode='json'),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except ValueError as e:
+        logger.warning(f"Export failed: {str(e)}")
+        if "not found" in str(e):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+        else:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed") 

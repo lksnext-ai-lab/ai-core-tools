@@ -10,6 +10,7 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import ImportModal, { type ConflictMode, type ImportResponse } from '../../components/ui/ImportModal';
 
 interface DataStructure {
   parser_id: number;
@@ -31,6 +32,9 @@ function DataStructuresPage() {
   const [editingStructure, setEditingStructure] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [structureToDelete, setStructureToDelete] = useState<DataStructure | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [exportingParserId, setExportingParserId] = useState<number | null>(null);
+  const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
 
   // Load data structures from cache or API
   useEffect(() => {
@@ -158,6 +162,81 @@ function DataStructuresPage() {
     setEditingStructure(null);
   }
 
+  async function handleExport(parserId: number) {
+    if (!appId) return;
+    setExportingParserId(parserId);
+    
+    try {
+      const blob = await apiService.exportOutputParser(parseInt(appId), parserId);
+      
+      // Find parser name for filename
+      const parser = dataStructures.find(p => p.parser_id === parserId);
+      const parserName = parser?.name || 'output-parser';
+      const sanitizedName = parserName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `output-parser-${sanitizedName}-${timestamp}.json`;
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      setNotification({
+        message: err instanceof Error ? err.message : 'Failed to export parser',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setExportingParserId(null);
+    }
+  }
+
+  async function handleImport(
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string
+  ): Promise<ImportResponse> {
+    if (!appId) throw new Error('App ID not found');
+    
+    try {
+      const result = await apiService.importOutputParser(
+        parseInt(appId),
+        file,
+        conflictMode,
+        newName
+      );
+      
+      if (result.success) {
+        // Close modal immediately
+        setShowImportModal(false);
+        // Show success notification
+        setNotification({
+          message: result.message || 'Import completed successfully',
+          type: 'success'
+        });
+        // Refresh the list
+        await forceReloadDataStructures();
+        // Auto-dismiss notification after 5 seconds
+        setTimeout(() => setNotification(null), 5000);
+      }
+      
+      return result;
+    } catch (err) {
+      // Show error notification
+      setNotification({
+        message: err instanceof Error ? err.message : 'Import failed',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      throw err;
+    }
+  }
+
   const getFieldCountBadge = (count: number) => {
     if (count === 0) return 'bg-gray-100 text-gray-800';
     if (count <= 3) return 'bg-green-100 text-green-800';
@@ -194,18 +273,63 @@ function DataStructuresPage() {
             <p className="text-gray-600">Define schemas for structured data extraction and validation</p>
           </div>
           {canEdit && (
-            <button 
-              onClick={handleCreateStructure}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}Create Data Structure
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
+              >
+                <span className="mr-2">📤</span>Import
+              </button>
+              <button 
+                onClick={handleCreateStructure}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
+              >
+                <span className="mr-2">+</span>
+                {' '}Create Data Structure
+              </button>
+            </div>
           )}
         </div>
         
         {/* Read-only banner for non-admins */}
         {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
+
+        {/* Notification Banner */}
+        {notification && (
+          <div className={`mb-4 rounded-lg p-4 ${
+            notification.type === 'success' 
+              ? 'bg-green-50 border border-green-200' 
+              : 'bg-red-50 border border-red-200'
+          }`}>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className={`text-xl ${
+                  notification.type === 'success' ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {notification.type === 'success' ? '✓' : '✗'}
+                </span>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className={`text-sm font-medium ${
+                  notification.type === 'success' ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  {notification.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setNotification(null)}
+                className={`ml-3 inline-flex rounded-md p-1.5 ${
+                  notification.type === 'success'
+                    ? 'text-green-500 hover:bg-green-100'
+                    : 'text-red-500 hover:bg-red-100'
+                } focus:outline-none`}
+              >
+                <span className="sr-only">Dismiss</span>
+                <span className="text-lg">×</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Data Structures Table */}
         <Table
@@ -261,6 +385,13 @@ function DataStructuresPage() {
                 canEdit ? (
                   <ActionDropdown
                     actions={[
+                      {
+                        label: exportingParserId === structure.parser_id ? 'Exporting...' : 'Export',
+                        onClick: () => { void handleExport(structure.parser_id); },
+                        icon: exportingParserId === structure.parser_id ? '⏳' : '📥',
+                        variant: 'primary' as const,
+                        disabled: exportingParserId === structure.parser_id
+                      },
                       {
                         label: 'Edit',
                         onClick: () => { void handleEditStructure(structure.parser_id); },
@@ -392,6 +523,15 @@ function DataStructuresPage() {
             </div>
           </div>
         </Modal>
+
+        {/* Import Modal */}
+        <ImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImport}
+          componentType="output_parser"
+          componentLabel="Output Parser"
+        />
       </div>
     
   );

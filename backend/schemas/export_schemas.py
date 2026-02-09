@@ -56,14 +56,23 @@ class ExportEmbeddingServiceSchema(BaseModel):
 # ==================== OUTPUT PARSER ====================
 
 
+class ExportOutputParserFieldSchema(BaseModel):
+    """Output Parser field export schema"""
+
+    name: str
+    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'parser'
+    description: str
+    parser_id: Optional[int] = None  # For type='parser'
+    list_item_type: Optional[str] = None  # For type='list'
+    list_item_parser_id: Optional[int] = None  # For list of parsers
+
+
 class ExportOutputParserSchema(BaseModel):
     """Output Parser export schema"""
 
     name: str = Field(..., min_length=1, max_length=255)
-    parser_type: str
-    config_json: Optional[str] = None
-    schema_definition: Optional[Dict[str, Any]] = None
     description: Optional[str] = None
+    fields: List[ExportOutputParserFieldSchema] = []
 
 
 # ==================== MCP CONFIG ====================
