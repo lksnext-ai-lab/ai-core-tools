@@ -127,10 +127,11 @@ async def create_or_update_agent(
     # Create or update agent
     created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
     
-    # Update tools and MCPs (always call to handle empty arrays for unselecting)
+    # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting)
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
-    
+    agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+
     # Return updated agent (reuse the GET logic)
     return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
 

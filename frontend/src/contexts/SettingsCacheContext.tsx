@@ -27,7 +27,7 @@ interface EmbeddingService {
   created_at: string;
 }
 
-import type { MCPConfig } from '../core/types';
+import type { MCPConfig, Skill } from '../core/types';
 
 interface DataStructure {
   parser_id: number;
@@ -55,6 +55,7 @@ interface SettingsCacheState {
   apiKeys: { [appId: string]: APIKey[] };
   embeddingServices: { [appId: string]: EmbeddingService[] };
   mcpConfigs: { [appId: string]: MCPConfig[] };
+  skills: { [appId: string]: Skill[] };
   dataStructures: { [appId: string]: DataStructure[] };
   collaborators: { [appId: string]: Collaborator[] };
 }
@@ -80,7 +81,12 @@ interface SettingsCacheContextType {
   getMCPConfigs: (appId: string) => MCPConfig[] | null;
   setMCPConfigs: (appId: string, configs: MCPConfig[]) => void;
   invalidateMCPConfigs: (appId: string) => void;
-  
+
+  // Skills
+  getSkills: (appId: string) => Skill[] | null;
+  setSkills: (appId: string, skills: Skill[]) => void;
+  invalidateSkills: (appId: string) => void;
+
   // Data Structures
   getDataStructures: (appId: string) => DataStructure[] | null;
   setDataStructures: (appId: string, structures: DataStructure[]) => void;
@@ -115,6 +121,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     apiKeys: {},
     embeddingServices: {},
     mcpConfigs: {},
+    skills: {},
     dataStructures: {},
     collaborators: {},
   });
@@ -199,6 +206,26 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     });
   };
 
+  // Skills methods
+  const getSkills = (appId: string): Skill[] | null => {
+    return cache.skills[appId] || null;
+  };
+
+  const setSkills = (appId: string, skills: Skill[]) => {
+    setCache(prev => ({
+      ...prev,
+      skills: { ...prev.skills, [appId]: skills }
+    }));
+  };
+
+  const invalidateSkills = (appId: string) => {
+    setCache(prev => {
+      const newSkills = { ...prev.skills };
+      delete newSkills[appId];
+      return { ...prev, skills: newSkills };
+    });
+  };
+
   // Data Structures methods
   const getDataStructures = (appId: string): DataStructure[] | null => {
     return cache.dataStructures[appId] || null;
@@ -246,21 +273,24 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       const newAPIKeys = { ...prev.apiKeys };
       const newEmbeddingServices = { ...prev.embeddingServices };
       const newMCPConfigs = { ...prev.mcpConfigs };
+      const newSkills = { ...prev.skills };
       const newDataStructures = { ...prev.dataStructures };
       const newCollaborators = { ...prev.collaborators };
-      
+
       delete newAIServices[appId];
       delete newAPIKeys[appId];
       delete newEmbeddingServices[appId];
       delete newMCPConfigs[appId];
+      delete newSkills[appId];
       delete newDataStructures[appId];
       delete newCollaborators[appId];
-      
+
       return {
         aiServices: newAIServices,
         apiKeys: newAPIKeys,
         embeddingServices: newEmbeddingServices,
         mcpConfigs: newMCPConfigs,
+        skills: newSkills,
         dataStructures: newDataStructures,
         collaborators: newCollaborators,
       };
@@ -280,6 +310,9 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     getMCPConfigs,
     setMCPConfigs,
     invalidateMCPConfigs,
+    getSkills,
+    setSkills,
+    invalidateSkills,
     getDataStructures,
     setDataStructures,
     invalidateDataStructures,

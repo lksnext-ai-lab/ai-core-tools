@@ -329,6 +329,35 @@ class ApiService {
     });
   }
 
+  // ==================== SKILLS ====================
+  async getSkills(appId: number) {
+    return this.request(`/internal/apps/${appId}/skills/`);
+  }
+
+  async getSkill(appId: number, skillId: number) {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}`);
+  }
+
+  async createSkill(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/skills/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSkill(appId: number, skillId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSkill(appId: number, skillId: number) {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== MCP SERVERS (Expose Agents as MCP Tools) ====================
   async getMCPServers(appId: number) {
     return this.request(`/internal/apps/${appId}/mcp-servers/`);

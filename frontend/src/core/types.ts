@@ -79,6 +79,14 @@ export interface MCPConfig {
   created_at: string;
 }
 
+export interface Skill {
+  skill_id: number;
+  name: string;
+  description?: string;
+  content?: string;
+  created_at: string;
+}
+
 // MCP Server types - for exposing agents as MCP tools
 export interface MCPServerAgent {
   agent_id: number;
