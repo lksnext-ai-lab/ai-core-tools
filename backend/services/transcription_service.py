@@ -1,5 +1,3 @@
-import whisper
-import os
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from utils.logger import get_logger
@@ -9,17 +7,6 @@ from repositories.ai_service_repository import AIServiceRepository
 logger = get_logger(__name__)
 
 class TranscriptionService:
-    # Load model once at class level (singleton pattern)
-    _model = None
-    MODEL_SIZE = os.getenv('WHISPER_MODEL_SIZE', 'base')  # tiny, base, small, medium, large
-    
-    @classmethod
-    def _get_model(cls):
-        """Lazy load Whisper model"""
-        if cls._model is None:
-            logger.info(f"Loading Whisper model: {cls.MODEL_SIZE}")
-            cls._model = whisper.load_model(cls.MODEL_SIZE)
-        return cls._model
     
     @staticmethod
     def transcribe_audio(
@@ -29,13 +16,13 @@ class TranscriptionService:
         ai_service_id: Optional[int] = None
     ) -> dict:
         """
-        Transcribe audio file using Whisper (OpenAI API or local model)
+        Transcribe audio file using configured AI Service (OpenAI Whisper API)
         
         Args:
             audio_path: Path to audio file
             language: Force language (e.g., 'es', 'en', 'fr'). None for auto-detect.
-            db: Database session (optional, for service config lookup)
-            ai_service_id: AI Service ID with Whisper configuration (optional)
+            db: Database session (required for service config lookup)
+            ai_service_id: AI Service ID with Whisper configuration (required)
         
         Returns:
             {
@@ -44,54 +31,21 @@ class TranscriptionService:
                 'duration': float,
                 'text': str  # Full transcription
             }
+        
+        Raises:
+            ValueError: If db or ai_service_id is not provided, or AI service not found
         """
         try:
-            # If AI service is provided, use the configured transcription method (OpenAI)
-            if db and ai_service_id:
-                logger.info(f"Using AI Service {ai_service_id} for transcription")
-                ai_service = AIServiceRepository.get_by_id(db, ai_service_id)
-                
-                if ai_service:
-                    return get_transcription_from_service(ai_service, audio_path, language)
+            if not db or not ai_service_id:
+                raise ValueError("Database session and AI service ID are required for transcription")
             
-            # Fallback to local Whisper model with environment configuration
-            model = TranscriptionService._get_model()
+            logger.info(f"Using AI Service {ai_service_id} for transcription")
+            ai_service = AIServiceRepository.get_by_id(db, ai_service_id)
             
-            logger.info(f"Transcribing audio with local Whisper: {audio_path}, language: {language or 'auto-detect'}")
+            if not ai_service:
+                raise ValueError(f"AI Service with ID {ai_service_id} not found")
             
-            if language == '':
-                language = None
-
-            # Transcribe with word-level timestamps
-            result = model.transcribe(
-                audio_path,
-                task='transcribe',
-                verbose=False,
-                word_timestamps=True,
-                language=language  # None = auto-detect, or force language
-            )
-            
-            # Extract segments with timestamps
-            segments = []
-            for segment in result.get('segments', []):
-                segments.append({
-                    'start': segment['start'],
-                    'end': segment['end'],
-                    'text': segment['text'].strip()
-                })
-            
-            # Get duration from last segment or audio file
-            duration = segments[-1]['end'] if segments else 0.0
-            
-            transcription_data = {
-                'segments': segments,
-                'language': result.get('language', 'unknown'),
-                'duration': duration,
-                'text': result.get('text', '').strip()
-            }
-            
-            logger.info(f"Local Whisper transcription complete: {len(segments)} segments, {duration:.2f}s, language: {transcription_data['language']}")
-            return transcription_data
+            return get_transcription_from_service(ai_service, audio_path, language)
             
         except Exception as e:
             logger.error(f"Error transcribing audio {audio_path}: {str(e)}")

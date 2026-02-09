@@ -89,9 +89,6 @@ TranscriptionService.transcribe_audio(
 )
 ```
 
-**Local Whisper:**
-Falls back to local model if no service configured. Model size set via `WHISPER_MODEL_SIZE` env var (tiny/base/small/medium/large).
-
 **Output:**
 ```python
 {
