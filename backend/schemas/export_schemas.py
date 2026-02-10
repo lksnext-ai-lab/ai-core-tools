@@ -142,21 +142,27 @@ class ExportAgentMCPRefSchema(BaseModel):
 
 
 class ExportAgentSchema(BaseModel):
-    """Agent export schema"""
+    """Agent export schema (configuration only, no conversations)"""
 
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     system_prompt: Optional[str] = None
+    prompt_template: Optional[str] = None
     service_name: Optional[str] = None  # Reference by name
     silo_name: Optional[str] = None  # Reference by name
     output_parser_name: Optional[str] = None  # Reference by name
     agent_tool_refs: List[ExportAgentToolRefSchema] = []
     agent_mcp_refs: List[ExportAgentMCPRefSchema] = []
-    memory_type: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    model_name: Optional[str] = None
-    # Exclude: conversation history
+    has_memory: Optional[bool] = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = None
+    memory_summarize_threshold: Optional[int] = 10
+    temperature: Optional[float] = 0.7
+    # OCR-specific fields
+    vision_service_name: Optional[str] = None  # Reference by name (OCR agents only)
+    vision_system_prompt: Optional[str] = None  # OCR agents only
+    text_system_prompt: Optional[str] = None  # OCR agents only
+    # Exclude: conversation history, request_count, usage stats
 
 
 # ==================== APP ====================

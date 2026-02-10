@@ -43,25 +43,23 @@ class ImportRequestSchema(BaseModel):
 class ValidateImportResponseSchema(BaseModel):
     """Import validation response"""
 
-    valid: bool
     component_type: ComponentType
-    name: str
-    exists: bool
-    existing_id: Optional[int] = None
+    component_name: str
+    has_conflict: bool  # True if component with same name exists
     warnings: List[str] = []
     missing_dependencies: List[str] = []  # e.g., "AI Service: GPT-4 not found"
     requires_embedding_service_selection: bool = False  # For silos without bundled service
+    requires_ai_service_selection: bool = False  # For agents without bundled AI service
 
 
 class ImportSummarySchema(BaseModel):
     """Import operation summary"""
 
     component_type: ComponentType
-    component_id: int
+    component_id: Optional[int] = None
     component_name: str
-    mode: ConflictMode
-    created: bool  # True if new, False if updated
-    dependencies_created: List[str] = []  # New dependencies created
+    mode: Optional[ConflictMode] = None
+    created: bool = False
     warnings: List[str] = []
     next_steps: List[str] = []
 

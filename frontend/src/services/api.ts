@@ -210,6 +210,91 @@ class ApiService {
     });
   }
 
+  async exportAgent(
+    appId: number,
+    agentId: number,
+    includeAIService: boolean = true,
+    includeSilo: boolean = true,
+    includeOutputParser: boolean = true,
+    includeMCPConfigs: boolean = true,
+    includeAgentTools: boolean = true
+  ): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams({
+      include_ai_service: String(includeAIService),
+      include_silo: String(includeSilo),
+      include_output_parser: String(includeOutputParser),
+      include_mcp_configs: String(includeMCPConfigs),
+      include_agent_tools: String(includeAgentTools),
+    });
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/export?${params}`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importAgent(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string,
+    selectedAIServiceId?: number,
+    selectedSiloId?: number,
+    selectedOutputParserId?: number
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/agents/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    if (selectedAIServiceId !== undefined) {
+      url += `&selected_ai_service_id=${selectedAIServiceId}`;
+    }
+    if (selectedSiloId !== undefined) {
+      url += `&selected_silo_id=${selectedSiloId}`;
+    }
+    if (selectedOutputParserId !== undefined) {
+      url += `&selected_output_parser_id=${selectedOutputParserId}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);

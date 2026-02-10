@@ -73,11 +73,9 @@ class AIServiceImportService:
             warnings.append("API key must be configured after import")
 
         return ValidateImportResponseSchema(
-            valid=True,
             component_type=ComponentType.AI_SERVICE,
-            name=export_data.ai_service.name,
-            exists=existing_service is not None,
-            existing_id=existing_service.service_id if existing_service else None,
+            component_name=export_data.ai_service.name,
+            has_conflict=existing_service is not None,
             warnings=warnings,
             missing_dependencies=[],  # AI Services have no dependencies
         )
@@ -112,8 +110,8 @@ class AIServiceImportService:
         final_name = export_data.ai_service.name
         existing_service = None
 
-        if validation.exists:
-            existing_service = self.session.query(AIService).get(validation.existing_id)
+        if validation.has_conflict:
+            existing_service = self.get_by_name_and_app(final_name, app_id)
 
             if conflict_mode == ConflictMode.FAIL:
                 raise ValueError(
