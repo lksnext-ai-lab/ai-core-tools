@@ -10,6 +10,11 @@ class AIServiceRepository:
         return db.query(AIService).filter(AIService.app_id == app_id).all()
     
     @staticmethod
+    def get_by_id(db: Session, service_id: int) -> Optional[AIService]:
+        """Get AI service by ID"""
+        return db.query(AIService).filter(AIService.service_id == service_id).first()
+
+    @staticmethod
     def get_by_id_and_app_id(db: Session, service_id: int, app_id: int) -> Optional[AIService]:
         """Get a specific AI service by ID and app ID"""
         return db.query(AIService).filter(

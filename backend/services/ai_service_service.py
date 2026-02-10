@@ -172,6 +172,10 @@ class AIServiceService:
                     "message": "Model name is required"
                 }
             
+            # Special handling for Whisper (transcription model)
+            if service.description and 'whisper' in service.description.lower():
+                return AIServiceService._test_whisper_connection(service)
+            
             # Build LLM using shared tool
             llm = create_llm_from_service(service, temperature=0)
             
@@ -197,6 +201,49 @@ class AIServiceService:
             return {
                 "status": "error",
                 "message": str(e)
+            }
+    
+    @staticmethod
+    def _test_whisper_connection(service) -> dict:
+        """Test connection to OpenAI Whisper API"""
+        try:
+            from openai import OpenAI
+            
+            if not service.api_key:
+                return {
+                    "status": "error",
+                    "message": "API key is required for Whisper"
+                }
+            
+            # Initialize OpenAI client
+            client = OpenAI(api_key=service.api_key)
+            
+            logger.info("Testing Whisper connection using configured API key")
+            
+            # Test by listing models (lightweight API call)
+            models = client.models.list()
+            
+            # Check if whisper-1 model is accessible
+            model_names = [m.id for m in models.data]
+            
+            if 'whisper-1' in model_names:
+                return {
+                    "status": "success",
+                    "message": "Successfully connected to OpenAI Whisper API",
+                    "response": "Whisper-1 model is available"
+                }
+            else:
+                return {
+                    "status": "success",
+                    "message": "Connected to OpenAI API, but whisper-1 model not found in available models",
+                    "response": f"Available models: {', '.join(model_names[:5])}..."
+                }
+                
+        except Exception as e:
+            logger.error(f"Error testing Whisper connection: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Failed to connect to OpenAI Whisper API: {str(e)}"
             }
 
     @staticmethod

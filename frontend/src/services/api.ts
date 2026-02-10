@@ -507,6 +507,117 @@ class ApiService {
     });
   }
 
+  // ==================== MEDIA API ====================
+  async uploadMedia(appId: number, repositoryId: number, files: File[], folderId?: number, config?: {
+    forced_language?: string;
+    chunk_min_duration?: number;
+    chunk_max_duration?: number;
+    chunk_overlap?: number;
+  }, transcriptionServiceId?: number) {
+    const formData = new FormData();
+    const headers: Record<string, string> = {};
+    
+    files.forEach(file => formData.append('files', file));
+    
+    if (folderId !== undefined && folderId !== null) {
+      formData.append('folder_id', folderId.toString());
+      console.log('API: Added folder_id to FormData:', folderId);
+    } else {
+      console.log('API: No folder_id provided or folderId is null/undefined');
+    }
+    
+    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+
+    const token = this.getAuthToken();
+    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
+        
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      console.log('API: Authorization header set for upload');
+    } else {
+      console.log('API: WARNING - No token found for upload request');
+    }
+
+    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
+
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media`, {
+      method: 'POST',
+      headers: headers,
+      body: formData,
+    });
+  }
+  
+  async addYouTube(appId: number, repositoryId: number, url: string, folderId?: number, config?: {
+    forced_language?: string;
+    chunk_min_duration?: number;
+    chunk_max_duration?: number;
+    chunk_overlap?: number;
+  }, transcriptionServiceId?: number) {
+    const formData = new FormData();
+    const headers: Record<string, string> = {};
+    const token = this.getAuthToken();
+    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
+
+    formData.append('url', url);
+    if (folderId !== undefined && folderId !== null) {
+      formData.append('folder_id', folderId.toString());
+      console.log('API: Added folder_id to FormData:', folderId);
+    } else {
+      console.log('API: No folder_id provided or folderId is null/undefined');
+    }
+    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+        
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      console.log('API: Authorization header set for upload');
+    } else {
+      console.log('API: WARNING - No token found for upload request');
+    }
+
+    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
+
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/youtube`, {
+      method: 'POST',
+      headers: headers,
+      body: formData,
+    });
+  }
+
+  async getMediaStatus(appId: number, repositoryId: number, mediaId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}`);
+  }
+
+  async listMedia(appId: number, repositoryId: number, folderId?: number) {
+    const params = folderId !== undefined ? `?folder_id=${folderId}` : '';
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media${params}`);
+  }
+
+  async moveMedia(appId: number, repositoryId: number, mediaId: number, newFolderId?: number) {
+    const formData = new FormData();
+    if (newFolderId !== undefined) {
+      formData.append('new_folder_id', newFolderId.toString());
+    }
+    
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}/move`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async deleteMedia(appId: number, repositoryId: number, mediaId: number) {
+    return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}`, {
+      method: 'DELETE',
+    })
+  }
+
   // ==================== SILOS API ====================
   async getSilos(appId: number) {
     return this.request(`/internal/apps/${appId}/silos/`);

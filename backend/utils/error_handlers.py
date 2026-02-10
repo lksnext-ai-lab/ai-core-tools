@@ -1,12 +1,10 @@
 """
-Centralized error handling utilities
+Centralized error handling utilities for FastAPI
 """
 import traceback
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, Tuple, Union
-from flask import jsonify, flash, redirect, url_for, request
+from typing import Any, Callable, Dict, Optional, Tuple
 from sqlalchemy.exc import SQLAlchemyError
-from pydantic import ValidationError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -150,48 +148,6 @@ def create_error_response(error: Exception, include_traceback: bool = False) -> 
     return response, status_code
 
 
-def handle_api_errors(include_traceback: bool = False):
-    """Decorator to handle API errors and return JSON responses"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except AppError as e:
-                logger.warning(f"Application error in {func.__name__}: {e.message}")
-                response, status_code = create_error_response(e, include_traceback)
-                return jsonify(response), status_code
-            except Exception as e:
-                logger.error(f"Unexpected error in {func.__name__}: {str(e)}", exc_info=True)
-                response, status_code = create_error_response(e, include_traceback)
-                return jsonify(response), status_code
-        return wrapper
-    return decorator
-
-
-def handle_web_errors(redirect_url: str = None, flash_category: str = 'error'):
-    """Decorator to handle web errors and redirect with flash messages"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except AppError as e:
-                logger.warning(f"Application error in {func.__name__}: {e.message}")
-                flash(e.message, flash_category)
-                if redirect_url:
-                    return redirect(url_for(redirect_url))
-                return redirect(request.referrer or url_for('home'))
-            except Exception as e:
-                logger.error(f"Unexpected error in {func.__name__}: {str(e)}", exc_info=True)
-                flash(f"An unexpected error occurred: {str(e)}", flash_category)
-                if redirect_url:
-                    return redirect(url_for(redirect_url))
-                return redirect(request.referrer or url_for('home'))
-        return wrapper
-    return decorator
-
-
 def validate_required_fields(data: dict, required_fields: list, raise_on_missing: bool = True) -> list:
     """
     Validate that required fields are present in data
@@ -240,4 +196,4 @@ def validate_field_types(data: dict, field_types: dict, raise_on_invalid: bool =
     if invalid_fields and raise_on_invalid:
         raise ValidationError(f"Invalid field types: {', '.join(invalid_fields)}")
     
-    return invalid_fields 
+    return invalid_fields

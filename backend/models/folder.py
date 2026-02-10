@@ -20,6 +20,7 @@ class Folder(Base):
     parent_folder = relationship('Folder', remote_side=[folder_id], back_populates='subfolders', foreign_keys=[parent_folder_id])
     subfolders = relationship('Folder', back_populates='parent_folder', foreign_keys=[parent_folder_id], cascade='all, delete-orphan')
     resources = relationship('Resource', back_populates='folder', cascade='all, delete-orphan')
+    media = relationship('Media', back_populates='folder', cascade='all, delete-orphan')
     
     def to_dict(self, include_children=False):
         """Convert folder to dictionary representation"""
