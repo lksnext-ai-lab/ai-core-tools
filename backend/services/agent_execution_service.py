@@ -32,8 +32,7 @@ logger = get_logger(__name__)
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
-    # Shared thread pool for blocking operations (LLM calls, file I/O, etc.)
-    # This prevents blocking the event loop
+    # Shared thread pool for blocking I/O operations (file processing, OCR, etc.)
     _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="agent_exec")
     
     def __init__(self, db: Session = None):
@@ -128,27 +127,34 @@ class AgentExecutionService:
                         user_context=user_context,
                         conversation_id=session_suffix
                     )
-            
-            # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
-            # This prevents blocking the event loop and allows other requests to be processed
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                self._executor,
-                self._execute_langchain_agent,
-                agent, message, processed_files, search_params, session, user_context, db
+
+            # Re-query agent with all relationships eagerly loaded
+            fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent_id)
+            if not fresh_agent:
+                raise HTTPException(status_code=404, detail="Agent not found in database")
+
+            # Build enhanced message with file contents
+            enhanced_message, image_files = self._prepare_message_with_files(message, processed_files)
+
+            # Determine session ID for checkpointer
+            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+
+            # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
+            response = await self._execute_agent_async(
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
             )
-            
+
             # Parse response based on agent's output parser
             from tools.agentTools import parse_agent_response
             parsed_response = parse_agent_response(response, agent)
-            
+
             # Update request count
             self._update_request_count(agent, db)
-            
+
             # Update session timestamp to keep it alive
             if session:
                 await self.session_service.touch_session(session.id)
-            
+
             # Update conversation message count if using a specific conversation
             if conversation:
                 from services.conversation_service import ConversationService
@@ -234,16 +240,23 @@ class AgentExecutionService:
                 # Extract conversation_id from user_context to ensure correct session identification
                 conversation_id = user_context.get("conversation_id") if user_context else None
                 session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
-            
-            # Execute agent using LangChain IN A THREAD POOL (blocking LLM calls)
-            # This prevents blocking the event loop and allows other requests to be processed
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                self._executor,
-                self._execute_langchain_agent,
-                agent, message, processed_files, search_params, session, user_context, db
+
+            # Re-query agent with all relationships eagerly loaded
+            fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent_id)
+            if not fresh_agent:
+                raise HTTPException(status_code=404, detail="Agent not found in database")
+
+            # Build enhanced message with file contents
+            enhanced_message, image_files = self._prepare_message_with_files(message, processed_files)
+
+            # Determine session ID for checkpointer
+            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+
+            # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
+            response = await self._execute_agent_async(
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
             )
-            
+
             # Parse response based on agent's output parser
             from tools.agentTools import parse_agent_response
             parsed_response = parse_agent_response(response, agent)
@@ -736,64 +749,33 @@ class AgentExecutionService:
             logger.error(f"Error processing PDF with OCR: {str(e)}")
             raise
     
-    def _execute_langchain_agent(
-        self, 
-        agent: Agent, 
-        message: str, 
-        processed_files: List[Dict], 
-        search_params: Dict = None,
-        session = None,
-        user_context: Dict = None,
-        db: Session = None
-    ) -> str:
-        """Execute agent using the new create_agent approach with full tool support"""
-        try:
-            import asyncio
-            from tools.agentTools import create_agent, prepare_agent_config
-            
-            # Re-query the agent with relationships loaded using repository
-            fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent.agent_id)
-            
-            if not fresh_agent:
-                raise Exception("Agent not found in database")
-            
-            # Enhance message with file contents if files were uploaded
-            enhanced_message = message
-            image_files = []
-            
-            if processed_files:
-                #TODO: we should move this to class initialization? It is repeated in many places.
-                # Get TMP_BASE_FOLDER from config
-                app_config = get_app_config()
-                tmp_base_folder = app_config['TMP_BASE_FOLDER']
-                
-                # Separate images from text files
-                text_files_msg = ""
-                for file_data in processed_files:
-                    if file_data.get('type') == 'image':
-                        image_files.append(file_data)
-                    else:
-                        text_files_msg += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
-                
-                if text_files_msg:
-                    enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
-                    enhanced_message += "\n\n[Attached files:]" + text_files_msg
-            
-            # Wrap all async operations in a single event loop to avoid conflicts
-            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
-            result_text = asyncio.run(self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
-            ))
-            
-            return result_text
-                
-        except Exception as e:
-            import traceback
-            error_msg = str(e) if str(e) else repr(e)
-            logger.error(f"Error executing LangChain agent: {error_msg}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            raise Exception(f"Agent execution failed: {error_msg}")
-    
+    def _prepare_message_with_files(self, message: str, processed_files: List[Dict]) -> tuple:
+        """
+        Build enhanced message with file contents and separate image files.
+
+        Returns:
+            Tuple of (enhanced_message, image_files)
+        """
+        enhanced_message = message
+        image_files = []
+
+        if processed_files:
+            app_config = get_app_config()
+            tmp_base_folder = app_config['TMP_BASE_FOLDER']
+
+            text_files_msg = ""
+            for file_data in processed_files:
+                if file_data.get('type') == 'image':
+                    image_files.append(file_data)
+                else:
+                    text_files_msg += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+
+            if text_files_msg:
+                enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
+                enhanced_message += "\n\n[Attached files:]" + text_files_msg
+
+        return enhanced_message, image_files
+
     async def _execute_agent_async(
         self,
         fresh_agent: Agent,
@@ -803,16 +785,14 @@ class AgentExecutionService:
         user_context: Dict = None,
         image_files: List[Dict] = None
     ) -> str:
-        """Async helper to execute agent with MCP client in same event loop"""
+        """Execute agent in FastAPI's event loop using shared checkpointer pool"""
         from tools.agentTools import create_agent, prepare_agent_config
         from langchain_core.messages import HumanMessage
-        
+
         mcp_client = None
-        checkpointer_cm = None
         try:
             # Create the agent chain with all tools and capabilities
-            # All async operations happen in the SAME event loop
-            agent_chain, tracer, mcp_client, checkpointer_cm = await create_agent(
+            agent_chain, tracer, mcp_client = await create_agent(
                 fresh_agent, search_params, session_id_for_cache, user_context
             )
             
@@ -944,14 +924,6 @@ class AgentExecutionService:
             # As of langchain-mcp-adapters 0.1.0, MCP client doesn't need manual cleanup
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
-            
-            # Always close the checkpointer context manager
-            if checkpointer_cm:
-                try:
-                    await checkpointer_cm.__aexit__(None, None, None)
-                    logger.debug("Checkpointer context manager closed successfully")
-                except Exception as e:
-                    logger.warning(f"Error closing checkpointer context manager: {e}")
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location"""
