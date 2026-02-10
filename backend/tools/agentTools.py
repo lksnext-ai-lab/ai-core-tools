@@ -128,13 +128,12 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
-    checkpointer_cm = None
     if agent.has_memory:
         # Use the session_id if provided, otherwise use "default"
         cache_session_id = session_id if session_id else "default"
         # Create the async PostgreSQL checkpointer in the current event loop
         # This ensures the checkpointer uses the same event loop as ainvoke()
-        checkpointer, checkpointer_cm = await CheckpointerCacheService.get_async_checkpointer()
+        checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
@@ -229,18 +228,18 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             model=llm,
             prompt=prompt,
             response_format=(structured_prompt, pydantic_model),
-            tools=tools, 
+            tools=tools,
             checkpointer=checkpointer,
-            debug=True  
+            debug=False
         )
     else:
         # Si no hay modelo Pydantic, usamos el agente sin formato estructurado
         agent_chain = create_react_agent(
             model=llm,
             prompt=prompt,
-            tools=tools, 
-            checkpointer=checkpointer,  
-            debug=True
+            tools=tools,
+            checkpointer=checkpointer,
+            debug=False
         )
 
     # Add logging for the created agent
@@ -249,7 +248,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
     logger.info(f"Tracer configured: {tracer is not None}")
 
-    return agent_chain, tracer, mcp_client, checkpointer_cm
+    return agent_chain, tracer, mcp_client
 
 
 def prepare_agent_config(agent, tracer):

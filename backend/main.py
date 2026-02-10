@@ -82,16 +82,24 @@ async def lifespan(app: FastAPI):
                 "EntraID provider NOT initialized (development/testing only)"
             )
         
+        # Initialize checkpointer connection pool for LangGraph agent memory
+        from services.agent_cache_service import CheckpointerCacheService
+        await CheckpointerCacheService.initialize_pool()
+
         print("✅ Application startup complete")
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
         print(f"❌ Error during startup: {e}")
         raise
-    
+
     yield
-    
+
     # Shutdown
     try:
+        # Close checkpointer connection pool
+        from services.agent_cache_service import CheckpointerCacheService
+        await CheckpointerCacheService.close_pool()
+
         # Only shutdown provider if it was initialized (OIDC mode)
         if AuthConfig.LOGIN_MODE == "OIDC":
             await shutdown_provider()

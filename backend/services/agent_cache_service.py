@@ -1,5 +1,6 @@
-from models.agent import Agent
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg_pool import AsyncConnectionPool
+from psycopg.rows import dict_row
 import logging
 import os
 
@@ -7,12 +8,16 @@ logger = logging.getLogger(__name__)
 
 class CheckpointerCacheService:
     """
-    Service to manage Async PostgreSQL checkpointer for LangGraph agents.
-    The checkpointer is created within each event loop to ensure proper async context.
+    Service to manage a shared AsyncConnectionPool for LangGraph's PostgreSQL checkpointer.
+
+    The pool is created once at application startup (via initialize_pool) and shared across
+    all requests. This avoids creating a new TCP connection per request, which caused OOM
+    kills in Kubernetes due to resource accumulation.
     """
-    
-    # Store the connection string instead of the checkpointer instance
+
     _db_uri = None
+    _pool: AsyncConnectionPool = None
+    _checkpointer: AsyncPostgresSaver = None
     _is_setup_done = False
 
     @classmethod
@@ -23,111 +28,82 @@ class CheckpointerCacheService:
         return cls._db_uri
 
     @classmethod
-    async def get_async_checkpointer(cls):
+    async def initialize_pool(cls):
         """
-        Create and return an AsyncPostgresSaver for the current event loop.
-        This must be called within an async context (event loop).
-        
-        Returns:
-            AsyncPostgresSaver instance (context manager entered)
+        Initialize the shared AsyncConnectionPool and checkpointer.
+        Must be called during application startup (FastAPI lifespan).
         """
         db_uri = cls._get_db_uri()
-        
-        setup_needed = not cls._is_setup_done
-        
-        if setup_needed:
-            logger.info(f"Initializing Async PostgreSQL checkpointer with URI: {db_uri.split('@')[1] if '@' in db_uri else 'hidden'}")
-        
-        # Create a new checkpointer context manager for this event loop
-        checkpointer_cm = AsyncPostgresSaver.from_conn_string(db_uri)
-        # Enter the async context manager
-        checkpointer = await checkpointer_cm.__aenter__()
-        
-        # Setup tables if first time (idempotent operation)
-        if setup_needed:
-            try:
-                await checkpointer.setup()
-                logger.info("PostgreSQL checkpointer tables created/verified")
-                logger.info("✓ Async checkpointer is ready to persist agent memory to PostgreSQL")
-                cls._is_setup_done = True
-            except Exception as e:
-                logger.debug(f"Checkpointer setup (tables may already exist): {str(e)}")
-                cls._is_setup_done = True
-        
-        return checkpointer, checkpointer_cm
+        logger.info(f"Initializing checkpointer connection pool (DB: {db_uri.split('@')[1] if '@' in db_uri else 'hidden'})")
+
+        cls._pool = AsyncConnectionPool(
+            conninfo=db_uri,
+            min_size=2,
+            max_size=10,
+            kwargs={
+                "autocommit": True,
+                "prepare_threshold": 0,
+                "row_factory": dict_row,
+            },
+        )
+        await cls._pool.open(wait=True)
+
+        cls._checkpointer = AsyncPostgresSaver(conn=cls._pool)
+        await cls._checkpointer.setup()
+        cls._is_setup_done = True
+
+        logger.info("Checkpointer connection pool initialized successfully")
 
     @classmethod
-    def get_cached_checkpointer(cls, agent_id: int = None, session_id: str = "default"):
+    async def close_pool(cls):
         """
-        Legacy method for backward compatibility.
-        Returns None - the actual checkpointer will be created in the async context.
-        
-        Args:
-            agent_id: Agent ID (kept for backward compatibility)
-            session_id: Session ID (kept for backward compatibility)
-            
+        Close the shared connection pool.
+        Must be called during application shutdown (FastAPI lifespan).
+        """
+        if cls._pool is not None:
+            await cls._pool.close()
+            logger.info("Checkpointer connection pool closed")
+        cls._pool = None
+        cls._checkpointer = None
+        cls._is_setup_done = False
+
+    @classmethod
+    async def get_async_checkpointer(cls) -> AsyncPostgresSaver:
+        """
+        Return the shared AsyncPostgresSaver backed by the connection pool.
+
+        The pool automatically checks out and returns connections per operation,
+        so no per-request lifecycle management is needed.
+
         Returns:
-            None (checkpointer will be created in async context)
+            AsyncPostgresSaver instance
         """
-        logger.info(f"Checkpointer will be created in async context for agent {agent_id} (session: {session_id})")
-        return None
-
-    @classmethod
-    def cache_checkpointer(cls, agent_id: int = None, checkpointer = None, session_id: str = "default"):
-        """
-        This method is kept for backward compatibility but doesn't do anything.
-        
-        Args:
-            agent_id: Agent ID (ignored)
-            checkpointer: Checkpointer instance (ignored)
-            session_id: Session ID (ignored)
-        """
-        logger.info(f"Using async PostgreSQL checkpointer (agent: {agent_id}, session: {session_id})")
+        if cls._checkpointer is None:
+            raise RuntimeError(
+                "Checkpointer pool not initialized. "
+                "Call CheckpointerCacheService.initialize_pool() during application startup."
+            )
+        return cls._checkpointer
 
     @classmethod
     async def invalidate_checkpointer_async(cls, agent_id: int, session_id: str = "default"):
         """
-        Delete checkpoints for a specific thread (session) - async version.
-        
+        Delete checkpoints for a specific thread (session).
+
         The thread_id format must match the one used during agent execution:
         f"thread_{agent_id}_{session_id}"
-        
+
         Args:
             agent_id: Agent ID
             session_id: Session ID (e.g., "oauth_9_2", "api_1_abc123")
         """
         try:
-            # Create a temporary checkpointer to delete the thread
-            checkpointer, checkpointer_cm = await cls.get_async_checkpointer()
-            
-            try:
-                # Generate thread_id that EXACTLY matches the one used in agent_execution_service.py
-                # Format: "thread_{agent_id}_{session_id}"
-                thread_id = f"thread_{agent_id}_{session_id}"
-                
-                # Delete the thread from PostgreSQL
-                await checkpointer.adelete_thread(thread_id)
-                
-                logger.info(f"Deleted checkpoints for thread {thread_id} (agent {agent_id}, session {session_id})")
-            finally:
-                # Clean up the checkpointer
-                await checkpointer_cm.__aexit__(None, None, None)
-            
-        except Exception as e:
-            logger.error(f"Error invalidating checkpointer: {str(e)}")
+            checkpointer = await cls.get_async_checkpointer()
 
-    @classmethod
-    def invalidate_checkpointer(cls, agent_id: int, session_id: str = "default"):
-        """
-        Delete checkpoints for a specific thread (session) - sync wrapper.
-        
-        Args:
-            agent_id: Agent ID
-            session_id: Session ID
-        """
-        import asyncio
-        try:
-            asyncio.run(cls.invalidate_checkpointer_async(agent_id, session_id))
+            thread_id = f"thread_{agent_id}_{session_id}"
+            await checkpointer.adelete_thread(thread_id)
+
+            logger.info(f"Deleted checkpoints for thread {thread_id} (agent {agent_id}, session {session_id})")
         except Exception as e:
             logger.error(f"Error invalidating checkpointer: {str(e)}")
 
@@ -145,33 +121,14 @@ class CheckpointerCacheService:
     async def invalidate_session_checkpointers_async(cls, agent_id: int, session_id: str = "default"):
         """
         Clear checkpoints for a specific session - async version.
-        
-        Note: This is a wrapper around invalidate_checkpointer_async.
-        Kept for backward compatibility but requires agent_id now.
-        
+
         Args:
             agent_id: Agent ID (required to build correct thread_id)
             session_id: Session ID to clear
         """
         try:
-            # Use the standard invalidate method which has correct thread_id format
             await cls.invalidate_checkpointer_async(agent_id, session_id)
             logger.info(f"Deleted checkpoints for session {session_id} (agent {agent_id})")
-        except Exception as e:
-            logger.error(f"Error invalidating session checkpointers: {str(e)}")
-
-    @classmethod
-    def invalidate_session_checkpointers(cls, agent_id: int, session_id: str = "default"):
-        """
-        Clear checkpoints for a specific session - sync wrapper.
-        
-        Args:
-            agent_id: Agent ID (required to build correct thread_id)
-            session_id: Session ID to clear
-        """
-        import asyncio
-        try:
-            asyncio.run(cls.invalidate_session_checkpointers_async(agent_id, session_id))
         except Exception as e:
             logger.error(f"Error invalidating session checkpointers: {str(e)}")
 
@@ -179,100 +136,76 @@ class CheckpointerCacheService:
     async def get_conversation_history_async(cls, agent_id: int, session_id: str = "default"):
         """
         Retrieve conversation history from PostgreSQL checkpointer.
-        
+
         Args:
             agent_id: Agent ID
             session_id: Session ID
-            
+
         Returns:
             List of message dicts with role and content
         """
         try:
-            # Create a temporary checkpointer to read the thread
-            checkpointer, checkpointer_cm = await cls.get_async_checkpointer()
-            
-            try:
-                # Generate thread_id that matches the one used in agent_execution_service.py
-                thread_id = f"thread_{agent_id}_{session_id}"
-                
-                # Get the latest state for this thread
-                config = {"configurable": {"thread_id": thread_id}}
-                
-                # Get the state tuple
-                state_tuple = await checkpointer.aget_tuple(config)
-                
-                if state_tuple and state_tuple.checkpoint:
-                    # Extract messages from checkpoint
-                    channel_values = state_tuple.checkpoint.get("channel_values", {})
-                    messages = channel_values.get("messages", [])
-                    
-                    # Convert LangChain messages to simple dicts
-                    history = []
-                    for msg in messages:
-                        # Handle different message types
-                        if hasattr(msg, 'type'):
-                            msg_type = msg.type
-                            if msg_type in ['human', 'user']:
-                                role = 'user'
-                            elif msg_type in ['ai', 'assistant']:
-                                role = 'agent'
-                                
-                                # Filter out AI messages that only contain tool calls without content
-                                # These are internal coordination messages between agents
-                                content = msg.content if hasattr(msg, 'content') else str(msg)
-                                
-                                # Handle content that might be a list or other non-string type
-                                if isinstance(content, list):
-                                    # If content is a list, convert to string for processing
-                                    content_str = str(content)
-                                else:
-                                    content_str = str(content) if content else ""
-                                
-                                # Skip AI messages with tool_calls but no actual content for the user
-                                if hasattr(msg, 'tool_calls') and msg.tool_calls and not content_str.strip():
-                                    continue
-                                    
-                                # Also skip AI messages that contain only tool call arrays in content
-                                if content_str.strip().startswith('[') and 'tool_use' in content_str:
-                                    continue
-                                    
-                            elif msg_type == 'system':
-                                # Skip system messages in UI
-                                continue
-                            elif msg_type == 'tool':
-                                # Skip tool messages (tool_use and tool_result) in UI
-                                continue
-                            else:
-                                role = msg_type
-                            
+            checkpointer = await cls.get_async_checkpointer()
+
+            thread_id = f"thread_{agent_id}_{session_id}"
+            config = {"configurable": {"thread_id": thread_id}}
+
+            state_tuple = await checkpointer.aget_tuple(config)
+
+            if state_tuple and state_tuple.checkpoint:
+                channel_values = state_tuple.checkpoint.get("channel_values", {})
+                messages = channel_values.get("messages", [])
+
+                history = []
+                for msg in messages:
+                    if hasattr(msg, 'type'):
+                        msg_type = msg.type
+                        if msg_type in ['human', 'user']:
+                            role = 'user'
+                        elif msg_type in ['ai', 'assistant']:
+                            role = 'agent'
+
                             content = msg.content if hasattr(msg, 'content') else str(msg)
-                            
-                            # Handle content that might be a list or other non-string type
+
                             if isinstance(content, list):
-                                # If content is a list, convert to string for processing
                                 content_str = str(content)
                             else:
                                 content_str = str(content) if content else ""
-                            
-                            # Skip empty messages
-                            if not content_str or not content_str.strip():
+
+                            if hasattr(msg, 'tool_calls') and msg.tool_calls and not content_str.strip():
                                 continue
-                            
-                            history.append({
-                                "role": role,
-                                "content": content_str
-                            })
-                    
-                    logger.info(f"Retrieved {len(history)} messages from thread {thread_id}")
-                    return history
-                else:
-                    logger.info(f"No conversation history found for thread {thread_id}")
-                    return []
-                    
-            finally:
-                # Clean up the checkpointer
-                await checkpointer_cm.__aexit__(None, None, None)
-            
+
+                            if content_str.strip().startswith('[') and 'tool_use' in content_str:
+                                continue
+
+                        elif msg_type == 'system':
+                            continue
+                        elif msg_type == 'tool':
+                            continue
+                        else:
+                            role = msg_type
+
+                        content = msg.content if hasattr(msg, 'content') else str(msg)
+
+                        if isinstance(content, list):
+                            content_str = str(content)
+                        else:
+                            content_str = str(content) if content else ""
+
+                        if not content_str or not content_str.strip():
+                            continue
+
+                        history.append({
+                            "role": role,
+                            "content": content_str
+                        })
+
+                logger.info(f"Retrieved {len(history)} messages from thread {thread_id}")
+                return history
+            else:
+                logger.info(f"No conversation history found for thread {thread_id}")
+                return []
+
         except Exception as e:
             logger.error(f"Error retrieving conversation history: {str(e)}")
-            return [] 
+            return []
