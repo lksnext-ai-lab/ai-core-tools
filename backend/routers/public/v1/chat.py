@@ -210,7 +210,7 @@ async def reset_conversation(
     This will clear the conversation history and any attached files.
     """
     # Validate API key for this app
-    auth = validate_api_key_for_app(app_id, api_key)
+    validate_api_key_for_app(app_id, api_key)
     
     # Create user context for API key user
     user_context = _create_api_key_user_context(app_id, api_key)

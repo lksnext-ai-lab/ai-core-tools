@@ -79,9 +79,7 @@ class AgentRepository:
     def delete(db: Session, agent: Agent) -> bool:
         """Delete an agent"""
         try:
-            db.delete(agent)
-            db.commit()
-            return True
+            return AgentRepository._delete_agent_with_associations(db, agent)
         except Exception:
             db.rollback()
             return False
@@ -96,16 +94,24 @@ class AgentRepository:
                 agent = AgentRepository.get_ocr_agent_by_id(db, agent_id)
             
             if agent:
-                # First remove all references to this agent as a tool
-                AgentRepository.remove_tool_references(db, agent_id)
-                # Then delete the agent
-                db.delete(agent)
-                db.commit()
-                return True
+                return AgentRepository._delete_agent_with_associations(db, agent)
             return False
         except Exception:
             db.rollback()
             return False
+
+    @staticmethod
+    def _delete_agent_with_associations(db: Session, agent: Agent | OCRAgent) -> bool:
+        """Delete an agent and its association rows in a single transaction."""
+        agent_id = agent.agent_id
+        db.query(AgentMCP).filter(AgentMCP.agent_id == agent_id).delete(synchronize_session=False)
+        db.query(AgentSkill).filter(AgentSkill.agent_id == agent_id).delete(synchronize_session=False)
+        db.query(AgentTool).filter(AgentTool.agent_id == agent_id).delete(synchronize_session=False)
+        # Remove all references to this agent as a tool (tool_id side).
+        AgentRepository.remove_tool_references(db, agent_id)
+        db.delete(agent)
+        db.commit()
+        return True
     
     # ==================== AGENT ASSOCIATIONS ====================
     

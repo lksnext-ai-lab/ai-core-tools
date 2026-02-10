@@ -1,6 +1,7 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from models.skill import Skill
+from models.agent import AgentSkill
 
 
 class SkillRepository:
@@ -38,6 +39,7 @@ class SkillRepository:
     @staticmethod
     def delete(db: Session, skill: Skill) -> None:
         """Delete a skill"""
+        db.query(AgentSkill).filter(AgentSkill.skill_id == skill.skill_id).delete(synchronize_session=False)
         db.delete(skill)
         db.commit()
 

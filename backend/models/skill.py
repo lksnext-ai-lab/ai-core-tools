@@ -20,7 +20,7 @@ class Skill(Base):
     # Foreign keys and relationships
     app_id = Column(Integer, ForeignKey('App.app_id'))
     app = relationship('App', back_populates='skills')
-    agent_associations = relationship('AgentSkill', back_populates='skill', cascade="all, delete-orphan")
+    agent_associations = relationship('AgentSkill', back_populates='skill')
 
     def get_associated_agents(self):
         """Retrieve all agents associated with this Skill."""

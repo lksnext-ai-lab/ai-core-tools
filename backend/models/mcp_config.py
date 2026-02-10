@@ -20,7 +20,7 @@ class MCPConfig(Base):
     # Foreign keys and relationships
     app_id = Column(Integer, ForeignKey('App.app_id'))
     app = relationship('App', back_populates='mcp_configs')
-    agent_associations = relationship('AgentMCP', back_populates='mcp', cascade="all, delete-orphan")
+    agent_associations = relationship('AgentMCP', back_populates='mcp')
     
     def get_associated_agents(self):
         """Retrieve all agents associated with this MCPConfig."""
