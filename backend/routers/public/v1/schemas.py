@@ -20,7 +20,7 @@ class CountResponseSchema(BaseModel):
 class AgentResponseSchema(BaseModel):
     """Agent response - supports both string responses and structured JSON from output parsers"""
     response: Union[str, Dict[str, Any]]
-    conversation_id: str
+    conversation_id: Optional[int] = None
     usage: Optional[Dict[str, Any]] = None
 
 # ==================== FILE OPERATION SCHEMAS ====================

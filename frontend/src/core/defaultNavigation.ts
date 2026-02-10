@@ -49,6 +49,12 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      path: '/apps/:appId/skills',
+      name: 'Skills',
+      icon: '🎯',
+      section: 'appNavigation'
+    },
+    {
       path: '/apps/:appId/settings',
       name: 'App Settings',
       icon: '⚙️',

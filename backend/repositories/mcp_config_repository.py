@@ -1,6 +1,7 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from models.mcp_config import MCPConfig
+from models.agent import AgentMCP
 
 
 class MCPConfigRepository:
@@ -37,6 +38,7 @@ class MCPConfigRepository:
     @staticmethod
     def delete(db: Session, config: MCPConfig) -> None:
         """Delete an MCP config"""
+        db.query(AgentMCP).filter(AgentMCP.config_id == config.config_id).delete(synchronize_session=False)
         db.delete(config)
         db.commit()
 

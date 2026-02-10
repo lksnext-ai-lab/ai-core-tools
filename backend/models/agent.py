@@ -8,6 +8,18 @@ AGENT_ID = 'Agent.agent_id'
 # Default temperature for agents
 DEFAULT_AGENT_TEMPERATURE = 0.7
 
+
+class AgentSkill(Base):
+    """Association table for Agent-Skill many-to-many relationship"""
+    __tablename__ = 'agent_skills'
+    agent_id = Column(Integer, ForeignKey(AGENT_ID), primary_key=True)
+    skill_id = Column(Integer, ForeignKey('Skill.skill_id'), primary_key=True)
+    description = Column(Text, nullable=True)  # Description of how this skill is used
+
+    agent = relationship('Agent', foreign_keys=[agent_id], back_populates='skill_associations')
+    skill = relationship('Skill', foreign_keys=[skill_id])
+
+
 class AgentMCP(Base):
     __tablename__ = 'agent_mcps'
     agent_id = Column(Integer, ForeignKey(AGENT_ID), primary_key=True)
@@ -84,7 +96,12 @@ class Agent(Base):
     mcp_associations = relationship('AgentMCP',
                                   primaryjoin=(agent_id == AgentMCP.agent_id),
                                   back_populates='agent')
-    
+
+    # Add Skill relationship
+    skill_associations = relationship('AgentSkill',
+                                     primaryjoin=(agent_id == AgentSkill.agent_id),
+                                     back_populates='agent')
+
     __mapper_args__ = {
         'polymorphic_identity': 'agent',
         'polymorphic_on': type

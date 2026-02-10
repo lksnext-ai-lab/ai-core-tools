@@ -98,7 +98,8 @@ class AgentExecutionService:
                     conversation = ConversationService.get_conversation(
                         db=db,
                         conversation_id=conversation_id,
-                        user_context=user_context
+                        user_context=user_context,
+                        agent_id=agent_id
                     )
                     if not conversation:
                         raise HTTPException(status_code=404, detail="Conversation not found or access denied")

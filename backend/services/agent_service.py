@@ -4,6 +4,7 @@ from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
+from repositories.skill_repository import SkillRepository
 
 class AgentService:
 
@@ -76,6 +77,7 @@ class AgentService:
             temperature=agent.temperature if agent.temperature is not None else DEFAULT_AGENT_TEMPERATURE,
             tool_ids=associations['tool_ids'],
             mcp_config_ids=associations['mcp_ids'],
+            skill_ids=associations['skill_ids'],
             created_at=agent.create_date,
             request_count=getattr(agent, 'request_count', 0) or 0,
             # OCR-specific fields
@@ -90,7 +92,8 @@ class AgentService:
             silos=form_data['silos'],
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
-            mcp_configs=form_data['mcp_configs']
+            mcp_configs=form_data['mcp_configs'],
+            skills=form_data['skills']
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
@@ -277,7 +280,49 @@ class AgentService:
                 AgentRepository.create_agent_mcp_association(db, agent_id, mcp_id, description)
         
         db.commit()
-    
+
+    def update_agent_skills(self, db: Session, agent_id: int, skill_ids: list, form_data: dict = None):
+        """Update agent skill associations"""
+        # Get the agent
+        agent = AgentRepository.get_by_id(db, agent_id)
+        if not agent:
+            return
+
+        # Convert skill_ids to list if it's not already
+        if isinstance(skill_ids, str):
+            skill_ids = [skill_ids]
+        elif not isinstance(skill_ids, list):
+            skill_ids = []
+
+        # Get existing skill associations
+        existing_skills = {assoc.skill_id: assoc for assoc in AgentRepository.get_agent_skill_associations(db, agent_id)}
+
+        # Convert skill_ids to set of integers
+        requested_skill_ids = {int(id) for id in skill_ids if id}
+        
+        # Validate that skills exist and belong to the same app as the agent
+        # This prevents cross-app associations and FK errors
+        valid_skill_ids = SkillRepository.get_valid_skill_ids_for_app(db, requested_skill_ids, agent.app_id)
+
+        # Remove associations that are no longer needed
+        for skill_id in existing_skills.keys():
+            if skill_id not in valid_skill_ids:
+                AgentRepository.delete_agent_skill_association(db, existing_skills[skill_id])
+
+        # Update or create associations
+        for skill_id in valid_skill_ids:
+            description = form_data.get(f'skill_description_{skill_id}') if form_data else None
+
+            if skill_id in existing_skills:
+                # Update existing association
+                existing_skills[skill_id].description = description
+                db.add(existing_skills[skill_id])
+            else:
+                # Create new association
+                AgentRepository.create_agent_skill_association(db, agent_id, skill_id, description)
+
+        db.commit()
+
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
         return AgentRepository.delete_by_id(db, agent_id)
