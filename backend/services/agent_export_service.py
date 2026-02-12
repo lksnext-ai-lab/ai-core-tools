@@ -174,6 +174,8 @@ class AgentExportService(BaseExportService):
                 )
 
         # Bundle Silo
+        bundled_silo_embedding_service = None
+        bundled_silo_output_parser = None
         if include_silo and agent.silo_id:
             try:
                 silo_export = SiloExportService(self.session)
@@ -181,6 +183,15 @@ class AgentExportService(BaseExportService):
                     agent.silo_id, app_id, user_id, include_dependencies=True
                 )
                 bundled_silo = silo_export_file.silo
+                # Also preserve the silo's embedding service dependency
+                bundled_silo_embedding_service = (
+                    silo_export_file.embedding_service
+                )
+                # Also preserve the silo's output parser
+                # (metadata definition)
+                bundled_silo_output_parser = (
+                    silo_export_file.output_parser
+                )
             except Exception as e:
                 logger.warning(f"Failed to bundle silo {agent.silo_id}: {e}")
 
@@ -243,6 +254,8 @@ class AgentExportService(BaseExportService):
             agent=export_agent,
             ai_service=bundled_ai_service,
             silo=bundled_silo,
+            silo_embedding_service=bundled_silo_embedding_service,
+            silo_output_parser=bundled_silo_output_parser,
             output_parser=bundled_output_parser,
             mcp_configs=bundled_mcp_configs,
             agent_tools=bundled_agent_tools,

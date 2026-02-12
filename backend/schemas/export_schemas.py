@@ -231,6 +231,8 @@ class AgentExportFileSchema(BaseModel):
     agent: ExportAgentSchema
     ai_service: Optional[ExportAIServiceSchema] = None
     silo: Optional[ExportSiloSchema] = None
+    silo_embedding_service: Optional[ExportEmbeddingServiceSchema] = None  # Silo's embedding service (separate from agent's ai_service)
+    silo_output_parser: Optional[ExportOutputParserSchema] = None  # Silo's metadata definition (may differ from agent's parser)
     output_parser: Optional[ExportOutputParserSchema] = None
     mcp_configs: List[ExportMCPConfigSchema] = []
     agent_tools: List[ExportAgentSchema] = []  # Referenced agents

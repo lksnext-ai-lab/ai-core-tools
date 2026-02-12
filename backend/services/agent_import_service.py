@@ -312,8 +312,24 @@ class AgentImportService:
             try:
                 # Use custom name: {original_name} {agent_name}
                 silo_custom_name = f"{export_data.silo.name} {agent_name}"
+                
+                # Create SiloExportFileSchema wrapper
+                from schemas.export_schemas import (
+                    SiloExportFileSchema,
+                )
+                silo_wrapper = SiloExportFileSchema(
+                    metadata=export_data.metadata,
+                    silo=export_data.silo,
+                    embedding_service=(
+                        export_data.silo_embedding_service
+                    ),
+                    output_parser=(
+                        export_data.silo_output_parser
+                    ),
+                )
+                
                 silo_import_result = self.silo_import.import_silo(
-                    export_data,
+                    silo_wrapper,
                     app_id,
                     conflict_mode=ConflictMode.RENAME,
                     new_name=silo_custom_name,
