@@ -122,11 +122,9 @@ class SiloImportService:
         )
 
         return ValidateImportResponseSchema(
-            valid=True,
             component_type=ComponentType.SILO,
-            name=export_data.silo.name,
-            exists=existing_silo is not None,
-            existing_id=existing_silo.silo_id if existing_silo else None,
+            component_name=export_data.silo.name,
+            has_conflict=existing_silo is not None,
             warnings=warnings,
             missing_dependencies=missing_dependencies,
             requires_embedding_service_selection=requires_embedding_service_selection,
@@ -139,6 +137,8 @@ class SiloImportService:
         conflict_mode: ConflictMode = ConflictMode.FAIL,
         new_name: Optional[str] = None,
         selected_embedding_service_id: Optional[int] = None,
+        embedding_service_id_map: Optional[dict] = None,
+        output_parser_id_map: Optional[dict] = None,
     ) -> ImportSummarySchema:
         """Import Silo (structure only, no vectors).
 
@@ -149,6 +149,8 @@ class SiloImportService:
             new_name: Optional custom name (for rename mode)
             selected_embedding_service_id: User-selected embedding service
                 (required if embedding service not bundled)
+            embedding_service_id_map: Mapping of original embedding service names to new IDs
+            output_parser_id_map: Mapping of original output parser names to new IDs
 
         Returns:
             ImportSummarySchema: Import operation summary
@@ -160,8 +162,14 @@ class SiloImportService:
         validation = self.validate_import(export_data, app_id)
 
         # Check if embedding service selection is required
+        # BUT: Skip this check if we have an ID map (from full app import)
         if validation.requires_embedding_service_selection:
-            if selected_embedding_service_id is None:
+            has_id_map = (
+                embedding_service_id_map 
+                and export_data.silo.embedding_service_name 
+                and export_data.silo.embedding_service_name in embedding_service_id_map
+            )
+            if selected_embedding_service_id is None and not has_id_map:
                 raise ValueError(
                     "Embedding service selection required but not provided. "
                     "Please select an existing embedding service to use with this silo."
@@ -172,8 +180,53 @@ class SiloImportService:
         dependencies_created = []
 
         if export_data.silo.embedding_service_name:
-            if export_data.embedding_service:
-                # Bundled - import it first
+            # Priority 1: Check ID map from full app import (already imported services)
+            if embedding_service_id_map and export_data.silo.embedding_service_name in embedding_service_id_map:
+                embedding_service_id = embedding_service_id_map[export_data.silo.embedding_service_name]
+                logger.info(
+                    f"Resolved embedding service via ID map: '{export_data.silo.embedding_service_name}' -> ID {embedding_service_id}"
+                )
+            # Priority 2: Use user-selected embedding service
+            elif selected_embedding_service_id:
+                embedding_service = (
+                    self.session.query(EmbeddingService)
+                    .filter(
+                        EmbeddingService.service_id == selected_embedding_service_id,
+                        EmbeddingService.app_id == app_id,
+                    )
+                    .first()
+                )
+                if not embedding_service:
+                    raise ValueError(
+                        f"Selected embedding service {selected_embedding_service_id} "
+                        f"not found in app {app_id}"
+                    )
+                embedding_service_id = selected_embedding_service_id
+                logger.info(
+                    f"Using selected embedding service '{embedding_service.name}'"
+                )
+            # Priority 3: Try to resolve by name (for existing services)
+            elif not export_data.embedding_service:
+                existing_service = (
+                    self.session.query(EmbeddingService)
+                    .filter(
+                        EmbeddingService.name == export_data.silo.embedding_service_name,
+                        EmbeddingService.app_id == app_id,
+                    )
+                    .first()
+                )
+                if existing_service:
+                    embedding_service_id = existing_service.service_id
+                    logger.info(
+                        f"Resolved embedding service by name: '{existing_service.name}'"
+                    )
+                else:
+                    raise ValueError(
+                        f"Embedding service '{export_data.silo.embedding_service_name}' "
+                        f"not found. Please select an existing service."
+                    )
+            # Priority 4: Bundled - import it (last resort for individual silo imports)
+            elif export_data.embedding_service:
                 try:
                     embedding_import_summary = (
                         self.embedding_service_import.import_embedding_service(
@@ -193,52 +246,43 @@ class SiloImportService:
                     raise ValueError(
                         f"Failed to import bundled embedding service: {e}"
                     )
-            elif selected_embedding_service_id:
-                # Use user-selected embedding service
-                embedding_service = (
-                    self.session.query(EmbeddingService)
-                    .filter(
-                        EmbeddingService.service_id == selected_embedding_service_id,
-                        EmbeddingService.app_id == app_id,
-                    )
-                    .first()
-                )
-                if not embedding_service:
-                    raise ValueError(
-                        f"Selected embedding service {selected_embedding_service_id} "
-                        f"not found in app {app_id}"
-                    )
-                embedding_service_id = selected_embedding_service_id
-                logger.info(
-                    f"Using selected embedding service '{embedding_service.name}'"
-                )
             else:
-                # Try to resolve by name
-                existing_service = (
-                    self.session.query(EmbeddingService)
-                    .filter(
-                        EmbeddingService.name
-                        == export_data.silo.embedding_service_name,
-                        EmbeddingService.app_id == app_id,
-                    )
-                    .first()
+                raise ValueError(
+                    f"Embedding service '{export_data.silo.embedding_service_name}' "
+                    f"not found and not bundled. Please select an existing service."
                 )
-                if existing_service:
-                    embedding_service_id = existing_service.service_id
-                    logger.info(
-                        f"Resolved embedding service by name: '{existing_service.name}'"
-                    )
-                else:
-                    raise ValueError(
-                        f"Embedding service '{export_data.silo.embedding_service_name}' "
-                        f"not found and not bundled. Please select an existing service."
-                    )
 
         # Resolve output parser (metadata definition)
         metadata_definition_id = None
         if export_data.silo.metadata_definition_name:
-            if export_data.output_parser:
-                # Bundled - import it first
+            # Priority 1: Check ID map from full app import (already imported parsers)
+            if output_parser_id_map and export_data.silo.metadata_definition_name in output_parser_id_map:
+                metadata_definition_id = output_parser_id_map[export_data.silo.metadata_definition_name]
+                logger.info(
+                    f"Resolved output parser via ID map: '{export_data.silo.metadata_definition_name}' -> ID {metadata_definition_id}"
+                )
+            # Priority 2: Try to resolve by name (for existing parsers)
+            elif not export_data.output_parser:
+                existing_parser = (
+                    self.session.query(OutputParser)
+                    .filter(
+                        OutputParser.name == export_data.silo.metadata_definition_name,
+                        OutputParser.app_id == app_id,
+                    )
+                    .first()
+                )
+                if existing_parser:
+                    metadata_definition_id = existing_parser.parser_id
+                    logger.info(
+                        f"Resolved output parser by name: '{existing_parser.name}'"
+                    )
+                else:
+                    logger.warning(
+                        f"Output parser '{export_data.silo.metadata_definition_name}' "
+                        f"not found. Silo will be created without metadata definition."
+                    )
+            # Priority 3: Bundled - import it (last resort for individual silo imports)
+            elif export_data.output_parser:
                 try:
                     parser_import_summary = (
                         self.output_parser_import.import_output_parser(
@@ -258,34 +302,12 @@ class SiloImportService:
                         f"Failed to import bundled output parser: {e}. "
                         f"Continuing without metadata definition."
                     )
-            else:
-                # Try to resolve by name
-                existing_parser = (
-                    self.session.query(OutputParser)
-                    .filter(
-                        OutputParser.name == export_data.silo.metadata_definition_name,
-                        OutputParser.app_id == app_id,
-                    )
-                    .first()
-                )
-                if existing_parser:
-                    metadata_definition_id = existing_parser.parser_id
-                    logger.info(
-                        f"Resolved output parser by name: '{existing_parser.name}'"
-                    )
-                else:
-                    logger.warning(
-                        f"Output parser '{export_data.silo.metadata_definition_name}' "
-                        f"not found. Silo will be created without metadata definition."
-                    )
 
         # Handle conflict
         final_name = export_data.silo.name
-        existing_silo = None
+        existing_silo = self.get_by_name_and_app(final_name, app_id)
 
-        if validation.exists:
-            existing_silo = self.session.query(Silo).get(validation.existing_id)
-
+        if existing_silo:
             if conflict_mode == ConflictMode.FAIL:
                 raise ValueError(
                     f"Silo '{final_name}' already exists in app {app_id}"

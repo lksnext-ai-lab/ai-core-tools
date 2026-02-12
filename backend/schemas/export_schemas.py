@@ -172,7 +172,6 @@ class ExportAppSchema(BaseModel):
     """App metadata export schema"""
 
     name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
     agent_rate_limit: Optional[int] = None
     enable_langsmith: bool = False
 

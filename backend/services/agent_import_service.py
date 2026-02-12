@@ -168,6 +168,7 @@ class AgentImportService:
         selected_ai_service_id: Optional[int] = None,
         selected_silo_id: Optional[int] = None,
         selected_output_parser_id: Optional[int] = None,
+        ai_service_id_map: Optional[dict] = None,
     ) -> ImportSummarySchema:
         """Import Agent configuration.
 
@@ -189,6 +190,8 @@ class AgentImportService:
                 bundled)
             selected_silo_id: User-selected silo ID (optional)
             selected_output_parser_id: User-selected parser ID (optional)
+            ai_service_id_map: Mapping of original AI service names to new IDs
+                (from full app import)
 
         Returns:
             ImportSummarySchema: Import result
@@ -225,8 +228,41 @@ class AgentImportService:
 
         # Step 1: Import or resolve AI service (MANDATORY)
         service_id = None
-        if export_data.ai_service:
-            # Bundled AI service - import it
+        # Priority 1: Check ID map from full app import (already imported services)
+        if ai_service_id_map and export_data.agent.service_name in ai_service_id_map:
+            service_id = ai_service_id_map[export_data.agent.service_name]
+            logger.info(
+                f"Resolved AI service via ID map: '{export_data.agent.service_name}' -> ID {service_id}"
+            )
+        # Priority 2: User selected existing AI service
+        elif selected_ai_service_id:
+            service = AIServiceRepository.get_by_id_and_app_id(
+                self.session, selected_ai_service_id, app_id
+            )
+            if not service:
+                raise ValueError(
+                    f"Selected AI service {selected_ai_service_id} not found"
+                )
+            service_id = selected_ai_service_id
+        # Priority 3: Try to find by name (for existing services)
+        elif export_data.agent.service_name and not export_data.ai_service:
+            service = (
+                self.session.query(AIService)
+                .filter(
+                    AIService.name == export_data.agent.service_name,
+                    AIService.app_id == app_id,
+                )
+                .first()
+            )
+            if service:
+                service_id = service.service_id
+            else:
+                raise ValueError(
+                    f"AI service '{export_data.agent.service_name}' not "
+                    f"found. Please select an AI service."
+                )
+        # Priority 4: Bundled AI service - import it (last resort for individual agent imports)
+        elif export_data.ai_service:
             try:
                 from schemas.export_schemas import AIServiceExportFileSchema
                 
@@ -259,33 +295,15 @@ class AgentImportService:
                 raise ValueError(
                     f"Failed to import bundled AI service: {e}"
                 )
-        elif selected_ai_service_id:
-            # User selected existing AI service
-            service = AIServiceRepository.get_by_id_and_app_id(
-                self.session, selected_ai_service_id, app_id
+        else:
+            raise ValueError(
+                "AI service is mandatory but not provided. Please bundle an AI service, "
+                "select an existing one, or ensure it's available in the target app."
             )
-            if not service:
-                raise ValueError(
-                    f"Selected AI service {selected_ai_service_id} not found"
-                )
-            service_id = selected_ai_service_id
-        elif export_data.agent.service_name:
-            # Try to find by name
-            service = (
-                self.session.query(AIService)
-                .filter(
-                    AIService.name == export_data.agent.service_name,
-                    AIService.app_id == app_id,
-                )
-                .first()
-            )
-            if service:
-                service_id = service.service_id
-            else:
-                raise ValueError(
-                    f"AI service '{export_data.agent.service_name}' not "
-                    f"found and not bundled. Please select an AI service."
-                )
+
+        # Ensure we have a service_id
+        if not service_id:
+            raise ValueError("Failed to resolve AI service ID")
 
         # Step 2: Import or resolve Silo (OPTIONAL)
         silo_id = None

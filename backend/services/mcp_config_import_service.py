@@ -76,11 +76,9 @@ class MCPConfigImportService:
         )
 
         return ValidateImportResponseSchema(
-            valid=True,
             component_type=ComponentType.MCP_CONFIG,
-            name=export_data.mcp_config.name,
-            exists=existing_config is not None,
-            existing_id=existing_config.config_id if existing_config else None,
+            component_name=export_data.mcp_config.name,
+            has_conflict=existing_config is not None,
             warnings=warnings,
             missing_dependencies=[],
         )
@@ -148,15 +146,11 @@ class MCPConfigImportService:
 
         # Handle conflict
         final_name = export_data.mcp_config.name
-        existing_config = None
+        existing_config = self.get_by_name_and_app(final_name, app_id)
         warnings = validation.warnings.copy()
         next_steps = []
 
-        if validation.exists:
-            existing_config = (
-                self.session.query(MCPConfig).get(validation.existing_id)
-            )
-
+        if existing_config:
             if conflict_mode == ConflictMode.FAIL:
                 raise ValueError(
                     f"MCP Config '{final_name}' already exists in app {app_id}"
@@ -167,6 +161,12 @@ class MCPConfigImportService:
                 else:
                     date_str = datetime.now().strftime("%Y-%m-%d")
                     final_name = f"{final_name} (imported {date_str})"
+                    
+                    # Ensure uniqueness
+                    counter = 1
+                    while self.get_by_name_and_app(final_name, app_id):
+                        final_name = f"{export_data.mcp_config.name} (imported {date_str} {counter})"
+                        counter += 1
             # ConflictMode.OVERRIDE: will update existing
 
         # Parse and prepare config JSON

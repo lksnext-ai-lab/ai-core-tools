@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Tuple
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
+import json
+from pydantic import ValidationError
 
 # Import database
 from db.database import get_db
@@ -16,6 +18,13 @@ from schemas.apps_schemas import (
     AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema, AppUsageStatsSchema
 )
 from schemas.common_schemas import MessageResponseSchema
+from schemas.export_schemas import AppExportFileSchema
+from schemas.import_schemas import (
+    ConflictMode,
+    ImportTargetMode,
+    ComponentSelectionSchema,
+    FullAppImportResponseSchema,
+)
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -46,6 +55,97 @@ DEFAULT_MAX_FILE_SIZE_MB = 0
 
 # Error messages
 APP_NOT_FOUND_MSG = "App not found"
+
+# ==================== STATIC ROUTES (must come before dynamic routes) ====================
+
+@apps_router.post(
+    "/import",
+    response_model=FullAppImportResponseSchema,
+    summary="Import complete app configuration",
+    tags=["Apps", "Export/Import"],
+)
+async def import_full_app(
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(
+        ConflictMode.FAIL, description="How to handle name conflicts (fail/rename/override)"
+    ),
+    new_name: Optional[str] = Query(
+        None, description="New app name (for rename mode)"
+    ),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+) -> FullAppImportResponseSchema:
+    """Import complete app configuration from JSON file.
+
+    Creates a new app from the exported configuration.
+    
+    Query Parameters:
+    - conflict_mode: How to handle name conflicts (fail/rename/override)
+    - new_name: Optional new name for the app (auto-generated if conflict and rename mode)
+
+    File Format: JSON matching AppExportFileSchema
+    
+    Note: Always creates a NEW app (does not override existing apps).
+    """
+    from services.full_app_import_service import FullAppImportService
+
+    user_id = int(auth_context.identity.id)
+
+    # Read and parse file
+    try:
+        contents = await file.read()
+        export_dict = json.loads(contents)
+        export_data = AppExportFileSchema(**export_dict)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON: {str(e)}",
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid export format: {str(e)}",
+        )
+
+    # Import (always creates new app)
+    service = FullAppImportService(db)
+    try:
+        summary = service.import_full_app(
+            export_data=export_data,
+            user_id=user_id,
+            conflict_mode=conflict_mode,
+            new_name=new_name,
+        )
+
+        logger.info(
+            f"User {user_id} imported full app '{summary.app_name}': {summary.total_components} components"
+        )
+
+        return FullAppImportResponseSchema(
+            success=len(summary.total_errors) == 0,
+            message=(
+                f"App '{summary.app_name}' imported successfully with {summary.total_components} components"
+                if len(summary.total_errors) == 0
+                else f"Import completed with {len(summary.total_errors)} errors"
+            ),
+            summary=summary,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Full app import failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}",
+        )
+
+
+# ==================== INCLUDE NESTED ROUTERS (dynamic routes) ====================
 
 # Include nested routers under apps/{app_id}/
 # Based on frontend API calls - all app-specific resources go here
@@ -489,3 +589,59 @@ async def leave_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to leave app"
         )
+
+
+# ==================== FULL APP EXPORT ====================
+
+
+@apps_router.post(
+    "/{app_id}/export",
+    response_model=AppExportFileSchema,
+    summary="Export complete app configuration",
+    tags=["Apps", "Export/Import"],
+)
+async def export_full_app(
+    app_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+) -> AppExportFileSchema:
+    """Export complete app configuration to JSON.
+
+    Includes:
+    - AI Services (API keys removed)
+    - Embedding Services (API keys removed)
+    - Output Parsers
+    - MCP Configs (secrets removed)
+    - Silos
+    - Agents (conversation history excluded)
+
+    Excludes:
+    - User accounts and permissions
+    - Conversation history
+    - Vector data
+    - Files/attachments
+    - Usage statistics
+    """
+    from services.full_app_export_service import FullAppExportService
+
+    user_id = int(auth_context.identity.id)
+
+    try:
+        service = FullAppExportService(db)
+        export_data = service.export_full_app(app_id=app_id, user_id=user_id)
+
+        logger.info(f"User {user_id} exported app {app_id}")
+        return export_data
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error exporting app {app_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Export failed: {str(e)}",
+        )
+

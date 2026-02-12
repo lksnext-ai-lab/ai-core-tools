@@ -67,11 +67,9 @@ class OutputParserImportService:
         )
 
         return ValidateImportResponseSchema(
-            valid=True,
             component_type=ComponentType.OUTPUT_PARSER,
-            name=export_data.output_parser.name,
-            exists=existing_parser is not None,
-            existing_id=existing_parser.parser_id if existing_parser else None,
+            component_name=export_data.output_parser.name,
+            has_conflict=existing_parser is not None,
             warnings=[],
             missing_dependencies=[],  # Output Parsers have no external dependencies
         )
@@ -102,13 +100,9 @@ class OutputParserImportService:
 
         # Handle conflict
         final_name = export_data.output_parser.name
-        existing_parser = None
+        existing_parser = self.get_by_name_and_app(final_name, app_id)
 
-        if validation.exists:
-            existing_parser = (
-                self.session.query(OutputParser).get(validation.existing_id)
-            )
-
+        if existing_parser:
             if conflict_mode == ConflictMode.FAIL:
                 raise ValueError(
                     f"Output Parser '{final_name}' already exists in app {app_id}"
@@ -148,7 +142,7 @@ class OutputParserImportService:
                 existing_parser.fields = fields_json
 
                 self.session.add(existing_parser)
-                self.session.commit()
+                self.session.flush()
 
                 return ImportSummarySchema(
                     component_type=ComponentType.OUTPUT_PARSER,

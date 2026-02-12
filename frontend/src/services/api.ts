@@ -1291,6 +1291,57 @@ class ApiService {
     });
   }
 
+  // ==================== FULL APP EXPORT/IMPORT ====================
+  async exportFullApp(appId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/export`, {
+      method: 'POST',
+      headers: this.prepareHeaders({}),
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importFullApp(
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Build query params
+    const params = new URLSearchParams();
+    params.append('conflict_mode', conflictMode);
+    
+    if (newName) {
+      params.append('new_name', newName);
+    }
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Use fetch directly to avoid issues with FormData
+    const url = `${this.baseURL}/internal/apps/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== UTILITY METHODS ====================
 }
 

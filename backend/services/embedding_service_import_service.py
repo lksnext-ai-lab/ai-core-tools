@@ -73,11 +73,9 @@ class EmbeddingServiceImportService:
             warnings.append("API key must be configured after import")
 
         return ValidateImportResponseSchema(
-            valid=True,
             component_type=ComponentType.EMBEDDING_SERVICE,
-            name=export_data.embedding_service.name,
-            exists=existing_service is not None,
-            existing_id=existing_service.service_id if existing_service else None,
+            component_name=export_data.embedding_service.name,
+            has_conflict=existing_service is not None,
             warnings=warnings,
             missing_dependencies=[],  # Embedding Services have no dependencies
         )
@@ -108,13 +106,9 @@ class EmbeddingServiceImportService:
 
         # Handle conflict
         final_name = export_data.embedding_service.name
-        existing_service = None
+        existing_service = self.get_by_name_and_app(final_name, app_id)
 
-        if validation.exists:
-            existing_service = (
-                self.session.query(EmbeddingService).get(validation.existing_id)
-            )
-
+        if existing_service:
             if conflict_mode == ConflictMode.FAIL:
                 raise ValueError(
                     f"Embedding Service '{final_name}' already exists in app {app_id}"
@@ -141,7 +135,7 @@ class EmbeddingServiceImportService:
                 # Note: Keep existing api_key (user configured)
 
                 self.session.add(existing_service)
-                self.session.commit()
+                self.session.flush()
 
                 return ImportSummarySchema(
                     component_type=ComponentType.EMBEDDING_SERVICE,

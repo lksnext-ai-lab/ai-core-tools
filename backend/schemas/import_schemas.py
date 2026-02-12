@@ -29,6 +29,13 @@ class ComponentType(str, Enum):
     APP = "app"
 
 
+class ImportTargetMode(str, Enum):
+    """Import target destination mode"""
+
+    EXISTING_APP = "existing_app"  # Import into specified app_id
+    NEW_APP = "new_app"  # Create new app from export metadata
+
+
 # ==================== REQUEST/RESPONSE SCHEMAS ====================
 
 
@@ -70,3 +77,42 @@ class ImportResponseSchema(BaseModel):
     success: bool
     message: str
     summary: Optional[ImportSummarySchema] = None
+
+
+# ==================== FULL APP IMPORT SCHEMAS ====================
+
+
+class ComponentSelectionSchema(BaseModel):
+    """Which components to import from full app export"""
+
+    import_ai_services: bool = True
+    import_embedding_services: bool = True
+    import_output_parsers: bool = True
+    import_mcp_configs: bool = True
+    import_silos: bool = True
+    import_repositories: bool = Field(
+        default=False,
+        description="Phase 6 pending - repository export/import not yet implemented",
+    )
+    import_agents: bool = True
+
+
+class FullAppImportSummarySchema(BaseModel):
+    """Summary of full app import operation"""
+
+    app_name: str
+    app_id: int  # Target app ID (existing or newly created)
+    total_components: int
+    components_imported: dict[str, int] = {}  # component_type -> count
+    components_skipped: dict[str, int] = {}  # component_type -> count
+    total_warnings: List[str] = []
+    total_errors: List[str] = []
+    duration_seconds: float
+
+
+class FullAppImportResponseSchema(BaseModel):
+    """Response for full app import"""
+
+    success: bool
+    message: str
+    summary: Optional[FullAppImportSummarySchema] = None
