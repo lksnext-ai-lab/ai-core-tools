@@ -39,6 +39,7 @@ class AgentDetailSchema(BaseModel):
     temperature: float = DEFAULT_AGENT_TEMPERATURE
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
+    skill_ids: List[int] = []
     created_at: Optional[datetime]
     request_count: int
     # OCR-specific fields
@@ -55,7 +56,8 @@ class AgentDetailSchema(BaseModel):
     output_parsers: List[Dict[str, Any]]
     tools: List[Dict[str, Any]]
     mcp_configs: List[Dict[str, Any]]
-    
+    skills: List[Dict[str, Any]]
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -77,6 +79,7 @@ class CreateUpdateAgentSchema(BaseModel):
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
+    skill_ids: Optional[List[int]] = []
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
@@ -146,6 +149,7 @@ class CreateAgentRequestSchema(BaseModel):
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
+    skill_ids: Optional[List[int]] = []
 
 
 class CreateOCRAgentRequestSchema(BaseModel):
@@ -162,6 +166,7 @@ class CreateOCRAgentRequestSchema(BaseModel):
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
+    skill_ids: Optional[List[int]] = []
 
 
 class UpdateAgentRequestSchema(BaseModel):
@@ -178,6 +183,7 @@ class UpdateAgentRequestSchema(BaseModel):
     temperature: Optional[float] = None
     tool_ids: Optional[List[int]] = None
     mcp_config_ids: Optional[List[int]] = None
+    skill_ids: Optional[List[int]] = None
 
 
 class UpdateOCRAgentRequestSchema(BaseModel):
@@ -194,6 +200,7 @@ class UpdateOCRAgentRequestSchema(BaseModel):
     temperature: Optional[float] = None
     tool_ids: Optional[List[int]] = None
     mcp_config_ids: Optional[List[int]] = None
+    skill_ids: Optional[List[int]] = None
 
 
 class PublicAgentsResponseSchema(BaseModel):

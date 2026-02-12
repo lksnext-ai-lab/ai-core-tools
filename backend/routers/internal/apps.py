@@ -41,6 +41,7 @@ from .output_parsers import output_parsers_router
 from .repositories import repositories_router
 from .folders import folders_router
 from .mcp_servers import mcp_servers_router
+from .skills import skills_router
 
 # Import logger
 from utils.logger import get_logger
@@ -161,6 +162,7 @@ apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parse
 apps_router.include_router(repositories_router, prefix="/{app_id}/repositories", tags=["Repositories"])
 apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repository_id}/folders", tags=["Folders"])
 apps_router.include_router(mcp_servers_router, prefix="/{app_id}/mcp-servers", tags=["MCP Servers"])
+apps_router.include_router(skills_router, prefix="/{app_id}/skills", tags=["Skills"])
 
 #HELPER FUNCTIONS
 

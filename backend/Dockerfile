@@ -54,6 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libmariadb3 \
     libpq5 \
+    ffmpeg \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean

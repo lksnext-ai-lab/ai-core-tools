@@ -84,22 +84,27 @@ class ConversationService:
     def get_conversation(
         db: Session,
         conversation_id: int,
-        user_context: Dict
+        user_context: Dict,
+        agent_id: int = None
     ) -> Optional[Conversation]:
         """
         Get a conversation by ID with user validation
-        
+
         Args:
             db: Database session
             conversation_id: ID of the conversation
             user_context: User context for validation
-            
+            agent_id: Optional agent ID to validate the conversation belongs to this agent
+
         Returns:
             Conversation object or None if not found/unauthorized
         """
-        conversation = db.query(Conversation).filter(
+        query = db.query(Conversation).filter(
             Conversation.conversation_id == conversation_id
-        ).first()
+        )
+        if agent_id is not None:
+            query = query.filter(Conversation.agent_id == agent_id)
+        conversation = query.first()
         
         if not conversation:
             return None

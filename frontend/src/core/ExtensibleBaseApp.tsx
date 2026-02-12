@@ -37,6 +37,7 @@ import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
 import GeneralSettingsPage from '../pages/settings/GeneralSettingsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
+import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
@@ -257,6 +258,13 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/mcp-servers/:serverId/edit" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                     <MCPServerFormPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                {/* Skills route */}
+                <Route path="/apps/:appId/skills" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SkillsPage />
                   </ProtectedLayoutRoute>
                 } />
 

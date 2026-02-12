@@ -18,11 +18,13 @@ from .resource import Resource
 from .folder import Folder
 from .domain import Domain
 from .url import Url
+from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
     'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Media',
     'MCPServer', 'MCPServerAgent'
 ] 

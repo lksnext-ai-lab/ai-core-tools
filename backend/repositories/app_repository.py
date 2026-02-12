@@ -131,3 +131,13 @@ class AppRepository:
         """Get all URLs for a domain"""
         from models.url import Url
         return self.db.query(Url).filter(Url.domain_id == domain_id).all()
+
+    def get_skills_by_app_id(self, app_id: int):
+        """Get all skills for an app"""
+        from models.skill import Skill
+        return self.db.query(Skill).filter(Skill.app_id == app_id).all()
+
+    def get_mcp_servers_by_app_id(self, app_id: int):
+        """Get all MCP servers for an app"""
+        from models.mcp_server import MCPServer
+        return self.db.query(MCPServer).filter(MCPServer.app_id == app_id).all()

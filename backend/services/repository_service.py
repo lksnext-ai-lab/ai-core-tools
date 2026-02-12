@@ -10,6 +10,7 @@ import shutil
 from dotenv import load_dotenv
 from services.silo_service import SiloService
 from models.silo import SiloType
+from models.media import Media
 from services.output_parser_service import OutputParserService
 from repositories.repository_repository import RepositoryRepository
 from repositories.resource_repository import ResourceRepository
@@ -250,6 +251,12 @@ class RepositoryService:
             vector_db_options = VectorStoreFactory.get_available_type_options()
             embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
             embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
+            
+            # Get AI services for media transcription
+            from repositories.ai_service_repository import AIServiceRepository
+            ai_services_query = AIServiceRepository.get_by_app_id(db, app_id)
+            ai_services = [{"service_id": s.service_id, "name": s.name} for s in ai_services_query]
+            
             return RepositoryDetailSchema(
                 repository_id=0,
                 name="",
@@ -261,7 +268,9 @@ class RepositoryService:
                 silo_id=None,
                 metadata_fields=[],
                 vector_db_type='PGVECTOR',
-                vector_db_options=vector_db_options
+                vector_db_options=vector_db_options,
+                media=[],
+                ai_services=ai_services
             )
         
         # Existing repository
@@ -289,11 +298,35 @@ class RepositoryService:
         embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
         embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
         
+        # Get AI services for media transcription
+        from repositories.ai_service_repository import AIServiceRepository
+        ai_services_query = AIServiceRepository.get_by_app_id(db, app_id)
+        ai_services = [{"service_id": s.service_id, "name": s.name} for s in ai_services_query]
+        
         # Get folders for the repository
         from services.folder_service import FolderService
         folders_query = FolderService.get_all_folders_in_repository(repository_id, db)
         folders = [{"folder_id": f.folder_id, "name": f.name, "parent_folder_id": f.parent_folder_id} for f in folders_query]
         
+        # Get media for the repository
+        media_query = db.query(Media).filter(Media.repository_id == repository_id).all()
+        media_list = []
+        for m in media_query:
+            media_dict = {
+                'media_id': m.media_id,
+                'name': m.name,
+                'source_type': m.source_type,
+                'source_url': m.source_url,
+                'duration': m.duration,
+                'language': m.language,
+                'status': m.status,
+                'error_message': m.error_message,
+                'create_date': m.create_date,
+                'processed_at': m.processed_at,
+                'folder_id': m.folder_id
+            }
+            media_list.append(media_dict)
+
         # Get the current embedding service ID from the repository's silo
         embedding_service_id = None
         silo_id = None
@@ -337,7 +370,9 @@ class RepositoryService:
             silo_id=silo_id,
             metadata_fields=metadata_fields,
             vector_db_type=vector_db_type,
-            vector_db_options=vector_db_options
+            vector_db_options=vector_db_options,
+            media=media_list,
+            ai_services=ai_services
         )
 
     @staticmethod

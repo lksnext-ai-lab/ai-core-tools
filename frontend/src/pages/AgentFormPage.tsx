@@ -24,6 +24,7 @@ interface Agent {
   temperature: number;
   tool_ids?: number[];
   mcp_config_ids?: number[];
+  skill_ids?: number[];
   created_at: string;
   request_count: number;
   // OCR-specific fields
@@ -35,6 +36,7 @@ interface Agent {
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
+  skills: Array<{ skill_id: number; name: string; description?: string }>;
 }
 
 interface AgentFormData {
@@ -54,6 +56,7 @@ interface AgentFormData {
   temperature: number;
   tool_ids: number[];
   mcp_config_ids: number[];
+  skill_ids: number[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -164,7 +167,8 @@ function AgentFormPage() {
     memory_summarize_threshold: 10,
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
-    mcp_config_ids: []
+    mcp_config_ids: [],
+    skill_ids: []
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
 
@@ -204,6 +208,7 @@ function AgentFormPage() {
         temperature: response.temperature ?? DEFAULT_AGENT_TEMPERATURE,
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
+        skill_ids: response.skill_ids || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -255,6 +260,15 @@ function AgentFormPage() {
     }));
   };
 
+  const handleSkillToggle = (skillId: number) => {
+    setFormData(prev => ({
+      ...prev,
+      skill_ids: prev.skill_ids.includes(skillId)
+        ? prev.skill_ids.filter(id => id !== skillId)
+        : [...prev.skill_ids, skillId]
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -281,6 +295,7 @@ function AgentFormPage() {
         temperature: formData.temperature,
         tool_ids: formData.tool_ids,
         mcp_config_ids: formData.mcp_config_ids,
+        skill_ids: formData.skill_ids,
         // OCR-specific fields
         vision_service_id: formData.vision_service_id,
         vision_system_prompt: formData.vision_system_prompt,
@@ -982,6 +997,85 @@ function AgentFormPage() {
                   >
                     <span className="mr-2">⚙️</span>
                     {' '}Configure MCP Servers
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Skills Card - Only for regular agents */}
+          {agent?.skills && formData.type !== 'ocr_agent' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+                    <span className="mr-3">🎯</span>
+                    {' '}Skills
+                  </h3>
+                  <p className="text-gray-600 mt-1">Assign specialized behaviors that the agent can activate on-demand</p>
+                </div>
+              </div>
+
+              {agent.skills.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {agent.skills.map((skill) => (
+                      <button
+                        key={skill.skill_id}
+                        type="button"
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
+                          formData.skill_ids.includes(skill.skill_id)
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                        }`}
+                        onClick={() => handleSkillToggle(skill.skill_id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={formData.skill_ids.includes(skill.skill_id)}
+                              onChange={() => handleSkillToggle(skill.skill_id)}
+                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
+                          </div>
+                          <div className={`w-2 h-2 rounded-full ${
+                            formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
+                          }`} />
+                        </div>
+                        {skill.description && (
+                          <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {formData.skill_ids.length > 0 && (
+                    <div className="mt-4 p-4 bg-purple-50 rounded-xl">
+                      <p className="text-sm text-purple-800">
+                        <span className="font-medium">{formData.skill_ids.length}</span> skill{formData.skill_ids.length !== 1 ? 's' : ''} selected.
+                        The agent will have a <code className="bg-purple-100 px-1 rounded">load_skill</code> tool to activate these skills.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-gray-400 text-2xl">🎯</span>
+                  </div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">No Skills Available</h4>
+                  <p className="text-gray-500 mb-4">
+                    You haven't created any skills yet. Create skills in the settings to enable specialized agent behaviors.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/apps/${appId}/skills`)}
+                    className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <span className="mr-2">🎯</span>
+                    {' '}Manage Skills
                   </button>
                 </div>
               )}
