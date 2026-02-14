@@ -323,7 +323,7 @@ class TestImportOutputParserAPI:
             assert data["summary"]["component_name"] == "Custom Parser Name"
 
     def test_import_conflict_fail_mode_error(self, test_client, sample_export_data):
-        """Test import returns 400 when name conflict in FAIL mode."""
+        """Test import returns 409 when name conflict in FAIL mode."""
         with patch(
             "routers.internal.output_parsers.OutputParserImportService"
         ) as MockImportService:
@@ -342,7 +342,7 @@ class TestImportOutputParserAPI:
                 files=files
             )
 
-            assert response.status_code == 400
+            assert response.status_code == 409
             assert "already exists" in response.json()["detail"]
 
     def test_import_invalid_json(self, test_client):

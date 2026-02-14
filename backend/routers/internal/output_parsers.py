@@ -106,7 +106,7 @@ async def import_output_parser(
     except ValueError as e:
         logger.warning(f"Import failed: {str(e)}")
         if "already exists" in str(e):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
         else:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid data: {str(e)}")
     except Exception as e:

@@ -150,6 +150,7 @@ class OutputParserImportService:
                     component_name=existing_parser.name,
                     mode=conflict_mode,
                     created=False,
+                    conflict_detected=True,
                     warnings=[],
                     next_steps=[
                         "Review and test the imported parser schema",
@@ -196,6 +197,7 @@ class OutputParserImportService:
             component_name=new_parser.name,
             mode=conflict_mode,
             created=True,
+            conflict_detected=existing_parser is not None,
             warnings=[],
             next_steps=[
                 "Review and test the imported parser schema",

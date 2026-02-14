@@ -13,6 +13,8 @@ from schemas.export_schemas import (
     ExportOutputParserSchema,
     ExportMCPConfigSchema,
     ExportSiloSchema,
+    ExportRepositorySchema,
+    ExportDomainSchema,
     ExportAgentSchema,
 )
 from services.base_export_service import BaseExportService
@@ -21,6 +23,8 @@ from services.embedding_service_export_service import EmbeddingServiceExportServ
 from services.output_parser_export_service import OutputParserExportService
 from services.mcp_config_export_service import MCPConfigExportService
 from services.silo_export_service import SiloExportService
+from services.repository_export_service import RepositoryExportService
+from services.domain_export_service import DomainExportService
 from services.agent_export_service import AgentExportService
 from repositories.app_repository import AppRepository
 import logging
@@ -59,6 +63,8 @@ class FullAppExportService(BaseExportService):
         self.parser_export = OutputParserExportService(session)
         self.mcp_export = MCPConfigExportService(session)
         self.silo_export = SiloExportService(session)
+        self.repository_export = RepositoryExportService(session)
+        self.domain_export = DomainExportService(session)
         self.agent_export = AgentExportService(session)
 
     def export_full_app(
@@ -89,6 +95,8 @@ class FullAppExportService(BaseExportService):
         output_parsers = self._export_all_output_parsers(app_id)
         mcp_configs = self._export_all_mcp_configs(app_id)
         silos = self._export_all_silos(app_id)
+        repositories = self._export_all_repositories(app_id)
+        domains = self._export_all_domains(app_id)
         agents = self._export_all_agents(app_id)
 
         # Build app metadata
@@ -110,7 +118,8 @@ class FullAppExportService(BaseExportService):
             output_parsers=output_parsers,
             mcp_configs=mcp_configs,
             silos=silos,
-            repositories=[],  # Phase 6 not yet implemented
+            repositories=repositories,
+            domains=domains,
             agents=agents,
         )
 
@@ -121,6 +130,8 @@ class FullAppExportService(BaseExportService):
             f"{len(output_parsers)} output parsers, "
             f"{len(mcp_configs)} MCP configs, "
             f"{len(silos)} silos, "
+            f"{len(repositories)} repositories, "
+            f"{len(domains)} domains, "
             f"{len(agents)} agents"
         )
 
@@ -256,6 +267,82 @@ class FullAppExportService(BaseExportService):
                     exc_info=True
                 )
         logger.info(f"Successfully exported {len(exported)}/{len(silos)} silos")
+        return exported
+
+    def _export_all_repositories(
+        self, app_id: int
+    ) -> List[ExportRepositorySchema]:
+        """Export all repositories for app.
+
+        Args:
+            app_id: App ID
+
+        Returns:
+            List of repository export schemas
+        """
+        repositories = self.app_repo.get_repositories_by_app_id(
+            app_id
+        )
+        logger.info(
+            f"Found {len(repositories)} repositories "
+            f"for app {app_id}"
+        )
+        exported = []
+        for repo in repositories:
+            try:
+                export_file = (
+                    self.repository_export.export_repository(
+                        repo.repository_id, app_id
+                    )
+                )
+                exported.append(export_file.repository)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to export repository "
+                    f"{repo.repository_id}: {e}",
+                    exc_info=True,
+                )
+        logger.info(
+            f"Successfully exported "
+            f"{len(exported)}/{len(repositories)} "
+            f"repositories"
+        )
+        return exported
+
+    def _export_all_domains(
+        self, app_id: int
+    ) -> List[ExportDomainSchema]:
+        """Export all domains for app.
+
+        Args:
+            app_id: App ID
+
+        Returns:
+            List of domain export schemas
+        """
+        domains = self.app_repo.get_domains_by_app_id(app_id)
+        logger.info(
+            f"Found {len(domains)} domains for app {app_id}"
+        )
+        exported = []
+        for domain in domains:
+            try:
+                export_file = (
+                    self.domain_export.export_domain(
+                        domain.domain_id, app_id
+                    )
+                )
+                exported.append(export_file.domain)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to export domain "
+                    f"{domain.domain_id}: {e}",
+                    exc_info=True,
+                )
+        logger.info(
+            f"Successfully exported "
+            f"{len(exported)}/{len(domains)} domains"
+        )
         return exported
 
     def _export_all_agents(self, app_id: int) -> List[ExportAgentSchema]:

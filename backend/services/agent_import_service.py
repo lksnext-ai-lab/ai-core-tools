@@ -8,7 +8,10 @@ from models.ai_service import AIService
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
-from schemas.export_schemas import AgentExportFileSchema
+from schemas.export_schemas import (
+    AgentExportFileSchema,
+    MCPConfigExportFileSchema,
+)
 from schemas.import_schemas import (
     ConflictMode,
     ValidateImportResponseSchema,
@@ -441,8 +444,12 @@ class AgentImportService:
         imported_mcp_ids = {}
         for mcp_config in export_data.mcp_configs:
             try:
+                mcp_file = MCPConfigExportFileSchema(
+                    metadata=export_data.metadata,
+                    mcp_config=mcp_config,
+                )
                 mcp_import_result = self.mcp_import.import_mcp_config(
-                    export_data,
+                    mcp_file,
                     app_id,
                     ConflictMode.RENAME,
                 )
@@ -565,8 +572,15 @@ class AgentImportService:
 
                 return ImportSummarySchema(
                     component_type=ComponentType.AGENT,
+                    component_id=existing_agent.agent_id,
                     component_name=agent_name,
+                    mode=conflict_mode,
+                    created=False,
+                    conflict_detected=True,
                     warnings=warnings,
+                    next_steps=[
+                        "Review updated agent configuration",
+                    ],
                 )
 
         # Step 7: Create new agent
@@ -662,8 +676,15 @@ class AgentImportService:
 
         return ImportSummarySchema(
             component_type=ComponentType.AGENT,
+            component_id=new_agent.agent_id,
             component_name=agent_name,
+            mode=conflict_mode,
+            created=True,
+            conflict_detected=existing_agent is not None,
             warnings=warnings,
+            next_steps=[
+                "Configure AI service API key if needed",
+            ],
         )
 
     def _update_agent_tools(

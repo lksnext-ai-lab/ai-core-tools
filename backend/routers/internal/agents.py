@@ -100,10 +100,17 @@ async def import_agent(
     except HTTPException:
         raise
     except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:
         logger.error(f"Import error: {str(e)}", exc_info=True)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
 
 
 @agents_router.get("/", 

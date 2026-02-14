@@ -64,6 +64,7 @@ APP_NOT_FOUND_MSG = "App not found"
     response_model=FullAppImportResponseSchema,
     summary="Import complete app configuration",
     tags=["Apps", "Export/Import"],
+    status_code=status.HTTP_201_CREATED,
 )
 async def import_full_app(
     file: UploadFile = File(...),
@@ -134,6 +135,11 @@ async def import_full_app(
     except HTTPException:
         raise
     except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e),
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),

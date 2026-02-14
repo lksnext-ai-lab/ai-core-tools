@@ -17,6 +17,8 @@ from services.embedding_service_import_service import (
 from services.output_parser_import_service import OutputParserImportService
 from services.mcp_config_import_service import MCPConfigImportService
 from services.silo_import_service import SiloImportService
+from services.repository_import_service import RepositoryImportService
+from services.domain_import_service import DomainImportService
 from services.agent_import_service import AgentImportService
 from repositories.app_repository import AppRepository
 from models.app import App
@@ -39,6 +41,8 @@ class FullAppImportService:
         "output_parsers",
         "mcp_configs",
         "silos",
+        "repositories",
+        "domains",
         "agents",
     ]
 
@@ -57,6 +61,8 @@ class FullAppImportService:
         self.parser_import = OutputParserImportService(session)
         self.mcp_import = MCPConfigImportService(session)
         self.silo_import = SiloImportService(session)
+        self.repository_import = RepositoryImportService(session)
+        self.domain_import = DomainImportService(session)
         self.agent_import = AgentImportService(session)
         
         # Track name mappings for renamed components (original_name -> new_id)
@@ -106,6 +112,7 @@ class FullAppImportService:
             "ai_services": {},  # name -> new service_id
             "embedding_services": {},  # name -> new service_id
             "output_parsers": {},  # name -> new parser_id
+            "silos": {},  # name -> new silo_id
         }
 
         # Import ALL components in dependency order (wrapped in try-except for rollback)
@@ -357,13 +364,80 @@ class FullAppImportService:
                 item_export = SiloExportFileSchema(
                     metadata=export_data.metadata, silo=item
                 )
-                logger.debug(f"Importing silo: {item.name}")
+                original_name = item.name
+                logger.debug(f"Importing silo: {original_name}")
                 result = self.silo_import.import_silo(
                     export_data=item_export,
                     app_id=app_id,
                     conflict_mode=conflict_mode,
                     embedding_service_id_map=component_id_mappings["embedding_services"],
                     output_parser_id_map=component_id_mappings["output_parsers"],
+                )
+                warnings.extend(result.warnings)
+                # Track silo name -> ID for repos/domains
+                new_mappings[original_name] = result.component_id
+                logger.debug(
+                    f"Mapped silo '{original_name}' "
+                    f"-> ID {result.component_id}"
+                )
+                count += 1
+
+        elif component_type == "repositories":
+            for item in component_data:
+                from schemas.export_schemas import (
+                    RepositoryExportFileSchema,
+                )
+
+                item_export = RepositoryExportFileSchema(
+                    metadata=export_data.metadata,
+                    repository=item,
+                )
+                logger.debug(
+                    f"Importing repository: {item.name}"
+                )
+                result = self.repository_import.import_repository(
+                    export_data=item_export,
+                    app_id=app_id,
+                    conflict_mode=conflict_mode,
+                    silo_id_map=component_id_mappings.get(
+                        "silos", {}
+                    ),
+                    embedding_service_id_map=component_id_mappings[
+                        "embedding_services"
+                    ],
+                    output_parser_id_map=component_id_mappings[
+                        "output_parsers"
+                    ],
+                )
+                warnings.extend(result.warnings)
+                count += 1
+
+        elif component_type == "domains":
+            for item in component_data:
+                from schemas.export_schemas import (
+                    DomainExportFileSchema,
+                )
+
+                item_export = DomainExportFileSchema(
+                    metadata=export_data.metadata,
+                    domain=item,
+                )
+                logger.debug(
+                    f"Importing domain: {item.name}"
+                )
+                result = self.domain_import.import_domain(
+                    export_data=item_export,
+                    app_id=app_id,
+                    conflict_mode=conflict_mode,
+                    silo_id_map=component_id_mappings.get(
+                        "silos", {}
+                    ),
+                    embedding_service_id_map=component_id_mappings[
+                        "embedding_services"
+                    ],
+                    output_parser_id_map=component_id_mappings[
+                        "output_parsers"
+                    ],
                 )
                 warnings.extend(result.warnings)
                 count += 1

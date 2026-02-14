@@ -229,9 +229,27 @@ class MCPConfigImportService:
             result_config_id = created_config.config_id
             created = True
 
-            warnings.append("Authentication tokens must be reconfigured")
+            # Only warn about auth tokens if config has auth fields
+            has_auth = False
+            if config_json and isinstance(config_json, dict):
+                auth_keys = {
+                    "auth_type", "api_key", "token",
+                    "access_token", "auth_token",
+                    "authorization", "credentials",
+                    "secret", "password",
+                }
+                has_auth = bool(
+                    auth_keys & {k.lower() for k in config_json}
+                )
+            if has_auth:
+                warnings.append(
+                    "Authentication tokens must be reconfigured"
+                )
+                next_steps.append(
+                    "Configure authentication tokens "
+                    "for the MCP server"
+                )
             next_steps.extend([
-                "Configure authentication tokens for the MCP server",
                 "Test MCP connection after configuration",
                 "Update URLs if needed for your environment"
             ])
@@ -247,6 +265,7 @@ class MCPConfigImportService:
             component_name=final_name,
             mode=conflict_mode,
             created=created,
+            conflict_detected=existing_config is not None,
             warnings=warnings,
             next_steps=next_steps,
         )

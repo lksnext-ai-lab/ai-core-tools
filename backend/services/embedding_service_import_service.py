@@ -143,6 +143,7 @@ class EmbeddingServiceImportService:
                     component_name=existing_service.name,
                     mode=conflict_mode,
                     created=False,
+                    conflict_detected=True,
                     warnings=["Existing API key preserved"],
                     next_steps=[],
                 )
@@ -171,6 +172,7 @@ class EmbeddingServiceImportService:
             component_name=new_service.name,
             mode=conflict_mode,
             created=True,
+            conflict_detected=existing_service is not None,
             warnings=[],
             next_steps=["Configure API key for the imported Embedding Service"],
         )

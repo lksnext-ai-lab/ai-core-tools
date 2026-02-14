@@ -105,11 +105,25 @@ class ExportSiloSchema(BaseModel):
 # ==================== DOMAIN ====================
 
 
-class ExportDomainSchema(BaseModel):
-    """Domain export schema (URLs only)"""
+class ExportDomainUrlSchema(BaseModel):
+    """Domain URL export schema"""
 
-    domain_url: str
-    # Exclude: crawled content
+    url: str
+    # Exclude: crawled content, status (transient)
+
+
+class ExportDomainSchema(BaseModel):
+    """Domain export schema (structure and URLs only)"""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    base_url: str
+    content_tag: Optional[str] = None
+    content_class: Optional[str] = None
+    content_id: Optional[str] = None
+    silo_name: Optional[str] = None  # Reference by name
+    urls: List[ExportDomainUrlSchema] = []
+    # Exclude: crawled content (heavy data)
 
 
 # ==================== REPOSITORY ====================
@@ -119,10 +133,8 @@ class ExportRepositorySchema(BaseModel):
     """Repository export schema (structure only)"""
 
     name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
-    repo_type: str
+    type: str
     silo_name: Optional[str] = None  # Reference by name
-    domains: List[ExportDomainSchema] = []
     # Exclude: resources, files (heavy data)
 
 
@@ -222,6 +234,18 @@ class RepositoryExportFileSchema(BaseModel):
     metadata: ExportMetadataSchema
     repository: ExportRepositorySchema
     silo: Optional[ExportSiloSchema] = None
+    embedding_service: Optional[ExportEmbeddingServiceSchema] = None
+    output_parser: Optional[ExportOutputParserSchema] = None
+
+
+class DomainExportFileSchema(BaseModel):
+    """Domain export file"""
+
+    metadata: ExportMetadataSchema
+    domain: ExportDomainSchema
+    silo: Optional[ExportSiloSchema] = None
+    embedding_service: Optional[ExportEmbeddingServiceSchema] = None
+    output_parser: Optional[ExportOutputParserSchema] = None
 
 
 class AgentExportFileSchema(BaseModel):
@@ -252,4 +276,5 @@ class AppExportFileSchema(BaseModel):
     mcp_configs: List[ExportMCPConfigSchema] = []
     silos: List[ExportSiloSchema] = []
     repositories: List[ExportRepositorySchema] = []
+    domains: List[ExportDomainSchema] = []
     agents: List[ExportAgentSchema] = []

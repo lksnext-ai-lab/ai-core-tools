@@ -360,7 +360,7 @@ class TestImportEmbeddingServiceAPI:
             )
 
             # Verify response
-            assert response.status_code == 400
+            assert response.status_code == 409
             assert "already exists" in response.json()["detail"].lower()
 
     def test_import_invalid_json(self, test_client):

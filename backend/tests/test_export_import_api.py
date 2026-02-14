@@ -347,7 +347,7 @@ class TestImportEndpoint:
         )
         
         # Assertions
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_409_CONFLICT
         assert "already exists" in response.json()["detail"]
     
     @patch("routers.internal.ai_services.get_current_user_oauth")

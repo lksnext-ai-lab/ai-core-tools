@@ -348,6 +348,7 @@ class SiloImportService:
                     component_name=existing_silo.name,
                     mode=conflict_mode,
                     created=False,
+                    conflict_detected=True,
                     dependencies_created=dependencies_created,
                     warnings=["Existing vector data preserved"],
                     next_steps=[],
@@ -381,6 +382,7 @@ class SiloImportService:
             component_name=new_silo.name,
             mode=conflict_mode,
             created=True,
+            conflict_detected=existing_silo is not None,
             dependencies_created=dependencies_created,
             warnings=[],
             next_steps=[

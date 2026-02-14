@@ -25,6 +25,7 @@ class ComponentType(str, Enum):
     MCP_CONFIG = "mcp_config"
     SILO = "silo"
     REPOSITORY = "repository"
+    DOMAIN = "domain"
     AGENT = "agent"
     APP = "app"
 
@@ -67,6 +68,7 @@ class ImportSummarySchema(BaseModel):
     component_name: str
     mode: Optional[ConflictMode] = None
     created: bool = False
+    conflict_detected: bool = False
     warnings: List[str] = []
     next_steps: List[str] = []
 
@@ -90,10 +92,8 @@ class ComponentSelectionSchema(BaseModel):
     import_output_parsers: bool = True
     import_mcp_configs: bool = True
     import_silos: bool = True
-    import_repositories: bool = Field(
-        default=False,
-        description="Phase 6 pending - repository export/import not yet implemented",
-    )
+    import_repositories: bool = True
+    import_domains: bool = True
     import_agents: bool = True
 
 

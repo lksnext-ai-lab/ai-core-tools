@@ -137,10 +137,17 @@ async def import_ai_service(
             summary=summary
         )
     except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:
         logger.error(f"Import error: {str(e)}", exc_info=True)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
 
 
 # ==================== DYNAMIC ROUTES (with {service_id} parameter) ====================

@@ -11,6 +11,7 @@ COMPONENT_OUTPUT_PARSER = "output_parser"
 COMPONENT_MCP_CONFIG = "mcp_config"
 COMPONENT_SILO = "silo"
 COMPONENT_REPOSITORY = "repository"
+COMPONENT_DOMAIN = "domain"
 COMPONENT_AGENT = "agent"
 COMPONENT_APP = "app"
 
@@ -67,6 +68,8 @@ def get_component_type_from_file(file_data: dict) -> str:
         return COMPONENT_SILO
     elif "repository" in file_data:
         return COMPONENT_REPOSITORY
+    elif "domain" in file_data:
+        return COMPONENT_DOMAIN
     elif "agent" in file_data:
         return COMPONENT_AGENT
     elif "app" in file_data:
