@@ -15,6 +15,9 @@ COMPONENT_DOMAIN = "domain"
 COMPONENT_AGENT = "agent"
 COMPONENT_APP = "app"
 
+# Placeholder for imported services missing API keys
+PLACEHOLDER_API_KEY = "CHANGE_ME"
+
 
 def is_version_supported(version: str) -> bool:
     """Check if export version is supported.

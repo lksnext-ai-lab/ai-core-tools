@@ -68,6 +68,8 @@ function AIServiceForm({ aiService, onSubmit, onCancel }: Readonly<AIServiceForm
     created_at: aiService.created_at
   } : null;
 
+  const needsApiKey = aiService?.api_key === 'CHANGE_ME';
+
   return (
     <BaseServiceForm
       service={serviceData}
@@ -77,6 +79,7 @@ function AIServiceForm({ aiService, onSubmit, onCancel }: Readonly<AIServiceForm
       serviceType="AI"
       onSubmit={onSubmit}
       onCancel={onCancel}
+      needsApiKey={needsApiKey}
     />
   );
 }

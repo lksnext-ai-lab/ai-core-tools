@@ -63,6 +63,8 @@ function EmbeddingServiceForm({ embeddingService, onSubmit, onCancel }: Readonly
     created_at: embeddingService.created_at
   } : null;
 
+  const needsApiKey = embeddingService?.api_key === 'CHANGE_ME';
+
   return (
     <BaseServiceForm
       service={serviceData}
@@ -72,6 +74,7 @@ function EmbeddingServiceForm({ embeddingService, onSubmit, onCancel }: Readonly
       serviceType="Embedding"
       onSubmit={onSubmit}
       onCancel={onCancel}
+      needsApiKey={needsApiKey}
     />
   );
 }

@@ -1,7 +1,12 @@
 from sqlalchemy.orm import Session
 from models.ai_service import AIService, ProviderEnum
 from repositories.ai_service_repository import AIServiceRepository
-from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
+from schemas.ai_service_schemas import (
+    AIServiceListItemSchema,
+    AIServiceDetailSchema,
+    CreateUpdateAIServiceSchema,
+)
+from core.export_constants import PLACEHOLDER_API_KEY
 from datetime import datetime
 from typing import List
 from tools.aiServiceTools import create_llm_from_service
@@ -21,12 +26,17 @@ class AIServiceService:
         
         result = []
         for service in ai_services:
+            needs_api_key = (
+                not service.api_key
+                or service.api_key == PLACEHOLDER_API_KEY
+            )
             result.append(AIServiceListItemSchema(
                 service_id=service.service_id,
                 name=service.name,
                 provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
                 model_name=service.description or "",  # Use description as model info
-                created_at=service.create_date
+                created_at=service.create_date,
+                needs_api_key=needs_api_key,
             ))
         
         return result
@@ -60,15 +70,20 @@ class AIServiceService:
         # Get available providers for the form
         providers = [{"value": p.value, "name": p.value} for p in ProviderEnum]
         
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
         return AIServiceDetailSchema(
             service_id=service.service_id,
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",
-            api_key=service.api_key,
+            api_key=service.api_key or "",
             base_url=service.endpoint or "",  # Use endpoint as base_url
             created_at=service.create_date,
-            available_providers=providers
+            available_providers=providers,
+            needs_api_key=needs_api_key,
         )
     
     @staticmethod
@@ -160,6 +175,20 @@ class AIServiceService:
             
             service = MockAIService(config)
             
+            # Guard: placeholder or missing API key
+            if (
+                not service.api_key
+                or service.api_key == PLACEHOLDER_API_KEY
+            ):
+                return {
+                    "status": "error",
+                    "message": (
+                        "API key is required. Please configure "
+                        "a valid API key before testing the "
+                        "connection."
+                    ),
+                }
+
             # Validate required fields
             if not service.provider:
                 return {
@@ -209,10 +238,14 @@ class AIServiceService:
         try:
             from openai import OpenAI
             
-            if not service.api_key:
+            if not service.api_key or service.api_key == PLACEHOLDER_API_KEY:
                 return {
                     "status": "error",
-                    "message": "API key is required for Whisper"
+                    "message": (
+                        "API key is required. Please configure "
+                        "a valid API key before testing the "
+                        "connection."
+                    ),
                 }
             
             # Initialize OpenAI client

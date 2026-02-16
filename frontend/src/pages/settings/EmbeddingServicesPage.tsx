@@ -20,6 +20,7 @@ interface EmbeddingService {
   provider: string;
   model_name: string;
   created_at: string;
+  needs_api_key?: boolean;
 }
 
 function EmbeddingServicesPage() {
@@ -214,6 +215,17 @@ function EmbeddingServicesPage() {
           { header: 'Model', accessor: 'model_name' },
           { header: 'Provider', render: (service: EmbeddingService) => (
             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>{service.provider}</span>
+          ) },
+          { header: 'Status', render: (service: EmbeddingService) => (
+            service.needs_api_key ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                ⚠ API Key Required
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Ready
+              </span>
+            )
           ) },
           { header: 'Created', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: EmbeddingService) => (

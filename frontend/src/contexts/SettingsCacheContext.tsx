@@ -8,6 +8,7 @@ interface AIService {
   provider: string;
   model_name: string;
   created_at: string;
+  needs_api_key?: boolean;
 }
 
 interface APIKey {

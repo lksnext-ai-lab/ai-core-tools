@@ -11,7 +11,10 @@ from schemas.import_schemas import (
     ImportSummarySchema,
     ComponentType,
 )
-from core.export_constants import validate_export_version
+from core.export_constants import (
+    validate_export_version,
+    PLACEHOLDER_API_KEY,
+)
 from repositories.ai_service_repository import AIServiceRepository
 import logging
 
@@ -155,7 +158,7 @@ class AIServiceImportService:
         new_service = AIService(
             app_id=app_id,
             name=final_name,
-            api_key=None,  # User must configure
+            api_key=PLACEHOLDER_API_KEY,  # User must configure
             provider=export_data.ai_service.provider,
             description=export_data.ai_service.model_name,  # model_name mapped to description
             endpoint=export_data.ai_service.endpoint,
@@ -175,6 +178,11 @@ class AIServiceImportService:
             mode=conflict_mode,
             created=True,
             conflict_detected=existing_service is not None,
-            warnings=[],
-            next_steps=["Configure API key for the imported AI Service"],
+            warnings=[
+                "API key set to placeholder 'CHANGE_ME' "
+                "— update it before using this service"
+            ],
+            next_steps=[
+                "Configure API key for the imported AI Service"
+            ],
         )

@@ -6,6 +6,7 @@ from schemas.embedding_service_schemas import (
     EmbeddingServiceDetailSchema,
     CreateUpdateEmbeddingServiceSchema
 )
+from core.export_constants import PLACEHOLDER_API_KEY
 from typing import List, Optional
 from datetime import datetime
 
@@ -18,12 +19,17 @@ class EmbeddingServiceService:
         
         result = []
         for service in embedding_services:
+            needs_api_key = (
+                not service.api_key
+                or service.api_key == PLACEHOLDER_API_KEY
+            )
             result.append(EmbeddingServiceListItemSchema(
                 service_id=service.service_id,
                 name=service.name,
                 provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
                 model_name=service.description or "",
-                created_at=service.create_date
+                created_at=service.create_date,
+                needs_api_key=needs_api_key,
             ))
         
         return result
@@ -55,15 +61,20 @@ class EmbeddingServiceService:
         # Get available providers for the form
         providers = [{"value": p.value, "name": p.value} for p in EmbeddingProvider]
         
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
         return EmbeddingServiceDetailSchema(
             service_id=service.service_id,
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",
-            api_key=service.api_key,
+            api_key=service.api_key or "",
             base_url=service.endpoint or "",
             created_at=service.create_date,
-            available_providers=providers
+            available_providers=providers,
+            needs_api_key=needs_api_key,
         )
 
     @staticmethod

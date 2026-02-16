@@ -11,8 +11,13 @@ from schemas.import_schemas import (
     ImportSummarySchema,
     ComponentType,
 )
-from core.export_constants import validate_export_version
-from repositories.embedding_service_repository import EmbeddingServiceRepository
+from core.export_constants import (
+    validate_export_version,
+    PLACEHOLDER_API_KEY,
+)
+from repositories.embedding_service_repository import (
+    EmbeddingServiceRepository,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -152,7 +157,7 @@ class EmbeddingServiceImportService:
         new_service = EmbeddingService(
             app_id=app_id,
             name=final_name,
-            api_key=None,  # User must configure
+            api_key=PLACEHOLDER_API_KEY,  # User must configure
             provider=export_data.embedding_service.provider,
             description=export_data.embedding_service.model_name,  # model_name mapped to description
             endpoint=export_data.embedding_service.endpoint,
@@ -173,6 +178,12 @@ class EmbeddingServiceImportService:
             mode=conflict_mode,
             created=True,
             conflict_detected=existing_service is not None,
-            warnings=[],
-            next_steps=["Configure API key for the imported Embedding Service"],
+            warnings=[
+                "API key set to placeholder 'CHANGE_ME' "
+                "— update it before using this service"
+            ],
+            next_steps=[
+                "Configure API key for the imported "
+                "Embedding Service"
+            ],
         )
