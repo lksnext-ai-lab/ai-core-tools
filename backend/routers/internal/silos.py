@@ -97,6 +97,9 @@ async def import_silo(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:
         logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed"
+        )
 
 
 @silos_router.get("/", 

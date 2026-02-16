@@ -74,6 +74,40 @@ class OutputParserImportService:
             missing_dependencies=[],  # Output Parsers have no external dependencies
         )
 
+    def _convert_fields_to_json(self, fields, app_id: int) -> list:
+        """Convert export schema fields to JSON, resolving parser names to IDs.
+
+        Args:
+            fields: List of ExportOutputParserFieldSchema
+            app_id: Target app ID for parser name resolution
+
+        Returns:
+            list: Fields as JSON-serializable dicts
+        """
+        fields_json = []
+        for field in fields:
+            field_dict = {
+                "name": field.name,
+                "type": field.type,
+                "description": field.description,
+            }
+            if field.parser_name:
+                ref_parser = self.get_by_name_and_app(
+                    field.parser_name, app_id
+                )
+                if ref_parser:
+                    field_dict["parser_id"] = ref_parser.parser_id
+            if field.list_item_type is not None:
+                field_dict["list_item_type"] = field.list_item_type
+            if field.list_item_parser_name:
+                ref_parser = self.get_by_name_and_app(
+                    field.list_item_parser_name, app_id
+                )
+                if ref_parser:
+                    field_dict["list_item_parser_id"] = ref_parser.parser_id
+            fields_json.append(field_dict)
+        return fields_json
+
     def import_output_parser(
         self,
         export_data: OutputParserExportFileSchema,
@@ -124,20 +158,9 @@ class OutputParserImportService:
                 existing_parser.description = export_data.output_parser.description
 
                 # Convert fields from export schema to JSON
-                fields_json = []
-                for field in export_data.output_parser.fields:
-                    field_dict = {
-                        "name": field.name,
-                        "type": field.type,
-                        "description": field.description,
-                    }
-                    if field.parser_id is not None:
-                        field_dict["parser_id"] = field.parser_id
-                    if field.list_item_type is not None:
-                        field_dict["list_item_type"] = field.list_item_type
-                    if field.list_item_parser_id is not None:
-                        field_dict["list_item_parser_id"] = field.list_item_parser_id
-                    fields_json.append(field_dict)
+                fields_json = self._convert_fields_to_json(
+                    export_data.output_parser.fields, app_id
+                )
 
                 existing_parser.fields = fields_json
 
@@ -159,20 +182,9 @@ class OutputParserImportService:
                 )
 
         # Convert fields from export schema to JSON
-        fields_json = []
-        for field in export_data.output_parser.fields:
-            field_dict = {
-                "name": field.name,
-                "type": field.type,
-                "description": field.description,
-            }
-            if field.parser_id is not None:
-                field_dict["parser_id"] = field.parser_id
-            if field.list_item_type is not None:
-                field_dict["list_item_type"] = field.list_item_type
-            if field.list_item_parser_id is not None:
-                field_dict["list_item_parser_id"] = field.list_item_parser_id
-            fields_json.append(field_dict)
+        fields_json = self._convert_fields_to_json(
+            export_data.output_parser.fields, app_id
+        )
 
         # Create new parser
         new_parser = OutputParser(

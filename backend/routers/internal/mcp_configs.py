@@ -281,57 +281,6 @@ async def delete_mcp_config(
 
 
 @mcp_configs_router.post(
-    "/import",
-    summary="Import MCP Configuration",
-    tags=["MCP Configs", "Export/Import"],
-    response_model=ImportResponseSchema,
-    status_code=status.HTTP_201_CREATED
-)
-async def import_mcp_config(
-    app_id: int,
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
-    new_name: Optional[str] = Query(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
-):
-    """Import MCP Configuration from JSON file."""
-    try:
-        # Parse file
-        content = await file.read()
-        file_data = json.loads(content)
-        export_data = MCPConfigExportFileSchema(**file_data)
-        
-        # Import
-        import_service = MCPConfigImportService(db)
-        summary = import_service.import_mcp_config(
-            export_data,
-            app_id,
-            conflict_mode,
-            new_name
-        )
-        
-        return ImportResponseSchema(
-            success=True,
-            message=f"MCP Config '{summary.component_name}' imported successfully",
-            summary=summary
-        )
-    except json.JSONDecodeError as e:
-        logger.warning(f"Invalid JSON: {str(e)}")
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid JSON file")
-    except ValueError as e:
-        logger.warning(f"Import failed: {str(e)}")
-        if "already exists" in str(e):
-            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
-        else:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid data: {str(e)}")
-    except Exception as e:
-        logger.error(f"Import error: {str(e)}", exc_info=True)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
-
-
-@mcp_configs_router.post(
     "/{config_id}/export",
     summary="Export MCP Configuration",
     tags=["MCP Configs", "Export/Import"],

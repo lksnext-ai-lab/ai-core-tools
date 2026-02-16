@@ -51,3 +51,4 @@ qdrant_storage/
 .playwright-mcp/
 temp/
 .serena
+tmpclaude*

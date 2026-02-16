@@ -9,6 +9,7 @@ interface EmbeddingService {
   base_url: string;
   created_at: string;
   available_providers: Array<{value: string, name: string}>;
+  needs_api_key?: boolean;
 }
 
 interface EmbeddingServiceFormProps {
@@ -63,7 +64,7 @@ function EmbeddingServiceForm({ embeddingService, onSubmit, onCancel }: Readonly
     created_at: embeddingService.created_at
   } : null;
 
-  const needsApiKey = embeddingService?.api_key === 'CHANGE_ME';
+  const needsApiKey = embeddingService?.needs_api_key ?? false;
 
   return (
     <BaseServiceForm

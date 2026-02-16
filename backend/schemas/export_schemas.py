@@ -62,9 +62,9 @@ class ExportOutputParserFieldSchema(BaseModel):
     name: str
     type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'parser'
     description: str
-    parser_id: Optional[int] = None  # For type='parser'
+    parser_name: Optional[str] = None  # For type='parser' (name-based reference)
     list_item_type: Optional[str] = None  # For type='list'
-    list_item_parser_id: Optional[int] = None  # For list of parsers
+    list_item_parser_name: Optional[str] = None  # For list of parsers (name-based reference)
 
 
 class ExportOutputParserSchema(BaseModel):

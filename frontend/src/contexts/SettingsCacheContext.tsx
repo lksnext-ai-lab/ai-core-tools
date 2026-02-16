@@ -26,6 +26,7 @@ interface EmbeddingService {
   provider: string;
   model_name: string;
   created_at: string;
+  needs_api_key?: boolean;
 }
 
 import type { MCPConfig, Skill } from '../core/types';

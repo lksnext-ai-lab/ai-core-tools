@@ -56,14 +56,32 @@ class OutputParserExportService(BaseExportService):
         export_fields = []
         if parser.fields:
             for field_data in parser.fields:
+                # Resolve parser_id to parser_name for portability
+                parser_name = None
+                if field_data.get("parser_id"):
+                    ref_parser = self.output_parser_repo.get_by_id(
+                        self.session, field_data["parser_id"]
+                    )
+                    if ref_parser:
+                        parser_name = ref_parser.name
+
+                # Resolve list_item_parser_id to list_item_parser_name
+                list_item_parser_name = None
+                if field_data.get("list_item_parser_id"):
+                    ref_parser = self.output_parser_repo.get_by_id(
+                        self.session, field_data["list_item_parser_id"]
+                    )
+                    if ref_parser:
+                        list_item_parser_name = ref_parser.name
+
                 export_fields.append(
                     ExportOutputParserFieldSchema(
                         name=field_data.get("name", ""),
                         type=field_data.get("type", "str"),
                         description=field_data.get("description", ""),
-                        parser_id=field_data.get("parser_id"),
+                        parser_name=parser_name,
                         list_item_type=field_data.get("list_item_type"),
-                        list_item_parser_id=field_data.get("list_item_parser_id"),
+                        list_item_parser_name=list_item_parser_name,
                     )
                 )
 

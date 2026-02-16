@@ -86,7 +86,7 @@ class MCPConfigImportService:
     def _merge_configs(
         self, existing_config: dict, imported_config: dict
     ) -> dict:
-        """Merge imported config with existing, preserving sensitive keys.
+        """Merge imported config with existing, preserving sensitive keys recursively.
 
         Args:
             existing_config: Current config from database
@@ -96,27 +96,39 @@ class MCPConfigImportService:
             dict: Merged configuration
         """
         # Sensitive keys to preserve from existing config
-        sensitive_keys = [
-            'api_key', 'apiKey', 'api-key',
-            'token', 'access_token', 'accessToken', 'bearer',
+        sensitive_lower = {
+            'api_key', 'apikey', 'api-key',
+            'token', 'access_token', 'accesstoken', 'bearer',
             'password', 'pass', 'pwd',
-            'secret', 'client_secret', 'clientSecret',
+            'secret', 'client_secret', 'clientsecret',
             'auth', 'authorization', 'auth_token',
             'credential', 'credentials', 'creds',
-            'private_key', 'privateKey'
-        ]
+            'private_key', 'privatekey'
+        }
 
         # Start with imported config
         merged = imported_config.copy()
 
         # Preserve existing sensitive keys (case-insensitive matching)
-        existing_lower = {k.lower(): k for k in existing_config.keys()}
-        for sensitive in sensitive_keys:
-            sensitive_lower = sensitive.lower()
-            if sensitive_lower in existing_lower:
-                original_key = existing_lower[sensitive_lower]
+        existing_lower_map = {k.lower(): k for k in existing_config.keys()}
+        for sensitive in sensitive_lower:
+            if sensitive in existing_lower_map:
+                original_key = existing_lower_map[sensitive]
                 # Keep the existing sensitive value
                 merged[original_key] = existing_config[original_key]
+
+        # Recursively merge nested dicts to preserve their sensitive keys too
+        for key, value in imported_config.items():
+            if isinstance(value, dict):
+                existing_key = existing_lower_map.get(key.lower())
+                if (
+                    existing_key
+                    and isinstance(existing_config[existing_key], dict)
+                    and key.lower() not in sensitive_lower
+                ):
+                    merged[key] = self._merge_configs(
+                        existing_config[existing_key], value
+                    )
 
         return merged
 

@@ -166,7 +166,28 @@ class TestOutputParserExportIntegration:
         self, db_session: Session, test_app: App
     ):
         """Test that export preserves complex field structures."""
-        # Create parser with complex fields
+        # Create referenced parsers for parser-type fields
+        address_parser = OutputParser(
+            app_id=test_app.app_id,
+            name=f"Address Parser {datetime.now().timestamp()}",
+            description="Address parser",
+            fields=[],
+            create_date=datetime.now()
+        )
+        db_session.add(address_parser)
+        db_session.flush()
+
+        contact_parser = OutputParser(
+            app_id=test_app.app_id,
+            name=f"Contact Parser {datetime.now().timestamp()}",
+            description="Contact parser",
+            fields=[],
+            create_date=datetime.now()
+        )
+        db_session.add(contact_parser)
+        db_session.flush()
+
+        # Create parser with complex fields referencing the above parsers
         parser = OutputParser(
             app_id=test_app.app_id,
             name=f"Complex Parser {datetime.now().timestamp()}",
@@ -182,14 +203,14 @@ class TestOutputParserExportIntegration:
                     "name": "address",
                     "type": "parser",
                     "description": "Address object",
-                    "parser_id": 42
+                    "parser_id": address_parser.parser_id
                 },
                 {
                     "name": "contacts",
                     "type": "list",
                     "description": "List of contacts",
                     "list_item_type": "parser",
-                    "list_item_parser_id": 99
+                    "list_item_parser_id": contact_parser.parser_id
                 }
             ],
             create_date=datetime.now()
@@ -208,25 +229,27 @@ class TestOutputParserExportIntegration:
 
         # Verify complex fields preserved
         assert len(export_data.output_parser.fields) == 3
-        
+
         # Check list field
         list_field = next(f for f in export_data.output_parser.fields if f.name == "tags")
         assert list_field.type == "list"
         assert list_field.list_item_type == "str"
-        
-        # Check parser reference field
+
+        # Check parser reference field - resolved to name
         parser_field = next(f for f in export_data.output_parser.fields if f.name == "address")
         assert parser_field.type == "parser"
-        assert parser_field.parser_id == 42
-        
-        # Check list of parsers field
+        assert parser_field.parser_name == address_parser.name
+
+        # Check list of parsers field - resolved to name
         list_parser_field = next(f for f in export_data.output_parser.fields if f.name == "contacts")
         assert list_parser_field.type == "list"
         assert list_parser_field.list_item_type == "parser"
-        assert list_parser_field.list_item_parser_id == 99
+        assert list_parser_field.list_item_parser_name == contact_parser.name
 
         # Cleanup
         db_session.delete(parser)
+        db_session.delete(address_parser)
+        db_session.delete(contact_parser)
         db_session.commit()
 
 

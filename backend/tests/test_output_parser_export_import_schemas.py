@@ -39,20 +39,20 @@ class TestExportOutputParserFieldSchema:
         assert field.name == "username"
         assert field.type == "str"
         assert field.description == "User's username"
-        assert field.parser_id is None
+        assert field.parser_name is None
         assert field.list_item_type is None
-    
+
     def test_field_with_parser_reference(self):
         """Test field with parser reference."""
         field = ExportOutputParserFieldSchema(
             name="address",
             type="parser",
             description="User address",
-            parser_id=42
+            parser_name="Address Parser"
         )
-        
+
         assert field.type == "parser"
-        assert field.parser_id == 42
+        assert field.parser_name == "Address Parser"
     
     def test_field_with_list(self):
         """Test field with list type."""
@@ -73,12 +73,12 @@ class TestExportOutputParserFieldSchema:
             type="list",
             description="List of contacts",
             list_item_type="parser",
-            list_item_parser_id=99
+            list_item_parser_name="Contact Parser"
         )
-        
+
         assert field.type == "list"
         assert field.list_item_type == "parser"
-        assert field.list_item_parser_id == 99
+        assert field.list_item_parser_name == "Contact Parser"
 
 
 class TestExportOutputParserSchema:
