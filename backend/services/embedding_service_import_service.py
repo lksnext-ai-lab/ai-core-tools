@@ -140,8 +140,13 @@ class EmbeddingServiceImportService:
                 # Note: Keep existing api_key (user configured)
 
                 self.session.add(existing_service)
-                self.session.flush()
+                self.session.commit()
+                self.session.refresh(existing_service)
 
+                logger.info(
+                    f"Overrode Embedding Service '{existing_service.name}' "
+                    f"(ID: {existing_service.service_id})"
+                )
                 return ImportSummarySchema(
                     component_type=ComponentType.EMBEDDING_SERVICE,
                     component_id=existing_service.service_id,
