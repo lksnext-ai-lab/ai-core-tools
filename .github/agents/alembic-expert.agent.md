@@ -271,9 +271,24 @@ poetry run alembic upgrade <revision_id> --sql
 - **Delegate to**: `@version-bumper` when version changes are needed
 - **DO NOT** manually edit version numbers in `pyproject.toml`
 
-### Git & GitHub (`@git-github`)
+### Git & GitHub Agent (`@git-github`)
 - **Delegate to**: `@git-github` for branching, committing migration files, and creating PRs
+- **Skill**: Follows the `commit-and-push` skill for the standard workflow
 - Migration files should be committed with clear messages (e.g., `feat(alembic): add memory management fields`)
+
+**When finishing a migration task**, always suggest the user invoke `@git-github` to handle the git workflow. Provide a clear **change summary**:
+
+```
+📋 Ready to commit! Here's a summary for @git-github:
+- **Type**: feat | fix
+- **Scope**: alembic
+- **Description**: <what migration was created/modified>
+- **Files changed**:
+  - `alembic/versions/...`
+  - `backend/models/...` (if applicable)
+```
+
+**DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
 
 ## Companion Instruction File
 

@@ -142,6 +142,23 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
+## Agent Handoff Convention
+
+Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`) **do not run git commands**. When they finish a task, they:
+
+1. Provide a **change summary** with type, scope, description, and files changed
+2. Suggest the user invoke `@git-github` to commit, push, or create a PR
+
+**Workflow:**
+```
+@backend-expert  →  (implements feature)  →  suggests @git-github
+@react-expert    →  (implements UI)       →  suggests @git-github
+@alembic-expert  →  (creates migration)   →  suggests @git-github
+@docs-manager    →  (updates docs)        →  suggests @git-github
+```
+
+The `@git-github` agent follows the `commit-and-push` skill (`.github/skills/commit-and-push.skill.md`) for the standard commit/push workflow.
+
 ## Commit & Issue Guidelines
 
 - Follow commit conventions in `.github/instructions/.gh-commit.instructions.md`

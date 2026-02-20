@@ -399,6 +399,26 @@ When asked to bump, update, or change the project version:
 
 **DO NOT** manually edit version numbers in `pyproject.toml`. Always delegate version bumping to the `@version-bumper` agent.
 
+### Git & GitHub Agent (`@git-github`)
+When your implementation work is complete and the user needs to commit, push, or create a PR:
+- **Delegate to**: `@git-github` agent
+- **Purpose**: Handles git operations — staging, committing (GPG-signed), pushing, branching, and PR creation
+- **Skill**: Follows the `commit-and-push` skill for the standard workflow
+
+**When finishing a task**, always suggest the user invoke `@git-github` to handle the git workflow. Provide a clear **change summary** to help `@git-github` craft a good commit message:
+
+```
+📋 Ready to commit! Here's a summary for @git-github:
+- **Type**: feat | fix | refactor | docs | test | chore
+- **Scope**: frontend
+- **Description**: <what was done>
+- **Files changed**:
+  - `frontend/src/components/...`
+  - `frontend/src/pages/...`
+```
+
+**DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
+
 ## Conclusion
 
 When assisting with React development, always prioritize:

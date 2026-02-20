@@ -232,6 +232,25 @@ last_sync_summary:
 - **Delegate to**: `@version-bumper` when version changes are needed
 - **DO NOT** manually edit version numbers in `pyproject.toml`
 
+### Git & GitHub Agent (`@git-github`)
+When your documentation work is complete and the user needs to commit and push:
+- **Delegate to**: `@git-github` agent
+- **Purpose**: Handles git operations — staging, committing (GPG-signed), pushing, branching, and PR creation
+- **Skill**: Follows the `commit-and-push` skill for the standard workflow
+
+**When finishing a documentation task**, always suggest the user invoke `@git-github` to handle the git workflow. Provide a clear **change summary**:
+
+```
+📋 Ready to commit! Here's a summary for @git-github:
+- **Type**: docs
+- **Scope**: (optional, e.g., api, architecture, guides)
+- **Description**: <what docs were updated>
+- **Files changed**:
+  - `docs/...`
+```
+
+**DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
+
 ## What This Agent Does NOT Do
 
 - ❌ Does not write or modify application code (backend or frontend)

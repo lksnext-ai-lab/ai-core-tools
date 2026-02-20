@@ -763,6 +763,27 @@ When working on database schema changes, migrations, or troubleshooting migratio
 
 When you create or modify SQLAlchemy models, delegate the migration creation to `@alembic-expert`.
 
+### Git & GitHub Agent (`@git-github`)
+When your implementation work is complete and the user needs to commit, push, or create a PR:
+- **Delegate to**: `@git-github` agent
+- **Purpose**: Handles git operations — staging, committing (GPG-signed), pushing, branching, and PR creation
+- **Skill**: Follows the `commit-and-push` skill for the standard workflow
+
+**When finishing a task**, always suggest the user invoke `@git-github` to handle the git workflow. Provide a clear **change summary** to help `@git-github` craft a good commit message:
+
+```
+📋 Ready to commit! Here's a summary for @git-github:
+- **Type**: feat | fix | refactor | docs | test | chore
+- **Scope**: backend
+- **Description**: <what was done>
+- **Files changed**:
+  - `backend/models/...`
+  - `backend/services/...`
+  - `backend/routers/...`
+```
+
+**DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
+
 ## Conclusion
 
 When assisting with backend development, always prioritize:

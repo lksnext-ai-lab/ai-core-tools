@@ -287,6 +287,15 @@ git pull origin <branch>
 git push origin <branch>
 ```
 
+## Skills
+
+This agent has access to a reusable skill for its core commit-and-push workflow:
+
+### Commit and Push (`commit-and-push`)
+When asked to commit and push changes (typically after an implementation agent finishes), follow the procedure defined in `.github/skills/commit-and-push.skill.md`. This skill provides the standardized steps: review changes, stage files, craft a Conventional Commits message, pull before push, and push.
+
+Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`) will provide a **change summary** when handing off to you. Use that summary to craft the commit message.
+
 ## Collaborating with Other Agents
 
 ### Backend Expert (`@backend-expert`)
