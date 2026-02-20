@@ -1,4 +1,3 @@
-```chatagent
 ---
 name: Alembic Expert
 description: Expert in Alembic database migrations, schema versioning, SQLAlchemy model evolution, and PostgreSQL schema management for the Mattin AI project.
@@ -311,4 +310,3 @@ The instruction file provides the baseline rules; this agent provides deeper exp
 - ❌ Does not bump versions (delegates to `@version-bumper`)
 - ❌ Does not manage the pgvector extension or LangChain-managed tables directly
 
-```

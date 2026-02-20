@@ -1,4 +1,3 @@
-```skill
 ---
 name: New Instruction
 description: Bootstraps a new GitHub Copilot instruction file with proper frontmatter, scoping, and conventions for this repository.
@@ -37,7 +36,6 @@ Choose the right scoping strategy:
 Create `.github/instructions/<slug>.instructions.md`:
 
 ```markdown
-\```instructions
 ---
 description: <description>
 applyTo: "<glob pattern>"
@@ -65,7 +63,6 @@ applyTo: "<glob pattern>"
 \```<language>
 <incorrect pattern>
 \```
-\```
 ```
 
 ### Step 3: Verify No Conflicts
@@ -92,4 +89,3 @@ Check existing instructions in `.github/instructions/` for:
 
 > "@ai-dev-architect Create a new instruction file for Python testing conventions that applies to all files under tests/"
 
-```

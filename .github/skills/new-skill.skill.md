@@ -1,4 +1,3 @@
-```skill
 ---
 name: New Skill
 description: Bootstraps a new GitHub Copilot custom skill definition with proper structure, parameters, and step-by-step workflow.
@@ -24,7 +23,6 @@ Creates a new Copilot custom skill definition file in `.github/skills/` followin
 Create `.github/skills/<slug>.skill.md` with the following structure:
 
 ````markdown
-```skill
 ---
 name: <name>
 description: <description>
@@ -61,7 +59,6 @@ description: <description>
 
 ## Example Usage
 <Show how to invoke this skill>
-```
 ````
 
 ### Step 2: Define Parameters
@@ -125,4 +122,3 @@ If an agent commonly triggers this skill, add a reference in the agent's documen
 
 > "@ai-dev-architect Create a new skill called 'Add API Endpoint' that scaffolds a full REST resource with model, schema, repository, service, and router for the Mattin AI backend"
 
-```

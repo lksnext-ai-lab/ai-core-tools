@@ -1,4 +1,3 @@
-```chatagent
 ---
 name: AI Dev Architect
 description: Expert in designing, creating, and managing AI-assisted development environments. Specializes in GitHub Copilot agents, instruction files, CLAUDE.md configurations, MCP setups, prompt engineering for dev tools, and orchestrating multi-agent workflows.
@@ -126,7 +125,6 @@ Structure agent definitions from high-level overview to detailed specifics:
 
 ### Agent File Template
 ```markdown
-\```chatagent
 ---
 name: <Agent Name>
 description: <One-line description of what this agent does and its specialization>
@@ -176,12 +174,10 @@ description: <One-line description of what this agent does and its specializatio
 - **Delegate to**: `@<agent-slug>` when <condition>
 - **Purpose**: <What it handles>
 
-\```
 ```
 
 ### Skill File Template
 ```markdown
-\```skill
 ---
 name: <Skill Name>
 description: <One-line description of what this skill automates>
@@ -218,12 +214,10 @@ description: <One-line description of what this skill automates>
 
 ## Example Usage
 <Show how to invoke this skill, e.g.: "@ai-dev-architect scaffold a React component called UserCard in src/components">
-\```
 ```
 
 ### Instruction File Template
 ```markdown
-\```instructions
 ---
 description: <Brief description of what these instructions cover>
 applyTo: "<glob pattern>"  # Optional: e.g., "**/*.py", "backend/**"
@@ -238,7 +232,6 @@ applyTo: "<glob pattern>"  # Optional: e.g., "**/*.py", "backend/**"
 ## Workflow
 
 <Step-by-step process>
-\```
 ```
 
 ### CLAUDE.md Template
@@ -576,4 +569,3 @@ When auditing the AI development environment:
 3. **Identify overlaps** — areas with redundant or conflicting guidance
 4. **Prioritize recommendations** — highest-impact improvements first
 
-```

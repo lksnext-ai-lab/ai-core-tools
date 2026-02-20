@@ -1,4 +1,3 @@
-```skill
 ---
 name: New Agent
 description: Bootstraps a new GitHub Copilot custom agent with proper structure, frontmatter, and conventions for this repository.
@@ -24,7 +23,6 @@ Creates a new Copilot custom agent definition file in `.github/agents/` followin
 Create `.github/agents/<slug>.agent.md` with the following structure:
 
 ````markdown
-```chatagent
 ---
 name: <name>
 description: <description>
@@ -73,7 +71,6 @@ You are an expert <domain description>. <1-2 sentences establishing identity and
 
 ## What This Agent Does NOT Do
 - ❌ <Out-of-scope task>
-```
 ````
 
 ### Step 2: Populate Core Competencies
@@ -94,7 +91,6 @@ Check existing agents in `.github/agents/` and add bidirectional delegation:
 If the agent's domain benefits from auto-applied rules, create a matching instruction file:
 
 ```markdown
-\```instructions
 ---
 description: <Rules for the agent's domain>
 applyTo: "<relevant glob pattern>"
@@ -103,7 +99,6 @@ applyTo: "<relevant glob pattern>"
 # <Domain> Conventions
 
 <Auto-applied rules for files in this domain>
-\```
 ```
 
 Save as `.github/instructions/.<domain>.instructions.md`
@@ -127,4 +122,3 @@ Save as `.github/instructions/.<domain>.instructions.md`
 
 > "@ai-dev-architect Create a new agent called 'Database Migration Expert' that specializes in Alembic migrations, schema design, and PostgreSQL database management for this project"
 
-```

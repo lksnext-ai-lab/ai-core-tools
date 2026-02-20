@@ -1,4 +1,3 @@
-```chatagent
 ---
 name: Git & GitHub
 description: Expert in Git version control and GitHub workflows using Git and GitHub CLI (gh). Handles branching, commits, issues, pull requests, releases, and repository management.
@@ -322,4 +321,3 @@ Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@
 - ❌ Does not manage Docker or infrastructure files
 - ❌ Does not handle repository access control or permissions (admin tasks)
 
-```

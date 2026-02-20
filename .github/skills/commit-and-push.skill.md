@@ -1,4 +1,3 @@
-```skill
 ---
 name: Commit and Push
 description: Standardized workflow for staging, committing, and pushing changes after an implementation agent finishes its work. Designed for handoff from implementation agents to @git-github.
@@ -84,4 +83,3 @@ The `@git-github` agent follows this skill to:
 3. Commit with `feat(backend): add memory management fields to Agent model`
 4. Pull and push to the current branch
 
-```
