@@ -164,7 +164,7 @@ function AgentFormPage() {
     has_memory: false,
     memory_max_messages: 20,
     memory_max_tokens: 4000,
-    memory_summarize_threshold: 10,
+    memory_summarize_threshold: 4000,
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
@@ -201,7 +201,7 @@ function AgentFormPage() {
         has_memory: response.has_memory || false,
         memory_max_messages: response.memory_max_messages || 20,
         memory_max_tokens: response.memory_max_tokens || 4000,
-        memory_summarize_threshold: response.memory_summarize_threshold || 10,
+        memory_summarize_threshold: response.memory_summarize_threshold || 4000,
         service_id: response.service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
@@ -557,10 +557,10 @@ function AgentFormPage() {
                 <div className="flex items-start">
                   <span className="text-indigo-500 text-lg mr-3">ℹ️</span>
                   <div>
-                    <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
+                    <p className="text-sm text-indigo-800 font-medium">Gestión Automática de Memoria</p>
                     <p className="text-xs text-indigo-700 mt-1">
-                      El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, 
-                      recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.
+                      Cuando el historial de la conversación supera el límite de tokens configurado, 
+                      los mensajes antiguos se resumen automáticamente manteniendo los más recientes intactos.
                     </p>
                   </div>
                 </div>
@@ -581,7 +581,7 @@ function AgentFormPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
                   <p className="text-xs text-gray-500 mt-2">
-                    Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
+                    Número máximo de mensajes recientes a conservar intactos tras un resumen automático (recomendado: 20)
                   </p>
                 </div>
 
@@ -600,25 +600,26 @@ function AgentFormPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
                   <p className="text-xs text-gray-500 mt-2">
-                    Número máximo de tokens para el historial de conversación (recomendado: 4000)
+                    Umbral de tokens a partir del cual se activa el resumen automático del historial (recomendado: 4000)
                   </p>
                 </div>
 
                 <div>
                   <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                    Umbral de Resumen
+                    Tokens a conservar tras resumen
                   </label>
                   <input
                     type="number"
                     id="memory_summarize_threshold"
-                    min="1"
-                    max="50"
+                    min="1000"
+                    max="32000"
+                    step="100"
                     value={formData.memory_summarize_threshold}
                     onChange={(e) => handleInputChange('memory_summarize_threshold', parseInt(e.target.value))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
                   <p className="text-xs text-gray-500 mt-2">
-                    Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
+                    Número de tokens que se conservan del resumen generado tras la compresión del historial (recomendado: 4000)
                   </p>
                 </div>
               </div>

@@ -63,10 +63,10 @@ class Agent(Base):
 
     has_memory = Column(Boolean)
     
-    # Memory management configuration (hybrid strategy applied when has_memory=True)
-    memory_max_messages = Column(Integer, default=20, nullable=False)  # Maximum number of messages to keep
-    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # Maximum tokens for history (optional)
-    memory_summarize_threshold = Column(Integer, default=10, nullable=False)  # When to start summarizing
+    # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
+    memory_max_messages = Column(Integer, default=20, nullable=False)  # Messages to keep intact after summarization (keep param)
+    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # Token threshold that triggers summarization (trigger param)
+    memory_summarize_threshold = Column(Integer, default=4000, nullable=False)  # Max tokens sent to summarizer LLM (trim_tokens_to_summarize param)
     
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),

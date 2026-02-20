@@ -32,7 +32,7 @@ class AgentDetailSchema(BaseModel):
     has_memory: bool
     memory_max_messages: int = 20
     memory_max_tokens: Optional[int] = 4000
-    memory_summarize_threshold: int = 10
+    memory_summarize_threshold: int = 4000
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
@@ -72,7 +72,7 @@ class CreateUpdateAgentSchema(BaseModel):
     has_memory: bool = False
     memory_max_messages: Optional[int] = 20
     memory_max_tokens: Optional[int] = 4000
-    memory_summarize_threshold: Optional[int] = 10
+    memory_summarize_threshold: Optional[int] = 4000
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None

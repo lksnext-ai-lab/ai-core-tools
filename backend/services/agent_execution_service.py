@@ -784,10 +784,14 @@ class AgentExecutionService:
         session_id_for_cache: str = None,
         user_context: Dict = None,
         image_files: List[Dict] = None
-    ) -> str:
-        """Execute agent in FastAPI's event loop using shared checkpointer pool"""
+    ) -> Any:
+        """Execute agent in FastAPI's event loop using shared checkpointer pool.
+        
+        Returns:
+            str for plain text responses, dict/Pydantic model for structured output (v1).
+        """
         from tools.agentTools import create_agent, prepare_agent_config
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         mcp_client = None
         try:
@@ -903,7 +907,14 @@ class AgentExecutionService:
             
             result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
             
-            # Extract the response from the result
+            # LangChain v1: structured output is in 'structured_response' key
+            # when create_agent is called with response_format=pydantic_model
+            if isinstance(result, dict) and "structured_response" in result:
+                structured = result["structured_response"]
+                if structured is not None:
+                    return structured
+            
+            # Extract the response from the result messages
             if isinstance(result, dict) and "messages" in result:
                 # Get the last AI message
                 messages = result["messages"]

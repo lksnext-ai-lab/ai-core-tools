@@ -1,8 +1,9 @@
-from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
-from langgraph.prebuilt import create_react_agent
+from langchain.messages import HumanMessage, SystemMessage, AnyMessage
+from langchain.agents import create_agent as create_langchain_agent, AgentState
+from langchain.agents.middleware import SummarizationMiddleware
 from models.agent import Agent
 from models.silo import Silo, SiloType
-from langchain_core.tools import BaseTool, tool
+from langchain.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.dateTimeTools import get_current_date
@@ -11,13 +12,10 @@ from typing import Any, Optional, Dict, List
 from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt.chat_agent_executor import AgentState
 from services.agent_cache_service import CheckpointerCacheService
-from services.memory_management_service import MemoryManagementService
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
-from langchain.callbacks.tracers import LangChainTracer
+from langchain_core.tracers.langchain import LangChainTracer
 from langsmith import Client
 from langsmith.run_helpers import traceable
 import json
@@ -136,54 +134,39 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
-    def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-        """
-        Prepare messages for the agent, applying hybrid memory management strategy.
-        
-        When has_memory=True, automatically applies:
-        1. Remove tool messages (reduce noise)
-        2. Trim to max_messages
-        3. Enforce max_tokens limit if specified
-        """
-        # Get conversation history
-        history = state.get("messages", [])
-        
-        # Apply hybrid memory management if agent has memory enabled
-        if agent.has_memory:
-            try:
-                history = MemoryManagementService.apply_hybrid_strategy(
-                    messages=history,
-                    max_messages=agent.memory_max_messages or 20,
-                    max_tokens=agent.memory_max_tokens
-                )
-                
-                # Log memory statistics
-                stats = MemoryManagementService.get_memory_stats(history)
-                logger.info(f"Memory stats for agent {agent.agent_id}: {stats}")
-                
-            except Exception as e:
-                logger.error(f"Error applying memory management: {e}. Using unmodified history.")
-        
-        # Build final message list
-        messages = []
+    # Build system prompt with optional skills section and format instructions
+    # In LangChain v1, system_prompt is a static string passed to create_agent
+    system_prompt_content = agent.system_prompt
+    if hasattr(agent, 'skill_associations') and agent.skill_associations:
+        skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+        if skills_section:
+            system_prompt_content = system_prompt_content + "\n" + skills_section
 
-        # Build system prompt with optional skills section
-        system_prompt_content = agent.system_prompt
-        if hasattr(agent, 'skill_associations') and agent.skill_associations:
-            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
-            if skills_section:
-                system_prompt_content = system_prompt_content + "\n" + skills_section
+    if format_instructions:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n<output_format_instructions>"
+            + format_instructions
+            + "</output_format_instructions>"
+        )
 
-        # Add system messages for every turn
-        messages.extend([
-            SystemMessage(content=system_prompt_content),
-            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
-        ])
-        
-        # Add processed conversation history
-        messages.extend(history)
-        
-        return messages
+    middleware = []
+    if agent.has_memory:
+        max_tokens = agent.memory_max_tokens or 4000
+        max_messages = agent.memory_max_messages or 20
+        trim_tokens = agent.memory_summarize_threshold or 4000
+        summarization = SummarizationMiddleware(
+            model=llm,
+            trigger=("tokens", max_tokens),
+            keep=("messages", max_messages),
+            trim_tokens_to_summarize=trim_tokens,
+        )
+        middleware.append(summarization)
+        logger.info(
+            f"SummarizationMiddleware configured for agent {agent.agent_id}: "
+            f"trigger=('tokens', {max_tokens}), keep=('messages', {max_messages}), "
+            f"trim_tokens_to_summarize={trim_tokens}"
+        )
 
     tools = []
     for tool in agent.tool_associations:
@@ -222,24 +205,24 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")
 
     if pydantic_model:
-        # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
-        structured_prompt = f"Given the conversation, generate a response following this format: {format_instructions}"
-        agent_chain = create_react_agent(
+        # In LangChain v1, response_format accepts the pydantic model directly.
+        # It defaults to ProviderStrategy (native structured output) if supported,
+        # falling back to ToolStrategy (artificial tool calling) otherwise.
+        agent_chain = create_langchain_agent(
             model=llm,
-            prompt=prompt,
-            response_format=(structured_prompt, pydantic_model),
+            system_prompt=system_prompt_content,
+            response_format=pydantic_model,
             tools=tools,
             checkpointer=checkpointer,
-            debug=False
+            middleware=middleware if middleware else None,
         )
     else:
-        # Si no hay modelo Pydantic, usamos el agente sin formato estructurado
-        agent_chain = create_react_agent(
+        agent_chain = create_langchain_agent(
             model=llm,
-            prompt=prompt,
+            system_prompt=system_prompt_content,
             tools=tools,
             checkpointer=checkpointer,
-            debug=False
+            middleware=middleware if middleware else None,
         )
 
     # Add logging for the created agent
@@ -265,11 +248,19 @@ def prepare_agent_config(agent, tracer):
 
 
 def parse_agent_response(response_text, agent):
-    """Helper function to parse agent response."""
+    """Helper function to parse agent response.
+    
+    In LangChain v1, structured output is returned in the 'structured_response' key
+    of the agent result when response_format is used with create_agent.
+    """
     if agent.output_parser_id is not None:
-        # If response is already a dict (from JsonOutputParser), return it directly
+        # If response is already a dict (from structured output), return it directly
         if isinstance(response_text, dict):
             return response_text
+        
+        # If response is a Pydantic model instance, convert to dict
+        if hasattr(response_text, 'model_dump'):
+            return response_text.model_dump()
         
         # If response is a string, try to parse it as JSON
         content = response_text.strip()
@@ -328,49 +319,18 @@ class IACTTool(BaseTool):
             if retriever_tool is not None:
                 tools.append(retriever_tool)
         
-        # Create a prompt function that properly injects the system_prompt
-        def agent_tool_prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-            """Prepare messages for the agent tool, ensuring system prompt is included."""
-            history = state.get("messages", [])
-            
-            # Apply hybrid memory management if agent has memory enabled
-            if agent.has_memory:
-                try:
-                    history = MemoryManagementService.apply_hybrid_strategy(
-                        messages=history,
-                        max_messages=agent.memory_max_messages or 20,
-                        max_tokens=agent.memory_max_tokens
-                    )
-                    
-                    # Log memory statistics
-                    stats = MemoryManagementService.get_memory_stats(history)
-                    logger.info(f"Memory stats for agent tool {agent.agent_id} ({self.name}): {stats}")
-                    
-                except Exception as e:
-                    logger.error(f"Error applying memory management for agent tool {self.name}: {e}. Using unmodified history.")
-            
-            # Build final message list
-            messages = []
+        # Build system prompt with optional skills section (LangChain v1 pattern)
+        tool_system_prompt = agent.system_prompt or ""
+        if agent.system_prompt and hasattr(agent, 'skill_associations') and agent.skill_associations:
+            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+            if skills_section:
+                tool_system_prompt = tool_system_prompt + "\n" + skills_section
 
-            # Add system prompt if available, with optional skills section
-            if agent.system_prompt:
-                system_prompt_content = agent.system_prompt
-                if hasattr(agent, 'skill_associations') and agent.skill_associations:
-                    skills_section = generate_skills_system_prompt_section(agent.skill_associations)
-                    if skills_section:
-                        system_prompt_content = system_prompt_content + "\n" + skills_section
-                messages.append(SystemMessage(content=system_prompt_content))
-
-            # Add conversation history
-            messages.extend(history)
-
-            return messages
-
-        self.react_agent = create_react_agent(
-            model=self.llm, 
-            tools=tools, 
-            prompt=agent_tool_prompt,
-            debug=False
+        # Create sub-agent
+        self.react_agent = create_langchain_agent(
+            model=self.llm,
+            tools=tools,
+            system_prompt=tool_system_prompt if tool_system_prompt else None,
         )
 
     def _run(self, query: str, *args, **kwargs) -> str:
