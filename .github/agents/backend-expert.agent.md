@@ -754,6 +754,15 @@ When asked to bump, update, or change the project version:
 
 **DO NOT** manually edit version numbers in `pyproject.toml`. Always delegate version bumping to the `@version-bumper` agent.
 
+### Alembic Expert Agent (`@alembic-expert`)
+When working on database schema changes, migrations, or troubleshooting migration issues:
+- **Delegate to**: `@alembic-expert` agent
+- **Purpose**: Specializes in Alembic migrations, schema versioning, and migration troubleshooting
+- **Handles**: Creating migrations, reviewing migration scripts, resolving migration conflicts, migration rollbacks
+- **Example**: "Create a migration for the new model" → Delegate to `@alembic-expert`
+
+When you create or modify SQLAlchemy models, delegate the migration creation to `@alembic-expert`.
+
 ## Conclusion
 
 When assisting with backend development, always prioritize:
