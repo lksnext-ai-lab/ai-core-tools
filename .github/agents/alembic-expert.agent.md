@@ -271,6 +271,10 @@ poetry run alembic upgrade <revision_id> --sql
 - **Delegate to**: `@version-bumper` when version changes are needed
 - **DO NOT** manually edit version numbers in `pyproject.toml`
 
+### Git & GitHub (`@git-github`)
+- **Delegate to**: `@git-github` for branching, committing migration files, and creating PRs
+- Migration files should be committed with clear messages (e.g., `feat(alembic): add memory management fields`)
+
 ## Companion Instruction File
 
 This agent has a companion instruction file at `.github/instructions/.alembic.instructions.md` that is **automatically applied** by Copilot whenever working on files matching `alembic/**`. It enforces:

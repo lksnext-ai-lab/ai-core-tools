@@ -25,6 +25,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Backend Expert | `@backend-expert` | Python/FastAPI development, services, repositories |
 | React Expert | `@react-expert` | React/TypeScript frontend, components, hooks |
 | Alembic Expert | `@alembic-expert` | Database migrations, schema changes |
+| Git & GitHub | `@git-github` | Git workflows, issues, PRs, releases, branching |
 | Test Agent | `@test` | Writing and debugging tests |
 | Version Bumper | `@version-bumper` | Semantic versioning in pyproject.toml |
 | AI Dev Architect | `@ai-dev-architect` | Agent/instruction file management |
