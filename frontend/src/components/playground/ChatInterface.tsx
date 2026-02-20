@@ -234,7 +234,7 @@ function ChatInterface({
         setCurrentConversationId(targetConversationId);
         
         // Notify parent component about the new conversation
-        if (onConversationCreated) {
+        if (onConversationCreated && targetConversationId) {
           onConversationCreated(targetConversationId);
         }
         console.log(`Created conversation ${targetConversationId} for file attachment`);

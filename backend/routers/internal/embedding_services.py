@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi.responses import JSONResponse
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+import json
 
 # Import schemas and auth
 from schemas.embedding_service_schemas import (
@@ -9,14 +11,18 @@ from schemas.embedding_service_schemas import (
     EmbeddingServiceDetailSchema,
     CreateUpdateEmbeddingServiceSchema
 )
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import EmbeddingServiceExportFileSchema
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import database dependency
 from db.database import get_db
 
-# Import service
+# Import services
 from services.embedding_service_service import EmbeddingServiceService
+from services.embedding_service_export_service import EmbeddingServiceExportService
+from services.embedding_service_import_service import EmbeddingServiceImportService
 
 # Import logger
 from utils.logger import get_logger
@@ -52,6 +58,63 @@ async def list_embedding_services(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving embedding services: {str(e)}"
         )
+
+
+# ==================== STATIC ROUTES (without {service_id} parameter) ====================
+
+
+@embedding_services_router.post(
+    "/import",
+    summary="Import Embedding Service",
+    tags=["Embedding Services", "Export/Import"],
+    response_model=ImportResponseSchema,
+    status_code=status.HTTP_201_CREATED
+)
+async def import_embedding_service(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """Import Embedding Service from JSON file."""
+    try:
+        # Parse file
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = EmbeddingServiceExportFileSchema(**file_data)
+        
+        # Import
+        import_service = EmbeddingServiceImportService(db)
+        summary = import_service.import_embedding_service(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name
+        )
+        
+        return ImportResponseSchema(
+            success=True,
+            message=f"Embedding Service '{summary.component_name}' imported successfully",
+            summary=summary
+        )
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
+
+
+# ==================== DYNAMIC ROUTES (with {service_id} parameter) ====================
 
 
 @embedding_services_router.get("/{service_id}",
@@ -159,4 +222,46 @@ async def delete_embedding_service(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting embedding service: {str(e)}"
-        ) 
+        )
+
+
+# ==================== EXPORT/IMPORT ENDPOINTS ====================
+
+
+@embedding_services_router.post(
+    "/{service_id}/export",
+    summary="Export Embedding Service",
+    tags=["Embedding Services", "Export/Import"],
+    status_code=status.HTTP_200_OK
+)
+async def export_embedding_service(
+    app_id: int,
+    service_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export Embedding Service configuration to JSON file."""
+    try:
+        export_service = EmbeddingServiceExportService(db)
+        export_data = export_service.export_embedding_service(
+            service_id,
+            app_id,
+            getattr(auth_context, 'user_id', None)
+        )
+        
+        filename = f"{export_data.embedding_service.name.replace(' ', '_')}_embedding_service.json"
+        
+        return JSONResponse(
+            content=export_data.model_dump(mode='json'),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except ValueError as e:
+        logger.warning(f"Export failed: {str(e)}")
+        if "not found" in str(e):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+        else:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed") 

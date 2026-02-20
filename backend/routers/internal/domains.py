@@ -1,11 +1,15 @@
-from fastapi import APIRouter, HTTPException, status, Request, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, status, Request, Depends, BackgroundTasks, Query
+from fastapi.responses import JSONResponse
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List
+import json
 
 # Import services
 from services.domain_service import DomainService
 from services.url_service import UrlService
+from services.domain_export_service import DomainExportService
+from services.domain_import_service import DomainImportService
 from tools.scrapTools import scrape_and_index_url, reindex_domain_urls
 
 # Import schemas and auth
@@ -17,6 +21,8 @@ from schemas.domain_url_schemas import (
     CreateURLSchema,
     URLActionResponseSchema
 )
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import DomainExportFileSchema
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -26,6 +32,8 @@ from db.database import get_db
 # Import logger
 from utils.logger import get_logger
 from tools.vector_store_factory import VectorStoreFactory
+from fastapi import File, UploadFile
+from typing import Optional
 
 logger = get_logger(__name__)
 
@@ -77,6 +85,78 @@ def background_reindex_domain(domain_id: int):
 
 
 #DOMAIN MANAGEMENT
+
+@domains_router.post(
+    "/import",
+    summary="Import Domain",
+    tags=["Domains", "Export/Import"],
+    response_model=ImportResponseSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_domain(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    selected_embedding_service_id: Optional[int] = Query(
+        None
+    ),
+    auth_context: AuthContext = Depends(
+        get_current_user_oauth
+    ),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db),
+):
+    """Import Domain from JSON file.
+
+    Note: Imports domain structure and URL list.
+    URLs will need to be re-crawled after import.
+    """
+    try:
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = DomainExportFileSchema(**file_data)
+
+        import_service = DomainImportService(db)
+        import_service.validate_import(export_data, app_id)
+
+        summary = import_service.import_domain(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name,
+            selected_embedding_service_id=(
+                selected_embedding_service_id
+            ),
+        )
+
+        return ImportResponseSchema(
+            success=True,
+            message=(
+                f"Domain '{summary.component_name}' "
+                f"imported successfully"
+            ),
+            summary=summary,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(e)
+        )
+    except Exception as e:
+        logger.error(
+            f"Import error: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
+
 
 @domains_router.get("/", 
                     summary="List domains",
@@ -255,6 +335,73 @@ async def delete_domain(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting domain: {str(e)}"
+        )
+
+
+@domains_router.post(
+    "/{domain_id}/export",
+    summary="Export Domain",
+    tags=["Domains", "Export/Import"],
+    status_code=status.HTTP_200_OK,
+)
+async def export_domain(
+    app_id: int,
+    domain_id: int,
+    include_dependencies: bool = Query(
+        True,
+        description="Bundle silo and its dependencies",
+    ),
+    auth_context: AuthContext = Depends(
+        get_current_user_oauth
+    ),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+):
+    """Export Domain configuration to JSON file.
+
+    Note: Exports domain structure and URL list.
+    Crawled content is NOT exported (heavy data).
+    URLs will need to be re-crawled after import.
+    """
+    try:
+        export_service = DomainExportService(db)
+        export_data = export_service.export_domain(
+            domain_id,
+            app_id,
+            getattr(auth_context, "user_id", None),
+            include_dependencies,
+        )
+
+        filename = (
+            f"{export_data.domain.name.replace(' ', '_')}"
+            f"_domain.json"
+        )
+
+        return JSONResponse(
+            content=export_data.model_dump(mode="json"),
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{filename}"'
+                )
+            },
+        )
+    except ValueError as e:
+        logger.warning(f"Export failed: {str(e)}")
+        if "not found" in str(e):
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, str(e)
+            )
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, str(e)
+            )
+    except Exception as e:
+        logger.error(
+            f"Export error: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Export failed",
         )
 
 

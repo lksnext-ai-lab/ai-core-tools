@@ -9,6 +9,7 @@ interface FormActionsProps {
   cancelClassName?: string;
   containerClassName?: string;
   showCancel?: boolean;
+  submitDisabled?: boolean; // Additional condition to disable submit button
 }
 
 /**
@@ -23,7 +24,8 @@ export function FormActions({
   submitClassName = '',
   cancelClassName = '',
   containerClassName = '',
-  showCancel = true
+  showCancel = true,
+  submitDisabled = false
 }: FormActionsProps) {
   return (
     <div className={`flex justify-end space-x-3 pt-4 border-t border-gray-200 ${containerClassName}`}>
@@ -40,7 +42,7 @@ export function FormActions({
       
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || submitDisabled}
         className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center ${submitClassName}`}
       >
         {isSubmitting && (

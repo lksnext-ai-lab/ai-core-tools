@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
+from fastapi.responses import JSONResponse
 from typing import List, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 import json
 
 from services.agent_service import AgentService
+from services.agent_export_service import AgentExportService
+from services.agent_import_service import AgentImportService
 from services.mcp_server_service import MCPServerService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import AgentExportFileSchema
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
@@ -31,6 +36,82 @@ def get_agent_service() -> AgentService:
     return AgentService()
 
 #AGENT MANAGEMENT
+
+@agents_router.post("/import",
+                   summary="Import Agent",
+                   tags=["Agents", "Export/Import"],
+                   response_model=ImportResponseSchema,
+                   status_code=status.HTTP_201_CREATED)
+async def import_agent(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    selected_ai_service_id: Optional[int] = Query(None),
+    selected_silo_id: Optional[int] = Query(None),
+    selected_output_parser_id: Optional[int] = Query(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """Import Agent from JSON file.
+    
+    Note: Conversation history is NOT imported (config only).
+    If AI service is not bundled, you must provide selected_ai_service_id.
+    """
+    try:
+        # Parse file
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = AgentExportFileSchema(**file_data)
+        
+        # Validate import
+        import_service = AgentImportService(db)
+        validation = import_service.validate_import(export_data, app_id)
+        
+        # Check if AI service selection is required but not provided
+        if validation.requires_ai_service_selection:
+            if selected_ai_service_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "AI service selection required. "
+                        "This agent requires an AI service but none is bundled. "
+                        "Please provide selected_ai_service_id parameter."
+                    )
+                )
+        
+        # Import
+        summary = import_service.import_agent(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name,
+            selected_ai_service_id,
+            selected_silo_id,
+            selected_output_parser_id
+        )
+        
+        return ImportResponseSchema(
+            success=True,
+            message=f"Agent '{summary.component_name}' imported successfully",
+            summary=summary
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
+
 
 @agents_router.get("/", 
                   summary="List agents",
@@ -81,6 +162,51 @@ async def get_agent(
         )
     
     return agent_detail
+
+
+@agents_router.post("/{agent_id}/export",
+                   summary="Export Agent",
+                   tags=["Agents", "Export/Import"],
+                   response_model=AgentExportFileSchema)
+async def export_agent(
+    app_id: int,
+    agent_id: int,
+    include_ai_service: bool = Query(True, description="Bundle AI service in export"),
+    include_silo: bool = Query(True, description="Bundle silo in export"),
+    include_output_parser: bool = Query(True, description="Bundle output parser in export"),
+    include_mcp_configs: bool = Query(True, description="Bundle MCP configs in export"),
+    include_agent_tools: bool = Query(True, description="Bundle agent tools in export"),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export Agent configuration (conversation history NOT included).
+    
+    Customize which dependencies to bundle:
+    - include_ai_service: Bundle the AI service configuration
+    - include_silo: Bundle the silo configuration
+    - include_output_parser: Bundle the output parser configuration
+    - include_mcp_configs: Bundle all MCP configurations
+    - include_agent_tools: Bundle all agent tool (other agents) configurations
+    """
+    try:
+        export_service = AgentExportService(db)
+        export_data = export_service.export_agent(
+            agent_id=agent_id,
+            app_id=app_id,
+            user_id=int(auth_context.identity.id),
+            include_ai_service=include_ai_service,
+            include_silo=include_silo,
+            include_output_parser=include_output_parser,
+            include_mcp_configs=include_mcp_configs,
+            include_agent_tools=include_agent_tools,
+        )
+        return export_data
+    except ValueError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+    except Exception as e:
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
 
 
 @agents_router.post("/{agent_id}",

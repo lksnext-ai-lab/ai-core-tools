@@ -1,10 +1,10 @@
 
- import React from 'react';
+ import React, { type ReactNode } from 'react';
 
 interface AlertProps {
   type: 'success' | 'error' | 'warning' | 'info';
   title?: string;
-  message: string;
+  message: string | ReactNode;
   onDismiss?: () => void;
   className?: string;
 }

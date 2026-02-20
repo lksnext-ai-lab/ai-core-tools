@@ -12,6 +12,7 @@ class EmbeddingServiceListItemSchema(BaseModel):
     provider: Optional[str]
     model_name: str
     created_at: Optional[datetime]
+    needs_api_key: bool = False
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,6 +27,7 @@ class EmbeddingServiceDetailSchema(BaseModel):
     base_url: str
     created_at: Optional[datetime]
     available_providers: List[Dict[str, Any]]
+    needs_api_key: bool = False
     
     model_config = ConfigDict(from_attributes=True)
 
