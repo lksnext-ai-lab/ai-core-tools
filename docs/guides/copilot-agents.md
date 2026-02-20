@@ -1,6 +1,6 @@
 # Copilot Agents, Skills & Instructions
 
-> Part of [Mattin AI Documentation](../index.md)
+> Part of [Mattin AI Documentation](../README.md)
 
 ## Overview
 
@@ -83,7 +83,7 @@ Manages all documentation in `docs/`:
 
 - Git-based change tracking via `docs/.doc-metadata.yaml` baseline
 - Commit analysis and documentation freshness auditing
-- Index/TOC management (`docs/index.md` as authoritative TOC)
+- Index/TOC management (`docs/README.md` as authoritative TOC)
 - Section creation, restructuring, and cross-reference validation
 
 **Usage examples**:
@@ -227,7 +227,7 @@ Auto-applied when editing files under `docs/`. Enforces:
 - ATX-style headings with language-tagged fenced code blocks
 - Relative links for internal references
 - `docs/.doc-metadata.yaml` managed by `@docs-manager` only
-- `docs/index.md` is the authoritative TOC — every page must be linked there
+- `docs/README.md` is the authoritative TOC — every page must be linked there
 - Document what **exists**, not what is planned
 - Don't duplicate content from `CLAUDE.md` or root `README.md`
 
@@ -333,7 +333,7 @@ To extend the Copilot tooling:
 2. **New skill**: Ask `@ai-dev-architect`, or use the `new-skill` skill template
 3. **New instruction**: Ask `@ai-dev-architect`, or use the `new-instruction` skill template
 
-All new components should be documented by updating this page and the [index](../index.md).
+All new components should be documented by updating this page and the [README](../README.md).
 
 ---
 

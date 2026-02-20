@@ -1,6 +1,6 @@
 # MCP Integration
 
-> Part of [Mattin AI Documentation](../index.md)
+> Part of [Mattin AI Documentation](../README.md)
 
 ## Overview
 
