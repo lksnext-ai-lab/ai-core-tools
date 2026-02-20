@@ -5,7 +5,7 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "8f357aec4611c2defd8084bf16c0a3fc5d69b29f"
+last_synced_commit: "6bea1f2d80bf92676233f30b5c63172bea4b9a43"
 last_synced_date: "2026-02-20T00:00:00+01:00"
 last_synced_by: "docs-manager-agent"
 
@@ -31,7 +31,8 @@ last_sync_summary:
     - "docs/reference/environment-variables.md"
     - "docs/reference/role-authorization.md"
     - "docs/reference/file-processing.md"
+    - "docs/guides/copilot-agents.md"
   files_deleted: []
-  commits_covered: 0
-  commit_range: "8f357ae..8f357ae"
-  notes: "Restructured TOC and created stub section files for all documentation areas."
+  commits_covered: 1
+  commit_range: "8f357ae..6bea1f2"
+  notes: "Restructured TOC, created stub section files, and added Copilot Agents, Skills & Instructions documentation."

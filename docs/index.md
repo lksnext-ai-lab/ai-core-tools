@@ -1,8 +1,20 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-02-20 (based on commit `8f357ae`)
+> Last updated: 2026-02-20 (based on commit `93830a7`)
 
 ## Table of Contents
+
+- [Overview](#overview)
+- [Getting Started](#getting-started)
+- [Architecture](#architecture)
+- [AI & LLM](#ai--llm)
+- [API Reference](#api-reference)
+- [Guides](#guides)
+- [Copilot Agents & Tooling](#copilot-agents--tooling)
+- [Reference](#reference)
+- [Legal](#legal)
+
+---
 
 ### Overview
 - [Project Overview](README.md) — What Mattin AI is, features, licensing, and contribution guidelines
@@ -32,6 +44,9 @@
 - [Plugin Development](guides/plugin-development.md) — Building plugins for client projects
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
 - [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
+
+### Copilot Agents & Tooling
+- [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph
 
 ### Reference
 - [Role Authorization](reference/role-authorization.md) — Role hierarchy, decorators, and access control
