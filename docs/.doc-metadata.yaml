@@ -1,0 +1,21 @@
+# Documentation sync tracking — managed by @docs-manager agent
+# DO NOT EDIT MANUALLY unless you know what you're doing
+#
+# This file tracks which git commit the documentation was last synchronized to.
+# When @docs-manager updates documentation, it reads this file to determine
+# what commits need to be analyzed, then advances the baseline after updating.
+
+last_synced_commit: "6bea1f2d80bf92676233f30b5c63172bea4b9a43"
+last_synced_date: "2026-02-20T00:00:00+01:00"
+last_synced_by: "docs-manager-agent"
+
+# Summary of the last sync operation
+last_sync_summary:
+  files_updated:
+    - "docs/index.md"
+  files_created:
+    - "docs/guides/copilot-agents.md"
+  files_deleted: []
+  commits_covered: 1
+  commit_range: "8f357ae..6bea1f2"
+  notes: "Added Copilot Agents, Skills & Instructions section. Added TOC with anchor links to index.md."
