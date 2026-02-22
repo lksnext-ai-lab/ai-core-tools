@@ -79,9 +79,4 @@ By contributing to this project, you agree to the terms and conditions of the AG
 
 ### Legal
 
-This project is available under a dual licensing model:
-
-- **Open Source**: GNU Affero General Public License v3.0 (AGPL 3.0)
-- **Commercial**: Proprietary license with enhanced rights and features
-
-For full license details, see [LICENSE](LICENSE.md) and the [LICENSE](../LICENSE) file in the repository root.
+- [Licensing](LICENSE.md) — Dual-license model (AGPL-3.0 + Commercial), FAQ, and links to all license files

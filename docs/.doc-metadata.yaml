@@ -5,35 +5,18 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "593f5ba23f064490cc54fb1b74793c3ec6bbf7cd"
-last_synced_date: "2026-02-20T15:30:00+00:00"
+last_synced_commit: "c11bee46d4be0529663bf41f744ddeb21c250125"
+last_synced_date: "2026-02-20T18:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
-    - "docs/index.md"
+    - "docs/LICENSE.md"
     - "docs/README.md"
     - "docs/.doc-metadata.yaml"
-  files_created:
-    - "docs/architecture/overview.md"
-    - "docs/architecture/backend.md"
-    - "docs/architecture/frontend.md"
-    - "docs/architecture/database.md"
-    - "docs/ai/llm-integration.md"
-    - "docs/ai/rag-vector-stores.md"
-    - "docs/ai/agent-system.md"
-    - "docs/ai/mcp-integration.md"
-    - "docs/api/internal-api.md"
-    - "docs/api/public-api.md"
-    - "docs/guides/client-setup.md"
-    - "docs/guides/plugin-development.md"
-    - "docs/guides/deployment.md"
-    - "docs/guides/authentication.md"
-    - "docs/reference/environment-variables.md"
-    - "docs/reference/role-authorization.md"
-    - "docs/reference/file-processing.md"
+  files_created: []
   files_deleted: []
-  commits_covered: 10
-  commit_range: "d0c5392..593f5ba"
-  notes: "Completed all 17 documentation stub files with comprehensive content (~10,000+ lines). Covered architecture, AI/LLM, API reference, guides, and reference documentation. All sections now contain detailed technical documentation with code examples, configuration snippets, and cross-references."
+  commits_covered: 1
+  commit_range: "593f5ba..c11bee4"
+  notes: "Replaced outdated LKSISL inner-source license in docs/LICENSE.md with a proper dual-licensing documentation page (AGPL-3.0 + Commercial). Updated Legal section in docs/README.md to match."

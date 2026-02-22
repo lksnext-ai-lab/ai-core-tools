@@ -30,6 +30,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Version Bumper | `@version-bumper` | Semantic versioning in pyproject.toml |
 | AI Dev Architect | `@ai-dev-architect` | Agent/instruction file management |
 | Documentation Manager | `@docs-manager` | Documentation management, index/TOC, freshness tracking |
+| Open Source Manager | `@oss-manager` | Licensing, community files, changelog, release notes, OSS governance |
 
 ## Architecture Conventions
 
