@@ -8,6 +8,12 @@ export const defaultNavigation: NavigationConfig = {
       name: 'Home',
       icon: '🏠',
       section: 'mainFeatures'
+    },
+    {
+      path: '/marketplace',
+      name: 'Marketplace',
+      icon: '🏪',
+      section: 'mainFeatures'
     }
   ],
   // App-specific horizontal navigation (when inside an app)

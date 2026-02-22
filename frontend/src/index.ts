@@ -91,6 +91,8 @@ export { default as UsersPage } from './pages/admin/UsersPage';
 export { default as StatsPage } from './pages/admin/StatsPage';
 export { default as LoginPage } from './pages/LoginPage';
 export { default as AuthSuccessPage } from './pages/AuthSuccessPage';
+export { default as MarketplacePage } from './pages/MarketplacePage';
+export { MarketplaceAgentCard } from './components/marketplace/MarketplaceAgentCard';
 
 // Export base theme
 export { baseTheme } from './themes/baseTheme';
