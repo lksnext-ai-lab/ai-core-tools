@@ -48,6 +48,7 @@ import MCPServersPage from '../pages/MCPServersPage';
 import MCPServerFormPage from '../pages/MCPServerFormPage';
 import MCPServerDetailPage from '../pages/MCPServerDetailPage';
 import MarketplacePage from '../pages/MarketplacePage';
+import MarketplaceAgentDetailPage from '../pages/MarketplaceAgentDetailPage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -152,6 +153,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/marketplace" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                     <MarketplacePage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace/agents/:agentId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceAgentDetailPage />
                   </ProtectedLayoutRoute>
                 } />
 

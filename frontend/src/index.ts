@@ -93,6 +93,7 @@ export { default as LoginPage } from './pages/LoginPage';
 export { default as AuthSuccessPage } from './pages/AuthSuccessPage';
 export { default as MarketplacePage } from './pages/MarketplacePage';
 export { MarketplaceAgentCard } from './components/marketplace/MarketplaceAgentCard';
+export { default as MarketplaceAgentDetailPage } from './pages/MarketplaceAgentDetailPage';
 
 // Export base theme
 export { baseTheme } from './themes/baseTheme';
