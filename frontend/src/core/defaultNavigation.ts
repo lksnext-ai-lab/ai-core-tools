@@ -4,7 +4,7 @@ export const defaultNavigation: NavigationConfig = {
   // Sidebar navigation
   mainFeatures: [
     {
-      path: '/',
+      path: '/home',
       name: 'Home',
       icon: '🏠',
       section: 'mainFeatures'

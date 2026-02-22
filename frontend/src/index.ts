@@ -95,6 +95,7 @@ export { default as MarketplacePage } from './pages/MarketplacePage';
 export { MarketplaceAgentCard } from './components/marketplace/MarketplaceAgentCard';
 export { default as MarketplaceAgentDetailPage } from './pages/MarketplaceAgentDetailPage';
 export { default as MarketplaceChatPage } from './pages/MarketplaceChatPage';
+export { default as MarketplaceHomePage } from './pages/MarketplaceHomePage';
 
 // Export base theme
 export { baseTheme } from './themes/baseTheme';
