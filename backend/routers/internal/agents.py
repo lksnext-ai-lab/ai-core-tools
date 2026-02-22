@@ -6,9 +6,15 @@ import json
 
 from services.agent_service import AgentService
 from services.mcp_server_service import MCPServerService
+from services.marketplace_service import MarketplaceService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
+from schemas.marketplace_schemas import (
+    MarketplaceVisibilityUpdateSchema,
+    MarketplaceProfileCreateUpdateSchema,
+    MarketplaceProfileSchema,
+)
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
@@ -684,3 +690,76 @@ async def remove_attached_file(
     except Exception as e:
         logger.error(f"Error in remove file endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to remove file") 
+
+
+# ==================== MARKETPLACE MANAGEMENT ====================
+
+
+@agents_router.put("/{agent_id}/marketplace-visibility",
+                   summary="Update marketplace visibility",
+                   tags=["Agents", "Marketplace"])
+async def update_marketplace_visibility(
+    app_id: int,
+    agent_id: int,
+    data: MarketplaceVisibilityUpdateSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
+    db: Session = Depends(get_db),
+):
+    """Update an agent's marketplace visibility (unpublished/private/public)."""
+    try:
+        agent = MarketplaceService.update_marketplace_visibility(
+            db=db,
+            agent_id=agent_id,
+            app_id=app_id,
+            visibility_str=data.marketplace_visibility,
+        )
+        return {"marketplace_visibility": agent.marketplace_visibility.value}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@agents_router.get("/{agent_id}/marketplace-profile",
+                   summary="Get marketplace profile",
+                   tags=["Agents", "Marketplace"],
+                   response_model=MarketplaceProfileSchema)
+async def get_marketplace_profile(
+    app_id: int,
+    agent_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+):
+    """Get the marketplace profile for an agent (EDITOR+ management view)."""
+    profile = MarketplaceService.get_marketplace_profile(db, agent_id, app_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Marketplace profile not found",
+        )
+    return profile
+
+
+@agents_router.put("/{agent_id}/marketplace-profile",
+                   summary="Create or update marketplace profile",
+                   tags=["Agents", "Marketplace"],
+                   response_model=MarketplaceProfileSchema)
+async def update_marketplace_profile(
+    app_id: int,
+    agent_id: int,
+    profile_data: MarketplaceProfileCreateUpdateSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
+    db: Session = Depends(get_db),
+):
+    """Create or update the marketplace profile for an agent."""
+    try:
+        profile = MarketplaceService.create_or_update_marketplace_profile(
+            db=db,
+            agent_id=agent_id,
+            app_id=app_id,
+            profile_data=profile_data,
+        )
+        return MarketplaceProfileSchema.model_validate(profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

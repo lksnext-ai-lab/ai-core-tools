@@ -16,6 +16,7 @@ class AgentListItemSchema(BaseModel):
     request_count: int
     service_id: Optional[int] = None
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
+    marketplace_visibility: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,6 +58,8 @@ class AgentDetailSchema(BaseModel):
     tools: List[Dict[str, Any]]
     mcp_configs: List[Dict[str, Any]]
     skills: List[Dict[str, Any]]
+    marketplace_visibility: Optional[str] = None
+    marketplace_profile: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
