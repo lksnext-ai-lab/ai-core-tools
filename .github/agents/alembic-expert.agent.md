@@ -289,6 +289,16 @@ poetry run alembic upgrade <revision_id> --sql
 
 **DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
 
+### Plan Executor (`@plan-executor`)
+When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
+- **After completing the task**, append a `## Result` section to the step file with:
+  - `**Completed by**: @alembic-expert`
+  - `**Completed at**: YYYY-MM-DD`
+  - `**Status**: done | blocked | needs-revision`
+  - A summary of what migration was created, files changed, and any issues
+- **Then** suggest the user invoke `@plan-executor` to continue with the next step
+- If the task cannot be completed, set status to `blocked` and explain why
+
 ## Companion Instruction File
 
 This agent has a companion instruction file at `.github/instructions/.alembic.instructions.md` that is **automatically applied** by Copilot whenever working on files matching `alembic/**`. It enforces:

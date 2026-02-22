@@ -250,6 +250,16 @@ When your documentation work is complete and the user needs to commit and push:
 
 **DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
 
+### Plan Executor (`@plan-executor`)
+When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
+- **After completing the task**, append a `## Result` section to the step file with:
+  - `**Completed by**: @docs-manager`
+  - `**Completed at**: YYYY-MM-DD`
+  - `**Status**: done | blocked | needs-revision`
+  - A summary of what docs were updated, files changed, and any issues
+- **Then** suggest the user invoke `@plan-executor` to continue with the next step
+- If the task cannot be completed, set status to `blocked` and explain why
+
 ## What This Agent Does NOT Do
 
 - ❌ Does not write or modify application code (backend or frontend)

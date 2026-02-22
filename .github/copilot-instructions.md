@@ -190,6 +190,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Version Bumper | `@version-bumper` | Semantic versioning in pyproject.toml |
 | AI Dev Architect | `@ai-dev-architect` | Agent/instruction file management |
 | Feature Planner | `@feature-planner` | Structured feature planning, specs, and plan tracking in /plans |
+| Plan Executor | `@plan-executor` | Reads plans from /plans and generates sequenced step files for implementation agents |
 | Documentation Manager | `@docs-manager` | Documentation management, index/TOC, freshness tracking |
 | Open Source Manager | `@oss-manager` | Licensing, community files, changelog, release notes, OSS governance |
 

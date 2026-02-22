@@ -312,6 +312,16 @@ Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@
 ### React Expert (`@react-expert`)
 - **Coordinate with**: `@react-expert` when commits involve frontend code changes
 
+### Plan Executor (`@plan-executor`)
+When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
+- **After completing the task** (branch creation, commit, or PR), append a `## Result` section to the step file with:
+  - `**Completed by**: @git-github`
+  - `**Completed at**: YYYY-MM-DD`
+  - `**Status**: done | blocked | needs-revision`
+  - A summary of the git operation performed (branch name, commit SHA, PR URL)
+- **Then** suggest the user invoke `@plan-executor` to continue with the next step
+- For plan commits, use the commit message format specified in the step file
+
 ## What This Agent Does NOT Do
 
 - ❌ Does not write application code (delegates to `@backend-expert` or `@react-expert`)

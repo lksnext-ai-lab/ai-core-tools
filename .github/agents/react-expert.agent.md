@@ -428,6 +428,16 @@ When a user asks to plan, scope, or spec out a feature before implementation:
 
 **DO NOT** create or modify plan files yourself. Always delegate planning to `@feature-planner`.
 
+### Plan Executor (`@plan-executor`)
+When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
+- **After completing the task**, append a `## Result` section to the step file with:
+  - `**Completed by**: @react-expert`
+  - `**Completed at**: YYYY-MM-DD`
+  - `**Status**: done | blocked | needs-revision`
+  - A summary of what was implemented, files changed, and any issues
+- **Then** suggest the user invoke `@plan-executor` to continue with the next step
+- If the task cannot be completed, set status to `blocked` and explain why
+
 ## Conclusion
 
 When assisting with React development, always prioritize:

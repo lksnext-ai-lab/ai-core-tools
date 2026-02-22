@@ -359,6 +359,11 @@ What is explicitly out of scope for this feature?
 - **Delegate to**: `@git-github` when plans need to be committed, or when plan completion should create/close GitHub issues
 - **Purpose**: Handles all git operations and GitHub workflow
 
+### Plan Executor (`@plan-executor`)
+- **Hand off to**: `@plan-executor` when a plan reaches `ready` status and the user wants to start implementation
+- **Purpose**: Decomposes the spec into sequenced step files targeting implementation agents
+- **Workflow**: User invokes `@plan-executor execute plan <slug>` to begin execution
+
 ### Test Agent (`@test`)
 - **Delegate to**: `@test` when the user requests test specifications derived from acceptance criteria
 - **Purpose**: Translates acceptance criteria into test cases
