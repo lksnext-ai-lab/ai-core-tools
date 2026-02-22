@@ -16,6 +16,166 @@ This file provides repository-wide guidance for GitHub Copilot when working with
 - **Database**: PostgreSQL with pgvector extension
 - **Infrastructure**: Docker, Docker Compose
 
+## Product & Domain Reference
+
+This section describes **what Mattin AI does** from a product and domain perspective, so that every agent has shared context without needing to rediscover it from the codebase.
+
+### Core Concepts
+
+**App (Workspace)**: The central tenant unit. Every resource in the system (agents, silos, repos, services, API keys) is scoped to an App. Each App has an `owner`, a URL-safe `slug`, configurable rate limits, CORS origins, and max file sizes. Users create Apps to organize their AI work.
+
+**User**: A platform account (email, name). A User can own multiple Apps and be a collaborator on others. Users authenticate via OIDC (Azure Entra ID) in production or a simplified email-only flow in development (`AICT_LOGIN=FAKE`).
+
+**Collaborator**: Users can be invited to an App with a specific role. The invitation workflow has states: `PENDING` → `ACCEPTED` / `DECLINED`.
+
+### Role-Based Access Control
+
+Roles from lowest to highest privilege:
+
+| Role | Access Level |
+|------|-------------|
+| **VIEWER** | Read-only access to app resources |
+| **EDITOR** | Create/edit agents, repos, silos, services, etc. |
+| **ADMINISTRATOR** | Full app management except ownership transfer |
+| **OWNER** | Full control including collaborator management and app deletion |
+| **OMNIADMIN** | Cross-app superadmin (set via `AICT_OMNIADMINS` env var) |
+
+Access is enforced with `@require_min_role(AppRole.EDITOR)` decorators on routes. All resources are filtered by `app_id` for tenant isolation.
+
+### Domain Entities
+
+#### AI Entities
+
+| Entity | Purpose |
+|--------|---------|
+| **Agent** | Core AI agent. Configured with a system prompt, an LLM (via AIService), optional RAG (via Silo), memory settings, temperature, output parser, skills, and MCP tool configs. Can be composed: agents marked `is_tool=True` can be used as tools by other agents. |
+| **OCRAgent** | Specialized Agent subclass (STI via `type` column). Dual-LLM: a vision model for scanned pages and a text model for structuring output. |
+| **AIService** | LLM provider configuration. Stores provider type (OpenAI, Anthropic, MistralAI, Azure, Google, Custom), endpoint, API key. Each App can have multiple. |
+| **EmbeddingService** | Embedding model configuration for vector stores. Providers: OpenAI, MistralAI, Ollama, Custom, Azure. |
+| **Skill** | Reusable markdown prompt block that can be attached to agents (M:N via `agent_skills`). Injected into the agent's system prompt at execution time. |
+| **OutputParser** | JSON-schema definition for structured LLM output. Stored as a `fields` JSON column. At runtime, dynamically generates a Pydantic model. Used by agents for structured responses and by silos for metadata filtering. |
+| **Conversation** | Tracks a chat session between a user and an agent. Memory state stored in LangGraph's PostgreSQL checkpointer. Metadata (title, message count, last message) stored in the Conversation table. |
+
+#### RAG / Content Entities
+
+| Entity | Purpose |
+|--------|---------|
+| **Silo** | Vector store container. Each silo maps to a collection (`silo_{id}`) in a vector DB (PGVector or Qdrant, configurable per silo). Linked to an EmbeddingService. Agents connect to a Silo for RAG retrieval. |
+| **Repository** | File-based document store. Contains uploaded files organized in folders. Every Repository is linked to a Silo — uploaded files are vectorized into that silo's collection. |
+| **Resource** | Individual file within a Repository (PDF, text, etc.). |
+| **Folder** | Hierarchical folder structure within a Repository. Self-referencing for nesting. |
+| **Media** | Audio/video content within a Repository. Supports direct upload or YouTube URLs. Transcribed with configurable chunking (min/max duration, overlap), then vectorized. |
+| **Domain** | Web scraping source. Configured with a base URL and CSS selectors. Crawled URLs are vectorized into the linked Silo. |
+| **Url** | Individual page within a Domain. |
+
+#### MCP Entities (Dual-Role Architecture)
+
+Mattin AI acts as **both** an MCP server and an MCP client:
+
+| Entity | Role | Purpose |
+|--------|------|---------|
+| **MCPServer** | Server (outbound) | Exposes agents as MCP tools to external clients (Claude Desktop, Cursor). Has a slug for URL routing, rate limiting, and agent-to-tool mappings. |
+| **MCPConfig** | Client (inbound) | Stores connection config for external MCP servers that agents can consume as tool sources. Linked to agents via `agent_mcps` join table. |
+
+#### Auth Entity
+
+| Entity | Purpose |
+|--------|---------|
+| **APIKey** | 64-character key for programmatic access (public API + MCP). Scoped to an App, owned by a User. Shown once on creation. |
+
+### Entity Relationships (Key FKs)
+
+```
+User ──owns──► App (1:N)
+User ◄──collaborates──► App (M:N via AppCollaborator with role + status)
+
+App ──has──► Agent, Silo, Repository, Domain, AIService, EmbeddingService,
+             OutputParser, Skill, MCPServer, MCPConfig, APIKey (all 1:N)
+
+Agent ──uses──► AIService (N:1)           # Which LLM to call
+Agent ──links──► Silo (N:1, optional)     # RAG knowledge base
+Agent ──uses──► OutputParser (N:1, opt.)  # Structured output
+Agent ◄──► Skill (M:N via agent_skills)
+Agent ◄──► MCPConfig (M:N via agent_mcps)
+Agent ◄──► Agent (M:N via agent_tools)    # Agent-as-tool composition
+
+Silo ──uses──► EmbeddingService (N:1)
+Silo ◄── Repository (1:N)
+Silo ◄── Domain (1:N)
+
+Repository ──► Resource (1:N), Folder (1:N), Media (1:N)
+Domain ──► Url (1:N)
+
+MCPServer ◄──► Agent (M:N via mcp_server_agents)
+```
+
+### API Surface
+
+Three distinct API groups with different authentication:
+
+| Group | Prefix | Auth | Purpose |
+|-------|--------|------|---------|
+| **Internal** | `/internal` | Session/JWT (OIDC or dev) | Frontend ↔ Backend. Full CRUD for all entities. |
+| **Public v1** | `/public/v1` | `X-API-KEY` header | External programmatic access. Chat, file upload, repo/silo ops. |
+| **MCP** | `/mcp/v1` | `X-API-KEY` header | JSON-RPC 2.0 for Model Context Protocol. |
+
+**Public API controls:** per-app rate limiting (`App.agent_rate_limit`), CORS origin validation (`App.agent_cors_origins`), file size limits (`App.max_file_size_mb`).
+
+### Key User Workflows
+
+1. **Create App** → Configure AI services (LLM + embedding) → Create agents → Chat via playground or API
+2. **Build knowledge base** → Create silo → Create repository → Upload files → Files vectorized → Link silo to agent → Agent uses RAG
+3. **Web scraping for RAG** → Create silo → Create domain with URL + selectors → Scrape → Content vectorized
+4. **Media transcription** → Upload audio/video to repository → Transcribed → Chunked → Vectorized
+5. **Structured output** → Create output parser (JSON schema) → Attach to agent → Agent returns structured JSON
+6. **Agent composition** → Mark agent as `is_tool` → Link as tool to another agent → Parent agent delegates to child
+7. **MCP server exposure** → Create MCPServer → Attach agents → External tools (Claude Desktop, Cursor) connect via slug URL
+8. **MCP tool consumption** → Create MCPConfig with external server connection → Link to agent → Agent uses external tools
+9. **Collaboration** → Owner invites users by email with role → Invitee accepts → Collaborator accesses app resources
+10. **API access** → Generate API key → Use `X-API-KEY` header for public API or MCP endpoints
+
+### Agent Execution Flow
+
+```
+User message (+ optional files)
+  → AgentExecutionService.execute_agent_chat()
+    → Process file attachments (PDF text extraction, image encoding)
+    → Get/create conversation session (if memory enabled)
+    → Build LangGraph agent chain:
+        • LLM from AIService config
+        • Tools: agent-as-tool children + MCP client tools + silo retriever
+        • Skills injected into system prompt
+        • Memory via LangGraph PostgreSQL checkpointer
+    → Format prompt via prompt_template
+    → agent_chain.ainvoke(messages, config)
+    → Apply output parser (if configured)
+    → Update conversation metadata + request count
+    → Return {response, agent_id, conversation_id, metadata}
+```
+
+### Memory Management
+
+- **Storage**: LangGraph's `AsyncPostgresSaver` in PostgreSQL
+- **Thread ID**: `thread_{agent_id}_{session_id}`
+- **Config per agent**: `has_memory`, `memory_max_messages` (default 20), `memory_max_tokens` (default 4000), `memory_summarize_threshold` (default 10)
+- **Strategies**: Token counting (tiktoken), message trimming (keeps recent N, preserves system messages), tool message cleanup
+
+### Client Deployment Model
+
+The frontend is a **reusable npm library** (`@lksnext/ai-core-tools-base`):
+- Base library provides all pages, components, contexts, auth, themes
+- Client projects (`clients/<name>/`) import the library and customize via `clientConfig.ts`: theme, branding, auth config, API URL, feature flags, custom routes
+- All clients share the same backend
+
+### Notable Features
+
+- **Per-silo vector DB type**: Each silo independently uses PGVector or Qdrant
+- **Dynamic Pydantic models**: OutputParser JSON schemas become Pydantic models at runtime
+- **Multimodal chat**: Agents accept images alongside text (base64 or signed static URLs)
+- **Secure static files**: `/static/{path}` requires cryptographic signature
+- **Cascade deletion**: `AppService.delete_app()` performs ordered deletion across all entity types
+- **LangSmith tracing**: Optional per-app tracing via `App.langsmith_api_key`
+
 ## Specialized Agents
 
 For domain-specific tasks, invoke these specialized agents:
@@ -29,6 +189,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Test Agent | `@test` | Writing and debugging tests |
 | Version Bumper | `@version-bumper` | Semantic versioning in pyproject.toml |
 | AI Dev Architect | `@ai-dev-architect` | Agent/instruction file management |
+| Feature Planner | `@feature-planner` | Structured feature planning, specs, and plan tracking in /plans |
 | Documentation Manager | `@docs-manager` | Documentation management, index/TOC, freshness tracking |
 | Open Source Manager | `@oss-manager` | Licensing, community files, changelog, release notes, OSS governance |
 

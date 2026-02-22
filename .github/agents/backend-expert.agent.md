@@ -784,6 +784,15 @@ When your implementation work is complete and the user needs to commit, push, or
 
 **DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
 
+### Feature Planner (`@feature-planner`)
+When a user asks to plan, scope, or spec out a feature before implementation:
+- **Delegate to**: `@feature-planner` agent
+- **Purpose**: Creates structured feature specifications in `/plans/` with requirements, acceptance criteria, and edge cases
+- **Consult**: When implementing a planned feature, read `/plans/<slug>/spec.md` first for requirements and acceptance criteria
+- **After implementation**: Suggest the user invoke `@feature-planner` to mark the plan as `implemented`
+
+**DO NOT** create or modify plan files yourself. Always delegate planning to `@feature-planner`.
+
 ## Conclusion
 
 When assisting with backend development, always prioritize:
