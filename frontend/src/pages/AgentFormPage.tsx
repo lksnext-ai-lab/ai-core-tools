@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
+import { TagInput } from '../components/ui/TagInput';
 import type { AgentMCPUsage } from '../core/types';
+import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
+import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 
 // Define the Agent types
 interface Agent {
@@ -27,6 +30,7 @@ interface Agent {
   skill_ids?: number[];
   created_at: string;
   request_count: number;
+  marketplace_visibility?: MarketplaceVisibility;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -172,6 +176,21 @@ function AgentFormPage() {
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
 
+  // Marketplace state
+  const [showMarketplace, setShowMarketplace] = useState(false);
+  const [marketplaceVisibility, setMarketplaceVisibility] = useState<MarketplaceVisibility>('unpublished');
+  const [marketplaceProfile, setMarketplaceProfile] = useState<MarketplaceProfileUpdate>({
+    display_name: null,
+    short_description: null,
+    long_description: null,
+    category: null,
+    tags: null,
+    icon_url: null,
+    cover_image_url: null,
+  });
+  const [savingMarketplace, setSavingMarketplace] = useState(false);
+  const [marketplaceSuccess, setMarketplaceSuccess] = useState<string | null>(null);
+
   // Load agent data when component mounts
   useEffect(() => {
     if (appId && agentId) {
@@ -227,6 +246,30 @@ function AgentFormPage() {
           console.error('Error loading MCP usage:', usageErr);
         }
       }
+
+      // Load marketplace profile for existing agents
+      if (parseInt(agentId) !== 0) {
+        try {
+          const profile = await apiService.getAgentMarketplaceProfile(parseInt(appId), parseInt(agentId));
+          setMarketplaceProfile({
+            display_name: profile.display_name || null,
+            short_description: profile.short_description || null,
+            long_description: profile.long_description || null,
+            category: profile.category || null,
+            tags: profile.tags || null,
+            icon_url: profile.icon_url || null,
+            cover_image_url: profile.cover_image_url || null,
+          });
+        } catch {
+          // Profile may not exist yet — that's fine
+        }
+
+        // Marketplace visibility comes from agent detail
+        if (response.marketplace_visibility) {
+          setMarketplaceVisibility(response.marketplace_visibility as MarketplaceVisibility);
+          setShowMarketplace(response.marketplace_visibility !== 'unpublished');
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
       console.error('Error loading agent data:', err);
@@ -268,6 +311,63 @@ function AgentFormPage() {
         : [...prev.skill_ids, skillId]
     }));
   };
+
+  // Marketplace handlers
+  const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
+    if (!appId || !agentId || parseInt(agentId) === 0) return;
+    const previous = marketplaceVisibility;
+    setMarketplaceVisibility(visibility);
+    setShowMarketplace(visibility !== 'unpublished');
+    try {
+      await apiService.updateAgentMarketplaceVisibility(
+        parseInt(appId),
+        parseInt(agentId),
+        visibility,
+      );
+    } catch (err) {
+      // Revert to previous value on failure to avoid UI/server desync
+      setMarketplaceVisibility(previous);
+      setShowMarketplace(previous !== 'unpublished');
+      console.error('Error updating marketplace visibility:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update visibility');
+    }
+  }, [appId, agentId, marketplaceVisibility]);
+
+  const handleMarketplaceProfileChange = useCallback(
+    (field: keyof MarketplaceProfileUpdate, value: string | string[] | null) => {
+      setMarketplaceProfile(prev => ({ ...prev, [field]: value }));
+      setMarketplaceSuccess(null);
+    },
+    [],
+  );
+
+  const handleSaveMarketplaceProfile = useCallback(async () => {
+    if (!appId || !agentId || parseInt(agentId) === 0) return;
+
+    setSavingMarketplace(true);
+    setMarketplaceSuccess(null);
+    try {
+      const saved = await apiService.updateAgentMarketplaceProfile(
+        parseInt(appId),
+        parseInt(agentId),
+        marketplaceProfile,
+      );
+      setMarketplaceProfile({
+        display_name: saved.display_name || null,
+        short_description: saved.short_description || null,
+        long_description: saved.long_description || null,
+        category: saved.category || null,
+        tags: saved.tags || null,
+        icon_url: saved.icon_url || null,
+        cover_image_url: saved.cover_image_url || null,
+      });
+      setMarketplaceSuccess('Marketplace profile saved successfully');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save marketplace profile');
+    } finally {
+      setSavingMarketplace(false);
+    }
+  }, [appId, agentId, marketplaceProfile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1081,6 +1181,165 @@ function AgentFormPage() {
               )}
             </div>
           )}
+
+          {/* Marketplace Publishing Section — only shown for existing agents */}
+          <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 mb-8">
+            <div className="flex items-center mb-6">
+              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
+                <span className="text-blue-600 text-lg" aria-hidden="true">🏪</span>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900">Marketplace Publishing</h3>
+            </div>
+
+            {/* New agent: prompt user to save first */}
+            {isNewAgent ? (
+              <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+                <span aria-hidden="true">ℹ️</span>
+                <span>Save the agent first to configure marketplace publishing.</span>
+              </div>
+            ) : (
+            <>
+            {/* Visibility Control */}
+            <div className="mb-6">
+              <label htmlFor="marketplace-visibility" className="block text-sm font-medium text-gray-700 mb-2">Marketplace Visibility</label>
+              <div className="flex items-center gap-4">
+                <select
+                  id="marketplace-visibility"
+                  value={marketplaceVisibility}
+                  onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
+                  disabled={formData.is_tool}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                >
+                  <option value="unpublished">Unpublished (not listed)</option>
+                  <option value="private">Private (visible to app members only)</option>
+                  <option value="public">Public (visible to all users)</option>
+                </select>
+                {formData.is_tool && (
+                  <span className="text-xs text-gray-500 ml-2">Tool agents cannot be published to the marketplace</span>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Metadata (expandable) */}
+            {showMarketplace && (
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="marketplace-display-name" className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
+                  <input
+                    id="marketplace-display-name"
+                    type="text"
+                    value={marketplaceProfile.display_name ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('display_name', e.target.value)}
+                    maxLength={255}
+                    placeholder="Defaults to agent name if empty"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
+                  <textarea
+                    id="marketplace-short-description"
+                    value={marketplaceProfile.short_description ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('short_description', e.target.value)}
+                    maxLength={200}
+                    rows={2}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    {marketplaceProfile.short_description?.length ?? 0}/200 characters
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-gray-700 mb-2">Long Description</label>
+                  <textarea
+                    id="marketplace-long-description"
+                    value={marketplaceProfile.long_description ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('long_description', e.target.value)}
+                    rows={4}
+                    placeholder="Supports Markdown"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="marketplace-category" className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <select
+                    id="marketplace-category"
+                    value={marketplaceProfile.category ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  >
+                    <option value="">-- Select a category --</option>
+                    {MARKETPLACE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="marketplace-tags" className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                  <TagInput
+                    id="marketplace-tags"
+                    tags={marketplaceProfile.tags ?? []}
+                    onChange={(tags) => handleMarketplaceProfileChange('tags', tags)}
+                    maxTags={5}
+                    placeholder="Add up to 5 tags"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="marketplace-icon-url" className="block text-sm font-medium text-gray-700 mb-2">Icon URL</label>
+                  <input
+                    id="marketplace-icon-url"
+                    type="text"
+                    value={marketplaceProfile.icon_url ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  />
+                  {marketplaceProfile.icon_url && (
+                    <img
+                      src={marketplaceProfile.icon_url}
+                      alt="Icon preview"
+                      className="mt-2 w-10 h-10 rounded"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                    />
+                  )}
+                </div>
+                <div>
+                  <label htmlFor="marketplace-cover-image-url" className="block text-sm font-medium text-gray-700 mb-2">Cover Image URL</label>
+                  <input
+                    id="marketplace-cover-image-url"
+                    type="text"
+                    value={marketplaceProfile.cover_image_url ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  />
+                  {marketplaceProfile.cover_image_url && (
+                    <img
+                      src={marketplaceProfile.cover_image_url}
+                      alt="Cover preview"
+                      className="mt-2 w-32 h-16 rounded object-cover"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                    />
+                  )}
+                </div>
+                <div className="flex items-center gap-4 mt-4">
+                  <button
+                    type="button"
+                    onClick={handleSaveMarketplaceProfile}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    disabled={savingMarketplace}
+                  >
+                    {savingMarketplace ? 'Saving...' : 'Save Marketplace Profile'}
+                  </button>
+                  {marketplaceSuccess && (
+                    <span className="text-sm text-green-600">{marketplaceSuccess}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            </>
+            )}
+          </div>
 
           {/* Form Actions */}
           <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
