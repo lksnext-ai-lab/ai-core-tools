@@ -127,6 +127,33 @@ services:
 # ----------------------------------------------------------------------------
 # Redes y Volúmenes
 # ----------------------------------------------------------------------------
+  # --------------------------------------------------------------------------
+  # PostgreSQL de test (efimero, para pytest)
+  # Credenciales fijas e intencionadas — solo para entorno de test local/CI.
+  # Esta BD se destruye en cada reinicio (tmpfs). NO usar en producción.
+  # --------------------------------------------------------------------------
+  db_test:
+    image: pgvector/pgvector:pg17
+    container_name: mattin-postgres-test
+    environment:
+      POSTGRES_DB: ${TEST_DB_NAME:-test_db}
+      POSTGRES_USER: ${TEST_DB_USER:-test_user}
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:-test_pass}  # pragma: allowlist secret
+      POSTGRES_INITDB_ARGS: --encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - mattin-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_DB_USER:-test_user} -d ${TEST_DB_NAME:-test_db}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    profiles:
+      - test
+
 networks:
   mattin-network:
     driver: bridge

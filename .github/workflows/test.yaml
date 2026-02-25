@@ -1,0 +1,153 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main", "develop", "feat/**", "fix/**"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Backend unit tests (no DB required — pure Python)
+  # -------------------------------------------------------------------------
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies (including test group)
+        run: poetry install --with test --no-interaction
+
+      - name: Run unit tests (no DB needed)
+        run: |
+          poetry run pytest tests/unit/ \
+            -v \
+            --tb=short \
+            --cov=backend \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage-unit.xml \
+            --no-cov-on-fail
+        env:
+          AICT_LOGIN: FAKE
+          SQLALCHEMY_DATABASE_URI: postgresql://test_user:test_pass@localhost:5433/test_db
+          SECRET_KEY: ci-test-secret-key-32chars-minimum
+          AICT_OMNIADMINS: admin@test.com
+          AICT_MODE: SELF-HOSTED
+          FRONTEND_URL: http://localhost:5173
+
+      - name: Upload unit test coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: coverage-unit.xml
+          flags: unit
+          name: unit-tests
+        continue-on-error: true
+
+  # -------------------------------------------------------------------------
+  # Backend integration tests (real PostgreSQL with pgvector)
+  # -------------------------------------------------------------------------
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass  # pragma: allowlist secret
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+          --health-start-period 10s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies (including test group)
+        run: poetry install --with test --no-interaction
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in {1..20}; do
+            pg_isready -h localhost -p 5433 -U test_user && break
+            echo "Waiting for PostgreSQL... ($i/20)"
+            sleep 2
+          done
+
+      - name: Run integration tests
+        run: |
+          poetry run pytest tests/integration/ \
+            -v \
+            --tb=short \
+            --cov=backend \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage-integration.xml \
+            --no-cov-on-fail
+        env:
+          AICT_LOGIN: FAKE
+          SQLALCHEMY_DATABASE_URI: postgresql://test_user:test_pass@localhost:5433/test_db
+          SECRET_KEY: ci-test-secret-key-32chars-minimum
+          AICT_OMNIADMINS: admin@test.com
+          AICT_MODE: SELF-HOSTED
+          FRONTEND_URL: http://localhost:5173
+
+      - name: Upload integration test coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: coverage-integration.xml
+          flags: integration
+          name: integration-tests
+        continue-on-error: true
+
+  # -------------------------------------------------------------------------
+  # Frontend lint (placeholder — tests added in Phase 5)
+  # -------------------------------------------------------------------------
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint

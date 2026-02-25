@@ -56,6 +56,12 @@ The project aims to simplify the integration and use of AI technologies within L
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
 - [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
 
+### Testing
+- [Testing Overview](testing/README.md) — Test pyramid, quick start, running tests for the first time
+- [Writing Tests](testing/writing-tests.md) — How to write unit and integration tests with examples
+- [Fixtures Reference](testing/fixtures-reference.md) — All shared fixtures in `conftest.py` explained
+- [CI/CD](testing/ci.md) — How GitHub Actions runs tests automatically
+
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph
 
