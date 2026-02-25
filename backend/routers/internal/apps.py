@@ -442,6 +442,73 @@ async def delete_app(
     return MessageResponseSchema(message="App deleted successfully")
 
 
+@apps_router.post("/{app_id}/validate-langsmith-key",
+                 summary="Validate LangSmith API key",
+                 tags=["Apps"],
+                 response_model=MessageResponseSchema)
+async def validate_langsmith_key(
+    app_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """
+    Validate the LangSmith API key configured for an app.
+    Tests connectivity to the LangSmith API and returns the result.
+    """
+    import langsmith as ls
+
+    app_service, _ = get_services(db)
+    app = app_service.get_app(app_id)
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=APP_NOT_FOUND_MSG
+        )
+
+    if not app.langsmith_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No LangSmith API key configured for this app"
+        )
+
+    try:
+        client = ls.Client(
+            api_key=app.langsmith_api_key,
+            api_url="https://api.smith.langchain.com",
+        )
+        settings = client._get_settings()
+        tenant_handle = getattr(settings, 'tenant_handle', None)
+        logger.info(
+            f"LangSmith API key validated for app '{app.name}'. "
+            f"Tenant: {tenant_handle or 'default'}"
+        )
+        return MessageResponseSchema(
+            message=f"LangSmith API key is valid. "
+                    f"Tenant: {tenant_handle or 'default'}. "
+                    f"Traces will be sent to project '{app.name}'."
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(
+            f"LangSmith API key validation failed for app '{app.name}': "
+            f"{type(e).__name__}: {error_msg}"
+        )
+        if "403" in error_msg or "Forbidden" in error_msg:
+            detail = (
+                "LangSmith API key is invalid or expired. "
+                "Generate a new key at https://smith.langchain.com/settings"
+            )
+        elif "401" in error_msg or "Unauthorized" in error_msg:
+            detail = "LangSmith API key is missing or malformed."
+        else:
+            detail = f"Cannot connect to LangSmith: {error_msg}"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail
+        )
+
+
 @apps_router.post("/{app_id}/leave",
                  summary="Leave app collaboration",
                  tags=["Apps"],

@@ -79,9 +79,9 @@ services:
       AICT_OMNIADMINS: ${AICT_OMNIADMINS:-admin@example.com}
       REPO_BASE_FOLDER: ${REPO_BASE_FOLDER:-./data/repositories}
       
-      # LangSmith (opcional)
+      # LangSmith (opcional, el tracing se gestiona por app)
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
-      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
     volumes:

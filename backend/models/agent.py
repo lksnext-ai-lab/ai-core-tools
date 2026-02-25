@@ -64,9 +64,9 @@ class Agent(Base):
     has_memory = Column(Boolean)
     
     # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
-    memory_max_messages = Column(Integer, default=20, nullable=False)  # Messages to keep intact after summarization (keep param)
-    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # Token threshold that triggers summarization (trigger param)
-    memory_summarize_threshold = Column(Integer, default=4000, nullable=False)  # Max tokens sent to summarizer LLM (trim_tokens_to_summarize param)
+    memory_max_messages = Column(Integer, default=20, nullable=False)  # SummarizationMiddleware.keep=("messages", N) — messages to preserve after summarization
+    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # SummarizationMiddleware.trigger=("tokens", N) — token count that triggers summarization
+    memory_summarize_threshold = Column(Integer, default=4000, nullable=False)  # SummarizationMiddleware.trim_tokens_to_summarize — max tokens sent to summarizer LLM
     
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),

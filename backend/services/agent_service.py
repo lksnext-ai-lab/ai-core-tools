@@ -71,6 +71,9 @@ class AgentService:
             type=agent.type or "agent",
             is_tool=agent.is_tool or False,
             has_memory=getattr(agent, 'has_memory', False) or False,
+            memory_max_messages=getattr(agent, 'memory_max_messages', 20) or 20,
+            memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
+            memory_summarize_threshold=getattr(agent, 'memory_summarize_threshold', 4000) or 4000,
             service_id=getattr(agent, 'service_id', None),
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
@@ -193,6 +196,15 @@ class AgentService:
             agent.has_memory = has_memory_value
         else:
             agent.has_memory = has_memory_value == 'on'
+        
+        # Memory management fields
+        if data.get('memory_max_messages') is not None:
+            agent.memory_max_messages = data['memory_max_messages']
+        if data.get('memory_max_tokens') is not None:
+            agent.memory_max_tokens = data['memory_max_tokens']
+        if data.get('memory_summarize_threshold') is not None:
+            agent.memory_summarize_threshold = data['memory_summarize_threshold']
+        
         agent.output_parser_id = data.get('output_parser_id') or None
         
         # Handle temperature field - default to DEFAULT_AGENT_TEMPERATURE if not provided

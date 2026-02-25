@@ -206,35 +206,50 @@ async def get_client_config():
 
 # ==================== CUSTOM OPENAPI DOCS ====================
 
+_openapi_internal_schema = None
+_openapi_public_schema = None
+
 def get_openapi_internal():
-    """Generate OpenAPI schema for internal API only"""
+    """Generate OpenAPI schema for internal API only."""
+    global _openapi_internal_schema
     from fastapi.openapi.utils import get_openapi
     
-    if app.openapi_schema:
-        return app.openapi_schema
+    if _openapi_internal_schema:
+        return _openapi_internal_schema
     
-    openapi_schema = get_openapi(
+    internal_routes = [
+        route for route in app.routes
+        if hasattr(route, 'path') and route.path.startswith('/internal')
+    ]
+    
+    _openapi_internal_schema = get_openapi(
         title=os.getenv('INTERNAL_API_TITLE', 'IA Core Tools - Internal API'),
         version=os.getenv('INTERNAL_API_VERSION', '2.0.0'),
         description=os.getenv('INTERNAL_API_DESCRIPTION', 'Internal API for frontend-backend communication'),
-        routes=internal_router.routes,
+        routes=internal_routes,
     )
-    return openapi_schema
+    return _openapi_internal_schema
 
 def get_openapi_public():
-    """Generate OpenAPI schema for public API only"""
+    """Generate OpenAPI schema for public API only."""
+    global _openapi_public_schema
     from fastapi.openapi.utils import get_openapi
     
-    temp_app = FastAPI()
-    temp_app.include_router(public_v1_router, prefix="/public/v1")
+    if _openapi_public_schema:
+        return _openapi_public_schema
     
-    openapi_schema = get_openapi(
+    public_routes = [
+        route for route in app.routes
+        if hasattr(route, 'path') and route.path.startswith('/public')
+    ]
+    
+    _openapi_public_schema = get_openapi(
         title=os.getenv('PUBLIC_API_TITLE', 'IA Core Tools - Public API'),
         version=os.getenv('PUBLIC_API_VERSION', '1.0.0'), 
         description=os.getenv('PUBLIC_API_DESCRIPTION', 'Public API for external applications'),
-        routes=temp_app.routes,
+        routes=public_routes,
     )
-    return openapi_schema
+    return _openapi_public_schema
 
 @app.get("/docs/internal", include_in_schema=False)
 async def internal_docs():

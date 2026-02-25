@@ -11,6 +11,7 @@ from .output_parser import OutputParser
 from .mcp_config import MCPConfig
 from .silo import Silo
 from .agent import Agent
+from .skill import Skill
 from .ocr_agent import OCRAgent
 from .conversation import Conversation
 from .repository import Repository
@@ -24,7 +25,7 @@ from .mcp_server import MCPServer, MCPServerAgent
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
-    'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'Media',
     'MCPServer', 'MCPServerAgent'
 ] 

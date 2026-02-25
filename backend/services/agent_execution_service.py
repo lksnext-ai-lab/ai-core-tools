@@ -790,18 +790,19 @@ class AgentExecutionService:
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
         """
+        import langsmith as ls
         from tools.agentTools import create_agent, prepare_agent_config
         from langchain.messages import HumanMessage
 
         mcp_client = None
         try:
             # Create the agent chain with all tools and capabilities
-            agent_chain, tracer, mcp_client = await create_agent(
+            agent_chain, langsmith_config, mcp_client = await create_agent(
                 fresh_agent, search_params, session_id_for_cache, user_context
             )
             
-            # Prepare configuration with tracer
-            config = prepare_agent_config(fresh_agent, tracer)
+            # Prepare configuration
+            config = prepare_agent_config(fresh_agent)
             
             # Add session-specific configuration if memory is enabled
             if fresh_agent.has_memory and session_id_for_cache:
@@ -905,7 +906,32 @@ class AgentExecutionService:
             else:
                 message_payload = HumanMessage(content=formatted_user_message)
             
-            result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+            if langsmith_config:
+                from langchain_core.tracers.langchain import LangChainTracer, wait_for_all_tracers
+                
+                logger.info(
+                    f"LangSmith tracing ENABLED for app '{langsmith_config['project_name']}'"
+                )
+                
+                per_app_tracer = LangChainTracer(
+                    client=langsmith_config["client"],
+                    project_name=langsmith_config["project_name"],
+                )
+                config.setdefault("callbacks", []).append(per_app_tracer)
+                
+                with ls.tracing_context(
+                    client=langsmith_config["client"],
+                    project_name=langsmith_config["project_name"],
+                    enabled=True,
+                ):
+                    result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+                
+                try:
+                    wait_for_all_tracers()
+                except Exception as flush_err:
+                    logger.warning(f"Error flushing LangSmith traces: {flush_err}")
+            else:
+                result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
             
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

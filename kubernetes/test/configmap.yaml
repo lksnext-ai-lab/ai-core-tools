@@ -65,10 +65,10 @@ data:
   # Storage paths
   REPO_BASE_FOLDER: "data/repositories"
   
-  # LangChain configuration
-  LANGCHAIN_TRACING_V2: "true"
-  LANGCHAIN_PROJECT: "ia-core-tools"
-  LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+  # LangSmith configuration
+  LANGSMITH_TRACING: "true"
+  LANGSMITH_PROJECT: "ia-core-tools"
+  LANGSMITH_ENDPOINT: "https://api.smith.langchain.com"
   
   # Python environment
   PYTHONUNBUFFERED: "1"

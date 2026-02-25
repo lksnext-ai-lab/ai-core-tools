@@ -120,6 +120,9 @@ class PublicAgentDetailSchema(BaseModel):
     status: Optional[str] = None
     is_tool: bool
     has_memory: Optional[bool] = None
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 4000
     system_prompt: Optional[str] = None
     prompt_template: Optional[str] = None
     create_date: Optional[datetime] = None
@@ -141,6 +144,9 @@ class CreateAgentRequestSchema(BaseModel):
     type: str = "agent"  # "agent" or "ocr_agent"
     is_tool: bool = False
     has_memory: bool = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 4000
     system_prompt: Optional[str] = ""
     prompt_template: Optional[str] = ""
     service_id: Optional[int] = None
@@ -158,6 +164,9 @@ class CreateOCRAgentRequestSchema(BaseModel):
     description: Optional[str] = ""
     is_tool: bool = False
     has_memory: bool = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 4000
     service_id: Optional[int] = None
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = ""
@@ -175,6 +184,9 @@ class UpdateAgentRequestSchema(BaseModel):
     description: Optional[str] = None
     is_tool: Optional[bool] = None
     has_memory: Optional[bool] = None
+    memory_max_messages: Optional[int] = None
+    memory_max_tokens: Optional[int] = None
+    memory_summarize_threshold: Optional[int] = None
     system_prompt: Optional[str] = None
     prompt_template: Optional[str] = None
     service_id: Optional[int] = None
@@ -192,6 +204,9 @@ class UpdateOCRAgentRequestSchema(BaseModel):
     description: Optional[str] = None
     is_tool: Optional[bool] = None
     has_memory: Optional[bool] = None
+    memory_max_messages: Optional[int] = None
+    memory_max_tokens: Optional[int] = None
+    memory_summarize_threshold: Optional[int] = None
     service_id: Optional[int] = None
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
