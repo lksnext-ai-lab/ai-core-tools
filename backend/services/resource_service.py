@@ -6,6 +6,7 @@ import os
 from services.silo_service import SiloService
 from utils.logger import get_logger
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status, UploadFile
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
@@ -292,6 +293,19 @@ class ResourceService:
             name = os.path.splitext(file.filename)[0]
             save_filename = file.filename
         
+        # Check if file with same name already exists in this folder
+        if db:
+            if ResourceRepository.check_uri_conflict(db, repository_id, folder_id, save_filename):
+                return {
+                    'filename': file.filename,
+                    'error': f"File '{save_filename}' already exists in this folder"
+                }
+        
+        # Check if physical file already exists on filesystem (orphaned files or sync issues)
+        file_path = os.path.join(target_path, save_filename)
+        if os.path.exists(file_path):
+            return {'filename': file.filename, 'error': f"Physical file '{save_filename}' already exists"}
+        
         try:
             resource = Resource(
                 name=name, 
@@ -319,9 +333,29 @@ class ResourceService:
             
             ResourceRepository.create(db, resource)
             return resource
+        
+        except IntegrityError as e:
+            # Handle race condition: another request created the same resource
+            logger.warning(f"Duplicate resource detected via database constraint for {file.filename}: {str(e)}")
+            # Clean up the file that was saved to disk
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup file {file_path} after IntegrityError: {cleanup_error}")
+            return {
+                'filename': file.filename,
+                'error': f"File '{save_filename}' already exists in this folder"
+            }
             
         except Exception as e:
             logger.error(f"Error processing file {file.filename}: {str(e)}")
+            # Clean up the file if it was saved before the error
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup file {file_path} after error: {cleanup_error}")
             return {'filename': file.filename, 'error': str(e)}
 
     @staticmethod
