@@ -540,7 +540,7 @@ function AgentFormPage() {
             </div>
           )}
 
-          {/* Memory Management Card - Only when has_memory is enabled */}
+          {/* Memory Management Card (only when has_memory is enabled) */}
           {formData.type !== 'ocr_agent' && formData.has_memory && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
@@ -549,7 +549,9 @@ function AgentFormPage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-xl font-semibold text-gray-900">Memory Management</h3>
-                  <p className="text-sm text-gray-600 mt-1">Configura la estrategia de gestión de memoria del agente</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Configura la estrategia de resumen automático para gestionar la memoria conversacional del agente
+                  </p>
                 </div>
               </div>
 
@@ -557,89 +559,127 @@ function AgentFormPage() {
                 <div className="flex items-start">
                   <span className="text-indigo-500 text-lg mr-3">ℹ️</span>
                   <div>
-                    <p className="text-sm text-indigo-800 font-medium">Gestión Automática de Memoria</p>
+                    <p className="text-sm text-indigo-800 font-medium">Resumen Automático de Conversaciones</p>
                     <p className="text-xs text-indigo-700 mt-1">
-                      Cuando el historial de la conversación supera el límite de tokens configurado, 
-                      los mensajes antiguos se resumen automáticamente manteniendo los más recientes intactos.
+                      Cuando el historial de la conversación alcanza el umbral de tokens configurado (<strong>trigger</strong>),
+                      los mensajes más antiguos se resumen automáticamente, conservando los mensajes
+                      más recientes intactos (<strong>keep</strong>). Esto permite mantener conversaciones largas
+                      sin exceder la ventana de contexto del modelo.
                     </p>
                   </div>
                 </div>
               </div>
               
               <div className="space-y-6">
-                <div>
-                  <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                    Máximo de Mensajes
-                  </label>
-                  <input
-                    type="number"
-                    id="memory_max_messages"
-                    min="1"
-                    max="100"
-                    value={formData.memory_max_messages}
-                    onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Número máximo de mensajes recientes a conservar intactos tras un resumen automático (recomendado: 20)
+                {/* trigger */}
+                <div className="p-4 border border-gray-200 rounded-xl">
+                  <div className="flex items-center mb-2">
+                    <label htmlFor="memory_max_tokens" className="block text-sm font-semibold text-gray-900">
+                      Trigger — Umbral de activación
+                    </label>
+                    <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">trigger</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Número de tokens en el historial a partir del cual se dispara el resumen automático.
+                    Cuando el total de tokens de la conversación supera este valor, se genera un resumen
+                    de los mensajes antiguos para comprimir el contexto.
                   </p>
-                </div>
-
-                <div>
-                  <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                    Límite de Tokens
-                  </label>
                   <input
                     type="number"
                     id="memory_max_tokens"
                     min="100"
-                    max="32000"
+                    max="128000"
                     step="100"
                     value={formData.memory_max_tokens}
                     onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Umbral de tokens a partir del cual se activa el resumen automático del historial (recomendado: 4000)
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Valor recomendado: <strong>4000</strong> tokens. Ajusta según la ventana de contexto de tu modelo.
                   </p>
                 </div>
 
-                <div>
-                  <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                    Tokens a conservar tras resumen
-                  </label>
+                {/* keep */}
+                <div className="p-4 border border-gray-200 rounded-xl">
+                  <div className="flex items-center mb-2">
+                    <label htmlFor="memory_max_messages" className="block text-sm font-semibold text-gray-900">
+                      Keep — Mensajes a conservar
+                    </label>
+                    <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">keep</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Número de mensajes recientes que se conservan intactos después de cada resumen.
+                    Estos mensajes no se comprimen y se mantienen tal cual en el historial, asegurando que el agente
+                    tenga acceso al contexto más reciente de la conversación.
+                  </p>
+                  <input
+                    type="number"
+                    id="memory_max_messages"
+                    min="1"
+                    max="200"
+                    value={formData.memory_max_messages}
+                    onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Valor por defecto: <strong>20</strong> mensajes. Un valor más alto conserva más contexto pero consume más tokens.
+                  </p>
+                </div>
+
+                {/* trim_tokens_to_summarize */}
+                <div className="p-4 border border-gray-200 rounded-xl">
+                  <div className="flex items-center mb-2">
+                    <label htmlFor="memory_summarize_threshold" className="block text-sm font-semibold text-gray-900">
+                      Límite de tokens del resumidor
+                    </label>
+                    <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">trim</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Número máximo de tokens que se envían al modelo de resumen al generar el comprimido del historial.
+                    Los mensajes antiguos se recortan a este límite antes de pasarlos al resumidor. Un valor más alto
+                    produce resúmenes más detallados pero consume más tokens en la llamada de resumen.
+                  </p>
                   <input
                     type="number"
                     id="memory_summarize_threshold"
-                    min="1000"
-                    max="32000"
+                    min="500"
+                    max="128000"
                     step="100"
                     value={formData.memory_summarize_threshold}
-                    onChange={(e) => handleInputChange('memory_summarize_threshold', parseInt(e.target.value))}
+                    onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                   />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Número de tokens que se conservan del resumen generado tras la compresión del historial (recomendado: 4000)
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Valor por defecto: <strong>4000</strong> tokens. Ajusta en función de la calidad de resumen que necesites.
                   </p>
                 </div>
               </div>
 
+              {/* Summary panel */}
               <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">📊 Configuración Actual:</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">📊 Resumen de Configuración</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Mensajes:</span>
-                    <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
+                  <div className="flex items-center">
+                    <span className="w-2 h-2 bg-amber-400 rounded-full mr-2" />
+                    <span className="text-gray-600">Trigger:</span>
+                    <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()} tokens</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Tokens:</span>
-                    <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
+                  <div className="flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
+                    <span className="text-gray-600">Keep:</span>
+                    <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages} mensajes</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Umbral:</span>
-                    <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
+                  <div className="flex items-center">
+                    <span className="w-2 h-2 bg-purple-400 rounded-full mr-2" />
+                    <span className="text-gray-600">Trim:</span>
+                    <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold.toLocaleString()} tokens</span>
                   </div>
                 </div>
+                <p className="text-xs text-gray-400 mt-3">
+                  Cuando la conversación supere <strong>{formData.memory_max_tokens.toLocaleString()}</strong> tokens,
+                  se generará un resumen (usando hasta <strong>{formData.memory_summarize_threshold.toLocaleString()}</strong> tokens de entrada)
+                  y se conservarán los últimos <strong>{formData.memory_max_messages}</strong> mensajes intactos.
+                </p>
               </div>
             </div>
           )}
