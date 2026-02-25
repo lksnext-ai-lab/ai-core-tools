@@ -131,3 +131,21 @@ Read it bottom-up: the assertion error tells you what was different from what yo
 - [Writing Tests](writing-tests.md) — how to add new unit and integration tests
 - [Fixtures Reference](fixtures-reference.md) — all the shared helpers in `conftest.py`
 - [CI/CD](ci.md) — how tests run automatically on GitHub Actions
+
+---
+
+## Copilot Agent
+
+Use the `@test` Copilot agent for help with anything testing-related:
+
+- Writing new unit or integration tests for a feature
+- Debugging a failing test
+- Understanding which fixtures to use
+- Adding test data with factories
+- Deciding between unit vs integration for a given scenario
+
+```
+@test write integration tests for the new /internal/apps/{id}/widgets endpoint
+@test this test is failing with a 403 — why?
+@test add a fixture for the Widget model
+```
