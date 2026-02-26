@@ -1,8 +1,116 @@
-# Action Components
+# UI Components
 
-This directory contains reusable action components for consistent user interface patterns across the application.
+This directory contains reusable UI components for consistent user interface patterns across the application.
 
 ## Components
+
+### Tabs
+
+A fully accessible, responsive tab navigation component for organizing content into logical sections.
+
+#### Features
+
+- **Keyboard Navigation** — Arrow keys to switch tabs, Home/End to jump to first/last tab
+- **Accessible** — Full ARIA labels, semantic HTML, and focus management
+- **Responsive** — Adapts to mobile and desktop screens
+- **Icon Support** — Optional icons alongside tab labels for enhanced visual recognition
+- **State Management** — Simple controlled component pattern with `activeTab` and `onChange`
+
+#### Props
+
+- `tabs: TabItem[]` - Array of tab items to display (required)
+- `activeTab: string` - ID of the currently active tab (required)
+- `onChange: (tabId: string) => void` - Callback when tab is changed (required)
+- `className?: string` - Additional CSS classes for the container
+
+#### TabItem Interface
+
+```typescript
+interface TabItem {
+  id: string;        // Unique identifier for the tab
+  label: string;     // Display label for the tab
+  icon?: string;     // Optional icon (emoji or text)
+}
+```
+
+#### Usage Example
+
+```tsx
+import { Tabs } from '../components/ui/Tabs';
+import { useState } from 'react';
+
+export function MyComponent() {
+  const [activeTab, setActiveTab] = useState<string>('basic');
+
+  const tabs = [
+    { id: 'basic', label: 'Basic', icon: '📝' },
+    { id: 'prompts', label: 'Prompts', icon: '💬' },
+    { id: 'config', label: 'Configuration', icon: '⚙️' },
+    { id: 'advanced', label: 'Advanced', icon: '🔧' },
+    { id: 'marketplace', label: 'Marketplace', icon: '🛒' },
+  ];
+
+  return (
+    <div>
+      <Tabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+      />
+
+      <div className="p-6">
+        {activeTab === 'basic' && (
+          <div>
+            {/* Basic tab content */}
+          </div>
+        )}
+        {activeTab === 'prompts' && (
+          <div>
+            {/* Prompts tab content */}
+          </div>
+        )}
+        {/* ... other tabs ... */}
+      </div>
+    </div>
+  );
+}
+```
+
+#### Keyboard Navigation
+
+- **Arrow Right / Arrow Left** — Switch to next/previous tab
+- **Home** — Jump to first tab
+- **End** — Jump to last tab
+- **Enter/Space** — Activate tab (when focused)
+
+#### Accessibility
+
+The component uses semantic HTML and ARIA attributes:
+- `role="tablist"` on the container
+- `role="tab"` on individual tab buttons
+- `aria-selected` indicates active state
+- `aria-controls` links tabs to their content panels
+- `tabindex` management for keyboard focus
+- Focus visible indicator with blue ring
+
+#### Styling
+
+Tab styling uses Tailwind CSS:
+- **Active tab**: Blue text (`text-blue-600`) with blue bottom border (`border-blue-600`)
+- **Inactive tabs**: Gray text (`text-gray-600`) with transparent border
+- **Hover state**: Slightly darker text and light background
+- **Focus state**: Blue focus ring for keyboard navigation
+
+#### Best Practices
+
+1. **Tab IDs** — Use meaningful, kebab-case IDs like `basic`, `configuration`, `advanced`
+2. **Tab Organization** — Group related settings in 3–6 tabs
+3. **Icons** — Optional but recommended for quick visual recognition
+4. **Single Form** — All form data stays in parent component state; form submits once from parent
+5. **Error Handling** — Display errors in their respective tab sections, not globally
+6. **Mobile** — Icons help on small screens where label space is limited
+
+---
 
 ### ActionDropdown
 
