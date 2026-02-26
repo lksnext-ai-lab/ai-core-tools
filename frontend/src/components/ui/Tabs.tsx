@@ -104,6 +104,7 @@ export function Tabs({
           return (
             <button
               key={tab.id}
+              type="button"
               ref={(el) => {
                 tabRefs.current[index] = el;
               }}
@@ -115,12 +116,12 @@ export function Tabs({
               onKeyDown={(e) => handleKeyDown(e, index)}
               className={`
                 px-4 py-3 text-sm font-medium whitespace-nowrap
-                border-b-2 transition-colors duration-200
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0
+                transition-colors duration-200
+                focus:outline-none
                 ${
                   isActive
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
                 }
               `}
             >
