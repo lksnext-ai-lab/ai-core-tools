@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -27,6 +27,23 @@ export default function MarketplaceHomePage() {
   const [conversations, setConversations] = useState<MarketplaceConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  const handleDeleteClick = async (e: React.MouseEvent, conversationId: number) => {
+    e.stopPropagation();
+    if (confirmDeleteId !== conversationId) {
+      setConfirmDeleteId(conversationId);
+      return;
+    }
+    try {
+      await apiService.deleteConversation(conversationId);
+      setConversations((prev) => prev.filter((c) => c.conversation_id !== conversationId));
+    } catch {
+      // ignore
+    } finally {
+      setConfirmDeleteId(null);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -68,7 +85,7 @@ export default function MarketplaceHomePage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-        <ErrorState message={error} onRetry={() => window.location.reload()} />
+        <ErrorState error={error} onRetry={() => window.location.reload()} />
       </div>
     );
   }
@@ -132,11 +149,11 @@ export default function MarketplaceHomePage() {
           ) : (
             <ul className="space-y-3" role="list">
               {conversations.map((conv) => (
-                <li key={conv.conversation_id}>
+                <li key={conv.conversation_id} className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => navigate(`/marketplace/chat/${conv.conversation_id}`)}
-                    className="w-full text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
+                    className="flex-1 min-w-0 text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-3">
                       {/* Agent icon */}
@@ -177,6 +194,20 @@ export default function MarketplaceHomePage() {
                         ›
                       </span>
                     </div>
+                  </button>
+
+                  {/* Delete button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteClick(e, conv.conversation_id)}
+                    title={confirmDeleteId === conv.conversation_id ? 'Click again to confirm' : 'Delete conversation'}
+                    className={`shrink-0 p-2 rounded-lg text-sm transition-colors duration-200 ${
+                      confirmDeleteId === conv.conversation_id
+                        ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                        : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                    }`}
+                  >
+                    {confirmDeleteId === conv.conversation_id ? '✓' : '✕'}
                   </button>
                 </li>
               ))}
