@@ -20,11 +20,14 @@ from .domain import Domain
 from .url import Url
 from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
+from .skill import Skill
+from .agent import AgentSkill
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
-    'Agent', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Agent', 'AgentSkill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'Media',
-    'MCPServer', 'MCPServerAgent'
+    'MCPServer', 'MCPServerAgent',
+    'Skill',
 ] 

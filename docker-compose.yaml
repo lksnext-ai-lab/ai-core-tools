@@ -85,8 +85,16 @@ services:
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
     volumes:
-      - ./backend/data:/aict_backend/data
-      - ./backend/logs:/aict_backend/logs
+      - type: bind
+        source: ./backend/data
+        target: /aict_backend/data
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ./backend/logs
+        target: /aict_backend/logs
+        bind:
+          create_host_path: true
     ports:
       - "8000:8000"
     depends_on:
