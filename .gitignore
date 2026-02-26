@@ -48,3 +48,4 @@ logs/
 local/
 clients/
 qdrant_storage/
+plans/

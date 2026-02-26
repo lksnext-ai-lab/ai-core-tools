@@ -399,6 +399,45 @@ When asked to bump, update, or change the project version:
 
 **DO NOT** manually edit version numbers in `pyproject.toml`. Always delegate version bumping to the `@version-bumper` agent.
 
+### Git & GitHub Agent (`@git-github`)
+When your implementation work is complete and the user needs to commit, push, or create a PR:
+- **Delegate to**: `@git-github` agent
+- **Purpose**: Handles git operations — staging, committing (GPG-signed), pushing, branching, and PR creation
+- **Skill**: Follows the `commit-and-push` skill for the standard workflow
+
+**When finishing a task**, always suggest the user invoke `@git-github` to handle the git workflow. Provide a clear **change summary** to help `@git-github` craft a good commit message:
+
+```
+📋 Ready to commit! Here's a summary for @git-github:
+- **Type**: feat | fix | refactor | docs | test | chore
+- **Scope**: frontend
+- **Description**: <what was done>
+- **Files changed**:
+  - `frontend/src/components/...`
+  - `frontend/src/pages/...`
+```
+
+**DO NOT** run `git` commands yourself. Always delegate to `@git-github`.
+
+### Feature Planner (`@feature-planner`)
+When a user asks to plan, scope, or spec out a feature before implementation:
+- **Delegate to**: `@feature-planner` agent
+- **Purpose**: Creates structured feature specifications in `/plans/` with requirements, acceptance criteria, and edge cases
+- **Consult**: When implementing a planned feature, read `/plans/<slug>/spec.md` first for requirements and acceptance criteria
+- **After implementation**: Suggest the user invoke `@feature-planner` to mark the plan as `implemented`
+
+**DO NOT** create or modify plan files yourself. Always delegate planning to `@feature-planner`.
+
+### Plan Executor (`@plan-executor`)
+When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
+- **After completing the task**, append a `## Result` section to the step file with:
+  - `**Completed by**: @react-expert`
+  - `**Completed at**: YYYY-MM-DD`
+  - `**Status**: done | blocked | needs-revision`
+  - A summary of what was implemented, files changed, and any issues
+- **Then** suggest the user invoke `@plan-executor` to continue with the next step
+- If the task cannot be completed, set status to `blocked` and explain why
+
 ## Conclusion
 
 When assisting with React development, always prioritize:

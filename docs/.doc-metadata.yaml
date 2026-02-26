@@ -1,0 +1,22 @@
+# Documentation sync tracking — managed by @docs-manager agent
+# DO NOT EDIT MANUALLY unless you know what you're doing
+#
+# This file tracks which git commit the documentation was last synchronized to.
+# When @docs-manager updates documentation, it reads this file to determine
+# what commits need to be analyzed, then advances the baseline after updating.
+
+last_synced_commit: "c11bee46d4be0529663bf41f744ddeb21c250125"
+last_synced_date: "2026-02-20T18:00:00+00:00"
+last_synced_by: "docs-manager-agent"
+
+# Summary of the last sync operation
+last_sync_summary:
+  files_updated:
+    - "docs/LICENSE.md"
+    - "docs/README.md"
+    - "docs/.doc-metadata.yaml"
+  files_created: []
+  files_deleted: []
+  commits_covered: 1
+  commit_range: "593f5ba..c11bee4"
+  notes: "Replaced outdated LKSISL inner-source license in docs/LICENSE.md with a proper dual-licensing documentation page (AGPL-3.0 + Commercial). Updated Legal section in docs/README.md to match."
