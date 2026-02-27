@@ -2,7 +2,7 @@ import os
 import asyncio
 import ast
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from tools.ocrAgentTools import (
 from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
+from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
@@ -139,10 +140,34 @@ class AgentExecutionService:
             # Determine session ID for checkpointer
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
 
+            # Resolve working directory for code interpreter
+            working_dir = None
+            if fresh_agent.enable_code_interpreter:
+                app_config = get_app_config()
+                tmp_base = app_config['TMP_BASE_FOLDER']
+                if conversation_id:
+                    working_dir = os.path.join(tmp_base, "conversations", str(conversation_id))
+                else:
+                    user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
+                    app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
+                    session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
+                    working_dir = os.path.join(tmp_base, "persistent", session_key)
+
             # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
             response = await self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files,
+                working_dir=working_dir
             )
+
+            # Auto-register any files the sandbox wrote during this turn
+            if working_dir and fresh_agent.enable_code_interpreter:
+                file_service = FileManagementService()
+                await file_service.sync_output_files(
+                    working_dir=working_dir,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=str(conversation_id) if conversation_id else None,
+                )
 
             # Parse response based on agent's output parser
             from tools.agentTools import parse_agent_response
@@ -783,7 +808,8 @@ class AgentExecutionService:
         search_params: Dict = None,
         session_id_for_cache: str = None,
         user_context: Dict = None,
-        image_files: List[Dict] = None
+        image_files: List[Dict] = None,
+        working_dir: Optional[str] = None
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
         
@@ -798,7 +824,7 @@ class AgentExecutionService:
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, langsmith_config, mcp_client = await create_agent(
-                fresh_agent, search_params, session_id_for_cache, user_context
+                fresh_agent, search_params, session_id_for_cache, user_context, working_dir
             )
             
             # Prepare configuration

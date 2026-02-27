@@ -866,6 +866,13 @@ class ApiService {
     });
   }
 
+  async getFileDownloadUrl(appId: number, agentId: number, fileId: string, conversationId?: number | null): Promise<string> {
+    const base = `/internal/apps/${appId}/agents/${agentId}/files/${fileId}/download`;
+    const url = conversationId ? `${base}?conversation_id=${conversationId}` : base;
+    const response = await this.request(url, { method: 'GET' });
+    return response.download_url as string;
+  }
+
   async processOCR(appId: number, agentId: number, file: File) {
     const formData = new FormData();
     formData.append('pdf_file', file);
@@ -920,7 +927,7 @@ class ApiService {
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1162,6 +1169,14 @@ class ApiService {
       `/internal/marketplace/conversations/${conversationId}/files/${fileId}`,
       { method: 'DELETE' },
     );
+  }
+
+  async getMarketplaceFileDownloadUrl(conversationId: number, fileId: string): Promise<string> {
+    const response = await this.request(
+      `/internal/marketplace/conversations/${conversationId}/files/${fileId}/download`,
+      { method: 'GET' },
+    );
+    return response.download_url as string;
   }
 
   // Agent marketplace management (EDITOR+)

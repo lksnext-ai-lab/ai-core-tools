@@ -97,6 +97,7 @@ class AgentService:
             type=agent.type or "agent",
             is_tool=agent.is_tool or False,
             has_memory=getattr(agent, 'has_memory', False) or False,
+            enable_code_interpreter=getattr(agent, 'enable_code_interpreter', False) or False,
             memory_max_messages=getattr(agent, 'memory_max_messages', 20) or 20,
             memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
             memory_summarize_threshold=getattr(agent, 'memory_summarize_threshold', 4000) or 4000,
@@ -231,6 +232,9 @@ class AgentService:
             agent.has_memory = has_memory_value
         else:
             agent.has_memory = has_memory_value == 'on'
+
+        enable_ci_value = data.get('enable_code_interpreter', False)
+        agent.enable_code_interpreter = bool(enable_ci_value)
         
         # Memory management fields
         if data.get('memory_max_messages') is not None:

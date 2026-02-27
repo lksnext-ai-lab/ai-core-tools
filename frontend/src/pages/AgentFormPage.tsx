@@ -19,6 +19,7 @@ interface Agent {
   type: string;
   is_tool: boolean;
   has_memory: boolean;
+  enable_code_interpreter: boolean;
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
@@ -52,6 +53,7 @@ interface AgentFormData {
   type: string;
   is_tool: boolean;
   has_memory: boolean;
+  enable_code_interpreter: boolean;
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
@@ -169,6 +171,7 @@ function AgentFormPage() {
     type: 'agent',
     is_tool: false,
     has_memory: false,
+    enable_code_interpreter: false,
     memory_max_messages: 20,
     memory_max_tokens: 4000,
     memory_summarize_threshold: 4000,
@@ -221,6 +224,7 @@ function AgentFormPage() {
         type: response.type || 'agent',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
+        enable_code_interpreter: response.enable_code_interpreter || false,
         memory_max_messages: response.memory_max_messages || 20,
         memory_max_tokens: response.memory_max_tokens || 4000,
         memory_summarize_threshold: response.memory_summarize_threshold || 4000,
@@ -389,6 +393,7 @@ function AgentFormPage() {
         type: formData.type,
         is_tool: formData.is_tool,
         has_memory: formData.has_memory,
+        enable_code_interpreter: formData.enable_code_interpreter,
         memory_max_messages: formData.memory_max_messages,
         memory_max_tokens: formData.memory_max_tokens,
         memory_summarize_threshold: formData.memory_summarize_threshold,
@@ -893,6 +898,20 @@ function AgentFormPage() {
                         <div className="ml-3">
                           <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
                           <p className="text-xs text-gray-500">Maintains conversation memory</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <input
+                          id="enable_code_interpreter"
+                          type="checkbox"
+                          checked={formData.enable_code_interpreter}
+                          onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
+                          <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
                         </div>
                       </div>
                     </div>

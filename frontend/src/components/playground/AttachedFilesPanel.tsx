@@ -12,6 +12,7 @@ interface AttachedFilesPanelProps {
   files: PanelFile[];
   isLoading?: boolean;
   onRemoveFile: (id: string) => void;
+  onDownloadFile?: (id: string) => void;
   title?: string;
 }
 
@@ -21,6 +22,7 @@ function getFileIcon(fileType?: string): string {
     case 'image': return '🖼️';
     case 'text': return '📝';
     case 'document': return '📑';
+    case 'output': return '⬇️';
     default: return '📁';
   }
 }
@@ -29,6 +31,7 @@ export default function AttachedFilesPanel({
   files,
   isLoading = false,
   onRemoveFile,
+  onDownloadFile,
   title = 'Attached Files',
 }: Readonly<AttachedFilesPanelProps>) {
   return (
@@ -80,7 +83,12 @@ export default function AttachedFilesPanel({
                 >
                   {file.filename}
                 </span>
-                {file.processing_status && (
+                {file.file_type === 'output' && (
+                  <span className="text-xs px-1 py-0.5 rounded-full shrink-0 bg-blue-100 text-blue-700">
+                    Generated
+                  </span>
+                )}
+                {file.processing_status && file.file_type !== 'output' && (
                   <span
                     className={`text-xs px-1 py-0.5 rounded-full shrink-0 ${
                       file.processing_status === 'ready'
@@ -118,18 +126,33 @@ export default function AttachedFilesPanel({
               )}
             </div>
 
-            {/* Delete button */}
-            <button
-              type="button"
-              onClick={() => onRemoveFile(file.id)}
-              className="shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded p-0.5 transition-colors"
-              title="Remove file"
-              aria-label={`Remove ${file.filename}`}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            {/* Action buttons */}
+            <div className="shrink-0 flex flex-col gap-0.5">
+              {onDownloadFile && (
+                <button
+                  type="button"
+                  onClick={() => onDownloadFile(file.id)}
+                  className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded p-0.5 transition-colors"
+                  title="Download file"
+                  aria-label={`Download ${file.filename}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onRemoveFile(file.id)}
+                className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded p-0.5 transition-colors"
+                title="Remove file"
+                aria-label={`Remove ${file.filename}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
         ))}
       </div>

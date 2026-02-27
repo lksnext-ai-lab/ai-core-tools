@@ -1,6 +1,9 @@
 import json
 import math
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
+from fastapi.responses import RedirectResponse
+from utils.security import generate_signature
 
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
@@ -350,6 +353,60 @@ async def remove_marketplace_file(
     except Exception as e:
         logger.error(f"Error removing marketplace file: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to remove file")
+
+
+@marketplace_router.get(
+    "/conversations/{conversation_id}/files/{file_id}/download",
+    summary="Download a file from a marketplace conversation",
+)
+async def download_marketplace_file(
+    conversation_id: int,
+    file_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+):
+    """Download an uploaded or agent-generated file from a marketplace conversation."""
+    user_id = int(current_user.identity.id)
+    conversation = _get_marketplace_conversation(conversation_id, user_id, db)
+    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+
+    user_context = _build_file_user_context(current_user, agent.app_id)
+    file_service = FileManagementService()
+    try:
+        files = await file_service.list_attached_files(
+            agent_id=agent.agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id),
+        )
+        file_data = next((f for f in files if f.get("file_id") == file_id), None)
+        if not file_data or not file_data.get("file_path"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+        file_path = file_data["file_path"].lstrip("/")
+        filename = file_data.get("filename", os.path.basename(file_path))
+        user_email = current_user.identity.email
+
+        aict_base_url = os.getenv("AICT_BASE_URL", "").rstrip("/")
+        if not aict_base_url:
+            aict_base_url = str(request.base_url).rstrip("/")
+
+        sig = generate_signature(file_path, user_email)
+        download_url = (
+            f"{aict_base_url}/static/{file_path}"
+            f"?user={user_email}&sig={sig}"
+            f"&filename={filename}"
+        )
+
+        return {"download_url": download_url, "filename": filename}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading marketplace file: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="File download failed")
 
 
 # ==================== CHAT ====================

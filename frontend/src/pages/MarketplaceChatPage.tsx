@@ -225,6 +225,18 @@ export default function MarketplaceChatPage() {
     [numericId],
   );
 
+  const handleDownloadFile = useCallback(
+    async (fileId: string) => {
+      try {
+        const url = await apiService.getMarketplaceFileDownloadUrl(numericId, fileId);
+        window.open(url, '_blank');
+      } catch (error) {
+        console.error('Error getting download URL:', error);
+      }
+    },
+    [numericId],
+  );
+
   const handleRemoveFile = useCallback(
     async (fileId: string) => {
       try {
@@ -397,6 +409,7 @@ export default function MarketplaceChatPage() {
           files={panelFiles}
           isLoading={isLoadingFiles}
           onRemoveFile={handleRemoveFile}
+          onDownloadFile={handleDownloadFile}
         />
       </div>
     </div>

@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from fastapi.responses import RedirectResponse
+from utils.security import generate_signature
+import os
 from typing import List, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
@@ -118,6 +121,7 @@ async def create_or_update_agent(
         'type': agent_data.type,
         'is_tool': agent_data.is_tool,
         'has_memory': agent_data.has_memory,
+        'enable_code_interpreter': agent_data.enable_code_interpreter,
         'memory_max_messages': agent_data.memory_max_messages,
         'memory_max_tokens': agent_data.memory_max_tokens,
         'memory_summarize_threshold': agent_data.memory_summarize_threshold,
@@ -693,6 +697,67 @@ async def remove_attached_file(
     except Exception as e:
         logger.error(f"Error in remove file endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to remove file") 
+
+
+@agents_router.get("/{agent_id}/files/{file_id}/download",
+                   summary="Download a file (uploaded or agent-generated)",
+                   tags=["Agents"])
+async def download_file(
+    app_id: int,
+    agent_id: int,
+    file_id: str,
+    request: Request,
+    conversation_id: Optional[int] = None,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: Download an uploaded or agent-generated file.
+
+    Looks up the file by file_id scoped to the calling user's session,
+    returns a signed URL for the /static/ endpoint (no auth required).
+    """
+    try:
+        user_context = {
+            "user_id": int(auth_context.identity.id),
+            "oauth": True,
+            "app_id": app_id
+        }
+
+        file_service = FileManagementService()
+        files = await file_service.list_attached_files(
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None
+        )
+
+        file_data = next((f for f in files if f.get("file_id") == file_id), None)
+        if not file_data or not file_data.get("file_path"):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        file_path = file_data["file_path"].lstrip("/")
+        filename = file_data.get("filename", os.path.basename(file_path))
+        user_email = auth_context.identity.email
+
+        # Build absolute base URL: prefer explicit env var, fall back to request origin
+        aict_base_url = os.getenv("AICT_BASE_URL", "").rstrip("/")
+        if not aict_base_url:
+            aict_base_url = str(request.base_url).rstrip("/")
+
+        sig = generate_signature(file_path, user_email)
+        download_url = (
+            f"{aict_base_url}/static/{file_path}"
+            f"?user={user_email}&sig={sig}"
+            f"&filename={filename}"
+        )
+
+        return {"download_url": download_url, "filename": filename}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in download file endpoint: {e}")
+        raise HTTPException(status_code=500, detail="File download failed")
 
 
 # ==================== MARKETPLACE MANAGEMENT ====================

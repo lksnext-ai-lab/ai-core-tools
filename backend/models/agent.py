@@ -70,7 +70,8 @@ class Agent(Base):
                         nullable=True)
 
     has_memory = Column(Boolean)
-    
+    enable_code_interpreter = Column(Boolean, default=False, nullable=False, server_default='false')
+
     # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
     memory_max_messages = Column(Integer, default=20, nullable=False)  # SummarizationMiddleware.keep=("messages", N) — messages to preserve after summarization
     memory_max_tokens = Column(Integer, default=4000, nullable=True)  # SummarizationMiddleware.trigger=("tokens", N) — token count that triggers summarization

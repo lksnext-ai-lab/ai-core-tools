@@ -18,9 +18,11 @@ from langchain_core.documents import Document
 import langsmith as ls
 import json
 import asyncio
+import os
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.python_sandbox_tools import create_python_repl_tool
 
 logger = get_logger(__name__)
 
@@ -93,7 +95,7 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None):
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
@@ -140,6 +142,18 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         if skills_section:
             system_prompt_content = system_prompt_content + "\n" + skills_section
 
+    if agent.enable_code_interpreter and working_dir:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<code_interpreter>\n"
+            + "You have access to a `python_repl` tool that executes Python code.\n"
+            + f"Your working directory is: {working_dir}\n"
+            + "Reference uploaded files by filename only (e.g. 'report.xlsx').\n"
+            + "Save output files to the same directory and print the filename so the user can download it.\n"
+            + "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n"
+            + "</code_interpreter>"
+        )
+
     if format_instructions:
         system_prompt_content = (
             system_prompt_content
@@ -176,10 +190,16 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     #tools.append(fetch_file_in_base64)
 
     if agent.silo_id is not None:
-        
+
         retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
+
+    if agent.enable_code_interpreter and working_dir:
+        os.makedirs(working_dir, exist_ok=True)
+        python_tool = create_python_repl_tool(working_dir=working_dir)
+        tools.append(python_tool)
+        logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
 
     mcp_client = None
     try:

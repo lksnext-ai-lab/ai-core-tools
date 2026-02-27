@@ -359,6 +359,73 @@ class FileManagementService:
             logger.error(f"Error removing file: {str(e)}")
             return False
     
+    async def register_output_file(
+        self,
+        file_path: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None
+    ) -> Optional["FileReference"]:
+        """
+        Register an already-existing file on disk as a FileReference so it appears
+        in list_attached_files() and can be downloaded by the user.
+
+        Used by the code interpreter to surface agent-generated output files
+        (e.g. modified Excel files, CSVs, charts) in the same UI panel as uploads.
+
+        Args:
+            file_path: Absolute path to the file on disk
+            agent_id: ID of the agent that generated the file
+            user_context: User context
+            conversation_id: Optional conversation ID for scoping
+
+        Returns:
+            FileReference if registration succeeded, None on error
+        """
+        try:
+            if not os.path.exists(file_path):
+                logger.warning(f"register_output_file: file not found at {file_path}")
+                return None
+
+            filename = os.path.basename(file_path)
+            file_id = str(uuid.uuid4())
+            file_size = os.path.getsize(file_path)
+            relative_path = os.path.relpath(file_path, self._tmp_base_folder).replace(os.sep, '/')
+
+            file_ref = FileReference(
+                file_id=file_id,
+                filename=filename,
+                file_type="output",
+                content=f"Generated file: {filename}",
+                file_path=relative_path,
+                file_size_bytes=file_size,
+                conversation_id=str(conversation_id) if conversation_id else None
+            )
+            file_ref.processing_status = "ready"
+
+            session_key = self._get_session_key(agent_id, user_context, str(conversation_id) if conversation_id else None)
+            if session_key not in self._files:
+                self._files[session_key] = {}
+            self._files[session_key][file_id] = file_ref
+
+            # Persist metadata so it survives restarts
+            session_dir = os.path.join(self._persistent_dir, session_key)
+            os.makedirs(session_dir, exist_ok=True)
+            metadata_file = os.path.join(session_dir, f"{file_id}.json")
+            with open(metadata_file, 'w') as f:
+                json.dump(file_ref.to_dict(), f, indent=2)
+            # _load_session_files requires a matching .content file to load the entry
+            content_file = os.path.join(session_dir, f"{file_id}.content")
+            with open(content_file, 'w', encoding='utf-8') as f:
+                f.write(file_ref.content)
+
+            logger.info(f"Registered output file {filename} (id={file_id}) for session {session_key}")
+            return file_ref
+
+        except Exception as e:
+            logger.error(f"Error registering output file: {e}")
+            return None
+
     def _get_file_type(self, filename: str) -> str:
         """Get file type from filename"""
         if not filename:
@@ -499,28 +566,29 @@ class FileManagementService:
             
             # Save original file FIRST (to set file_path before saving metadata)
             if original_file_path and os.path.exists(original_file_path):
-                original_filename = os.path.basename(original_file_path)
-                original_extension = os.path.splitext(original_filename)[1]
-                
                 # Determine target directory
                 if conversation_id:
                     target_dir = os.path.join(self._tmp_base_folder, "conversations", str(conversation_id))
                 else:
                     target_dir = session_dir
-                
+
                 os.makedirs(target_dir, exist_ok=True)
-                
-                original_file = os.path.join(target_dir, f"{file_id}{original_extension}")
-                
+
+                # Use the original user-facing filename so the code interpreter can
+                # reference files by the name the user knows (e.g. 'report.xlsx').
+                # Path separators are stripped to prevent directory traversal.
+                safe_filename = file_ref.filename.replace('/', '_').replace('\\', '_')
+                original_file = os.path.join(target_dir, safe_filename)
+
                 import shutil
                 shutil.copy2(original_file_path, original_file)
-                
+
                 # Calculate relative path from TMP_BASE_FOLDER
                 relative_path = os.path.relpath(original_file, self._tmp_base_folder)
                 # Ensure forward slashes for URLs
                 file_ref.file_path = relative_path.replace(os.sep, '/')
-                
-                logger.info(f"Saved original file {original_filename} to {original_file} (relative: {relative_path})")
+
+                logger.info(f"Saved file as '{safe_filename}' in {target_dir} (relative: {relative_path})")
                 logger.info(f"FileReference file_path set to: {file_ref.file_path}")
             
             # Save file metadata AFTER setting file_path
@@ -580,22 +648,37 @@ class FileManagementService:
                             
                             # If file_path is missing, try to regenerate it
                             if not file_ref.file_path:
-                                # Look for the original file in the session directory
-                                for filename in os.listdir(session_path):
-                                    if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
-                                        original_file = os.path.join(session_path, filename)
-                                        if os.path.exists(original_file):
-                                            # Calculate relative path
-                                            relative_path = os.path.relpath(original_file, self._tmp_base_folder)
-                                            file_ref.file_path = relative_path
-                                            
-                                            # Update metadata file with the new path
-                                            metadata['file_path'] = relative_path
-                                            with open(metadata_file, 'w') as f:
-                                                json.dump(metadata, f, indent=2)
-                                            
-                                            logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
-                                            break
+                                # Search: session dir (UUID-named legacy files) and
+                                # conversation dir (original-named files)
+                                conv_id = metadata.get('conversation_id')
+                                search_dirs = [session_path]
+                                if conv_id:
+                                    search_dirs.append(os.path.join(
+                                        self._tmp_base_folder, "conversations", str(conv_id)
+                                    ))
+                                found = False
+                                for search_dir in search_dirs:
+                                    if not os.path.isdir(search_dir):
+                                        continue
+                                    for fname in os.listdir(search_dir):
+                                        # Legacy: UUID prefix match; new: original filename match
+                                        is_match = (
+                                            fname.startswith(file_id)
+                                            or fname == metadata.get('filename')
+                                        )
+                                        if is_match and not fname.endswith(('.json', '.content')):
+                                            candidate = os.path.join(search_dir, fname)
+                                            if os.path.exists(candidate):
+                                                relative_path = os.path.relpath(candidate, self._tmp_base_folder)
+                                                file_ref.file_path = relative_path
+                                                metadata['file_path'] = relative_path
+                                                with open(metadata_file, 'w') as f:
+                                                    json.dump(metadata, f, indent=2)
+                                                logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
+                                                found = True
+                                                break
+                                    if found:
+                                        break
                             
                             self._files[session_key][file_id] = file_ref
                             logger.info(f"Loaded persistent file {file_id} for session {session_key}")
@@ -648,6 +731,73 @@ class FileManagementService:
 
         except Exception as e:
             logger.error(f"Error removing file from disk: {str(e)}")
+
+    async def sync_output_files(
+        self,
+        working_dir: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ) -> List["FileReference"]:
+        """
+        Scan working_dir for files that are not yet registered and register them
+        as output FileReferences.  Called after each agent execution turn so that
+        files saved by the python_repl tool appear automatically in the UI panel.
+
+        Args:
+            working_dir: Directory where the sandbox writes output files
+            agent_id: ID of the agent
+            user_context: User context
+            conversation_id: Conversation scope
+
+        Returns:
+            List of newly registered FileReferences (may be empty)
+        """
+        try:
+            if not os.path.exists(working_dir):
+                return []
+
+            session_key = self._get_session_key(agent_id, user_context, conversation_id)
+            if session_key not in self._files:
+                self._load_session_files(session_key)
+
+            # Build a set of file paths already registered for this session
+            registered_paths = {
+                ref.file_path
+                for ref in self._files.get(session_key, {}).values()
+                if ref.file_path
+            }
+
+            newly_registered: List[FileReference] = []
+            for fname in os.listdir(working_dir):
+                # Skip hidden files and Python temp scripts
+                if fname.startswith('.') or fname.endswith('.py'):
+                    continue
+                abs_path = os.path.join(working_dir, fname)
+                if not os.path.isfile(abs_path):
+                    continue
+                rel_path = os.path.relpath(abs_path, self._tmp_base_folder).replace(os.sep, '/')
+                if rel_path in registered_paths:
+                    continue
+                ref = await self.register_output_file(
+                    file_path=abs_path,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=conversation_id,
+                )
+                if ref:
+                    newly_registered.append(ref)
+
+            if newly_registered:
+                logger.info(
+                    "sync_output_files: registered %d new file(s) in %s for session %s",
+                    len(newly_registered), working_dir, session_key,
+                )
+            return newly_registered
+
+        except Exception as e:
+            logger.error("sync_output_files error: %s", e)
+            return []
 
     def get_file_stats(self) -> Dict[str, Any]:
         """Get file management statistics"""
