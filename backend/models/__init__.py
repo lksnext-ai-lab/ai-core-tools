@@ -10,7 +10,9 @@ from .embedding_service import EmbeddingService
 from .output_parser import OutputParser
 from .mcp_config import MCPConfig
 from .silo import Silo
+from .skill import Skill
 from .agent import Agent
+from .agent_marketplace_profile import AgentMarketplaceProfile
 from .skill import Skill
 from .ocr_agent import OCRAgent
 from .conversation import Conversation
@@ -24,6 +26,9 @@ from .mcp_server import MCPServer, MCPServerAgent
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
+    'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill',
+    'Agent', 'AgentMarketplaceProfile', 'OCRAgent', 'Conversation',
+    'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
     'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'Media',

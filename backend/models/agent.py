@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float
+import enum
+
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
+
+
+class MarketplaceVisibility(enum.Enum):
+    UNPUBLISHED = "unpublished"
+    PRIVATE = "private"
+    PUBLIC = "public"
 
 AGENT_ID = 'Agent.agent_id'
 
@@ -72,7 +80,13 @@ class Agent(Base):
                         ForeignKey('OutputParser.parser_id'),
                         nullable=True)
     temperature = Column(Float, default=DEFAULT_AGENT_TEMPERATURE, nullable=False)
-    
+
+    marketplace_visibility = Column(
+        Enum(MarketplaceVisibility),
+        nullable=False,
+        default=MarketplaceVisibility.UNPUBLISHED
+    )
+
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
 
@@ -101,6 +115,14 @@ class Agent(Base):
     skill_associations = relationship('AgentSkill',
                                      primaryjoin=(agent_id == AgentSkill.agent_id),
                                      back_populates='agent')
+
+    # Marketplace profile (1:1)
+    marketplace_profile = relationship(
+        'AgentMarketplaceProfile',
+        back_populates='agent',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
 
     __mapper_args__ = {
         'polymorphic_identity': 'agent',

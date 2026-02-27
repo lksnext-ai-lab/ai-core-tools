@@ -1,5 +1,14 @@
 // API Service - Think of this like your backend services!
 import { configService } from '../core/ConfigService';
+import type {
+  MarketplaceCatalogParams,
+  MarketplaceCatalogResponse,
+  MarketplaceAgentDetail,
+  MarketplaceConversation,
+  MarketplaceProfile,
+  MarketplaceProfileUpdate,
+  MarketplaceVisibility,
+} from '../types/marketplace';
 
 class ApiService {
   private get baseURL(): string {
@@ -1055,6 +1064,124 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'DELETE',
     });
+  }
+
+  // ==================== MARKETPLACE ====================
+
+  async getMarketplaceCatalog(
+    params: MarketplaceCatalogParams = {},
+  ): Promise<MarketplaceCatalogResponse> {
+    const queryParams = new URLSearchParams();
+    if (params.search) queryParams.set('search', params.search);
+    if (params.category) queryParams.set('category', params.category);
+    if (params.my_apps_only) queryParams.set('my_apps_only', 'true');
+    if (params.page) queryParams.set('page', String(params.page));
+    if (params.page_size) queryParams.set('page_size', String(params.page_size));
+    if (params.sort_by) queryParams.set('sort_by', params.sort_by);
+    const qs = queryParams.toString();
+    const endpoint = qs
+      ? '/internal/marketplace/agents?' + qs
+      : '/internal/marketplace/agents';
+    return this.request(endpoint);
+  }
+
+  async getMarketplaceAgentDetail(
+    agentId: number,
+  ): Promise<MarketplaceAgentDetail> {
+    return this.request(`/internal/marketplace/agents/${agentId}`);
+  }
+
+  async getMarketplaceCategories(): Promise<{ categories: string[] }> {
+    return this.request('/internal/marketplace/categories');
+  }
+
+  async createMarketplaceConversation(
+    agentId: number,
+    title?: string,
+  ): Promise<any> {
+    const titleParam = title
+      ? `?title=${encodeURIComponent(title)}`
+      : '';
+    return this.request(
+      `/internal/marketplace/agents/${agentId}/conversations${titleParam}`,
+      { method: 'POST' },
+    );
+  }
+
+  async getMarketplaceConversations(
+    limit = 50,
+    offset = 0,
+  ): Promise<{ conversations: MarketplaceConversation[]; total: number }> {
+    return this.request(
+      `/internal/marketplace/conversations?limit=${limit}&offset=${offset}`,
+    );
+  }
+
+  async getMarketplaceConversationHistory(
+    conversationId: number,
+  ): Promise<any> {
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}`,
+    );
+  }
+
+  async sendMarketplaceMessage(
+    conversationId: number,
+    message: string,
+    files?: File[],
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('message', message);
+    if (files) {
+      files.forEach((file) => formData.append('files', file));
+    }
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/chat`,
+      {
+        method: 'POST',
+        body: formData,
+        // Do NOT set Content-Type — browser sets it with boundary for FormData
+      },
+    );
+  }
+
+  // Agent marketplace management (EDITOR+)
+
+  async getAgentMarketplaceProfile(
+    appId: number,
+    agentId: number,
+  ): Promise<MarketplaceProfile> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-profile`,
+    );
+  }
+
+  async updateAgentMarketplaceProfile(
+    appId: number,
+    agentId: number,
+    data: MarketplaceProfileUpdate,
+  ): Promise<MarketplaceProfile> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-profile`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async updateAgentMarketplaceVisibility(
+    appId: number,
+    agentId: number,
+    visibility: MarketplaceVisibility,
+  ): Promise<{ marketplace_visibility: string }> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-visibility`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ marketplace_visibility: visibility }),
+      },
+    );
   }
 
   // ==================== UTILITY METHODS ====================

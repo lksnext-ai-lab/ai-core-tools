@@ -1,6 +1,7 @@
 ---
 name: Documentation Manager
 description: Expert in managing project documentation in the docs/ folder. Maintains index, TOC, sections, and tracks documentation freshness against git commits. Can self-describe its capabilities.
+tools: [read, edit]
 ---
 
 # Documentation Manager Agent
@@ -252,11 +253,17 @@ When your documentation work is complete and the user needs to commit and push:
 
 ### Plan Executor (`@plan-executor`)
 When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
-- **After completing the task**, append a `## Result` section to the step file with:
-  - `**Completed by**: @docs-manager`
-  - `**Completed at**: YYYY-MM-DD`
-  - `**Status**: done | blocked | needs-revision`
-  - A summary of what docs were updated, files changed, and any issues
+- **After completing the task**:
+  1. Append a `## Result` section to the step file with:
+     - `**Completed by**: @docs-manager`
+     - `**Completed at**: YYYY-MM-DD`
+     - `**Status**: done | blocked | needs-revision`
+     - A summary of what docs were updated, files changed, and any issues
+  2. **Update the status.yaml manifest** at `/plans/<slug>/execution/status.yaml`:
+     - Find the step in the `steps:` array by its `id` (e.g., `step_002`)
+     - Update the step's `status:` field to match (e.g., `done`, `blocked`, `needs-revision`)
+     - If status is `done`, add `completed_at: YYYY-MM-DD`
+     - Save the updated manifest
 - **Then** suggest the user invoke `@plan-executor` to continue with the next step
 - If the task cannot be completed, set status to `blocked` and explain why
 

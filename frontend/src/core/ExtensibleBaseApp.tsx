@@ -47,6 +47,10 @@ import ProfilePage from '../pages/ProfilePage';
 import MCPServersPage from '../pages/MCPServersPage';
 import MCPServerFormPage from '../pages/MCPServerFormPage';
 import MCPServerDetailPage from '../pages/MCPServerDetailPage';
+import MarketplacePage from '../pages/MarketplacePage';
+import MarketplaceAgentDetailPage from '../pages/MarketplaceAgentDetailPage';
+import MarketplaceChatPage from '../pages/MarketplaceChatPage';
+import MarketplaceHomePage from '../pages/MarketplaceHomePage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -145,6 +149,30 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/profile" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                       <ProfilePage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplacePage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace/agents/:agentId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceAgentDetailPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace/chat/:conversationId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceChatPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/home" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceHomePage />
                   </ProtectedLayoutRoute>
                 } />
 

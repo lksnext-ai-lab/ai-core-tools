@@ -214,6 +214,33 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 - `app` → Owning app
 - `agents` → List of agents using this service
 
+### AgentMarketplaceProfile
+
+**Table**: `agent_marketplace_profiles`  
+**Purpose**: Marketplace metadata for published agents (1:1 with Agent)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `profile_id` | Integer (PK) | Unique profile identifier |
+| `agent_id` | Integer (FK → Agent, unique) | Associated agent |
+| `display_name` | String(255) | Public-facing name |
+| `short_description` | String(160) | Brief summary for catalog |
+| `long_description` | Text | Full markdown description |
+| `category` | String(50) | Category key (enum) |
+| `tags` | JSON | List of tags (max 5) |
+| `icon_url` | String(500) | Icon image URL |
+| `cover_image_url` | String(500) | Cover banner URL |
+| `visibility` | String(20) | Marketplace visibility (enum) |
+| `create_date` | DateTime | Profile creation timestamp |
+| `update_date` | DateTime | Last update timestamp |
+
+**Relationships**:
+- `agent` → Associated agent (1:1)
+
+**Visibility values**: `unpublished`, `private`, `public`
+
+**Category values**: `customer_support`, `education`, `research_analysis`, `content_creation`, `development_tools`, `business_finance`, `health_wellness`, `other`
+
 ### EmbeddingService
 
 **Table**: `EmbeddingService`  
@@ -345,12 +372,15 @@ Provides common fields and methods for AIService and EmbeddingService.
 | `user_id` | Integer (FK → User) | User who started the conversation |
 | `title` | String(255) | Conversation title |
 | `messages` | JSON | Message history (serialized) |
+| `source` | String(20) | Conversation source (enum) |
 | `create_date` | DateTime | Conversation start timestamp |
 | `last_message_date` | DateTime | Last message timestamp |
 
 **Relationships**:
 - `agent` → Agent used
 - `user` → User who owns the conversation
+
+**Source values**: `playground`, `marketplace`, `api`
 
 ### Media
 
@@ -452,6 +482,51 @@ alembic downgrade -1
 - Test rollback before committing
 - Descriptive revision messages
 - Never modify already-applied migrations
+
+## Enums
+
+Mattin AI uses string-based enum values stored in database columns. These are validated at the application level.
+
+### MarketplaceVisibility
+
+**Column**: `agent_marketplace_profiles.visibility`  
+**Purpose**: Controls agent visibility in marketplace
+
+| Value | Description |
+|-------|-------------|
+| `unpublished` | Not listed in marketplace (default) |
+| `private` | Listed but only accessible via direct link |
+| `public` | Publicly listed and discoverable |
+
+### ConversationSource
+
+**Column**: `Conversation.source`  
+**Purpose**: Tracks where conversation originated
+
+| Value | Description |
+|-------|-------------|
+| `playground` | Agent playground (app management UI) |
+| `marketplace` | Marketplace consumer chat |
+| `api` | Public API or MCP endpoint |
+
+### CollaborationRole
+
+**Column**: `app_collaborators.role`  
+**Purpose**: Defines user permissions within an app
+
+**Role hierarchy**: `omniadmin > owner > administrator > editor > viewer > user > guest`
+
+| Value | Description |
+|-------|-------------|
+| `omniadmin` | Superuser with cross-app access (set via env var) |
+| `owner` | App creator, full control |
+| `administrator` | Can manage app settings and collaborators |
+| `editor` | Can create/edit agents, resources, services |
+| `viewer` | Read-only access to app resources |
+| `user` | Authenticated user, marketplace access only |
+| `guest` | Unauthenticated user (future use) |
+
+**Note**: The `USER` role was added for marketplace consumers who need authenticated access without app permissions.
 
 ## Connection Pooling
 

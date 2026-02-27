@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+import enum
+
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.database import Base
+
+
+class ConversationSource(enum.Enum):
+    PLAYGROUND = "playground"
+    MARKETPLACE = "marketplace"
+    API = "api"
 
 
 class Conversation(Base):
@@ -34,7 +42,14 @@ class Conversation(Base):
     
     # User context (for API key users who don't have user_id)
     api_key_hash = Column(String(64), nullable=True)  # MD5 hash of API key for tracking
-    
+
+    # Source of conversation: playground, marketplace, or api
+    source = Column(
+        Enum(ConversationSource),
+        nullable=False,
+        default=ConversationSource.PLAYGROUND
+    )
+
     # Relationships
     agent = relationship("Agent", backref="conversations")
     user = relationship("User", backref="conversations", foreign_keys=[user_id])

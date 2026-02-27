@@ -409,6 +409,216 @@ Response:
 }
 ```
 
+### Marketplace
+
+**Base**: `/internal/marketplace`
+
+Endpoints for browsing and consuming published agents.
+
+#### Catalog
+
+| Method | Endpoint | Purpose | Min Role |
+|--------|----------|---------|----------|
+| GET | `/agents` | List published agents | user |
+| GET | `/agents/{id}` | Get agent detail | user |
+| GET | `/categories` | List predefined categories | user |
+
+**Example: Browse Marketplace**
+
+```http
+GET /internal/marketplace/agents?search=support&category=customer_support&page=1&per_page=12
+Cookie: session=...
+
+Response:
+{
+  "items": [
+    {
+      "agent_id": 42,
+      "display_name": "Customer Support Assistant",
+      "short_description": "24/7 AI support for common customer inquiries",
+      "category": "customer_support",
+      "tags": ["support", "customer-service"],
+      "icon_url": "https://...",
+      "cover_image_url": "https://...",
+      "visibility": "public"
+    }
+  ],
+  "total": 15,
+  "page": 1,
+  "per_page": 12
+}
+```
+
+**Example: Get Agent Detail**
+
+```http
+GET /internal/marketplace/agents/42
+Cookie: session=...
+
+Response:
+{
+  "agent_id": 42,
+  "display_name": "Customer Support Assistant",
+  "short_description": "24/7 AI support for common customer inquiries",
+  "long_description": "# About\n\nThis agent helps with...\n\n## Features\n\n- FAQ responses\n- Order tracking\n- Return processing",
+  "category": "customer_support",
+  "tags": ["support", "customer-service", "FAQ"],
+  "icon_url": "https://...",
+  "cover_image_url": "https://...",
+  "visibility": "public"
+}
+```
+
+**Example: List Categories**
+
+```http
+GET /internal/marketplace/categories
+Cookie: session=...
+
+Response:
+[
+  {"key": "customer_support", "label": "Customer Support"},
+  {"key": "education", "label": "Education"},
+  {"key": "research_analysis", "label": "Research & Analysis"},
+  {"key": "content_creation", "label": "Content Creation"},
+  {"key": "development_tools", "label": "Development Tools"},
+  {"key": "business_finance", "label": "Business & Finance"},
+  {"key": "health_wellness", "label": "Health & Wellness"},
+  {"key": "other", "label": "Other"}
+]
+```
+
+#### Conversations
+
+| Method | Endpoint | Purpose | Min Role |
+|--------|----------|---------|----------|
+| POST | `/agents/{id}/conversations` | Start new conversation | user |
+| GET | `/conversations` | List user's conversations | user |
+| GET | `/conversations/{id}` | Get conversation history | user |
+| POST | `/conversations/{id}/chat` | Send message | user |
+
+**Example: Start Conversation**
+
+```http
+POST /internal/marketplace/agents/42/conversations
+Cookie: session=...
+
+{
+  "title": "Help with product returns"  // optional
+}
+
+Response:
+{
+  "conversation_id": 101,
+  "agent_id": 42,
+  "title": "Help with product returns",
+  "source": "marketplace",
+  "create_date": "2026-02-23T10:00:00Z"
+}
+```
+
+**Example: Send Message**
+
+```http
+POST /internal/marketplace/conversations/101/chat
+Cookie: session=...
+
+{
+  "message": "How do I return a product?"
+}
+
+Response:
+{
+  "response": "To return a product, please follow these steps...",
+  "conversation_id": 101,
+  "message_count": 2
+}
+```
+
+**Example: List My Conversations**
+
+```http
+GET /internal/marketplace/conversations?page=1&per_page=20
+Cookie: session=...
+
+Response:
+{
+  "items": [
+    {
+      "conversation_id": 101,
+      "agent_id": 42,
+      "agent_display_name": "Customer Support Assistant",
+      "title": "Help with product returns",
+      "message_count": 4,
+      "last_message_date": "2026-02-23T10:15:00Z",
+      "create_date": "2026-02-23T10:00:00Z"
+    }
+  ],
+  "total": 5,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+#### Agent Management
+
+**Base**: `/internal/apps/{app_slug}/agents/{agent_id}`
+
+Endpoints for managing marketplace visibility and profiles (requires agent ownership).
+
+| Method | Endpoint | Purpose | Min Role |
+|--------|----------|---------|----------|
+| PUT | `/marketplace-visibility` | Update visibility | editor |
+| GET | `/marketplace-profile` | Get marketplace profile | viewer |
+| PUT | `/marketplace-profile` | Update marketplace profile | editor |
+
+**Example: Set Visibility**
+
+```http
+PUT /internal/apps/my-workspace/agents/42/marketplace-visibility
+Cookie: session=...
+
+{
+  "visibility": "public"  // unpublished | private | public
+}
+
+Response:
+{
+  "agent_id": 42,
+  "visibility": "public"
+}
+```
+
+**Example: Update Marketplace Profile**
+
+```http
+PUT /internal/apps/my-workspace/agents/42/marketplace-profile
+Cookie: session=...
+
+{
+  "display_name": "Customer Support Assistant",
+  "short_description": "24/7 AI support for common customer inquiries",
+  "long_description": "# About\n\nThis agent helps...",
+  "category": "customer_support",
+  "tags": ["support", "customer-service", "FAQ"],
+  "icon_url": "https://storage.example.com/icons/support.png",
+  "cover_image_url": "https://storage.example.com/covers/support-banner.jpg"
+}
+
+Response:
+{
+  "agent_id": 42,
+  "display_name": "Customer Support Assistant",
+  "short_description": "24/7 AI support for common customer inquiries",
+  "long_description": "# About\n\nThis agent helps...",
+  "category": "customer_support",
+  "tags": ["support", "customer-service", "FAQ"],
+  "icon_url": "https://storage.example.com/icons/support.png",
+  "cover_image_url": "https://storage.example.com/covers/support-banner.jpg",
+  "visibility": "public"
+}
+```
+
 ### User Profile
 
 **Base**: `/internal/user`

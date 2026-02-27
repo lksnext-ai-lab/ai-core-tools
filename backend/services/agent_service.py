@@ -6,6 +6,27 @@ from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
 
+
+def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
+    """Serialize an AgentMarketplaceProfile to a dict for schema response."""
+    if not profile:
+        return None
+    published_at = profile.published_at.isoformat() if profile.published_at else None
+    updated_at = profile.updated_at.isoformat() if profile.updated_at else None
+    return {
+        "id": profile.id,
+        "agent_id": profile.agent_id,
+        "display_name": profile.display_name,
+        "short_description": profile.short_description,
+        "long_description": profile.long_description,
+        "category": profile.category,
+        "tags": profile.tags,
+        "icon_url": profile.icon_url,
+        "cover_image_url": profile.cover_image_url,
+        "published_at": published_at,
+        "updated_at": updated_at,
+    }
+
 class AgentService:
 
     def get_agents_list(self, db: Session, app_id: int) -> List[AgentListItemSchema]:
@@ -31,7 +52,12 @@ class AgentService:
                 created_at=agent.create_date,
                 request_count=agent.request_count or 0,
                 service_id=getattr(agent, 'service_id', None),
-                ai_service=ai_service_info
+                ai_service=ai_service_info,
+                marketplace_visibility=(
+                    agent.marketplace_visibility.value
+                    if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
+                    else None
+                ),
             ))
         
         return result
@@ -96,7 +122,16 @@ class AgentService:
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
             mcp_configs=form_data['mcp_configs'],
-            skills=form_data['skills']
+            skills=form_data['skills'],
+            # Marketplace
+            marketplace_visibility=(
+                agent.marketplace_visibility.value
+                if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
+                else None
+            ),
+            marketplace_profile=_serialize_marketplace_profile(
+                getattr(agent, 'marketplace_profile', None)
+            ),
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
