@@ -4,6 +4,9 @@ import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
+import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
+import type { PanelFile } from '../components/playground/AttachedFilesPanel';
+
 
 interface ChatMessage {
   readonly id: string;
@@ -29,10 +32,13 @@ export default function MarketplaceChatPage() {
   // Messages
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Persistent files (server-side, scoped to this conversation)
+  const [persistentFiles, setPersistentFiles] = useState<any[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -98,6 +104,20 @@ export default function MarketplaceChatPage() {
     loadHistory();
   }, [numericId]);
 
+  // Load persistent files whenever the conversation changes
+  useEffect(() => {
+    if (!numericId || isNaN(numericId)) return;
+    const loadFiles = async () => {
+      try {
+        const response = await apiService.listMarketplaceFiles(numericId);
+        setPersistentFiles(response.files || []);
+      } catch {
+        setPersistentFiles([]);
+      }
+    };
+    loadFiles();
+  }, [numericId]);
+
   // Auto-resize textarea
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -112,19 +132,18 @@ export default function MarketplaceChatPage() {
   // Send message
   const handleSend = useCallback(async () => {
     const trimmed = inputMessage.trim();
-    if (!trimmed && selectedFiles.length === 0) return;
+    if (!trimmed && persistentFiles.length === 0) return;
     if (isSending) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
-      content: trimmed || `[${selectedFiles.length} file(s) attached]`,
+      content: trimmed || `[${persistentFiles.length} file(s) attached]`,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setInputMessage('');
-    setSelectedFiles([]);
     setIsSending(true);
 
     // Reset textarea height
@@ -133,10 +152,13 @@ export default function MarketplaceChatPage() {
     }
 
     try {
+      const fileRefs = persistentFiles.length > 0
+        ? persistentFiles.map((f) => f.file_id)
+        : undefined;
       const response = await apiService.sendMarketplaceMessage(
         numericId,
         trimmed,
-        selectedFiles.length > 0 ? selectedFiles : undefined,
+        fileRefs,
       );
 
       let responseContent = response.response || 'No response received';
@@ -163,7 +185,7 @@ export default function MarketplaceChatPage() {
     } finally {
       setIsSending(false);
     }
-  }, [inputMessage, selectedFiles, isSending, numericId]);
+  }, [inputMessage, persistentFiles, isSending, numericId]);
 
   // Handle Enter key
   const handleKeyDown = useCallback(
@@ -176,21 +198,45 @@ export default function MarketplaceChatPage() {
     [handleSend],
   );
 
-  // File handling
+  // File handling — upload to server so files persist across navigation
   const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files) {
-        setSelectedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-      }
-      // Reset input so same file can be re-selected
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files ? Array.from(e.target.files) : [];
       e.target.value = '';
+      if (files.length === 0) return;
+
+      setIsLoadingFiles(true);
+      for (const file of files) {
+        try {
+          await apiService.uploadMarketplaceFile(numericId, file);
+        } catch (err) {
+          console.error(`Error uploading file ${file.name}:`, err);
+        }
+      }
+      try {
+        const response = await apiService.listMarketplaceFiles(numericId);
+        setPersistentFiles(response.files || []);
+      } catch {
+        // keep existing list
+      } finally {
+        setIsLoadingFiles(false);
+      }
     },
-    [],
+    [numericId],
   );
 
-  const removeFile = useCallback((index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const handleRemoveFile = useCallback(
+    async (fileId: string) => {
+      try {
+        await apiService.removeMarketplaceFile(numericId, fileId);
+        const response = await apiService.listMarketplaceFiles(numericId);
+        setPersistentFiles(response.files || []);
+      } catch (err) {
+        console.error(`Error removing file ${fileId}:`, err);
+      }
+    },
+    [numericId],
+  );
 
   // New chat with same agent
   const handleNewChat = useCallback(async () => {
@@ -225,8 +271,21 @@ export default function MarketplaceChatPage() {
     );
   }
 
+  const panelFiles: PanelFile[] = persistentFiles.map((f) => ({
+    id: f.file_id,
+    filename: f.filename,
+    file_type: f.file_type,
+    processing_status: f.processing_status,
+    file_size_display: f.file_size_display,
+    has_extractable_content: f.has_extractable_content,
+    content_preview: f.content_preview,
+  }));
+
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex h-[calc(100vh-8rem)]">
+      {/* Chat column */}
+      <div className="flex-1 flex flex-col min-w-0">
+
       {/* Top bar */}
       <div className="flex items-center justify-between border-b bg-white px-4 py-3 flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -287,28 +346,6 @@ export default function MarketplaceChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* File chips */}
-      {selectedFiles.length > 0 && (
-        <div className="flex flex-wrap gap-2 px-4 py-2 border-t bg-gray-50">
-          {selectedFiles.map((file, idx) => (
-            <span
-              key={`${file.name}-${idx}`}
-              className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full"
-            >
-              📎 {file.name}
-              <button
-                type="button"
-                onClick={() => removeFile(idx)}
-                className="ml-1 text-blue-600 hover:text-blue-900"
-                aria-label={`Remove ${file.name}`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
       {/* Input area */}
       <div className="border-t bg-white px-4 py-3 flex-shrink-0">
         <div className="flex items-end gap-2">
@@ -344,12 +381,23 @@ export default function MarketplaceChatPage() {
           <button
             type="button"
             onClick={handleSend}
-            disabled={isSending || (!inputMessage.trim() && selectedFiles.length === 0)}
+            disabled={isSending || (!inputMessage.trim() && persistentFiles.length === 0)}
             className="flex-shrink-0 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Send
           </button>
         </div>
+      </div>
+
+      </div> {/* end chat column */}
+
+      {/* Attached Files Panel */}
+      <div className="border-l">
+        <AttachedFilesPanel
+          files={panelFiles}
+          isLoading={isLoadingFiles}
+          onRemoveFile={handleRemoveFile}
+        />
       </div>
     </div>
   );

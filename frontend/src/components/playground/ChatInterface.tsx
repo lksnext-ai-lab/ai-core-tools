@@ -3,6 +3,8 @@ import { apiService } from '../../services/api';
 import MessageContent from './MessageContent';
 import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
+import AttachedFilesPanel from './AttachedFilesPanel';
+import type { PanelFile } from './AttachedFilesPanel';
 
 interface Message {
   id: string;
@@ -295,6 +297,16 @@ function ChatInterface({
     }
   };
 
+  const panelFiles: PanelFile[] = persistentFiles.map((f) => ({
+    id: f.file_id,
+    filename: f.filename,
+    file_type: f.file_type,
+    processing_status: f.processing_status,
+    file_size_display: f.file_size_display,
+    has_extractable_content: f.has_extractable_content,
+    content_preview: f.content_preview,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Metadata Filters Section */}
@@ -332,8 +344,11 @@ function ChatInterface({
         </div>
       )}
 
-      {/* Chat Interface */}
-      <div className="bg-white shadow rounded-lg">
+      {/* Chat Interface + File Panel */}
+      <div className="flex gap-4 items-start">
+
+      {/* Chat card */}
+      <div className="flex-1 bg-white shadow rounded-lg">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900">
@@ -430,97 +445,6 @@ function ChatInterface({
             </label>
           </div>
 
-          {/* Persistent Files with Visual Feedback */}
-          {(persistentFiles.length > 0 || isLoadingFiles) && (
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-medium text-gray-700">Attached Files:</div>
-                {persistentFiles.length > 0 && (
-                  <span className="text-xs text-gray-500">
-                    {persistentFiles.length} file{persistentFiles.length !== 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
-              {isLoadingFiles && (
-                <div className="flex items-center justify-center py-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                  <span className="text-sm text-gray-500">Uploading files...</span>
-                </div>
-              )}
-              <div className="space-y-2">
-                {persistentFiles.map((file) => (
-                  <div key={file.file_id} className="flex items-center justify-between bg-white px-3 py-2 rounded border hover:border-gray-400 transition-colors">
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      {/* File Type Icon */}
-                      <span className="text-lg flex-shrink-0">
-                        {file.file_type === 'pdf' && '📄'}
-                        {file.file_type === 'image' && '🖼️'}
-                        {file.file_type === 'text' && '📝'}
-                        {file.file_type === 'document' && '📑'}
-                        {!['pdf', 'image', 'text', 'document'].includes(file.file_type) && '📁'}
-                      </span>
-                      
-                      {/* File Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-800 font-medium truncate" title={file.filename}>
-                            {file.filename}
-                          </span>
-                          {/* Processing Status Badge */}
-                          {file.processing_status && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                              file.processing_status === 'ready' 
-                                ? 'bg-green-100 text-green-700' 
-                                : file.processing_status === 'error' 
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                              {file.processing_status === 'ready' && '✓ Ready'}
-                              {file.processing_status === 'error' && '✗ Error'}
-                              {file.processing_status === 'uploaded' && '⏳ Uploaded'}
-                              {file.processing_status === 'processing' && '⏳ Processing'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
-                          {/* File Size */}
-                          {file.file_size_display && (
-                            <span>{file.file_size_display}</span>
-                          )}
-                          {/* Content Extraction Status */}
-                          {file.has_extractable_content !== undefined && (
-                            <span className={file.has_extractable_content || file.file_type === 'image' ? 'text-green-600' : 'text-gray-400'}>
-                              {file.file_type === 'image' 
-                                ? '• Vision ready' 
-                                : file.has_extractable_content 
-                                  ? '• Text extracted' 
-                                  : '• No text'}
-                            </span>
-                          )}
-                        </div>
-                        {/* Content Preview */}
-                        {file.content_preview && (
-                          <div className="text-xs text-gray-400 truncate mt-1" title={file.content_preview}>
-                            {file.content_preview}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Remove Button */}
-                    <button
-                      onClick={() => handleRemovePersistentFile(file.file_id)}
-                      className="text-red-600 hover:text-red-800 text-sm ml-2 flex-shrink-0 p-1 rounded hover:bg-red-50"
-                      title="Remove file"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Message Input */}
           <div className="flex space-x-2">
             <textarea
@@ -541,6 +465,15 @@ function ChatInterface({
           </div>
         </div>
       </div>
+
+      {/* Attached Files Panel */}
+      <AttachedFilesPanel
+        files={panelFiles}
+        isLoading={isLoadingFiles}
+        onRemoveFile={handleRemovePersistentFile}
+      />
+
+      </div> {/* end flex row */}
     </div>
   );
 }

@@ -1128,20 +1128,39 @@ class ApiService {
   async sendMarketplaceMessage(
     conversationId: number,
     message: string,
-    files?: File[],
+    fileReferences?: string[],
   ): Promise<any> {
     const formData = new FormData();
     formData.append('message', message);
-    if (files) {
-      files.forEach((file) => formData.append('files', file));
+    if (fileReferences && fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(fileReferences));
     }
     return this.request(
       `/internal/marketplace/conversations/${conversationId}/chat`,
       {
         method: 'POST',
         body: formData,
-        // Do NOT set Content-Type — browser sets it with boundary for FormData
       },
+    );
+  }
+
+  async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/upload-file`,
+      { method: 'POST', body: formData },
+    );
+  }
+
+  async listMarketplaceFiles(conversationId: number): Promise<any> {
+    return this.request(`/internal/marketplace/conversations/${conversationId}/files`);
+  }
+
+  async removeMarketplaceFile(conversationId: number, fileId: string): Promise<any> {
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/files/${fileId}`,
+      { method: 'DELETE' },
     );
   }
 

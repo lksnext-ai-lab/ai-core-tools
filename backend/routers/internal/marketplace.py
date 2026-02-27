@@ -1,6 +1,7 @@
 import json
 import math
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
+
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
@@ -29,6 +30,7 @@ logger = get_logger(__name__)
 marketplace_router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
 
 CONVERSATION_NOT_FOUND = "Conversation not found"
+AGENT_NOT_FOUND = "Agent not found"
 
 
 def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
@@ -206,6 +208,148 @@ async def get_marketplace_conversation(
     except Exception as e:
         logger.error(f"Error retrieving marketplace conversation history: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+# ==================== FILES ====================
+
+
+def _get_marketplace_conversation(
+    conversation_id: int,
+    user_id: int,
+    db: Session,
+) -> Conversation:
+    """Load a marketplace conversation and verify it belongs to the user."""
+    conversation = db.query(Conversation).filter(
+        Conversation.conversation_id == conversation_id,
+        Conversation.user_id == user_id,
+        Conversation.source == ConversationSource.MARKETPLACE,
+    ).first()
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CONVERSATION_NOT_FOUND)
+    return conversation
+
+
+def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
+    return {
+        "user_id": int(auth_context.identity.id),
+        "email": auth_context.identity.email,
+        "oauth": True,
+        "app_id": app_id,
+    }
+
+
+@marketplace_router.post(
+    "/conversations/{conversation_id}/upload-file",
+    summary="Upload file for marketplace conversation",
+)
+async def upload_marketplace_file(
+    conversation_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+):
+    """Upload and persist a file for a marketplace conversation."""
+    user_id = int(current_user.identity.id)
+    conversation = _get_marketplace_conversation(conversation_id, user_id, db)
+    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+
+    user_context = _build_file_user_context(current_user, agent.app_id)
+    file_service = FileManagementService()
+    try:
+        file_ref = await file_service.upload_file(
+            file=file,
+            agent_id=agent.agent_id,
+            user_context=user_context,
+            conversation_id=conversation_id,
+        )
+        return {
+            "success": True,
+            "file_id": file_ref.file_id,
+            "filename": file_ref.filename,
+            "file_type": file_ref.file_type,
+            "file_size_bytes": file_ref.file_size_bytes,
+            "file_size_display": FileReference.format_file_size(file_ref.file_size_bytes),
+            "processing_status": file_ref.processing_status,
+            "content_preview": file_ref.content_preview,
+            "has_extractable_content": file_ref.has_extractable_content,
+            "mime_type": file_ref.mime_type,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading marketplace file: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="File upload failed")
+
+
+@marketplace_router.get(
+    "/conversations/{conversation_id}/files",
+    summary="List files for marketplace conversation",
+)
+async def list_marketplace_files(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+):
+    """List files attached to a marketplace conversation."""
+    user_id = int(current_user.identity.id)
+    conversation = _get_marketplace_conversation(conversation_id, user_id, db)
+    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+
+    user_context = _build_file_user_context(current_user, agent.app_id)
+    file_service = FileManagementService()
+    try:
+        files = await file_service.list_attached_files(
+            agent_id=agent.agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id),
+        )
+        total_size = sum(f.get("file_size_bytes", 0) or 0 for f in files)
+        return {
+            "files": files,
+            "total_size_bytes": total_size,
+            "total_size_display": FileReference.format_file_size(total_size),
+        }
+    except Exception as e:
+        logger.error(f"Error listing marketplace files: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list files")
+
+
+@marketplace_router.delete(
+    "/conversations/{conversation_id}/files/{file_id}",
+    summary="Remove file from marketplace conversation",
+)
+async def remove_marketplace_file(
+    conversation_id: int,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+):
+    """Remove a file attached to a marketplace conversation."""
+    user_id = int(current_user.identity.id)
+    conversation = _get_marketplace_conversation(conversation_id, user_id, db)
+    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+
+    user_context = _build_file_user_context(current_user, agent.app_id)
+    file_service = FileManagementService()
+    try:
+        success = await file_service.remove_file(
+            file_id=file_id,
+            agent_id=agent.agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id),
+        )
+        if success:
+            return {"success": True, "message": "File removed successfully"}
+        return {"success": False, "message": "File not found or already removed"}
+    except Exception as e:
+        logger.error(f"Error removing marketplace file: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to remove file")
 
 
 # ==================== CHAT ====================

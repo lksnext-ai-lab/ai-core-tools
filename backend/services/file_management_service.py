@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 import tempfile
@@ -525,7 +526,6 @@ class FileManagementService:
             # Save file metadata AFTER setting file_path
             metadata_file = os.path.join(session_dir, f"{file_id}.json")
             with open(metadata_file, 'w') as f:
-                import json
                 json.dump(file_ref.to_dict(), f, indent=2)
             
             # Save file content (extracted text)
@@ -562,7 +562,6 @@ class FileManagementService:
                     if os.path.exists(content_file):
                         try:
                             with open(metadata_file, 'r') as f:
-                                import json
                                 metadata = json.load(f)
                             
                             with open(content_file, 'r', encoding='utf-8') as f:
@@ -593,7 +592,6 @@ class FileManagementService:
                                             # Update metadata file with the new path
                                             metadata['file_path'] = relative_path
                                             with open(metadata_file, 'w') as f:
-                                                import json
                                                 json.dump(metadata, f, indent=2)
                                             
                                             logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
@@ -617,23 +615,37 @@ class FileManagementService:
             session_dir = os.path.join(self._persistent_dir, session_key)
             metadata_file = os.path.join(session_dir, f"{file_id}.json")
             content_file = os.path.join(session_dir, f"{file_id}.content")
-            
-            # Remove metadata and content files
+
+            # Read metadata BEFORE deleting it to locate the original file
+            # (original files stored in conversations/ dir have a relative file_path)
             if os.path.exists(metadata_file):
+                try:
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    file_path = metadata.get('file_path')
+                    if file_path:
+                        abs_path = os.path.join(self._tmp_base_folder, file_path)
+                        if os.path.exists(abs_path):
+                            os.remove(abs_path)
+                            logger.info(f"Removed original file {abs_path}")
+                except Exception as e:
+                    logger.error(f"Error reading metadata to locate original file: {e}")
                 os.remove(metadata_file)
+
             if os.path.exists(content_file):
                 os.remove(content_file)
-            
-            # Remove original file (look for any file with the file_id as prefix)
-            for filename in os.listdir(session_dir):
-                if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
-                    original_file = os.path.join(session_dir, filename)
-                    if os.path.exists(original_file):
-                        os.remove(original_file)
-                        logger.info(f"Removed original file {filename}")
-                
+
+            # Fallback: also remove any file with the file_id prefix inside session_dir
+            if os.path.exists(session_dir):
+                for filename in os.listdir(session_dir):
+                    if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
+                        original_file = os.path.join(session_dir, filename)
+                        if os.path.exists(original_file):
+                            os.remove(original_file)
+                            logger.info(f"Removed original file {filename}")
+
             logger.info(f"Removed file {file_id} from disk")
-            
+
         except Exception as e:
             logger.error(f"Error removing file from disk: {str(e)}")
 
