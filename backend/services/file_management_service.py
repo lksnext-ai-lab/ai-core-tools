@@ -392,10 +392,13 @@ class FileManagementService:
             file_size = os.path.getsize(file_path)
             relative_path = os.path.relpath(file_path, self._tmp_base_folder).replace(os.sep, '/')
 
+            detected_type = self._get_file_type(filename)
+            file_type = detected_type if detected_type != "unknown" else "output"
+
             file_ref = FileReference(
                 file_id=file_id,
                 filename=filename,
-                file_type="output",
+                file_type=file_type,
                 content=f"Generated file: {filename}",
                 file_path=relative_path,
                 file_size_bytes=file_size,

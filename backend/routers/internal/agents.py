@@ -122,6 +122,7 @@ async def create_or_update_agent(
         'is_tool': agent_data.is_tool,
         'has_memory': agent_data.has_memory,
         'enable_code_interpreter': agent_data.enable_code_interpreter,
+        'server_tools': agent_data.server_tools or [],
         'memory_max_messages': agent_data.memory_max_messages,
         'memory_max_tokens': agent_data.memory_max_tokens,
         'memory_summarize_threshold': agent_data.memory_summarize_threshold,

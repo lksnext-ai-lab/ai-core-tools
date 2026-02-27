@@ -140,18 +140,17 @@ class AgentExecutionService:
             # Determine session ID for checkpointer
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
 
-            # Resolve working directory for code interpreter
-            working_dir = None
-            if fresh_agent.enable_code_interpreter:
-                app_config = get_app_config()
-                tmp_base = app_config['TMP_BASE_FOLDER']
-                if conversation_id:
-                    working_dir = os.path.join(tmp_base, "conversations", str(conversation_id))
-                else:
-                    user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
-                    app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
-                    session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
-                    working_dir = os.path.join(tmp_base, "persistent", session_key)
+            # Resolve working directory (always — used by download_url_to_workspace
+            # and, when enable_code_interpreter is on, by python_repl too)
+            app_config = get_app_config()
+            tmp_base = app_config['TMP_BASE_FOLDER']
+            if conversation_id:
+                working_dir = os.path.join(tmp_base, "conversations", str(conversation_id))
+            else:
+                user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
+                app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
+                session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
+                working_dir = os.path.join(tmp_base, "persistent", session_key)
 
             # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
             response = await self._execute_agent_async(
@@ -159,8 +158,9 @@ class AgentExecutionService:
                 working_dir=working_dir
             )
 
-            # Auto-register any files the sandbox wrote during this turn
-            if working_dir and fresh_agent.enable_code_interpreter:
+            # Auto-register any files written to the working dir during this turn
+            # (code interpreter output, downloaded URLs, etc.)
+            if working_dir:
                 file_service = FileManagementService()
                 await file_service.sync_output_files(
                     working_dir=working_dir,
@@ -801,6 +801,49 @@ class AgentExecutionService:
 
         return enhanced_message, image_files
 
+    def _save_generated_image(self, b64_data: str, working_dir: str) -> str:
+        """Decode a base64 image and save it to working_dir. Returns a status string."""
+        import base64
+        import time
+        try:
+            os.makedirs(working_dir, exist_ok=True)
+            filename = f"generated_image_{int(time.time())}.png"
+            dest = os.path.join(working_dir, filename)
+            with open(dest, "wb") as f:
+                f.write(base64.b64decode(b64_data))
+            logger.info("Saved generated image to %s", dest)
+            return f"[Image saved: {filename}]"
+        except Exception as exc:
+            logger.error("Failed to save generated image: %s", exc)
+            return "[Image generated but could not be saved]"
+
+    def _extract_content_blocks(self, blocks: list, working_dir: Optional[str] = None) -> str:
+        """
+        Extract a plain-text response from a multimodal content block list.
+
+        Handles:
+        - text blocks           → concatenated as-is
+        - image_generation_call → base64 result decoded and saved to working_dir;
+                                   sync_output_files will register the file afterwards
+        - anything else         → silently ignored (tool call artefacts, etc.)
+        """
+        text_parts = []
+
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type", "")
+            if block_type == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    text_parts.append(text)
+            elif block_type == "image_generation_call":
+                b64_data = block.get("result", "")
+                label = self._save_generated_image(b64_data, working_dir) if b64_data and working_dir else "[Image generated]"
+                text_parts.append(label)
+
+        return " ".join(text_parts) if text_parts else str(blocks)
+
     async def _execute_agent_async(
         self,
         fresh_agent: Agent,
@@ -972,7 +1015,12 @@ class AgentExecutionService:
                 messages = result["messages"]
                 for msg in reversed(messages):
                     if hasattr(msg, 'content') and msg.content:
-                        return msg.content
+                        content = msg.content
+                        if isinstance(content, str):
+                            return content
+                        if isinstance(content, list):
+                            return self._extract_content_blocks(content, working_dir)
+                        return content
                 # Fallback: return the last message content
                 if messages:
                     return str(messages[-1].content) if hasattr(messages[-1], 'content') else str(messages[-1])
