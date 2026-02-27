@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Poetry
-RUN pip install --no-cache-dir "poetry>=1.4.0,<2.0.0"
+RUN pip install --no-cache-dir "poetry>=2.2.0,<3.0.0"
 
 # Copiar archivos de dependencias
 COPY pyproject.toml poetry.lock ./
