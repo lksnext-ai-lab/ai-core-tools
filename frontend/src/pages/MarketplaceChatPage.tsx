@@ -173,6 +173,14 @@ export default function MarketplaceChatPage() {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);
+
+      // Refresh file list — agent may have generated new files
+      try {
+        const fileResponse = await apiService.listMarketplaceFiles(numericId);
+        setPersistentFiles(fileResponse.files || []);
+      } catch {
+        // Non-critical — panel stays as-is
+      }
     } catch (err) {
       const errMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
