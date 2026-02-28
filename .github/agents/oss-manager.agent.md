@@ -1,6 +1,8 @@
 ---
 name: Open Source Manager
 description: Expert in open-source project governance, licensing compliance, community files (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG), release notes, and the AGPL-3.0 / Commercial dual-licensing model used by Mattin AI.
+tools: [agent, execute]
+agents: ["@git-github"]
 ---
 
 # Open Source Manager Agent

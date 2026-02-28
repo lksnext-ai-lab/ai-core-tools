@@ -43,7 +43,7 @@ Community members who observe violations are encouraged to report them. Reports 
 
 ### Reporting
 
-If you experience or witness unacceptable behavior, please report it by emailing **conduct@mattin-ai.com** or opening a private security advisory on GitHub if the matter is sensitive.
+If you experience or witness unacceptable behavior, please report it by emailing **mattin-ai@lksnext.com** or opening a private security advisory on GitHub if the matter is sensitive.
 
 **Include in your report:**
 - A description of the incident
@@ -90,7 +90,7 @@ This Code of Conduct is adapted from the [Contributor Covenant](https://www.cont
 
 ## Questions?
 
-If you have questions about this Code of Conduct, please contact the Mattin AI maintainers at conduct@mattin-ai.com.
+If you have questions about this Code of Conduct, please contact the Mattin AI maintainers at mattin-ai@lksnext.com.
 
 ---
 
