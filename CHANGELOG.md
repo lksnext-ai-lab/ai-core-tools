@@ -13,6 +13,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.3.14] - 2026-02-28
+
+### Added
+
+#### Agent Development Tools
+- **Python Code Interpreter**: Execute Python code within agent conversations
+  - Subprocess-based Python REPL tool with sandboxed execution
+  - Automatic file system synchronization for generated outputs
+  - Support for file uploads available to agent scripts
+  - Dependencies: pandas, openpyxl for data processing
+
+#### Provider-Side Tools
+- **Provider-Aware Tool Injection**: Map generic tool names to provider-specific implementations
+  - Support for OpenAI, Anthropic, Google, and Azure providers
+  - Generic tool names: `web_search`, `image_generation`, `code_interpreter`, `file_search`
+  - Provider-specific tool routing in `create_agent()` execution flow
+  - `server_tools` JSON field added to Agent model (with migration)
+
+#### File Download Support
+- **Workspace Download Tool**: Download files from agent working directories
+  - `download_url_to_workspace` tool for programmatic file retrieval
+  - Working directory now computed for all agent executions (not just code interpreter)
+  - File type detection with proper categorization for images and documents
+  - Signed URL endpoint pattern for secure file downloads in agents and marketplace
+
+#### Image Generation
+- **Multimodal Image Output**: Handle AI-generated images within conversations
+  - Image generation call blocks decoded from base64 and saved to working directory
+  - Auto-registration of generated files for download and display
+  - UI support for image renders in conversation history
+
+#### Community Governance
+- **Code of Conduct**: Adopted community conduct standards for contributors and users
+
+### Changed
+
+- **Agent File Management**: Attached files panel now refreshes automatically after agent responses without requiring page reload (#30c3331)
+- **Agent Form UI**: Added Capabilities section with clickable tool cards showing provider compatibility
+
+### Fixed
+
+- **Marketplace**: Refresh attachments panel after agent generates files (#30c3331)
+
 ## [0.3.13] - 2026-02-28
 
 ### Added
@@ -98,114 +141,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - File processing reference
   - Environment variables reference
   - Role authorization reference
-  - Client setup guide
-  - Plugin development guide
-  - Copilot agents, skills & instructions documentation
-  - Dual-licensing documentation (AGPL-3.0 / Commercial)
-
-#### API & Features
-- **User Management**: Current user information endpoints
-- **File Management**: Conversation-specific file handling in chat API
-- **Conversation Management**: Enhanced conversation tracking and deletion
-- **Agent Form UX**: Tabbed interface for improved agent configuration experience
-- **Runtime Configuration**: Frontend runtime configuration using environment variables
-
-### Changed
-
-#### Major Upgrades
-- **LangChain/LangGraph 1.x Migration**: Complete migration to LangChain and LangGraph 1.x
-  - Updated memory management for new APIs
-  - Dependency updates across the project
-  - Breaking changes from 0.x to 1.x addressed
-
-#### Authentication
-- **OIDC Authentication**: Migration to `lks-idprovider` for Entra ID authentication
-  - Centralized OIDC configuration management
-  - Updated environment variable naming conventions
-  - OIDC-enabled build configuration
-  - Runtime configuration for OIDC settings
-
-#### Dependencies
-- **Dependency Updates**: Major dependency upgrades and cleanups
-  - Removed legacy Flask decorators
-  - Removed Celery dependency (replaced with background tasks)
-  - Updated YouTube downloader dependencies
-  - Removed openai-whisper dependency (whisper not loaded on local)
-  - Poetry lock file updates
-
-#### Refactoring
-- **Code Quality Improvements**: Extensive refactoring for maintainability
-  - Eliminated code duplication in UI components
-  - Sequential video task processing with improved comments
-  - Silo service refactoring for media support
-  - Repository-level M2M relationship management
-  - Removed console.log() statements and commented code
-  - Deleted unused imports across the codebase
-  - Enhanced error handling for file system operations
-
-#### Database
-- **Alembic Migrations**: Database schema improvements
-  - Media management migration versions
-  - Conversation model updates
-  - Role-based access control migrations
-  - Viewer role addition
-
-#### Configuration
-- **Environment Variables**: Updated configuration management
-  - OIDC configuration environment variables
-  - Vector database type configuration
-  - Kubernetes ingress configuration updates
-  - Secret key references for deployments
-
-### Fixed
-
-#### Agent Issues
-- **Agent as Tool**: Fixed system prompts for agent-as-tool composition
-- **Temperature Field**: Temperature field now correctly displays 0 when editing agents
-
-#### API Issues
-- **Playground API**: Updated API examples in playground
-- **API Key Logging**: Removed API keys from log outputs
-- **Empty Documents**: Handle empty document extraction in silo operations
-
-#### Media & File Issues
-- **Media References**: Corrected media.media_id references
-- **File Uploads**: Fixed duplicate file uploads in repositories
-- **YouTube URLs**: Fixed duplicate handling in YouTube URL processing
-- **Folder Association**: Fixed no duplicates on API folder_id append
-
-#### Database Issues
-- **Alembic Conflicts**: Resolved conflicts in Alembic revision files
-- **Model Definitions**: Fixed comma usage in `__init__` models
-- **Qdrant Corruption**: Addressed Qdrant corruption issues
-
-#### Authentication & Security
-- **Authorization Token**: API correctly receives authorization token
-- **Pydantic v2**: Fixed Pydantic v2 compatibility in backend agent examples
-- **Security Vulnerabilities**: Cleaned up security vulnerabilities and bugs
-- **Resource Cleanup**: Enhanced resource cleanup in MCP config service
-
-#### Connection & Errors
-- **Connection Testing**: Improved connection testing with timeout and validation
-- **Error Logging**: Enhanced error logging for MCP services
-- **Windows Compatibility**: Fixed psycopg issues on Windows
-
-### Removed
-
-- **Deprecated Code**: Removed deprecated tests and notebooks with hardcoded API keys
-- **Unused Code**: Removed unused imports, functions, and commented code throughout
-- **Legacy Components**: Removed pgVectorTools class (replaced by abstraction)
-- **Redundant Routes**: Removed redundant /auth route from ingress configuration
-- **Duplicate Code**: Eliminated code duplication in warning banners
-
-### Security
-
-- **Vulnerability Fixes**: Addressed multiple security vulnerabilities identified by SonarQube
-- **API Key Protection**: Ensured API keys are not logged or exposed in responses
-- **Authentication Hardening**: Enhanced authentication flow and token handling
-- **MCP Authorization**: Implemented authorization for MCP server access
-
-## [0.3.0]
-
-Initial release with v0.3.0 baseline.
-
