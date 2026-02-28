@@ -128,31 +128,33 @@ tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
 os.makedirs(tmp_base_folder, exist_ok=True)
 
 @app.get("/static/{file_path:path}")
-async def get_static_file(file_path: str, user: str = None, sig: str = None):
+async def get_static_file(file_path: str, user: str = None, sig: str = None, filename: str = None):
     # Verify signature
     if not user or not sig or not verify_signature(file_path, user, sig):
         raise HTTPException(status_code=403, detail="Invalid signature or missing parameters")
-    
+
     # Prevent directory traversal - check for .. sequences
     if ".." in file_path:
         raise HTTPException(status_code=403, detail="Invalid path")
-    
+
     # Strip leading slashes to prevent absolute path injection
     # os.path.join("data/tmp", "/etc/passwd") would return "/etc/passwd" otherwise
     file_path = file_path.lstrip("/\\")
-    
+
     # Build full path and resolve to absolute
     full_path = os.path.abspath(os.path.join(tmp_base_folder, file_path))
     base_path = os.path.abspath(tmp_base_folder)
-    
+
     # Verify the resolved path is within the allowed directory
     if not full_path.startswith(base_path + os.sep) and full_path != base_path:
         raise HTTPException(status_code=403, detail="Invalid path")
 
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="File not found")
-        
-    return FileResponse(full_path)
+
+    # Use original filename for Content-Disposition if provided, else use path basename
+    download_filename = filename or os.path.basename(full_path)
+    return FileResponse(full_path, filename=download_filename)
 
 
 # ==================== CORS MIDDLEWARE ====================

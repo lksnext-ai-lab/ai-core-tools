@@ -8,6 +8,7 @@ from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.dateTimeTools import get_current_date
 from tools.ai.fileTools import fetch_file_in_base64
+from tools.ai.workspaceTools import create_download_url_tool
 from typing import Any, Optional, Dict, List
 from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
@@ -18,9 +19,11 @@ from langchain_core.documents import Document
 import langsmith as ls
 import json
 import asyncio
+import os
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.python_sandbox_tools import create_python_repl_tool
 
 logger = get_logger(__name__)
 
@@ -93,7 +96,7 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None):
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
@@ -140,6 +143,28 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         if skills_section:
             system_prompt_content = system_prompt_content + "\n" + skills_section
 
+    if working_dir:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<workspace>\n"
+            + f"Working directory: {working_dir}\n"
+            + "User-uploaded files are in this directory — reference them by filename only.\n"
+            + "Use `download_url_to_workspace` to save any URL (generated image, PDF, report…) "
+            + "to this directory so the user can download it from the files panel.\n"
+            + "</workspace>"
+        )
+
+    if agent.enable_code_interpreter and working_dir:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<code_interpreter>\n"
+            + "You have access to a `python_repl` tool that executes Python code.\n"
+            + "Reference uploaded files by filename only (e.g. 'report.xlsx').\n"
+            + "Save output files to the working directory and print the filename so the user can download it.\n"
+            + "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n"
+            + "</code_interpreter>"
+        )
+
     if format_instructions:
         system_prompt_content = (
             system_prompt_content
@@ -167,19 +192,46 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         )
 
     tools = []
+
+    # Provider-side tools — injected from agent.server_tools using provider-specific formats
+    _SERVER_TOOL_FORMATS = {
+        "OpenAI":     {"web_search": {"type": "web_search"}, "image_generation": {"type": "image_generation"}, "code_interpreter": {"type": "code_interpreter"}, "file_search": {"type": "file_search"}},
+        "Azure":      {"web_search": {"type": "web_search"}, "image_generation": {"type": "image_generation"}, "code_interpreter": {"type": "code_interpreter"}, "file_search": {"type": "file_search"}},
+        "Anthropic":  {"web_search": {"type": "web_search_20250305"}, "code_interpreter": {"type": "codeExecution_20250825"}},
+        "Google":     {"web_search": {"type": "google_search"}, "code_interpreter": {"type": "code_execution"}},
+        "MistralAI":  {},
+        "Custom":     {},
+    }
+    provider_name = agent.ai_service.provider if agent.ai_service else None
+    provider_map = _SERVER_TOOL_FORMATS.get(provider_name, {})
+    for tool_name in (getattr(agent, 'server_tools', None) or []):
+        tool_def = provider_map.get(tool_name)
+        if tool_def:
+            tools.append(tool_def)
+            logger.info("Server-side tool '%s' injected for provider %s", tool_name, provider_name)
+        else:
+            logger.warning("Server-side tool '%s' not supported by provider %s — skipped", tool_name, provider_name)
+
     for tool in agent.tool_associations:
         sub_agent = tool.tool
         tools.append(IACTTool(sub_agent))
 
-    #add base useful tools
+    # Base tools — always available for every agent
     tools.append(get_current_date)
-    #tools.append(fetch_file_in_base64)
+    if working_dir:
+        tools.append(create_download_url_tool(working_dir))
 
     if agent.silo_id is not None:
-        
+
         retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
+
+    if agent.enable_code_interpreter and working_dir:
+        os.makedirs(working_dir, exist_ok=True)
+        python_tool = create_python_repl_tool(working_dir=working_dir)
+        tools.append(python_tool)
+        logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
 
     mcp_client = None
     try:
@@ -228,6 +280,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
     logger.info(f"LangSmith configured: {langsmith_config is not None}")
+    
 
     return agent_chain, langsmith_config, mcp_client
 

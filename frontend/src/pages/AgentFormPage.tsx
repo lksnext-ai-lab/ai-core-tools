@@ -19,6 +19,7 @@ interface Agent {
   type: string;
   is_tool: boolean;
   has_memory: boolean;
+  enable_code_interpreter: boolean;
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
@@ -52,6 +53,8 @@ interface AgentFormData {
   type: string;
   is_tool: boolean;
   has_memory: boolean;
+  enable_code_interpreter: boolean;
+  server_tools: string[];
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
@@ -169,6 +172,8 @@ function AgentFormPage() {
     type: 'agent',
     is_tool: false,
     has_memory: false,
+    enable_code_interpreter: false,
+    server_tools: [],
     memory_max_messages: 20,
     memory_max_tokens: 4000,
     memory_summarize_threshold: 4000,
@@ -221,6 +226,8 @@ function AgentFormPage() {
         type: response.type || 'agent',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
+        enable_code_interpreter: response.enable_code_interpreter || false,
+        server_tools: response.server_tools || [],
         memory_max_messages: response.memory_max_messages || 20,
         memory_max_tokens: response.memory_max_tokens || 4000,
         memory_summarize_threshold: response.memory_summarize_threshold || 4000,
@@ -389,6 +396,8 @@ function AgentFormPage() {
         type: formData.type,
         is_tool: formData.is_tool,
         has_memory: formData.has_memory,
+        enable_code_interpreter: formData.enable_code_interpreter,
+        server_tools: formData.server_tools,
         memory_max_messages: formData.memory_max_messages,
         memory_max_tokens: formData.memory_max_tokens,
         memory_summarize_threshold: formData.memory_summarize_threshold,
@@ -895,6 +904,103 @@ function AgentFormPage() {
                           <p className="text-xs text-gray-500">Maintains conversation memory</p>
                         </div>
                       </div>
+
+                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <input
+                          id="enable_code_interpreter"
+                          type="checkbox"
+                          checked={formData.enable_code_interpreter}
+                          onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
+                          <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Provider-side Tools */}
+                    <div className="mt-6 pt-6 border-t border-gray-100">
+                      <div className="mb-3">
+                        <h4 className="text-sm font-semibold text-gray-800">Provider-side Tools</h4>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          These tools run on the AI provider's infrastructure — no extra backend setup needed.
+                          Only tools supported by the agent's selected provider will be active.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          {
+                            id: 'web_search',
+                            icon: '🔍',
+                            label: 'Web Search',
+                            description: 'Real-time internet search',
+                            providers: ['OpenAI', 'Anthropic', 'Google', 'Azure'],
+                          },
+                          {
+                            id: 'image_generation',
+                            icon: '🖼️',
+                            label: 'Image Generation',
+                            description: 'Generate images with DALL-E',
+                            providers: ['OpenAI', 'Azure'],
+                          },
+                          {
+                            id: 'code_interpreter',
+                            icon: '💻',
+                            label: 'Code Interpreter',
+                            description: 'Provider-sandboxed code execution',
+                            providers: ['OpenAI', 'Anthropic', 'Azure'],
+                          },
+                          {
+                            id: 'file_search',
+                            icon: '📂',
+                            label: 'File Search',
+                            description: 'Vector search over uploaded files',
+                            providers: ['OpenAI', 'Azure'],
+                          },
+                        ].map((tool) => {
+                          const active = formData.server_tools.includes(tool.id);
+                          const toggle = () => handleInputChange(
+                            'server_tools',
+                            active
+                              ? formData.server_tools.filter(t => t !== tool.id)
+                              : [...formData.server_tools, tool.id]
+                          );
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={toggle}
+                              className={`text-left p-3 rounded-xl border-2 transition-colors ${
+                                active
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-base">{tool.icon}</span>
+                                <span className={`text-sm font-medium ${active ? 'text-blue-800' : 'text-gray-800'}`}>
+                                  {tool.label}
+                                </span>
+                                {active && (
+                                  <span className="ml-auto text-xs font-medium text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">ON</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{tool.description}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {tool.providers.map(p => (
+                                  <span key={p} className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{p}</span>
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-amber-600 mt-3">
+                        ⚠ Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API).
+                        Unsupported tools for the selected provider are silently ignored.
+                      </p>
                     </div>
                   </div>
                 </>

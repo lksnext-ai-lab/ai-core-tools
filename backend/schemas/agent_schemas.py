@@ -31,6 +31,8 @@ class AgentDetailSchema(BaseModel):
     type: str
     is_tool: bool
     has_memory: bool
+    enable_code_interpreter: bool = False
+    server_tools: List[str] = []
     memory_max_messages: int = 20
     memory_max_tokens: Optional[int] = 4000
     memory_summarize_threshold: int = 4000
@@ -73,6 +75,8 @@ class CreateUpdateAgentSchema(BaseModel):
     type: str = "agent"  # "agent", "ocr_agent"
     is_tool: bool = False
     has_memory: bool = False
+    enable_code_interpreter: bool = False
+    server_tools: Optional[List[str]] = []
     memory_max_messages: Optional[int] = 20
     memory_max_tokens: Optional[int] = 4000
     memory_summarize_threshold: Optional[int] = 4000
