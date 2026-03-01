@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -32,11 +32,21 @@ class AgentMarketplaceProfile(Base):
     published_at = Column(DateTime, nullable=True)  # Set when first published
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Usage & rating stats (denormalized for fast catalog reads)
+    conversation_count = Column(Integer, default=0, nullable=False)
+    rating_avg = Column(Float, nullable=True)       # NULL = no ratings yet
+    rating_count = Column(Integer, default=0, nullable=False)
+
     # Relationships
     agent = relationship(
         'Agent',
         back_populates='marketplace_profile',
         uselist=False
+    )
+    ratings = relationship(
+        'AgentMarketplaceRating',
+        back_populates='profile',
+        cascade='all, delete-orphan'
     )
 
     def __repr__(self):
