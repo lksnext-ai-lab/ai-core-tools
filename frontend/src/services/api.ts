@@ -8,6 +8,8 @@ import type {
   MarketplaceProfile,
   MarketplaceProfileUpdate,
   MarketplaceVisibility,
+  AgentRatingResponse,
+  UserRatingResponse,
 } from '../types/marketplace';
 
 class ApiService {
@@ -1100,6 +1102,21 @@ class ApiService {
 
   async getMarketplaceCategories(): Promise<{ categories: string[] }> {
     return this.request('/internal/marketplace/categories');
+  }
+
+  async rateMarketplaceAgent(
+    agentId: number,
+    rating: number,
+  ): Promise<AgentRatingResponse> {
+    return this.request(`/internal/marketplace/agents/${agentId}/rate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating }),
+    });
+  }
+
+  async getMyMarketplaceRating(agentId: number): Promise<UserRatingResponse> {
+    return this.request(`/internal/marketplace/agents/${agentId}/my-rating`);
   }
 
   async createMarketplaceConversation(

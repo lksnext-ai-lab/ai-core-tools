@@ -29,6 +29,9 @@ export interface MarketplaceAgentCard {
   app_id: number;
   has_knowledge_base: boolean;
   published_at: string | null;
+  conversation_count: number;
+  rating_avg: number | null;
+  rating_count: number;
 }
 
 /** Full agent detail shown on the marketplace agent page */
@@ -46,6 +49,9 @@ export interface MarketplaceAgentDetail {
   has_knowledge_base: boolean;
   has_memory: boolean;
   published_at: string | null;
+  conversation_count: number;
+  rating_avg: number | null;
+  rating_count: number;
 }
 
 /** Paginated catalog response */
@@ -104,4 +110,16 @@ export interface MarketplaceCatalogParams {
   page?: number;
   page_size?: number;
   sort_by?: "relevance" | "newest" | "alphabetical";
+}
+
+/** Response after submitting a star rating */
+export interface AgentRatingResponse {
+  rating: number;
+  rating_avg: number | null;
+  rating_count: number;
+}
+
+/** Current user's rating for an agent */
+export interface UserRatingResponse {
+  rating: number | null;
 }
