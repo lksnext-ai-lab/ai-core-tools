@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '../ui/Badge';
+import { StarRating } from './StarRating';
+import { apiService } from '../../services/api';
 import type { MarketplaceAgentCard as MarketplaceAgentCardType } from '../../types/marketplace';
 
 interface MarketplaceAgentCardProps {
@@ -21,9 +24,25 @@ const CATEGORY_VARIANT: Record<string, 'info' | 'success' | 'warning' | 'error' 
 
 /**
  * Card component for displaying a published agent in the marketplace catalog grid.
- * Shows icon, display name, short description, category, knowledge base badge, and tags.
+ * Shows icon, display name, short description, category, knowledge base badge, tags,
+ * rating stats, conversation count, and a "Start Chat" quick-start button.
  */
 export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardProps) {
+  const navigate = useNavigate();
+  const [starting, setStarting] = useState(false);
+
+  const handleStartChat = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (starting) return;
+    setStarting(true);
+    try {
+      const conv = await apiService.createMarketplaceConversation(agent.agent_id);
+      navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
+    } finally {
+      setStarting(false);
+    }
+  };
+
   return (
     <button
       type="button"
@@ -56,7 +75,22 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
         {agent.short_description || 'No description provided.'}
       </p>
 
-      {/* Bottom row: category + knowledge badge + tags */}
+      {/* Stats row: rating + conversation count */}
+      <div className="flex items-center gap-3 mb-3 text-xs text-gray-500">
+        <div className="flex items-center gap-1">
+          <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="sm" />
+          {agent.rating_avg !== null ? (
+            <span>{agent.rating_avg.toFixed(1)} ({agent.rating_count})</span>
+          ) : (
+            <span className="text-gray-400">No ratings</span>
+          )}
+        </div>
+        {agent.conversation_count > 0 && (
+          <span>{agent.conversation_count.toLocaleString()} chats</span>
+        )}
+      </div>
+
+      {/* Bottom row: category + knowledge badge + tags + start chat button */}
       <div className="flex flex-wrap items-center gap-1.5 mt-auto">
         {agent.category && (
           <Badge
@@ -70,6 +104,20 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
         {agent.tags?.slice(0, 3).map((tag) => (
           <Badge key={tag} label={tag} variant="default" />
         ))}
+
+        {/* Spacer */}
+        <span className="flex-1" />
+
+        {/* Quick-start button */}
+        <button
+          type="button"
+          onClick={handleStartChat}
+          disabled={starting}
+          className="ml-auto px-2.5 py-1 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          aria-label={`Start chat with ${agent.display_name}`}
+        >
+          {starting ? '…' : 'Start Chat'}
+        </button>
       </div>
     </button>
   );

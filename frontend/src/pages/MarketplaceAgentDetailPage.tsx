@@ -5,6 +5,7 @@ import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { Badge } from '../components/ui/Badge';
+import { StarRating } from '../components/marketplace/StarRating';
 import type {
   MarketplaceAgentDetail,
   MarketplaceConversation,
@@ -40,6 +41,11 @@ export default function MarketplaceAgentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
+  // Rating state
+  const [myRating, setMyRating] = useState<number | null>(null);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingError, setRatingError] = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
     if (!numericId || isNaN(numericId)) {
       setError('Invalid agent ID');
@@ -49,14 +55,16 @@ export default function MarketplaceAgentDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [detail, convData] = await Promise.all([
+      const [detail, convData, ratingData] = await Promise.all([
         apiService.getMarketplaceAgentDetail(numericId),
         apiService.getMarketplaceConversations(100, 0),
+        apiService.getMyMarketplaceRating(numericId),
       ]);
       setAgent(detail);
       setConversations(
         convData.conversations.filter((c) => c.agent_id === numericId),
       );
+      setMyRating(ratingData.rating);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load agent';
       if (msg.includes('404') || msg.includes('not found')) {
@@ -86,6 +94,25 @@ export default function MarketplaceAgentDetailPage() {
     }
   }, [agent, navigate]);
 
+  const handleRate = useCallback(async (rating: number) => {
+    if (!agent || ratingSubmitting) return;
+    setRatingSubmitting(true);
+    setRatingError(null);
+    try {
+      const result = await apiService.rateMarketplaceAgent(agent.agent_id, rating);
+      setMyRating(result.rating);
+      setAgent((prev) =>
+        prev
+          ? { ...prev, rating_avg: result.rating_avg, rating_count: result.rating_count }
+          : prev,
+      );
+    } catch (err) {
+      setRatingError(err instanceof Error ? err.message : 'Failed to submit rating');
+    } finally {
+      setRatingSubmitting(false);
+    }
+  }, [agent, ratingSubmitting]);
+
   if (loading) {
     return <LoadingState message="Loading agent details..." />;
   }
@@ -111,6 +138,8 @@ export default function MarketplaceAgentDetailPage() {
   const publishedDate = agent.published_at
     ? new Date(agent.published_at).toLocaleDateString()
     : null;
+
+  const hasConversation = conversations.length > 0;
 
   return (
     <div className="space-y-6">
@@ -156,6 +185,25 @@ export default function MarketplaceAgentDetailPage() {
             {agent.display_name}
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">by {agent.app_name}</p>
+
+          {/* Rating summary */}
+          <div className="flex items-center gap-2 mt-1.5">
+            <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="md" />
+            {agent.rating_avg !== null ? (
+              <span className="text-sm text-gray-600">
+                {agent.rating_avg.toFixed(1)}{' '}
+                <span className="text-gray-400">({agent.rating_count} rating{agent.rating_count !== 1 ? 's' : ''})</span>
+              </span>
+            ) : (
+              <span className="text-sm text-gray-400">No ratings yet</span>
+            )}
+            {agent.conversation_count > 0 && (
+              <span className="text-sm text-gray-400">
+                · {agent.conversation_count.toLocaleString()} conversations
+              </span>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 mt-2">
             {agent.category && (
               <Badge
@@ -229,6 +277,34 @@ export default function MarketplaceAgentDetailPage() {
                 </div>
               )}
             </dl>
+          </div>
+
+          {/* Rating card */}
+          <div className="bg-white rounded-lg shadow-md border p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">Rate this agent</h2>
+            {hasConversation ? (
+              <div className="space-y-2">
+                <StarRating value={myRating} interactive size="md" onChange={handleRate} />
+                {ratingSubmitting && (
+                  <p className="text-xs text-gray-500">Submitting…</p>
+                )}
+                {myRating !== null && !ratingSubmitting && (
+                  <p className="text-xs text-gray-500">
+                    Your rating: {myRating} star{myRating !== 1 ? 's' : ''}. Click to change.
+                  </p>
+                )}
+                {ratingError && (
+                  <p className="text-xs text-red-500">{ratingError}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <StarRating value={null} size="md" />
+                <p className="text-xs text-gray-500">
+                  Start a conversation with this agent to leave a rating.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Mobile action button */}
