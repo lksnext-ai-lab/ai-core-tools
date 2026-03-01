@@ -75,7 +75,7 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
         {agent.short_description || 'No description provided.'}
       </p>
 
-      {/* Stats row: rating + conversation count */}
+      {/* Stats row: rating + conversation count + published date */}
       <div className="flex items-center gap-3 mb-3 text-xs text-gray-500">
         <div className="flex items-center gap-1">
           <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="sm" />
@@ -88,6 +88,11 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
         {agent.conversation_count > 0 && (
           <span>{agent.conversation_count.toLocaleString()} chats</span>
         )}
+        <span className="ml-auto text-gray-400">
+          {agent.published_at
+            ? new Date(agent.published_at).toLocaleDateString('en-CA')
+            : '—'}
+        </span>
       </div>
 
       {/* Bottom row: category + knowledge badge + tags + start chat button */}

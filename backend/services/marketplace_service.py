@@ -84,7 +84,7 @@ class MarketplaceService:
         )
 
     @staticmethod
-    def _apply_sort(query, sort_by: str, search: Optional[str]):
+    def _apply_sort(query, sort_by: str):
         """Apply sorting to a catalog query."""
         resolved_name = func.coalesce(AgentMarketplaceProfile.display_name, Agent.name)
 
@@ -93,15 +93,12 @@ class MarketplaceService:
         if sort_by == "newest":
             return query.order_by(desc(AgentMarketplaceProfile.published_at))
 
-        # "relevance"
-        if search:
-            relevance = case(
-                (AgentMarketplaceProfile.display_name.ilike(search), 1),
-                (Agent.name.ilike(search), 2),
-                else_=3,
-            )
-            return query.order_by(asc(relevance), asc(resolved_name))
-        return query.order_by(desc(AgentMarketplaceProfile.published_at))
+        # "relevance" → top rated: highest avg rating first, then most rated, then alphabetical
+        return query.order_by(
+            desc(AgentMarketplaceProfile.rating_avg).nulls_last(),
+            desc(AgentMarketplaceProfile.rating_count),
+            asc(resolved_name),
+        )
 
     # ------------------------------------------------------------------
     # 1. Catalog
@@ -152,7 +149,7 @@ class MarketplaceService:
         total = query.count()
 
         # Sorting
-        query = MarketplaceService._apply_sort(query, sort_by, search)
+        query = MarketplaceService._apply_sort(query, sort_by)
 
         # Pagination
         offset = (page - 1) * page_size
@@ -324,6 +321,16 @@ class MarketplaceService:
                 **profile_data.model_dump(exclude_unset=True),
             )
             db.add(profile)
+            db.flush()  # populate profile.id before setting published_at
+
+        # Back-fill published_at if the agent is already published but the
+        # timestamp was never set (e.g. visibility was changed before the
+        # profile existed, or agents migrated from a pre-published_at schema).
+        if (
+            agent.marketplace_visibility != MarketplaceVisibility.UNPUBLISHED
+            and profile.published_at is None
+        ):
+            profile.published_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(profile)

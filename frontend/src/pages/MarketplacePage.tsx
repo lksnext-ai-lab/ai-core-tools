@@ -15,7 +15,7 @@ const PAGE_SIZE = 12;
 type SortOption = 'relevance' | 'newest' | 'alphabetical';
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'relevance', label: 'Relevance' },
+  { value: 'relevance', label: 'Top Rated' },
   { value: 'newest', label: 'Newest' },
   { value: 'alphabetical', label: 'A–Z' },
 ];
