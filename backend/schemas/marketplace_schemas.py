@@ -99,6 +99,9 @@ class MarketplaceAgentCardSchema(BaseModel):
     app_id: int
     has_knowledge_base: bool = False  # True if agent has a silo (RAG)
     published_at: Optional[datetime] = None
+    conversation_count: int = 0
+    rating_avg: Optional[float] = None   # None = no ratings yet
+    rating_count: int = 0
 
 
 class MarketplaceAgentDetailSchema(BaseModel):
@@ -121,6 +124,9 @@ class MarketplaceAgentDetailSchema(BaseModel):
     has_knowledge_base: bool = False
     has_memory: bool = False  # Whether conversations persist
     published_at: Optional[datetime] = None
+    conversation_count: int = 0
+    rating_avg: Optional[float] = None   # None = no ratings yet
+    rating_count: int = 0
 
 
 class MarketplaceCatalogResponseSchema(BaseModel):
@@ -153,3 +159,22 @@ class MarketplaceConversationListSchema(BaseModel):
     """List of consumer's marketplace conversations."""
     conversations: List[MarketplaceConversationSchema]
     total: int
+
+
+# ==================== RATING SCHEMAS ====================
+
+class AgentRatingInputSchema(BaseModel):
+    """Request body for rating a marketplace agent (1–5 stars)."""
+    rating: int = Field(..., ge=1, le=5)
+
+
+class AgentRatingResponseSchema(BaseModel):
+    """Response after submitting a rating."""
+    rating: int
+    rating_avg: Optional[float] = None
+    rating_count: int
+
+
+class UserRatingResponseSchema(BaseModel):
+    """Current user's rating for an agent (None if not yet rated)."""
+    rating: Optional[int] = None

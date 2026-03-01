@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from models.agent import Agent, MarketplaceVisibility
 from models.agent_marketplace_profile import AgentMarketplaceProfile
+from models.agent_marketplace_rating import AgentMarketplaceRating
 from models.conversation import Conversation, ConversationSource
 from models.app_collaborator import AppCollaborator, CollaborationStatus
 from models.app import App
@@ -15,6 +16,8 @@ from schemas.marketplace_schemas import (
     MarketplaceProfileSchema,
     MarketplaceProfileCreateUpdateSchema,
     MarketplaceConversationSchema,
+    AgentRatingResponseSchema,
+    UserRatingResponseSchema,
 )
 from utils.logger import get_logger
 
@@ -170,6 +173,9 @@ class MarketplaceService:
                     app_id=app.app_id,
                     has_knowledge_base=agent.silo_id is not None,
                     published_at=profile.published_at,
+                    conversation_count=profile.conversation_count,
+                    rating_avg=profile.rating_avg,
+                    rating_count=profile.rating_count,
                 )
             )
 
@@ -229,6 +235,9 @@ class MarketplaceService:
             has_knowledge_base=agent.silo_id is not None,
             has_memory=bool(agent.has_memory),
             published_at=profile.published_at,
+            conversation_count=profile.conversation_count,
+            rating_avg=profile.rating_avg,
+            rating_count=profile.rating_count,
         )
 
     # ------------------------------------------------------------------
@@ -462,6 +471,15 @@ class MarketplaceService:
         )
 
         db.add(conversation)
+        db.flush()  # Assign conversation_id without committing
+
+        # Increment denormalized conversation counter on the profile
+        db.query(AgentMarketplaceProfile).filter(
+            AgentMarketplaceProfile.agent_id == agent_id
+        ).update(
+            {"conversation_count": AgentMarketplaceProfile.conversation_count + 1}
+        )
+
         db.commit()
         db.refresh(conversation)
 
@@ -470,3 +488,125 @@ class MarketplaceService:
             f"for agent {agent_id}, user {user_id}"
         )
         return conversation
+
+    # ------------------------------------------------------------------
+    # 8. Rate an agent (1–5 stars)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def rate_agent(
+        db: Session,
+        agent_id: int,
+        user_id: int,
+        rating: int,
+    ) -> AgentRatingResponseSchema:
+        """
+        Create or update a star rating (1–5) for a marketplace agent.
+
+        Requires:
+        - Agent is published (visibility != UNPUBLISHED)
+        - User has had at least one MARKETPLACE conversation with this agent
+        """
+        profile = (
+            db.query(AgentMarketplaceProfile)
+            .join(Agent, Agent.agent_id == AgentMarketplaceProfile.agent_id)
+            .filter(
+                AgentMarketplaceProfile.agent_id == agent_id,
+                Agent.marketplace_visibility != MarketplaceVisibility.UNPUBLISHED,
+            )
+            .first()
+        )
+        if not profile:
+            raise ValueError(f"Marketplace profile not found for agent {agent_id}")
+
+        # Verify the user has had at least one marketplace conversation
+        has_conversation = (
+            db.query(Conversation)
+            .filter(
+                Conversation.agent_id == agent_id,
+                Conversation.user_id == user_id,
+                Conversation.source == ConversationSource.MARKETPLACE,
+            )
+            .first()
+        )
+        if not has_conversation:
+            raise PermissionError(
+                "You must start a conversation with this agent before rating it"
+            )
+
+        # Upsert the rating row
+        existing = (
+            db.query(AgentMarketplaceRating)
+            .filter(
+                AgentMarketplaceRating.profile_id == profile.id,
+                AgentMarketplaceRating.user_id == user_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.rating = rating
+            existing.updated_at = datetime.now(timezone.utc)
+        else:
+            db.add(AgentMarketplaceRating(
+                profile_id=profile.id,
+                user_id=user_id,
+                rating=rating,
+            ))
+
+        db.flush()
+
+        # Recalculate avg and count from authoritative rows
+        agg = (
+            db.query(
+                func.avg(AgentMarketplaceRating.rating).label("avg"),
+                func.count(AgentMarketplaceRating.id).label("cnt"),
+            )
+            .filter(AgentMarketplaceRating.profile_id == profile.id)
+            .one()
+        )
+        new_avg = float(agg.avg) if agg.avg is not None else None
+        new_count = agg.cnt or 0
+
+        profile.rating_avg = new_avg
+        profile.rating_count = new_count
+
+        db.commit()
+
+        logger.info(
+            f"User {user_id} rated agent {agent_id} with {rating} stars "
+            f"(new avg={new_avg:.2f}, count={new_count})"
+        )
+        return AgentRatingResponseSchema(
+            rating=rating,
+            rating_avg=new_avg,
+            rating_count=new_count,
+        )
+
+    # ------------------------------------------------------------------
+    # 9. Get current user's rating for an agent
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_user_rating(
+        db: Session,
+        agent_id: int,
+        user_id: int,
+    ) -> UserRatingResponseSchema:
+        """Return the current user's star rating for the given agent, or None."""
+        profile = (
+            db.query(AgentMarketplaceProfile)
+            .filter(AgentMarketplaceProfile.agent_id == agent_id)
+            .first()
+        )
+        if not profile:
+            return UserRatingResponseSchema(rating=None)
+
+        row = (
+            db.query(AgentMarketplaceRating)
+            .filter(
+                AgentMarketplaceRating.profile_id == profile.id,
+                AgentMarketplaceRating.user_id == user_id,
+            )
+            .first()
+        )
+        return UserRatingResponseSchema(rating=row.rating if row else None)

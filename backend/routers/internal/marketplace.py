@@ -23,6 +23,9 @@ from schemas.marketplace_schemas import (
     MarketplaceCatalogResponseSchema,
     MarketplaceAgentDetailSchema,
     MarketplaceConversationListSchema,
+    AgentRatingInputSchema,
+    AgentRatingResponseSchema,
+    UserRatingResponseSchema,
 )
 from schemas.conversation_schemas import ConversationResponse, ConversationWithHistoryResponse
 from schemas.chat_schemas import ChatResponseSchema
@@ -117,6 +120,48 @@ async def marketplace_agent_detail(
             detail="Agent not found or not available",
         )
     return detail
+
+
+# ==================== RATINGS ====================
+
+
+@marketplace_router.post(
+    "/agents/{agent_id}/rate",
+    summary="Rate a marketplace agent",
+    response_model=AgentRatingResponseSchema,
+)
+async def rate_marketplace_agent(
+    agent_id: int,
+    body: AgentRatingInputSchema,
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+):
+    """
+    Submit or update a star rating (1–5) for a published marketplace agent.
+    The user must have had at least one conversation with the agent.
+    """
+    user_id = int(current_user.identity.id)
+    try:
+        return MarketplaceService.rate_agent(db, agent_id, user_id, body.rating)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@marketplace_router.get(
+    "/agents/{agent_id}/my-rating",
+    summary="Get current user's rating for an agent",
+    response_model=UserRatingResponseSchema,
+)
+async def get_my_rating(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+):
+    """Return the authenticated user's current star rating for this agent (null if not rated)."""
+    user_id = int(current_user.identity.id)
+    return MarketplaceService.get_user_rating(db, agent_id, user_id)
 
 
 # ==================== CONVERSATIONS ====================
