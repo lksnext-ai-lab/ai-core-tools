@@ -903,13 +903,22 @@ async def download_file(
         }
 
         file_service = FileManagementService()
-        files = await file_service.list_attached_files(
-            agent_id=agent_id,
-            user_context=user_context,
-            conversation_id=str(conversation_id) if conversation_id else None
-        )
 
-        file_data = next((f for f in files if f.get("file_id") == file_id), None)
+        # Try with conversation_id first, then fall back to the global session so that
+        # files registered before the conversation was known (first-message auto-create)
+        # are still resolved correctly.
+        file_data = None
+        conv_ids_to_try = [str(conversation_id), None] if conversation_id else [None]
+        for try_conv_id in conv_ids_to_try:
+            files = await file_service.list_attached_files(
+                agent_id=agent_id,
+                user_context=user_context,
+                conversation_id=try_conv_id,
+            )
+            file_data = next((f for f in files if f.get("file_id") == file_id), None)
+            if file_data:
+                break
+
         if not file_data or not file_data.get("file_path"):
             raise HTTPException(status_code=404, detail="File not found")
 

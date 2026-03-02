@@ -421,12 +421,16 @@ async def download_marketplace_file(
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
     try:
-        files = await file_service.list_attached_files(
-            agent_id=agent.agent_id,
-            user_context=user_context,
-            conversation_id=str(conversation_id),
-        )
-        file_data = next((f for f in files if f.get("file_id") == file_id), None)
+        file_data = None
+        for try_conv_id in [str(conversation_id), None]:
+            files = await file_service.list_attached_files(
+                agent_id=agent.agent_id,
+                user_context=user_context,
+                conversation_id=try_conv_id,
+            )
+            file_data = next((f for f in files if f.get("file_id") == file_id), None)
+            if file_data:
+                break
         if not file_data or not file_data.get("file_path"):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 

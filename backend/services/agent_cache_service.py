@@ -6,6 +6,29 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
+def _content_blocks_to_str(blocks: list) -> str:
+    """Convert a LangChain multimodal content block list to a display string.
+
+    Handles text, image_url and image_generation_call block types so that
+    conversation history never shows raw Python repr of the block list.
+    """
+    text_parts = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        block_type = block.get("type", "")
+        if block_type == "text":
+            text = block.get("text", "").strip()
+            if text:
+                text_parts.append(text)
+        elif block_type == "image_generation_call":
+            block_id = block.get("id", "")
+            text_parts.append(f"[IMAGE:{block_id}]" if block_id else "[Imagen generada]")
+        elif block_type == "image_url":
+            text_parts.append("[Imagen adjunta]")
+    return " ".join(text_parts) if text_parts else ""
+
 class CheckpointerCacheService:
     """
     Service to manage a shared AsyncConnectionPool for LangGraph's PostgreSQL checkpointer.
@@ -168,7 +191,7 @@ class CheckpointerCacheService:
                             content = msg.content if hasattr(msg, 'content') else str(msg)
 
                             if isinstance(content, list):
-                                content_str = str(content)
+                                content_str = _content_blocks_to_str(content)
                             else:
                                 content_str = str(content) if content else ""
 
@@ -188,7 +211,7 @@ class CheckpointerCacheService:
                         content = msg.content if hasattr(msg, 'content') else str(msg)
 
                         if isinstance(content, list):
-                            content_str = str(content)
+                            content_str = _content_blocks_to_str(content)
                         else:
                             content_str = str(content) if content else ""
 

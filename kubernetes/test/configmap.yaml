@@ -58,6 +58,9 @@ data:
   ENTRAID_REDIRECT_URI: "https://aict-desa.lksnext.com/auth/success"
   VITE_OIDC_ENABLED: "true"
   
+  # Base URL for generating signed download URLs
+  AICT_BASE_URL: "https://aict-desa.lksnext.com"
+
   # Application mode and admins
   AICT_MODE: "SELF-HOSTED"
   AICT_OMNIADMINS: "agaldos@lksnext.com,mlonbide@lksnext.com,mikellonbide@gmail.com"
