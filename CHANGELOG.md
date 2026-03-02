@@ -13,6 +13,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.3.15] - 2026-03-02
+
+### Added
+
+#### Marketplace Agent Ratings
+- **Agent Rating System**: User-contributed star ratings for marketplace agents
+  - `AgentMarketplaceRating` model — one rating per user per profile, 1-5 stars
+  - Rating endpoints: POST `/marketplace/agents/{id}/rate` and GET `/marketplace/agents/{id}/my-rating`
+  - Rating requires at least one prior marketplace conversation with the agent
+  - Denormalized rating stats in `AgentMarketplaceProfile`: `rating_avg`, `rating_count`
+
+#### Marketplace UI Enhancements
+- **Star Rating Component**: Interactive and read-only star display (sm/md sizes)
+- **Marketplace Agent Card**:
+  - Show rating average + conversation count stats row
+  - "Start Chat" button that creates conversation and navigates directly to chat
+- **Marketplace Agent Detail Page**:
+  - Rating summary header (avg, count, conversation count)
+  - Interactive rating sidebar card for users with prior conversations
+  - Locked rating UI with hint for users without prior conversations
+  - Automatic fetch of user's own rating on page load
+
+#### Marketplace Conversation Tracking
+- **Conversation Counter**: Automatically increment `conversation_count` on `AgentMarketplaceProfile` when a new marketplace conversation is created
+- **Enhanced Catalog API**: Expose `conversation_count`, `rating_avg`, `rating_count` in catalog and detail response schemas
+
+#### Marketplace Sorting
+- **"Top Rated" Sort**: Primary sort by `rating_avg DESC NULLS LAST`, secondary by `rating_count DESC`, tertiary alphabetical
+
+#### Marketplace Metadata
+- **Published Date Display**: Always show agent published date in YYYY/MM/DD format on marketplace cards (shows "—" when null)
+
+### Changed
+
+- **Agent Form**: (refer to previous entries)
+
+### Fixed
+
+- **Marketplace API**: Removed explicit `Content-Type` header that was silently overwriting `Authorization` header in rating requests (#8d7f66d)
+- **Marketplace Profile**: Back-fill `published_at` timestamp in `create_or_update_marketplace_profile()` for agents published before timestamp field existed (#2d6f20b)
+
 ## [0.3.14] - 2026-02-28
 
 ### Added
