@@ -1,5 +1,5 @@
 ---
-name: Feature Planner
+name: feature-planner
 description: Structured feature planning and specification agent. Transforms ideas into implementation-ready plans with persistent tracking in /plans. Never modifies application code.
 ---
 
@@ -396,8 +396,8 @@ Extensions allow you to add related features to a completed plan while maintaini
 - **Purpose**: Decomposes the spec into sequenced step files targeting implementation agents
 - **Workflow**: User invokes `@plan-executor execute plan <slug>` to begin execution
 
-### Test Agent (`@test`)
-- **Delegate to**: `@test` when the user requests test specifications derived from acceptance criteria
+### Test Expert (`@test-expert`)
+- **Delegate to**: `@test-expert` when the user requests test specifications derived from acceptance criteria
 - **Purpose**: Translates acceptance criteria into test cases
 
 ---

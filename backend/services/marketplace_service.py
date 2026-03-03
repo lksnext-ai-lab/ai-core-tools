@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func, case, desc, asc
+from sqlalchemy import or_, func, case, desc, asc, Text, cast
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone
 
@@ -79,7 +79,7 @@ class MarketplaceService:
                 AgentMarketplaceProfile.display_name.ilike(pattern),
                 AgentMarketplaceProfile.short_description.ilike(pattern),
                 Agent.name.ilike(pattern),
-                func.cast(AgentMarketplaceProfile.tags, func.text()).ilike(pattern),
+                cast(AgentMarketplaceProfile.tags, Text).ilike(pattern),
             )
         )
 

@@ -186,7 +186,7 @@ For domain-specific tasks, invoke these specialized agents:
 | React Expert | `@react-expert` | React/TypeScript frontend, components, hooks |
 | Alembic Expert | `@alembic-expert` | Database migrations, schema changes |
 | Git & GitHub | `@git-github` | Git workflows, issues, PRs, releases, branching |
-| Test Expert | `@test` | Writing, debugging, and maintaining tests — pytest fixtures, unit/integration test setup, mocking, CI coverage |
+| Test Expert | `@test-expert` | Writing, debugging, and maintaining tests — pytest fixtures, unit/integration test setup, mocking, CI coverage |
 | Version Bumper | `@version-bumper` | Semantic versioning in pyproject.toml |
 | AI Dev Architect | `@ai-dev-architect` | Agent/instruction file management |
 | Feature Planner | `@feature-planner` | Structured feature planning, specs, and plan tracking in /plans; supports plan extensions |
@@ -307,7 +307,7 @@ alembic downgrade -1
 
 ## Agent Handoff Convention
 
-Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`, `@test`) **do not run git commands**. When they finish a task, they:
+Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`, `@test-expert`) **do not run git commands**. When they finish a task, they:
 
 1. Provide a **change summary** with type, scope, description, and files changed
 2. Suggest the user invoke `@git-github` to commit, push, or create a PR
@@ -318,7 +318,7 @@ Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@
 @react-expert    →  (implements UI)       →  suggests @git-github
 @alembic-expert  →  (creates migration)   →  suggests @git-github
 @docs-manager    →  (updates docs)        →  suggests @git-github
-@test            →  (writes tests)        →  suggests @git-github
+@test-expert            →  (writes tests)        →  suggests @git-github
 ```
 
 The `@git-github` agent follows the `commit-and-push` skill (`.github/skills/commit-and-push.skill.md`) for the standard commit/push workflow.
@@ -365,7 +365,7 @@ pytest -k "test_name" -v
 cd frontend && npm run lint
 ```
 
-> See `docs/testing/` for the full testing guide. Use `@test` for help writing or debugging tests.
+> See `docs/testing/` for the full testing guide. Use `@test-expert` for help writing or debugging tests.
 
 ### Library Publishing
 
