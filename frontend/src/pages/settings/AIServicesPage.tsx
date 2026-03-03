@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import AIServiceForm from '../../components/forms/AIServiceForm';
 import ActionDropdown from '../../components/ui/ActionDropdown';
+import ImportModal, { type ImportResponse, type ConflictMode } from '../../components/ui/ImportModal';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
@@ -18,6 +19,7 @@ interface AIService {
   provider: string;
   model_name: string;
   created_at: string;
+  needs_api_key?: boolean;
 }
 
 function AIServicesPage() {
@@ -55,11 +57,15 @@ function AIServicesPage() {
     handleSave,
     setIsModalOpen,
     setEditingService,
+    forceReload,
   } = useServicesManager<AIService>(appId, api as any, cache as any);
 
   const [testResult, setTestResult] = useState<any>(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [testingServiceId, setTestingServiceId] = useState<number | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [exportingServiceId, setExportingServiceId] = useState<number | null>(null);
+  const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
 
   async function handleTestConnection(serviceId: number) {
     if (!appId) return;
@@ -75,6 +81,80 @@ function AIServicesPage() {
       setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
     } finally {
       setTestingServiceId(null);
+    }
+  }
+
+  async function handleExport(serviceId: number) {
+    if (!appId) return;
+    setExportingServiceId(serviceId);
+    
+    try {
+      const apiService = (await import('../../services/api')).apiService;
+      const blob = await apiService.exportAIService(parseInt(appId), serviceId);
+      
+      // Find service name for filename
+      const service = services.find(s => s.service_id === serviceId);
+      const serviceName = service?.name || 'ai-service';
+      const sanitizedName = serviceName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `ai-service-${sanitizedName}-${timestamp}.json`;
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export service');
+    } finally {
+      setExportingServiceId(null);
+    }
+  }
+
+  async function handleImport(
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string
+  ): Promise<ImportResponse> {
+    if (!appId) throw new Error('App ID not found');
+    
+    try {
+      const apiService = (await import('../../services/api')).apiService;
+      const result = await apiService.importAIService(
+        parseInt(appId),
+        file,
+        conflictMode,
+        newName
+      );
+      
+      if (result.success) {
+        // Close modal immediately
+        setShowImportModal(false);
+        // Show success notification
+        setNotification({
+          message: result.message || 'Import completed successfully',
+          type: 'success'
+        });
+        // Refresh the list
+        forceReload();
+        // Auto-dismiss notification after 5 seconds
+        setTimeout(() => setNotification(null), 5000);
+      }
+      
+      return result;
+    } catch (err) {
+      // Show error notification
+      setNotification({
+        message: err instanceof Error ? err.message : 'Import failed',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      // Re-throw the error so ImportModal can catch it
+      throw err;
     }
   }
 
@@ -100,9 +180,20 @@ function AIServicesPage() {
           <p className="text-gray-600">Manage language models and AI providers for your agents</p>
         </div>
         {canEdit && (
-          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-            <span className="mr-2">+</span>{' '}Add AI Service
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">📤</span>Import
+            </button>
+            <button
+              onClick={handleCreate}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>Add AI Service
+            </button>
+          </div>
         )}
       </div>
 
@@ -130,6 +221,17 @@ function AIServicesPage() {
               {service.provider}
             </span>
           )},
+          { header: 'Status', render: (service: AIService) => (
+            service.needs_api_key ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                ⚠ API Key Required
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Ready
+              </span>
+            )
+          )},
           { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: AIService) => (
             canEdit ? (
@@ -138,12 +240,18 @@ function AIServicesPage() {
                   label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
                   onClick: () => void handleTestConnection(service.service_id),
                   icon: testingServiceId === service.service_id ? '⏳' : '🔌',
-                  show: canEdit,
                   disabled: testingServiceId === service.service_id
                 },
-                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' },
-                { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: '📋', variant: 'primary' },
-                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: '🗑️', variant: 'danger' }
+                {
+                  label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
+                  onClick: () => void handleExport(service.service_id),
+                  icon: exportingServiceId === service.service_id ? '⏳' : '📥',
+                  variant: 'primary' as const,
+                  disabled: exportingServiceId === service.service_id
+                },
+                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' as const },
+                { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: '📋', variant: 'primary' as const },
+                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: '🗑️', variant: 'danger' as const }
               ]} size="sm" />
             ) : (
                <span className="text-gray-400 text-sm">View only</span>
@@ -159,6 +267,30 @@ function AIServicesPage() {
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
           <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Add First AI Service</button>
+        </div>
+      )}
+
+      {notification && (
+        <div className={`mb-4 rounded-lg p-4 ${notification.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <span className={`text-xl ${notification.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {notification.type === 'success' ? '✓' : '✗'}
+              </span>
+            </div>
+            <div className="ml-3 flex-1">
+              <p className={`text-sm font-medium ${notification.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
+                {notification.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setNotification(null)}
+              className={`ml-3 inline-flex rounded-md p-1.5 ${notification.type === 'success' ? 'text-green-500 hover:bg-green-100' : 'text-red-500 hover:bg-red-100'} focus:outline-none`}
+            >
+              <span className="sr-only">Dismiss</span>
+              <span className="text-lg">×</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -220,6 +352,15 @@ function AIServicesPage() {
           )}
         </div>
       </Modal>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImport}
+        componentType="ai_service"
+        componentLabel="AI Service"
+      />
     </div>
   );
 }

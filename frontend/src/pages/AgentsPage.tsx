@@ -7,6 +7,7 @@ import Table from '../components/ui/Table';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
+import AgentImportStepper from '../components/import/AgentImportStepper';
 import type { AgentMCPUsage } from '../core/types';
 
 // Define the Agent type
@@ -46,6 +47,17 @@ function AgentsPage() {
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
   const [deleteAgentMcpUsage, setDeleteAgentMcpUsage] = useState<AgentMCPUsage | null>(null);
   const [loadingMcpUsage, setLoadingMcpUsage] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [agentToExport, setAgentToExport] = useState<Agent | null>(null);
+  const [exportOptions, setExportOptions] = useState({
+    includeAIService: true,
+    includeSilo: true,
+    includeOutputParser: true,
+    includeMCPConfigs: true,
+    includeAgentTools: true,
+  });
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -121,6 +133,67 @@ function AgentsPage() {
     }
   };
 
+  const handleExportClick = (agent: Agent) => {
+    setAgentToExport(agent);
+    setShowExportDialog(true);
+  };
+
+  const handleExport = async () => {
+    if (!agentToExport || !appId) return;
+
+    try {
+      const blob = await apiService.exportAgent(
+        parseInt(appId),
+        agentToExport.agent_id,
+        exportOptions.includeAIService,
+        exportOptions.includeSilo,
+        exportOptions.includeOutputParser,
+        exportOptions.includeMCPConfigs,
+        exportOptions.includeAgentTools
+      );
+      
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const sanitizedName = agentToExport.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `agent-${sanitizedName}-${timestamp}.json`;
+      
+      // Download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setShowExportDialog(false);
+      setAgentToExport(null);
+      setNotification({
+        message: 'Agent exported successfully. Note: Conversation history excluded.',
+        type: 'warning'
+      });
+      setTimeout(() => setNotification(null), 7000);
+    } catch (err) {
+      setNotification({
+        message: err instanceof Error ? err.message : 'Failed to export agent',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      console.error('Error exporting agent:', err);
+    }
+  };
+
+  const handleImportComplete = () => {
+    setShowImportModal(false);
+    setNotification({
+      message: 'Agent imported successfully',
+      type: 'success',
+    });
+    void loadData();
+    setTimeout(() => setNotification(null), 5000);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
   };
@@ -172,21 +245,41 @@ function AgentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
           <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
         </div>
-        {canEdit && (
-          <button 
-            onClick={handleCreateAgent}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}Create Agent
-          </button>
-        )}
+        <div className="flex items-center space-x-3">
+          {hasMinRole(AppRole.ADMINISTRATOR) && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span aria-hidden="true" className="mr-2">⬆️</span>
+              <span>Import Agent</span>
+            </button>
+          )}
+          {canEdit && (
+            <button 
+              onClick={handleCreateAgent}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              {' '}Create Agent
+            </button>
+          )}
+        </div>
       </div>
 
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
+
+      {/* Notification */}
+      {notification && (
+        <Alert
+          type={notification.type}
+          message={notification.message}
+          onDismiss={() => setNotification(null)}
+        />
+      )}
 
       <Table
         data={agents}
@@ -310,6 +403,12 @@ function AgentsPage() {
                   },
                   ...(canEdit ? [
                     {
+                      label: 'Export',
+                      onClick: () => handleExportClick(agent),
+                      icon: '⬇️',
+                      variant: 'secondary' as const
+                    },
+                    {
                       label: 'Edit',
                       onClick: () => handleEditAgent(agent.agent_id),
                       icon: '✏️',
@@ -404,6 +503,104 @@ function AgentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Export Dialog */}
+      {showExportDialog && agentToExport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Agent</h3>
+            <p className="text-gray-600 mb-4">
+              Exporting "{agentToExport.name}". Select which components to bundle:
+            </p>
+
+            {/* Export Options */}
+            <div className="space-y-3 mb-4">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeAIService}
+                  onChange={(e) => setExportOptions({...exportOptions, includeAIService: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Include AI Service</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeSilo}
+                  onChange={(e) => setExportOptions({...exportOptions, includeSilo: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Include Silo (Knowledge Base)</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeOutputParser}
+                  onChange={(e) => setExportOptions({...exportOptions, includeOutputParser: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Include Output Parser</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeMCPConfigs}
+                  onChange={(e) => setExportOptions({...exportOptions, includeMCPConfigs: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Include MCP Configs</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeAgentTools}
+                  onChange={(e) => setExportOptions({...exportOptions, includeAgentTools: e.target.checked})}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Include Agent Tools</span>
+              </label>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              <div className="flex items-start">
+                <span className="text-amber-500 mr-2">⚠️</span>
+                <p className="text-sm text-amber-800">
+                  Conversation history is NOT exported. Only configuration is included.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowExportDialog(false);
+                  setAgentToExport(null);
+                }}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Stepper */}
+      {showImportModal && (
+        <AgentImportStepper
+          appId={parseInt(appId!)}
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={handleImportComplete}
+        />
       )}
     </div>
   );

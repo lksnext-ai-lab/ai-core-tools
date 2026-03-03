@@ -63,3 +63,12 @@ class OutputParserRepository:
         except Exception:
             db.rollback()
             return False
+
+    def get_by_name_and_app_id(
+        self, db: Session, name: str, app_id: int
+    ) -> Optional[OutputParser]:
+        """Get an output parser by its name and app ID"""
+        return db.query(OutputParser).filter(
+            OutputParser.name == name,
+            OutputParser.app_id == app_id
+        ).first()

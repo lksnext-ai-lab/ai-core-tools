@@ -115,7 +115,8 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
     try {
       if (editingService && editingService.service_id !== 0 && api.update) {
         await api.update(parseInt(appId), editingService.service_id, data);
-        await load();
+        cache.invalidate(appId);
+        await forceReload();
       } else {
         await api.create(parseInt(appId), data);
         cache.invalidate(appId);

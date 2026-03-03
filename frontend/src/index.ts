@@ -18,6 +18,8 @@ export { useFormState } from './hooks/useFormState';
 export { FormField, FormTextArea, FormSelect, FormCheckbox } from './components/ui/FormField';
 export { FormError } from './components/ui/FormError';
 export { FormActions } from './components/ui/FormActions';
+export { default as ImportModal } from './components/ui/ImportModal';
+export type { ImportResponse, ConflictMode, ComponentType } from './components/ui/ImportModal';
 
 // Export shared settings hooks and components
 export { useSettingsData } from './hooks/useSettingsData';

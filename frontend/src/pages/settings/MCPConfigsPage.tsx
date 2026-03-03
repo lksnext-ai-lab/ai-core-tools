@@ -11,6 +11,10 @@ import type { MCPConfig } from '../../core/types';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { AppRole } from '../../types/roles';
+import ImportModal, { 
+  type ConflictMode, 
+  type ImportResponse 
+} from '../../components/ui/ImportModal';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
@@ -25,6 +29,12 @@ function MCPConfigsPage() {
   const [testResult, setTestResult] = useState<any>(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [testingConfigId, setTestingConfigId] = useState<number | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [exportingConfigId, setExportingConfigId] = useState<number | null>(null);
+  const [notification, setNotification] = useState<{
+    message: string; 
+    type: 'success' | 'error'
+  } | null>(null);
 
   // Load MCP configs from cache or API
   useEffect(() => {
@@ -160,6 +170,104 @@ function MCPConfigsPage() {
     setEditingConfig(null);
   }
 
+  async function handleExport(configId: number) {
+    if (!appId) return;
+    setExportingConfigId(configId);
+    
+    try {
+      const blob = await apiService.exportMCPConfig(
+        parseInt(appId), 
+        configId
+      );
+      
+      // Find config name for filename
+      const config = configs.find(c => c.config_id === configId);
+      const configName = config?.name || 'mcp-config';
+      const sanitizedName = configName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `mcp-config-${sanitizedName}-${timestamp}.json`;
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      
+      // Show security info about auth tokens
+      setNotification({
+        message: (
+          'Configuration exported. Remember that authentication tokens ' +
+          'must be reconfigured after import.'
+        ),
+        type: 'success'
+      });
+      setTimeout(() => setNotification(null), 7000);
+    } catch (err) {
+      setNotification({
+        message: err instanceof Error ? err.message : 'Failed to export config',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setExportingConfigId(null);
+    }
+  }
+
+  async function handleImport(
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string
+  ): Promise<ImportResponse> {
+    if (!appId) throw new Error('App ID not found');
+    
+    try {
+      const result = await apiService.importMCPConfig(
+        parseInt(appId),
+        file,
+        conflictMode,
+        newName
+      );
+      
+      if (result.success) {
+        // Close modal immediately
+        setShowImportModal(false);
+        
+        // Build message with warnings
+        let message = result.message || 'Import completed successfully';
+        if (result.summary?.warnings && result.summary.warnings.length > 0) {
+          message += '. ' + result.summary.warnings.join('. ');
+        }
+        
+        // Show success notification with warnings
+        setNotification({
+          message,
+          type: 'success'
+        });
+        
+        // Invalidate cache and refresh the list
+        settingsCache.invalidateMCPConfigs(appId);
+        await forceReloadMCPConfigs();
+        
+        // Auto-dismiss notification after 7 seconds
+        setTimeout(() => setNotification(null), 7000);
+      }
+      
+      return result;
+    } catch (err) {
+      // Show error notification
+      setNotification({
+        message: err instanceof Error ? err.message : 'Import failed',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      throw err;
+    }
+  }
+
   if (loading) {
     return (
       
@@ -186,21 +294,105 @@ function MCPConfigsPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">MCP Configs</h2>
-            <p className="text-gray-600">Manage Model Context Protocol server configurations</p>
+            <p className="text-gray-600">
+              Manage Model Context Protocol server configurations
+            </p>
           </div>
           {canEdit && (
-            <button 
-              onClick={handleCreateConfig}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}Add MCP Config
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className={
+                  "border border-gray-300 hover:bg-gray-50 text-gray-700 " +
+                  "px-4 py-2 rounded-lg flex items-center"
+                }
+              >
+                <span className="mr-2">📤</span>Import
+              </button>
+              <button 
+                onClick={handleCreateConfig}
+                className={
+                  "bg-purple-600 hover:bg-purple-700 text-white " +
+                  "px-4 py-2 rounded-lg flex items-center"
+                }
+              >
+                <span className="mr-2">+</span>
+                {' '}Add MCP Config
+              </button>
+            </div>
           )}
         </div>
         
         {/* Read-only banner for non-admins */}
-        {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
+        {!canEdit && (
+          <ReadOnlyBanner 
+            userRole={userRole} 
+            minRole={AppRole.ADMINISTRATOR} 
+          />
+        )}
+
+        {/* Security Alert */}
+        {canEdit && (
+          <Alert 
+            type="warning" 
+            title="Security Notice" 
+            message={
+              "MCP configurations export without authentication tokens for " +
+              "security. You must reconfigure authentication tokens and API " +
+              "keys after importing a configuration."
+            } 
+            className="mb-4" 
+          />
+        )}
+
+        {/* Notification Banner */}
+        {notification && (
+          <div className={
+            `mb-4 rounded-lg p-4 ${
+              notification.type === 'success' 
+                ? 'bg-green-50 border border-green-200' 
+                : 'bg-red-50 border border-red-200'
+            }`
+          }>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className={
+                  `text-xl ${
+                    notification.type === 'success' 
+                      ? 'text-green-400' 
+                      : 'text-red-400'
+                  }`
+                }>
+                  {notification.type === 'success' ? '✓' : '✗'}
+                </span>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className={
+                  `text-sm font-medium ${
+                    notification.type === 'success' 
+                      ? 'text-green-800' 
+                      : 'text-red-800'
+                  }`
+                }>
+                  {notification.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setNotification(null)}
+                className={
+                  `ml-3 inline-flex rounded-md p-1.5 ${
+                    notification.type === 'success' 
+                      ? 'text-green-500 hover:bg-green-100' 
+                      : 'text-red-500 hover:bg-red-100'
+                  } focus:outline-none`
+                }
+              >
+                <span className="sr-only">Dismiss</span>
+                <span className="text-lg">×</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Configs Table */}
         <Table
@@ -249,16 +441,37 @@ function MCPConfigsPage() {
                 canEdit ? (
                   <ActionDropdown
                     actions={[
-                      {
-                        label: testingConfigId === config.config_id ? 'Testing...' : 'Test Connection',
-                        onClick: () => { void handleTestConnection(config.config_id); },
-                        icon: testingConfigId === config.config_id ? '⏳' : '🔌',
-                        show: canEdit,
+                      ...(canEdit ? [{
+                        label: (
+                          exportingConfigId === config.config_id 
+                            ? 'Exporting...' 
+                            : 'Export'
+                        ),
+                        onClick: () => { void handleExport(config.config_id); },
+                        icon: (
+                          exportingConfigId === config.config_id ? '⏳' : '📥'
+                        ),
+                        disabled: exportingConfigId === config.config_id
+                      }] : []),
+                      ...(canEdit ? [{
+                        label: (
+                          testingConfigId === config.config_id 
+                            ? 'Testing...' 
+                            : 'Test Connection'
+                        ),
+                        onClick: () => { 
+                          void handleTestConnection(config.config_id); 
+                        },
+                        icon: (
+                          testingConfigId === config.config_id ? '⏳' : '🔌'
+                        ),
                         disabled: testingConfigId === config.config_id
-                      },
+                      }] : []),
                       {
                         label: 'Edit',
-                        onClick: () => { void handleEditConfig(config.config_id); },
+                        onClick: () => { 
+                          void handleEditConfig(config.config_id); 
+                        },
                         icon: '✏️',
                         variant: 'primary'
                       },
@@ -394,7 +607,14 @@ function MCPConfigsPage() {
             )}
           </div>
         </Modal>
-      </div>
+        {/* Import Modal */}
+        <ImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImport}
+          componentType="mcp_config"
+          componentLabel="MCP Configuration"
+        />      </div>
     
   );
 }
