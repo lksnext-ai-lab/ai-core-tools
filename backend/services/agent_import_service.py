@@ -17,6 +17,9 @@ from schemas.import_schemas import (
     ValidateImportResponseSchema,
     ImportSummarySchema,
     ComponentType,
+    ComponentPreviewItem,
+    DependencyInfo,
+    AgentImportPreviewSchema,
 )
 from core.export_constants import validate_export_version
 from services.ai_service_import_service import AIServiceImportService
@@ -160,6 +163,215 @@ class AgentImportService:
             warnings=warnings,
             missing_dependencies=missing_dependencies,
             requires_ai_service_selection=requires_ai_service_selection,
+        )
+
+    def preview_import(
+        self, export_data: AgentExportFileSchema, app_id: int
+    ) -> AgentImportPreviewSchema:
+        """Preview agent import without importing.
+
+        Returns a structured breakdown of the export file contents
+        with conflict detection, dependency info, and warnings.
+
+        Args:
+            export_data: Parsed export file
+            app_id: Target app ID
+
+        Returns:
+            AgentImportPreviewSchema: Full preview of what will happen
+        """
+        validate_export_version(export_data.metadata.export_version)
+
+        global_warnings = []
+        dependencies = []
+
+        # Preview the main agent
+        existing_agent = self.get_by_name_and_app(
+            export_data.agent.name, app_id
+        )
+        agent_preview = ComponentPreviewItem(
+            component_type=ComponentType.AGENT,
+            component_name=export_data.agent.name,
+            bundled=True,
+            has_conflict=existing_agent is not None,
+            existing_id=(
+                existing_agent.agent_id if existing_agent else None
+            ),
+        )
+
+        # Preview AI service
+        ai_service_preview = None
+        requires_ai_service_selection = False
+        if export_data.agent.service_name:
+            if export_data.ai_service:
+                ai_service_preview = ComponentPreviewItem(
+                    component_type=ComponentType.AI_SERVICE,
+                    component_name=export_data.ai_service.name,
+                    bundled=True,
+                    has_conflict=self._check_ai_service_conflict(
+                        export_data.ai_service.name, app_id
+                    ),
+                    needs_api_key=True,
+                    provider=export_data.ai_service.provider,
+                )
+            else:
+                requires_ai_service_selection = True
+                global_warnings.append(
+                    f"AI service '{export_data.agent.service_name}' "
+                    f"not bundled. You must select an existing one."
+                )
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="ai_service",
+                depends_on_name=export_data.agent.service_name,
+                mandatory=True,
+                bundled=export_data.ai_service is not None,
+            ))
+
+        # Preview silo
+        silo_preview = None
+        silo_emb_preview = None
+        silo_parser_preview = None
+        if export_data.silo:
+            silo_preview = ComponentPreviewItem(
+                component_type=ComponentType.SILO,
+                component_name=export_data.silo.name,
+                bundled=True,
+                has_conflict=self._check_silo_conflict(
+                    export_data.silo.name, app_id
+                ),
+            )
+            if export_data.silo_embedding_service:
+                silo_emb_preview = ComponentPreviewItem(
+                    component_type=ComponentType.EMBEDDING_SERVICE,
+                    component_name=(
+                        export_data.silo_embedding_service.name
+                    ),
+                    bundled=True,
+                    needs_api_key=True,
+                    provider=(
+                        export_data.silo_embedding_service.provider
+                    ),
+                )
+            if export_data.silo_output_parser:
+                silo_parser_preview = ComponentPreviewItem(
+                    component_type=ComponentType.OUTPUT_PARSER,
+                    component_name=(
+                        export_data.silo_output_parser.name
+                    ),
+                    bundled=True,
+                )
+        if export_data.agent.silo_name:
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="silo",
+                depends_on_name=export_data.agent.silo_name,
+                mandatory=False,
+                bundled=export_data.silo is not None,
+            ))
+
+        # Preview output parser
+        parser_preview = None
+        if export_data.output_parser:
+            parser_preview = ComponentPreviewItem(
+                component_type=ComponentType.OUTPUT_PARSER,
+                component_name=export_data.output_parser.name,
+                bundled=True,
+            )
+        if export_data.agent.output_parser_name:
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="output_parser",
+                depends_on_name=(
+                    export_data.agent.output_parser_name
+                ),
+                mandatory=False,
+                bundled=export_data.output_parser is not None,
+            ))
+
+        # Preview MCP configs
+        mcp_previews = []
+        for mcp in export_data.mcp_configs:
+            mcp_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.MCP_CONFIG,
+                component_name=mcp.name,
+                bundled=True,
+            ))
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="mcp_config",
+                depends_on_name=mcp.name,
+                mandatory=False,
+                bundled=True,
+            ))
+
+        # Preview agent tools
+        tool_previews = []
+        for tool in export_data.agent_tools:
+            tool_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.AGENT,
+                component_name=tool.name,
+                bundled=True,
+            ))
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="agent",
+                depends_on_name=tool.name,
+                mandatory=False,
+                bundled=True,
+            ))
+
+        return AgentImportPreviewSchema(
+            valid=True,
+            export_version=(
+                export_data.metadata.export_version
+            ),
+            agent=agent_preview,
+            ai_service=ai_service_preview,
+            silo=silo_preview,
+            silo_embedding_service=silo_emb_preview,
+            silo_output_parser=silo_parser_preview,
+            output_parser=parser_preview,
+            mcp_configs=mcp_previews,
+            agent_tools=tool_previews,
+            dependencies=dependencies,
+            global_warnings=global_warnings,
+            requires_ai_service_selection=(
+                requires_ai_service_selection
+            ),
+        )
+
+    def _check_ai_service_conflict(
+        self, name: str, app_id: int
+    ) -> bool:
+        """Check if AI service with given name exists."""
+        return (
+            self.session.query(AIService)
+            .filter(
+                AIService.name == name,
+                AIService.app_id == app_id,
+            )
+            .first()
+            is not None
+        )
+
+    def _check_silo_conflict(
+        self, name: str, app_id: int
+    ) -> bool:
+        """Check if silo with given name exists."""
+        return (
+            self.session.query(Silo)
+            .filter(
+                Silo.name == name,
+                Silo.app_id == app_id,
+            )
+            .first()
+            is not None
         )
 
     def import_agent(

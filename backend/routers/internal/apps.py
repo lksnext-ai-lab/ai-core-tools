@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, Form, HTTPException, status, UploadFile, File, Query
 from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
@@ -24,6 +24,7 @@ from schemas.import_schemas import (
     ImportTargetMode,
     ComponentSelectionSchema,
     FullAppImportResponseSchema,
+    AppImportPreviewSchema,
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -60,6 +61,55 @@ APP_NOT_FOUND_MSG = "App not found"
 # ==================== STATIC ROUTES (must come before dynamic routes) ====================
 
 @apps_router.post(
+    "/preview-import",
+    response_model=AppImportPreviewSchema,
+    summary="Preview app import",
+    tags=["Apps", "Export/Import"],
+)
+async def preview_import_app(
+    file: UploadFile = File(...),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+):
+    """Preview full app import without importing.
+
+    Parses the export file and returns a structured preview
+    with component inventory, dependency graph, and warnings.
+    Read-only -- no database modifications.
+    """
+    from services.full_app_import_service import (
+        FullAppImportService,
+    )
+
+    try:
+        contents = await file.read()
+        export_dict = json.loads(contents)
+        export_data = AppExportFileSchema(**export_dict)
+
+        import_service = FullAppImportService(db)
+        return import_service.preview_import(export_data)
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Invalid export file: {e}",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            str(e),
+        )
+    except Exception as e:
+        logger.error(
+            f"Preview import error: {str(e)}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Preview failed",
+        )
+
+
+@apps_router.post(
     "/import",
     response_model=FullAppImportResponseSchema,
     summary="Import complete app configuration",
@@ -69,10 +119,26 @@ APP_NOT_FOUND_MSG = "App not found"
 async def import_full_app(
     file: UploadFile = File(...),
     conflict_mode: ConflictMode = Query(
-        ConflictMode.FAIL, description="How to handle name conflicts (fail/rename/override)"
+        ConflictMode.FAIL,
+        description="How to handle name conflicts (fail/rename/override)",
     ),
     new_name: Optional[str] = Query(
         None, description="New app name (for rename mode)"
+    ),
+    component_selection_json: Optional[str] = Form(
+        None,
+        description=(
+            "JSON object mapping singular component-type keys to lists of "
+            "names to import. Omit to import all components. "
+            "Example: {\"ai_service\":[\"My Service\"]}"
+        ),
+    ),
+    api_keys_json: Optional[str] = Form(
+        None,
+        description=(
+            "JSON object mapping original service names to API keys. "
+            "Example: {\"My Service\":\"sk-...\"}"
+        ),
     ),
     auth_context: AuthContext = Depends(get_current_user_oauth),
     db: Session = Depends(get_db),
@@ -109,6 +175,27 @@ async def import_full_app(
             detail=f"Invalid export format: {str(e)}",
         )
 
+    # Parse optional JSON form fields
+    component_selection = None
+    if component_selection_json:
+        try:
+            component_selection = json.loads(component_selection_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid component_selection JSON: {e}",
+            )
+
+    api_keys = None
+    if api_keys_json:
+        try:
+            api_keys = json.loads(api_keys_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid api_keys JSON: {e}",
+            )
+
     # Import (always creates new app)
     service = FullAppImportService(db)
     try:
@@ -117,6 +204,8 @@ async def import_full_app(
             user_id=user_id,
             conflict_mode=conflict_mode,
             new_name=new_name,
+            component_selection=component_selection,
+            api_keys=api_keys,
         )
 
         logger.info(

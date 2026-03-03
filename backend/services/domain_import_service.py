@@ -172,6 +172,16 @@ class DomainImportService:
             conflict_mode=conflict_mode,
         )
 
+        # Silo is mandatory for domains — fail early with a clear message
+        # rather than letting a DB NOT NULL constraint violation crash the session
+        if silo_id is None and export_data.domain.silo_name:
+            raise ValueError(
+                f"Domain '{export_data.domain.name}' requires silo "
+                f"'{export_data.domain.silo_name}' which could not be "
+                "resolved. Either include the silo in the import selection "
+                "or ensure it already exists in the target app."
+            )
+
         # Handle conflict
         final_name = export_data.domain.name
         existing = self.get_by_name_and_app(final_name, app_id)

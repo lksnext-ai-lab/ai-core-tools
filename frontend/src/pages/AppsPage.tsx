@@ -7,7 +7,7 @@ import ActionDropdown from '../components/ui/ActionDropdown';
 import Speedometer from '../components/ui/Speedometer';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
-import ImportModal, { type ConflictMode, type ImportResponse } from '../components/ui/ImportModal';
+import AppImportStepper from '../components/import/AppImportStepper';
 
 // Define the App type (like your Pydantic models!)
 interface UsageStats {
@@ -225,44 +225,12 @@ Type the app name to confirm: "${app.name}"`;
     }
   }
 
-  // Function to handle import (signature for ImportModal)
-  async function handleImportApp(
-    file: File,
-    conflictMode: ConflictMode,
-    newName?: string
-  ): Promise<ImportResponse> {
-    try {
-      const result = await apiService.importFullApp(file, conflictMode, newName);
-      
-      if (result.success) {
-        // Close modal immediately
-        setShowImportModal(false);
-        // Show success notification
-        setSuccess(result.message || 'Import completed successfully');
-        // Refresh the list without loading spinner
-        refreshApps();
-        // Auto-dismiss notification after 5 seconds
-        setTimeout(() => setSuccess(null), 5000);
-      }
-      
-      return {
-        success: result.success,
-        message: result.message,
-        summary: {
-          component_type: 'app',
-          component_id: result.summary?.app_id || 0,
-          component_name: result.summary?.app_name || 'Unknown',
-          mode: conflictMode,
-          created: true,
-        },
-      };
-    } catch (err) {
-      // Show error notification
-      setError(err instanceof Error ? err.message : 'Import failed');
-      setTimeout(() => setError(null), 5000);
-      // Re-throw the error so ImportModal can catch it
-      throw err;
-    }
+  // Function to handle import completion
+  function handleImportComplete() {
+    setShowImportModal(false);
+    setSuccess('App imported successfully!');
+    refreshApps();
+    setTimeout(() => setSuccess(null), 5000);
   }
 
   // Function to get user initials for avatar
@@ -573,14 +541,12 @@ Type the app name to confirm: "${app.name}"`;
         />
       </Modal>
 
-      {/* Import App Modal */}
+      {/* Import App Stepper */}
       {showImportModal && (
-        <ImportModal
+        <AppImportStepper
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
-          onImport={handleImportApp}
-          componentType="app"
-          componentLabel="App"
+          onImportComplete={handleImportComplete}
         />
       )}
     </div>

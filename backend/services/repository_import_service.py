@@ -181,6 +181,16 @@ class RepositoryImportService:
             conflict_mode=conflict_mode,
         )
 
+        # Silo is mandatory for repositories — fail early with a clear message
+        # rather than letting a DB NOT NULL constraint violation crash the session
+        if silo_id is None and export_data.repository.silo_name:
+            raise ValueError(
+                f"Repository '{export_data.repository.name}' requires silo "
+                f"'{export_data.repository.silo_name}' which could not be "
+                "resolved. Either include the silo in the import selection "
+                "or ensure it already exists in the target app."
+            )
+
         # Handle conflict
         final_name = export_data.repository.name
         existing = self.get_by_name_and_app(final_name, app_id)

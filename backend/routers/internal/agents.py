@@ -12,7 +12,11 @@ from services.mcp_server_service import MCPServerService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
-from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.import_schemas import (
+    ConflictMode,
+    ImportResponseSchema,
+    AgentImportPreviewSchema,
+)
 from schemas.export_schemas import AgentExportFileSchema
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
@@ -36,6 +40,46 @@ def get_agent_service() -> AgentService:
     return AgentService()
 
 #AGENT MANAGEMENT
+
+@agents_router.post(
+    "/preview-import",
+    summary="Preview Agent Import",
+    tags=["Agents", "Export/Import"],
+    response_model=AgentImportPreviewSchema,
+)
+async def preview_import_agent(
+    app_id: int,
+    file: UploadFile = File(...),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db),
+):
+    """Preview agent import without importing.
+
+    Parses the export file and returns a structured preview with
+    conflict detection, dependency info, and warnings. Read-only.
+    """
+    try:
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = AgentExportFileSchema(**file_data)
+
+        import_service = AgentImportService(db)
+        return import_service.preview_import(export_data, app_id)
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Invalid export file: {e}",
+        )
+    except Exception as e:
+        logger.error(
+            f"Preview import error: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Preview failed",
+        )
+
 
 @agents_router.post("/import",
                    summary="Import Agent",

@@ -1,7 +1,7 @@
 """Service for importing complete app configuration."""
 
 import time
-from typing import Optional, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,10 @@ from schemas.export_schemas import AppExportFileSchema
 from schemas.import_schemas import (
     ConflictMode,
     FullAppImportSummarySchema,
+    ComponentPreviewItem,
+    DependencyInfo,
+    AppImportPreviewSchema,
+    ComponentType,
 )
 from services.ai_service_import_service import AIServiceImportService
 from services.embedding_service_import_service import (
@@ -70,12 +74,269 @@ class FullAppImportService:
         self.embedding_service_mapping = {}
         self.parser_mapping = {}
 
+    def preview_import(
+        self,
+        export_data: AppExportFileSchema,
+    ) -> AppImportPreviewSchema:
+        """Preview full app import without importing.
+
+        Iterates all component types, checks for conflicts against
+        existing apps, builds dependency edges, and returns a
+        structured preview. Read-only -- no DB mutations.
+
+        Args:
+            export_data: Parsed export file
+
+        Returns:
+            AppImportPreviewSchema: Full preview of what will happen
+        """
+        from core.export_constants import validate_export_version
+        from models.app import App
+
+        validate_export_version(
+            export_data.metadata.export_version
+        )
+
+        global_warnings = []
+        dependencies = []
+
+        # Check app name conflict
+        existing_app = (
+            self.session.query(App)
+            .filter(App.name == export_data.app.name)
+            .first()
+        )
+        if existing_app:
+            global_warnings.append(
+                f"App '{export_data.app.name}' already exists. "
+                f"Use rename mode to auto-generate a new name."
+            )
+
+        # Component counts
+        component_counts = {
+            "ai_services": len(export_data.ai_services),
+            "embedding_services": len(
+                export_data.embedding_services
+            ),
+            "output_parsers": len(export_data.output_parsers),
+            "mcp_configs": len(export_data.mcp_configs),
+            "silos": len(export_data.silos),
+            "repositories": len(export_data.repositories),
+            "domains": len(export_data.domains),
+            "agents": len(export_data.agents),
+        }
+
+        # Preview AI services
+        ai_service_previews = []
+        for svc in export_data.ai_services:
+            ai_service_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.AI_SERVICE,
+                component_name=svc.name,
+                bundled=True,
+                needs_api_key=True,
+                provider=svc.provider,
+            ))
+
+        # Preview embedding services
+        embedding_previews = []
+        for svc in export_data.embedding_services:
+            embedding_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.EMBEDDING_SERVICE,
+                component_name=svc.name,
+                bundled=True,
+                needs_api_key=True,
+                provider=svc.provider,
+            ))
+
+        # Preview output parsers
+        parser_previews = []
+        for p in export_data.output_parsers:
+            parser_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.OUTPUT_PARSER,
+                component_name=p.name,
+                bundled=True,
+            ))
+
+        # Preview MCP configs
+        mcp_previews = []
+        for m in export_data.mcp_configs:
+            mcp_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.MCP_CONFIG,
+                component_name=m.name,
+                bundled=True,
+            ))
+
+        # Preview silos + dependency edges
+        silo_previews = []
+        for s in export_data.silos:
+            silo_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.SILO,
+                component_name=s.name,
+                bundled=True,
+            ))
+            if s.embedding_service_name:
+                dependencies.append(DependencyInfo(
+                    source_type="silo",
+                    source_name=s.name,
+                    depends_on_type="embedding_service",
+                    depends_on_name=s.embedding_service_name,
+                    mandatory=True,
+                    bundled=any(
+                        e.name == s.embedding_service_name
+                        for e in export_data.embedding_services
+                    ),
+                ))
+            if s.metadata_definition_name:
+                dependencies.append(DependencyInfo(
+                    source_type="silo",
+                    source_name=s.name,
+                    depends_on_type="output_parser",
+                    depends_on_name=s.metadata_definition_name,
+                    mandatory=False,
+                    bundled=any(
+                        p.name == s.metadata_definition_name
+                        for p in export_data.output_parsers
+                    ),
+                ))
+
+        # Preview repositories + dependency edges
+        repo_previews = []
+        for r in export_data.repositories:
+            repo_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.REPOSITORY,
+                component_name=r.name,
+                bundled=True,
+            ))
+            if r.silo_name:
+                dependencies.append(DependencyInfo(
+                    source_type="repository",
+                    source_name=r.name,
+                    depends_on_type="silo",
+                    depends_on_name=r.silo_name,
+                    mandatory=False,
+                    bundled=any(
+                        s.name == r.silo_name
+                        for s in export_data.silos
+                    ),
+                ))
+
+        # Preview domains + dependency edges
+        domain_previews = []
+        for d in export_data.domains:
+            domain_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.DOMAIN,
+                component_name=d.name,
+                bundled=True,
+            ))
+            if d.silo_name:
+                dependencies.append(DependencyInfo(
+                    source_type="domain",
+                    source_name=d.name,
+                    depends_on_type="silo",
+                    depends_on_name=d.silo_name,
+                    mandatory=False,
+                    bundled=any(
+                        s.name == d.silo_name
+                        for s in export_data.silos
+                    ),
+                ))
+
+        # Preview agents + dependency edges
+        agent_previews = []
+        for a in export_data.agents:
+            agent_previews.append(ComponentPreviewItem(
+                component_type=ComponentType.AGENT,
+                component_name=a.name,
+                bundled=True,
+            ))
+            if a.service_name:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="ai_service",
+                    depends_on_name=a.service_name,
+                    mandatory=True,
+                    bundled=any(
+                        s.name == a.service_name
+                        for s in export_data.ai_services
+                    ),
+                ))
+            if a.silo_name:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="silo",
+                    depends_on_name=a.silo_name,
+                    mandatory=False,
+                    bundled=any(
+                        s.name == a.silo_name
+                        for s in export_data.silos
+                    ),
+                ))
+            if a.output_parser_name:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="output_parser",
+                    depends_on_name=a.output_parser_name,
+                    mandatory=False,
+                    bundled=any(
+                        p.name == a.output_parser_name
+                        for p in export_data.output_parsers
+                    ),
+                ))
+            for mcp_ref in a.agent_mcp_refs:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="mcp_config",
+                    depends_on_name=mcp_ref.mcp_name,
+                    mandatory=False,
+                    bundled=any(
+                        m.name == mcp_ref.mcp_name
+                        for m in export_data.mcp_configs
+                    ),
+                ))
+            for tool_ref in a.agent_tool_refs:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="agent",
+                    depends_on_name=tool_ref.tool_agent_name,
+                    mandatory=False,
+                    bundled=any(
+                        ag.name == tool_ref.tool_agent_name
+                        for ag in export_data.agents
+                    ),
+                ))
+
+        return AppImportPreviewSchema(
+            valid=True,
+            export_version=(
+                export_data.metadata.export_version
+            ),
+            app_name=export_data.app.name,
+            ai_services=ai_service_previews,
+            embedding_services=embedding_previews,
+            output_parsers=parser_previews,
+            mcp_configs=mcp_previews,
+            silos=silo_previews,
+            repositories=repo_previews,
+            domains=domain_previews,
+            agents=agent_previews,
+            dependencies=dependencies,
+            component_counts=component_counts,
+            global_warnings=global_warnings,
+        )
+
     def import_full_app(
         self,
         export_data: AppExportFileSchema,
         user_id: int,
         conflict_mode: ConflictMode = ConflictMode.FAIL,
         new_name: Optional[str] = None,
+        component_selection: Optional[Dict[str, List[str]]] = None,
+        api_keys: Optional[Dict[str, str]] = None,
     ) -> FullAppImportSummarySchema:
         """Import complete app configuration (always creates NEW app).
 
@@ -84,6 +345,13 @@ class FullAppImportService:
             user_id: User ID creating the app
             conflict_mode: How to handle name conflicts (fail/rename/override)
             new_name: Optional custom name for the imported app
+            component_selection: Optional dict mapping singular type names to
+                lists of component names to import. If omitted, all components
+                are imported.  Keys: ``ai_service``, ``embedding_service``,
+                ``output_parser``, ``mcp_config``, ``silo``, ``repository``,
+                ``domain``, ``agent``.
+            api_keys: Optional dict mapping original service names to API keys
+                to set on newly created AI/embedding services.
 
         Returns:
             FullAppImportSummarySchema: Comprehensive import summary
@@ -92,6 +360,44 @@ class FullAppImportService:
             ValueError: If validation fails or app name conflict
         """
         start_time = time.time()
+
+        # Filter export_data based on component_selection
+        if component_selection is not None:
+            _TYPE_TO_FIELD: Dict[str, str] = {
+                "ai_service": "ai_services",
+                "embedding_service": "embedding_services",
+                "output_parser": "output_parsers",
+                "mcp_config": "mcp_configs",
+                "silo": "silos",
+                "repository": "repositories",
+                "domain": "domains",
+                "agent": "agents",
+            }
+            filtered: Dict[str, list] = {}
+            for sel_type, field_name in _TYPE_TO_FIELD.items():
+                selected_names = component_selection.get(sel_type)
+                if selected_names is not None:
+                    # User explicitly selected a subset of this type
+                    selected_set = set(selected_names)
+                    current = getattr(export_data, field_name, [])
+                    filtered[field_name] = [
+                        item for item in current
+                        if item.name in selected_set
+                    ]
+                else:
+                    # Type absent from selection = user deselected
+                    # all items of this type
+                    filtered[field_name] = []
+            if filtered:
+                export_data = export_data.model_copy(
+                    update=filtered
+                )
+                logger.info(
+                    "Component selection applied: "
+                    + ", ".join(
+                        f"{k}={len(v)}" for k, v in filtered.items()
+                    )
+                )
 
         # Create new app
         app_id, app_name = self._create_new_app(
@@ -122,7 +428,8 @@ class FullAppImportService:
                 logger.info(f"Starting import of {len(component_data)} {component_type}")
                 try:
                     count, warnings, mappings = self._import_component_type(
-                        component_type, export_data, app_id, conflict_mode, component_id_mappings
+                        component_type, export_data, app_id, conflict_mode,
+                        component_id_mappings, api_keys=api_keys,
                     )
                     components_imported[component_type] = count
                     all_warnings.extend(warnings)
@@ -134,6 +441,12 @@ class FullAppImportService:
                     error_msg = f"{component_type}: {str(e)}"
                     all_errors.append(error_msg)
                     logger.error(f"Failed to import {component_type}: {e}", exc_info=True)
+                    # Rollback to clear any poisoned transaction state so that
+                    # subsequent component types can still use the session
+                    try:
+                        self.session.rollback()
+                    except Exception:
+                        pass
                     # Skip remaining components of this type
                     components_skipped[component_type] = len(component_data)
 
@@ -256,6 +569,7 @@ class FullAppImportService:
         app_id: int,
         conflict_mode: ConflictMode,
         component_id_mappings: dict,
+        api_keys: Optional[Dict[str, str]] = None,
     ) -> Tuple[int, List[str], dict]:
         """Import all components of a specific type.
 
@@ -264,7 +578,10 @@ class FullAppImportService:
             export_data: Export file data
             app_id: Target app ID
             conflict_mode: Conflict resolution mode
-            component_id_mappings: Existing name->ID mappings for dependency resolution
+            component_id_mappings: Existing name->ID mappings for
+                dependency resolution
+            api_keys: Optional dict of original service name -> API key
+                to apply after creation.
 
         Returns:
             Tuple of (count_imported, warnings, new_mappings)
@@ -296,7 +613,27 @@ class FullAppImportService:
                 warnings.extend(result.warnings)
                 # Track mapping: original name -> new ID
                 new_mappings[original_name] = result.component_id
-                logger.debug(f"Mapped AI service '{original_name}' -> ID {result.component_id}")
+                logger.debug(
+                    f"Mapped AI service '{original_name}'"
+                    f" -> ID {result.component_id}"
+                )
+                # Apply user-supplied API key if provided (no commit here;
+                # the outer commit at the end of import_full_app persists it)
+                if (
+                    api_keys
+                    and original_name in api_keys
+                    and api_keys[original_name]
+                ):
+                    from models.ai_service import AIService as _AIService
+                    svc_obj = self.session.get(
+                        _AIService, result.component_id
+                    )
+                    if svc_obj:
+                        svc_obj.api_key = api_keys[original_name]
+                        logger.debug(
+                            f"Applied API key for AI service"
+                            f" '{original_name}'"
+                        )
                 count += 1
 
         elif component_type == "embedding_services":
@@ -318,7 +655,29 @@ class FullAppImportService:
                 warnings.extend(result.warnings)
                 # Track mapping: original name -> new ID
                 new_mappings[original_name] = result.component_id
-                logger.debug(f"Mapped embedding service '{original_name}' -> ID {result.component_id}")
+                logger.debug(
+                    f"Mapped embedding service '{original_name}'"
+                    f" -> ID {result.component_id}"
+                )
+                # Apply user-supplied API key if provided (no commit here;
+                # the outer commit at the end of import_full_app persists it)
+                if (
+                    api_keys
+                    and original_name in api_keys
+                    and api_keys[original_name]
+                ):
+                    from models.embedding_service import (
+                        EmbeddingService as _EmbeddingService,
+                    )
+                    emb_obj = self.session.get(
+                        _EmbeddingService, result.component_id
+                    )
+                    if emb_obj:
+                        emb_obj.api_key = api_keys[original_name]
+                        logger.debug(
+                            f"Applied API key for embedding service"
+                            f" '{original_name}'"
+                        )
                 count += 1
 
         elif component_type == "output_parsers":

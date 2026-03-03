@@ -1481,6 +1481,158 @@ class ApiService {
     return response.json();
   }
 
+  // ==================== IMPORT PREVIEW API ====================
+
+  async previewAgentImport(appId: number, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/preview-import`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async previewAppImport(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}/internal/apps/preview-import`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importAgentWithOptions(
+    appId: number,
+    file: File,
+    options: {
+      conflictMode: string;
+      newName?: string;
+      selectedAIServiceId?: number;
+      importBundledSilo?: boolean;
+      importBundledOutputParser?: boolean;
+      importBundledMCPConfigs?: boolean;
+      importBundledAgentTools?: boolean;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams();
+    params.append('conflict_mode', options.conflictMode);
+    if (options.newName) {
+      params.append(
+        'new_name',
+        options.newName
+      );
+    }
+    if (options.selectedAIServiceId !== undefined) {
+      params.append(
+        'selected_ai_service_id',
+        String(options.selectedAIServiceId)
+      );
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importAppWithOptions(
+    file: File,
+    options: {
+      conflictMode: string;
+      newAppName?: string;
+      componentSelection?: Record<string, string[]>;
+      apiKeys?: Record<string, string>;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const params = new URLSearchParams();
+    params.append('conflict_mode', options.conflictMode);
+    if (options.newAppName) {
+      params.append('new_name', options.newAppName);
+    }
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (options.componentSelection) {
+      formData.append(
+        'component_selection_json',
+        JSON.stringify(options.componentSelection),
+      );
+    }
+    if (options.apiKeys && Object.keys(options.apiKeys).length > 0) {
+      formData.append(
+        'api_keys_json',
+        JSON.stringify(options.apiKeys),
+      );
+    }
+
+    const url = `${this.baseURL}/internal/apps/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== UTILITY METHODS ====================
 }
 

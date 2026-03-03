@@ -116,3 +116,67 @@ class FullAppImportResponseSchema(BaseModel):
     success: bool
     message: str
     summary: Optional[FullAppImportSummarySchema] = None
+
+
+# ==================== PREVIEW SCHEMAS ====================
+
+
+class ComponentPreviewItem(BaseModel):
+    """Preview of a single component to be imported."""
+
+    component_type: ComponentType
+    component_name: str
+    bundled: bool = True
+    has_conflict: bool = False
+    existing_id: Optional[int] = None
+    warnings: List[str] = []
+    needs_api_key: bool = False
+    provider: Optional[str] = None
+
+
+class DependencyInfo(BaseModel):
+    """Dependency link between components."""
+
+    source_type: str
+    source_name: str
+    depends_on_type: str
+    depends_on_name: str
+    mandatory: bool
+    bundled: bool
+
+
+class AgentImportPreviewSchema(BaseModel):
+    """Complete preview of agent import."""
+
+    valid: bool
+    export_version: str
+    agent: ComponentPreviewItem
+    ai_service: Optional[ComponentPreviewItem] = None
+    silo: Optional[ComponentPreviewItem] = None
+    silo_embedding_service: Optional[ComponentPreviewItem] = None
+    silo_output_parser: Optional[ComponentPreviewItem] = None
+    output_parser: Optional[ComponentPreviewItem] = None
+    mcp_configs: List[ComponentPreviewItem] = []
+    agent_tools: List[ComponentPreviewItem] = []
+    dependencies: List[DependencyInfo] = []
+    global_warnings: List[str] = []
+    requires_ai_service_selection: bool = False
+
+
+class AppImportPreviewSchema(BaseModel):
+    """Complete preview of full app import."""
+
+    valid: bool
+    export_version: str
+    app_name: str
+    ai_services: List[ComponentPreviewItem] = []
+    embedding_services: List[ComponentPreviewItem] = []
+    output_parsers: List[ComponentPreviewItem] = []
+    mcp_configs: List[ComponentPreviewItem] = []
+    silos: List[ComponentPreviewItem] = []
+    repositories: List[ComponentPreviewItem] = []
+    domains: List[ComponentPreviewItem] = []
+    agents: List[ComponentPreviewItem] = []
+    dependencies: List[DependencyInfo] = []
+    component_counts: dict = {}
+    global_warnings: List[str] = []

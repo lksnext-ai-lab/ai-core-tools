@@ -7,7 +7,7 @@ import Table from '../components/ui/Table';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
-import ImportModal, { type ConflictMode, type ImportResponse } from '../components/ui/ImportModal';
+import AgentImportStepper from '../components/import/AgentImportStepper';
 import type { AgentMCPUsage } from '../core/types';
 
 // Define the Agent type
@@ -58,9 +58,6 @@ function AgentsPage() {
     includeAgentTools: true,
   });
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
-  const [requiresAIServiceSelection, setRequiresAIServiceSelection] = useState(false);
-  const [availableAIServices, setAvailableAIServices] = useState<Array<{ id: number; name: string }>>([]);
-  const [selectedAIServiceId, setSelectedAIServiceId] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     loadData();
@@ -187,67 +184,14 @@ function AgentsPage() {
     }
   };
 
-  const handleImport = async (
-    file: File,
-    conflictMode: ConflictMode,
-    newName?: string
-  ): Promise<ImportResponse> => {
-    if (!appId) {
-      throw new Error('App ID is required');
-    }
-
-    try {
-      // Parse file to check if AI service selection is needed
-      if (!requiresAIServiceSelection) {
-        const fileContent = await file.text();
-        const fileData = JSON.parse(fileContent);
-        
-        // Check if AI service is needed but not bundled
-        if (fileData.agent?.service_name && !fileData.ai_service) {
-          // Fetch available AI services
-          const services = await apiService.getAIServices(parseInt(appId));
-          setAvailableAIServices(
-            services.map((svc: any) => ({ id: svc.service_id, name: svc.name }))
-          );
-          setRequiresAIServiceSelection(true);
-          
-          return {
-            success: false,
-            message: 'Please select an AI service to continue',
-          };
-        }
-      }
-
-      // Perform import
-      const result = await apiService.importAgent(
-        parseInt(appId),
-        file,
-        conflictMode,
-        newName,
-        selectedAIServiceId
-      );
-
-      if (result.success) {
-        setShowImportModal(false);
-        setNotification({
-          message: result.message || 'Agent imported successfully',
-          type: 'success'
-        });
-        void loadData(); // Reload agents list
-        setTimeout(() => setNotification(null), 5000);
-        
-        // Reset AI service selection state
-        setRequiresAIServiceSelection(false);
-        setSelectedAIServiceId(undefined);
-      }
-
-      return result;
-    } catch (err: any) {
-      return {
-        success: false,
-        message: err?.message || 'Import failed',
-      };
-    }
+  const handleImportComplete = () => {
+    setShowImportModal(false);
+    setNotification({
+      message: 'Agent imported successfully',
+      type: 'success',
+    });
+    void loadData();
+    setTimeout(() => setNotification(null), 5000);
   };
 
   const formatDate = (dateString: string) => {
@@ -649,42 +593,13 @@ function AgentsPage() {
         </div>
       )}
 
-      {/* Import Modal */}
+      {/* Import Stepper */}
       {showImportModal && (
-        <ImportModal
+        <AgentImportStepper
+          appId={parseInt(appId!)}
           isOpen={showImportModal}
-          onClose={() => {
-            setShowImportModal(false);
-            setRequiresAIServiceSelection(false);
-            setSelectedAIServiceId(undefined);
-          }}
-          onImport={handleImport}
-          componentType="agent"
-          componentLabel="Agent"
-          additionalContent={
-            requiresAIServiceSelection && availableAIServices.length > 0 ? (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select AI Service (Required)
-                </label>
-                <select
-                  value={selectedAIServiceId || ''}
-                  onChange={(e) => setSelectedAIServiceId(Number(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                >
-                  <option value="">-- Select AI Service --</option>
-                  {availableAIServices.map((svc) => (
-                    <option key={svc.id} value={svc.id}>
-                      {svc.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  This agent requires an AI service that is not bundled in the export file.
-                </p>
-              </div>
-            ) : null
-          }
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={handleImportComplete}
         />
       )}
     </div>
