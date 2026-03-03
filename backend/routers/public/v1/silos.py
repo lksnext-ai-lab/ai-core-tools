@@ -237,14 +237,19 @@ async def delete_silo(
 async def count_docs_in_silo(
     app_id: int,
     silo_id: int,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Count documents in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
-    # TODO: Implement silo document counting
-    return CountResponseSchema(count=0)
+
+    try:
+        count = SiloService.count_docs_in_silo(silo_id, db)
+        return CountResponseSchema(count=count)
+    except Exception as e:
+        logger.error(f"Error counting documents in silo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error counting documents in silo: {str(e)}")
 
 @silos_router.post("/silos/{silo_id}/docs/index",
                    summary="Index content",
@@ -281,14 +286,19 @@ async def index_multiple_documents(
     app_id: int,
     silo_id: int,
     request: MultipleDocumentIndexSchema,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Index multiple documents in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
-    # TODO: Implement multiple document indexing
-    return MessageResponseSchema(message="Documents indexed successfully")
+
+    try:
+        SiloService.index_multiple_content(silo_id, request.documents, db)
+        return MessageResponseSchema(message="Documents indexed successfully")
+    except Exception as e:
+        logger.error(f"Error indexing multiple documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error indexing multiple documents: {str(e)}")
 
 @silos_router.delete("/silos/{silo_id}/docs/delete",
                      summary="Delete docs in collection",
@@ -360,14 +370,19 @@ async def delete_docs_by_metadata(
 async def delete_all_docs_in_collection(
     app_id: int,
     silo_id: int,
-    api_key: str = Depends(get_api_key_auth)
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
 ):
     """Delete all documents in a silo collection."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
-    # TODO: Implement all document deletion
-    return MessageResponseSchema(message="All documents deleted successfully")
+
+    try:
+        SiloService.delete_all_docs_in_collection(silo_id, db)
+        return MessageResponseSchema(message="All documents deleted successfully")
+    except Exception as e:
+        logger.error(f"Error deleting all documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting all documents: {str(e)}")
 
 @silos_router.post("/silos/{silo_id}/docs/find",
                    summary="Find docs in collection",
