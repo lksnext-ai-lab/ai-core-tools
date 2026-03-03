@@ -26,7 +26,17 @@ def _content_blocks_to_str(blocks: list) -> str:
             block_id = block.get("id", "")
             text_parts.append(f"[IMAGE:{block_id}]" if block_id else "[Imagen generada]")
         elif block_type == "image_url":
-            text_parts.append("[Imagen adjunta]")
+            # For Gemini-generated images the URL is a data URI; derive a stable
+            # ID from a content hash so _resolve_image_placeholders can match
+            # the registered file (saved as generated_image_{hash}.png).
+            url = (block.get("image_url") or {}).get("url", "")
+            if url.startswith("data:image/") and ";base64," in url:
+                import hashlib as _hl
+                import base64 as _b64
+                b64_data = url.split(";base64,", 1)[1]
+                img_hash = _hl.sha256(_b64.b64decode(b64_data)).hexdigest()[:16]
+                text_parts.append(f"[IMAGE:{img_hash}]")
+            # External-URL images are not resolved; skip silently.
     return " ".join(text_parts) if text_parts else ""
 
 class CheckpointerCacheService:

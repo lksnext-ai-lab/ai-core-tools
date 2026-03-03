@@ -884,6 +884,8 @@ class AgentExecutionService:
         - text blocks           → concatenated as-is
         - image_generation_call → base64 result decoded and saved to working_dir;
                                    sync_output_files will register the file afterwards
+        - image_url (data URI)  → Gemini native image generation; decoded and saved to
+                                   working_dir the same way as image_generation_call
         - anything else         → silently ignored (tool call artefacts, etc.)
         """
         text_parts = []
@@ -901,6 +903,19 @@ class AgentExecutionService:
                 block_id = block.get("id", "")
                 label = self._save_generated_image(b64_data, working_dir, block_id) if b64_data and working_dir else "[Image generated]"
                 text_parts.append(label)
+            elif block_type == "image_url":
+                # Gemini native image generation returns inline images as data URIs:
+                # {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+                url = (block.get("image_url") or {}).get("url", "")
+                if url.startswith("data:image/") and ";base64," in url:
+                    import hashlib as _hl
+                    import base64 as _b64
+                    b64_data = url.split(";base64,", 1)[1]
+                    # Use a content hash as stable block_id so history reload can
+                    # recompute the same ID and resolve the file via _resolve_image_placeholders
+                    img_hash = _hl.sha256(_b64.b64decode(b64_data)).hexdigest()[:16]
+                    label = self._save_generated_image(b64_data, working_dir, block_id=img_hash) if working_dir else "[Image generated]"
+                    text_parts.append(label)
 
         return " ".join(text_parts) if text_parts else str(blocks)
 
