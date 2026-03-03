@@ -1567,6 +1567,18 @@ class ApiService {
         String(options.selectedAIServiceId)
       );
     }
+    if (options.importBundledSilo === false) {
+      params.append('import_bundled_silo', 'false');
+    }
+    if (options.importBundledOutputParser === false) {
+      params.append('import_bundled_output_parser', 'false');
+    }
+    if (options.importBundledMCPConfigs === false) {
+      params.append('import_bundled_mcp_configs', 'false');
+    }
+    if (options.importBundledAgentTools === false) {
+      params.append('import_bundled_agent_tools', 'false');
+    }
 
     const url = `${this.baseURL}/internal/apps/${appId}/agents/import?${params}`;
     const response = await fetch(url, {

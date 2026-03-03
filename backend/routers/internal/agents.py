@@ -94,6 +94,10 @@ async def import_agent(
     selected_ai_service_id: Optional[int] = Query(None),
     selected_silo_id: Optional[int] = Query(None),
     selected_output_parser_id: Optional[int] = Query(None),
+    import_bundled_silo: bool = Query(True),
+    import_bundled_output_parser: bool = Query(True),
+    import_bundled_mcp_configs: bool = Query(True),
+    import_bundled_agent_tools: bool = Query(True),
     auth_context: AuthContext = Depends(get_current_user_oauth),
     role: AppRole = Depends(require_min_role("administrator")),
     db: Session = Depends(get_db)
@@ -133,7 +137,11 @@ async def import_agent(
             new_name,
             selected_ai_service_id,
             selected_silo_id,
-            selected_output_parser_id
+            selected_output_parser_id,
+            import_bundled_silo=import_bundled_silo,
+            import_bundled_output_parser=import_bundled_output_parser,
+            import_bundled_mcp_configs=import_bundled_mcp_configs,
+            import_bundled_agent_tools=import_bundled_agent_tools,
         )
         
         return ImportResponseSchema(

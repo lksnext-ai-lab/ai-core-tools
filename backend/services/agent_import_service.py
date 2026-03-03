@@ -384,6 +384,10 @@ class AgentImportService:
         selected_silo_id: Optional[int] = None,
         selected_output_parser_id: Optional[int] = None,
         ai_service_id_map: Optional[dict] = None,
+        import_bundled_silo: bool = True,
+        import_bundled_output_parser: bool = True,
+        import_bundled_mcp_configs: bool = True,
+        import_bundled_agent_tools: bool = True,
     ) -> ImportSummarySchema:
         """Import Agent configuration.
 
@@ -522,7 +526,7 @@ class AgentImportService:
 
         # Step 2: Import or resolve Silo (OPTIONAL)
         silo_id = None
-        if export_data.silo:
+        if export_data.silo and import_bundled_silo:
             # Bundled silo - import it
             try:
                 # Use custom name: {original_name} {agent_name}
@@ -592,7 +596,7 @@ class AgentImportService:
 
         # Step 3: Import or resolve Output Parser (OPTIONAL)
         parser_id = None
-        if export_data.output_parser:
+        if export_data.output_parser and import_bundled_output_parser:
             # Bundled parser - import it
             try:
                 # Use custom name: {original_name} {agent_name}
@@ -654,7 +658,8 @@ class AgentImportService:
 
         # Step 4: Import bundled MCP configs
         imported_mcp_ids = {}
-        for mcp_config in export_data.mcp_configs:
+        _mcp_list = export_data.mcp_configs if import_bundled_mcp_configs else []
+        for mcp_config in _mcp_list:
             try:
                 mcp_file = MCPConfigExportFileSchema(
                     metadata=export_data.metadata,
@@ -684,7 +689,8 @@ class AgentImportService:
 
         # Step 5: Import bundled agent tools
         imported_tool_ids = {}
-        for tool_agent in export_data.agent_tools:
+        _tool_list = export_data.agent_tools if import_bundled_agent_tools else []
+        for tool_agent in _tool_list:
             try:
                 # Create a minimal export file for the tool agent
                 from schemas.export_schemas import (
