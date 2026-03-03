@@ -286,8 +286,11 @@ function ChatInterface({
     }
   };
 
-  const resolveFileUrl = (fileId: string): Promise<string> =>
-    apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId);
+  const resolveFileUrl = useCallback(
+    (fileId: string): Promise<string> =>
+      apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId),
+    [appId, agentId, currentConversationId],
+  );
 
   const handleDownloadFile = async (fileId: string) => {
     try {
