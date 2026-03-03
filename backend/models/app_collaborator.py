@@ -9,6 +9,7 @@ class CollaborationRole(enum.Enum):
     ADMINISTRATOR = "administrator"
     EDITOR = "editor"
     VIEWER = "viewer"
+    USER = "user"
 
 
 class CollaborationStatus(enum.Enum):

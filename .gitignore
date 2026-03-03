@@ -52,3 +52,5 @@ qdrant_storage/
 temp/
 .serena
 tmpclaude*
+plans/
+

@@ -10,6 +10,7 @@ from .apps_usage import router as apps_usage_router
 from .conversations import router as conversations_router
 from .auth import router as auth_router
 from .user import router as user_router
+from .marketplace import marketplace_router
 
 # Create the main internal router
 internal_router = APIRouter()
@@ -25,3 +26,4 @@ internal_router.include_router(apps_usage_router, prefix="/usage-stats")
 internal_router.include_router(conversations_router)
 internal_router.include_router(auth_router, prefix="/auth")
 internal_router.include_router(user_router)
+internal_router.include_router(marketplace_router)

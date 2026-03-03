@@ -65,7 +65,11 @@ def include_name(name, type_, parent_names):
     # Add the tables you want to ignore here
     ignored_tables = [
         'langchain_pg_collection',
-        'langchain_pg_embedding'
+        'langchain_pg_embedding',
+        'checkpoints',
+        'checkpoint_blobs',
+        'checkpoint_writes',
+        'checkpoint_migrations',
     ]
     return name not in ignored_tables
 

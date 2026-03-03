@@ -1,5 +1,16 @@
 // API Service - Think of this like your backend services!
 import { configService } from '../core/ConfigService';
+import type {
+  MarketplaceCatalogParams,
+  MarketplaceCatalogResponse,
+  MarketplaceAgentDetail,
+  MarketplaceConversation,
+  MarketplaceProfile,
+  MarketplaceProfileUpdate,
+  MarketplaceVisibility,
+  AgentRatingResponse,
+  UserRatingResponse,
+} from '../types/marketplace';
 
 class ApiService {
   private get baseURL(): string {
@@ -1230,6 +1241,13 @@ class ApiService {
     });
   }
 
+  async getFileDownloadUrl(appId: number, agentId: number, fileId: string, conversationId?: number | null): Promise<string> {
+    const base = `/internal/apps/${appId}/agents/${agentId}/files/${fileId}/download`;
+    const url = conversationId ? `${base}?conversation_id=${conversationId}` : base;
+    const response = await this.request(url, { method: 'GET' });
+    return response.download_url as string;
+  }
+
   async processOCR(appId: number, agentId: number, file: File) {
     const formData = new FormData();
     formData.append('pdf_file', file);
@@ -1284,7 +1302,7 @@ class ApiService {
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1428,6 +1446,165 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'DELETE',
     });
+  }
+
+  // ==================== MARKETPLACE ====================
+
+  async getMarketplaceCatalog(
+    params: MarketplaceCatalogParams = {},
+  ): Promise<MarketplaceCatalogResponse> {
+    const queryParams = new URLSearchParams();
+    if (params.search) queryParams.set('search', params.search);
+    if (params.category) queryParams.set('category', params.category);
+    if (params.my_apps_only) queryParams.set('my_apps_only', 'true');
+    if (params.page) queryParams.set('page', String(params.page));
+    if (params.page_size) queryParams.set('page_size', String(params.page_size));
+    if (params.sort_by) queryParams.set('sort_by', params.sort_by);
+    const qs = queryParams.toString();
+    const endpoint = qs
+      ? '/internal/marketplace/agents?' + qs
+      : '/internal/marketplace/agents';
+    return this.request(endpoint);
+  }
+
+  async getMarketplaceAgentDetail(
+    agentId: number,
+  ): Promise<MarketplaceAgentDetail> {
+    return this.request(`/internal/marketplace/agents/${agentId}`);
+  }
+
+  async getMarketplaceCategories(): Promise<{ categories: string[] }> {
+    return this.request('/internal/marketplace/categories');
+  }
+
+  async rateMarketplaceAgent(
+    agentId: number,
+    rating: number,
+  ): Promise<AgentRatingResponse> {
+    return this.request(`/internal/marketplace/agents/${agentId}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ rating }),
+    });
+  }
+
+  async getMyMarketplaceRating(agentId: number): Promise<UserRatingResponse> {
+    return this.request(`/internal/marketplace/agents/${agentId}/my-rating`);
+  }
+
+  async createMarketplaceConversation(
+    agentId: number,
+    title?: string,
+  ): Promise<any> {
+    const titleParam = title
+      ? `?title=${encodeURIComponent(title)}`
+      : '';
+    return this.request(
+      `/internal/marketplace/agents/${agentId}/conversations${titleParam}`,
+      { method: 'POST' },
+    );
+  }
+
+  async getMarketplaceConversations(
+    limit = 50,
+    offset = 0,
+  ): Promise<{ conversations: MarketplaceConversation[]; total: number }> {
+    return this.request(
+      `/internal/marketplace/conversations?limit=${limit}&offset=${offset}`,
+    );
+  }
+
+  async getMarketplaceConversationHistory(
+    conversationId: number,
+  ): Promise<any> {
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}`,
+    );
+  }
+
+  async sendMarketplaceMessage(
+    conversationId: number,
+    message: string,
+    fileReferences?: string[],
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('message', message);
+    if (fileReferences && fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(fileReferences));
+    }
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/chat`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+  }
+
+  async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/upload-file`,
+      { method: 'POST', body: formData },
+    );
+  }
+
+  async listMarketplaceFiles(conversationId: number): Promise<any> {
+    return this.request(`/internal/marketplace/conversations/${conversationId}/files`);
+  }
+
+  async removeMarketplaceFile(conversationId: number, fileId: string): Promise<any> {
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/files/${fileId}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  async getMarketplaceFileDownloadUrl(conversationId: number, fileId: string): Promise<string> {
+    const response = await this.request(
+      `/internal/marketplace/conversations/${conversationId}/files/${fileId}/download`,
+      { method: 'GET' },
+    );
+    return response.download_url as string;
+  }
+
+  // Agent marketplace management (EDITOR+)
+
+  async getAgentMarketplaceProfile(
+    appId: number,
+    agentId: number,
+  ): Promise<MarketplaceProfile> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-profile`,
+    );
+  }
+
+  async updateAgentMarketplaceProfile(
+    appId: number,
+    agentId: number,
+    data: MarketplaceProfileUpdate,
+  ): Promise<MarketplaceProfile> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-profile`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async updateAgentMarketplaceVisibility(
+    appId: number,
+    agentId: number,
+    visibility: MarketplaceVisibility,
+  ): Promise<{ marketplace_visibility: string }> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-visibility`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ marketplace_visibility: visibility }),
+      },
+    );
   }
 
   // ==================== FULL APP EXPORT/IMPORT ====================

@@ -1,30 +1,29 @@
-from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
-from langgraph.prebuilt import create_react_agent
+from langchain.messages import HumanMessage, SystemMessage, AnyMessage
+from langchain.agents import create_agent as create_langchain_agent, AgentState
+from langchain.agents.middleware import SummarizationMiddleware
 from models.agent import Agent
 from models.silo import Silo, SiloType
-from langchain_core.tools import BaseTool, tool
+from langchain.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.dateTimeTools import get_current_date
 from tools.ai.fileTools import fetch_file_in_base64
+from tools.ai.workspaceTools import create_download_url_tool
 from typing import Any, Optional, Dict, List
 from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt.chat_agent_executor import AgentState
 from services.agent_cache_service import CheckpointerCacheService
-from services.memory_management_service import MemoryManagementService
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
-from langchain.callbacks.tracers import LangChainTracer
-from langsmith import Client
-from langsmith.run_helpers import traceable
+import langsmith as ls
 import json
 import asyncio
+import os
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.python_sandbox_tools import create_python_repl_tool
 
 logger = get_logger(__name__)
 
@@ -97,7 +96,7 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None):
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
@@ -110,8 +109,8 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     if llm is None:
         raise ValueError("No LLM found for agent")
     
-    # Setup tracer for LangSmith if configured
-    tracer = setup_tracer(agent)
+    # Get LangSmith configuration for per-app tracing
+    langsmith_config = get_langsmith_config(agent)
     
     output_parser = get_output_parser(agent)
     format_instructions = ""
@@ -128,78 +127,111 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
-    checkpointer_cm = None
     if agent.has_memory:
         # Use the session_id if provided, otherwise use "default"
         cache_session_id = session_id if session_id else "default"
         # Create the async PostgreSQL checkpointer in the current event loop
         # This ensures the checkpointer uses the same event loop as ainvoke()
-        checkpointer, checkpointer_cm = await CheckpointerCacheService.get_async_checkpointer()
+        checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
-    def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-        """
-        Prepare messages for the agent, applying hybrid memory management strategy.
-        
-        When has_memory=True, automatically applies:
-        1. Remove tool messages (reduce noise)
-        2. Trim to max_messages
-        3. Enforce max_tokens limit if specified
-        """
-        # Get conversation history
-        history = state.get("messages", [])
-        
-        # Apply hybrid memory management if agent has memory enabled
-        if agent.has_memory:
-            try:
-                history = MemoryManagementService.apply_hybrid_strategy(
-                    messages=history,
-                    max_messages=agent.memory_max_messages or 20,
-                    max_tokens=agent.memory_max_tokens
-                )
-                
-                # Log memory statistics
-                stats = MemoryManagementService.get_memory_stats(history)
-                logger.info(f"Memory stats for agent {agent.agent_id}: {stats}")
-                
-            except Exception as e:
-                logger.error(f"Error applying memory management: {e}. Using unmodified history.")
-        
-        # Build final message list
-        messages = []
+    # Build system prompt with optional skills section and format instructions
+    # In LangChain v1, system_prompt is a static string passed to create_agent
+    system_prompt_content = agent.system_prompt
+    if hasattr(agent, 'skill_associations') and agent.skill_associations:
+        skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+        if skills_section:
+            system_prompt_content = system_prompt_content + "\n" + skills_section
 
-        # Build system prompt with optional skills section
-        system_prompt_content = agent.system_prompt
-        if hasattr(agent, 'skill_associations') and agent.skill_associations:
-            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
-            if skills_section:
-                system_prompt_content = system_prompt_content + "\n" + skills_section
+    if working_dir:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<workspace>\n"
+            + f"Working directory: {working_dir}\n"
+            + "User-uploaded files are in this directory — reference them by filename only.\n"
+            + "Use `download_url_to_workspace` to save any URL (generated image, PDF, report…) "
+            + "to this directory so the user can download it from the files panel.\n"
+            + "</workspace>"
+        )
 
-        # Add system messages for every turn
-        messages.extend([
-            SystemMessage(content=system_prompt_content),
-            SystemMessage(content="<output_format_instructions>" + format_instructions + "</output_format_instructions>")
-        ])
-        
-        # Add processed conversation history
-        messages.extend(history)
-        
-        return messages
+    if agent.enable_code_interpreter and working_dir:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<code_interpreter>\n"
+            + "You have access to a `python_repl` tool that executes Python code.\n"
+            + "Reference uploaded files by filename only (e.g. 'report.xlsx').\n"
+            + "Save output files to the working directory and print the filename so the user can download it.\n"
+            + "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n"
+            + "</code_interpreter>"
+        )
+
+    if format_instructions:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n<output_format_instructions>"
+            + format_instructions
+            + "</output_format_instructions>"
+        )
+
+    middleware = []
+    if agent.has_memory:
+        max_tokens = agent.memory_max_tokens or 4000
+        max_messages = agent.memory_max_messages or 20
+        trim_tokens = agent.memory_summarize_threshold or 4000
+        summarization = SummarizationMiddleware(
+            model=llm,
+            trigger=("tokens", max_tokens),
+            keep=("messages", max_messages),
+            trim_tokens_to_summarize=trim_tokens,
+        )
+        middleware.append(summarization)
+        logger.info(
+            f"SummarizationMiddleware configured for agent {agent.agent_id}: "
+            f"trigger=('tokens', {max_tokens}), keep=('messages', {max_messages}), "
+            f"trim_tokens_to_summarize={trim_tokens}"
+        )
 
     tools = []
+
+    # Provider-side tools — injected from agent.server_tools using provider-specific formats
+    _SERVER_TOOL_FORMATS = {
+        "OpenAI":     {"web_search": {"type": "web_search"}, "image_generation": {"type": "image_generation"}, "code_interpreter": {"type": "code_interpreter"}, "file_search": {"type": "file_search"}},
+        "Azure":      {"web_search": {"type": "web_search"}, "image_generation": {"type": "image_generation"}, "code_interpreter": {"type": "code_interpreter"}, "file_search": {"type": "file_search"}},
+        "Anthropic":  {"web_search": {"type": "web_search_20250305"}, "code_interpreter": {"type": "codeExecution_20250825"}},
+        "Google":     {"web_search": {"type": "google_search"}, "code_interpreter": {"type": "code_execution"}},
+        "MistralAI":  {},
+        "Custom":     {},
+    }
+    provider_name = agent.ai_service.provider if agent.ai_service else None
+    provider_map = _SERVER_TOOL_FORMATS.get(provider_name, {})
+    for tool_name in (getattr(agent, 'server_tools', None) or []):
+        tool_def = provider_map.get(tool_name)
+        if tool_def:
+            tools.append(tool_def)
+            logger.info("Server-side tool '%s' injected for provider %s", tool_name, provider_name)
+        else:
+            logger.warning("Server-side tool '%s' not supported by provider %s — skipped", tool_name, provider_name)
+
     for tool in agent.tool_associations:
         sub_agent = tool.tool
         tools.append(IACTTool(sub_agent))
 
-    #add base useful tools
+    # Base tools — always available for every agent
     tools.append(get_current_date)
-    #tools.append(fetch_file_in_base64)
+    if working_dir:
+        tools.append(create_download_url_tool(working_dir))
 
     if agent.silo_id is not None:
-        
+
         retriever_tool = get_retriever_tool(agent.silo, search_params)
         if retriever_tool is not None:
             tools.append(retriever_tool)
+
+    if agent.enable_code_interpreter and working_dir:
+        os.makedirs(working_dir, exist_ok=True)
+        python_tool = create_python_repl_tool(working_dir=working_dir)
+        tools.append(python_tool)
+        logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
 
     mcp_client = None
     try:
@@ -223,36 +255,37 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")
 
     if pydantic_model:
-        # Si tenemos un modelo Pydantic, lo usamos como formato de respuesta
-        structured_prompt = f"Given the conversation, generate a response following this format: {format_instructions}"
-        agent_chain = create_react_agent(
+        # In LangChain v1, response_format accepts the pydantic model directly.
+        # It defaults to ProviderStrategy (native structured output) if supported,
+        # falling back to ToolStrategy (artificial tool calling) otherwise.
+        agent_chain = create_langchain_agent(
             model=llm,
-            prompt=prompt,
-            response_format=(structured_prompt, pydantic_model),
-            tools=tools, 
+            system_prompt=system_prompt_content,
+            response_format=pydantic_model,
+            tools=tools,
             checkpointer=checkpointer,
-            debug=True  
+            middleware=middleware if middleware else None,
         )
     else:
-        # Si no hay modelo Pydantic, usamos el agente sin formato estructurado
-        agent_chain = create_react_agent(
+        agent_chain = create_langchain_agent(
             model=llm,
-            prompt=prompt,
-            tools=tools, 
-            checkpointer=checkpointer,  
-            debug=True
+            system_prompt=system_prompt_content,
+            tools=tools,
+            checkpointer=checkpointer,
+            middleware=middleware if middleware else None,
         )
 
     # Add logging for the created agent
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
-    logger.info(f"Tracer configured: {tracer is not None}")
+    logger.info(f"LangSmith configured: {langsmith_config is not None}")
+    
 
-    return agent_chain, tracer, mcp_client, checkpointer_cm
+    return agent_chain, langsmith_config, mcp_client
 
 
-def prepare_agent_config(agent, tracer):
+def prepare_agent_config(agent):
     """Helper function to prepare agent configuration."""
     config = {
         "configurable": {
@@ -260,17 +293,23 @@ def prepare_agent_config(agent, tracer):
         },
         "recursion_limit": 200,
     }
-    if tracer is not None:
-        config["callbacks"] = [tracer]
     return config
 
 
 def parse_agent_response(response_text, agent):
-    """Helper function to parse agent response."""
+    """Helper function to parse agent response.
+    
+    In LangChain v1, structured output is returned in the 'structured_response' key
+    of the agent result when response_format is used with create_agent.
+    """
     if agent.output_parser_id is not None:
-        # If response is already a dict (from JsonOutputParser), return it directly
+        # If response is already a dict (from structured output), return it directly
         if isinstance(response_text, dict):
             return response_text
+        
+        # If response is a Pydantic model instance, convert to dict
+        if hasattr(response_text, 'model_dump'):
+            return response_text.model_dump()
         
         # If response is a string, try to parse it as JSON
         content = response_text.strip()
@@ -287,13 +326,51 @@ def parse_agent_response(response_text, agent):
     return response_text
 
 
-def setup_tracer(agent):
-    """Setup tracer if configured."""
-    tracer = None
+def get_langsmith_config(agent):
+    """Get LangSmith configuration for per-app tracing.
+    
+    Returns a dict with client and project_name if the app has a valid LangSmith
+    API key configured, or None otherwise.
+    """
     if agent.app.langsmith_api_key:
-        client = Client(api_key=agent.app.langsmith_api_key)
-        tracer = LangChainTracer(client=client, project_name=agent.app.name)
-    return tracer
+        try:
+            client = ls.Client(
+                api_key=agent.app.langsmith_api_key,
+                api_url="https://api.smith.langchain.com",
+            )
+            try:
+                client._get_settings()
+                logger.info(
+                    f"LangSmith API key validated for app '{agent.app.name}' "
+                    f"(project: '{agent.app.name}')"
+                )
+            except Exception as validation_err:
+                error_msg = str(validation_err)
+                if "403" in error_msg or "Forbidden" in error_msg:
+                    logger.error(
+                        f"LangSmith API key is INVALID or EXPIRED for app '{agent.app.name}'. "
+                        f"Traces will NOT be sent. "
+                        f"Generate a new key at https://smith.langchain.com/settings"
+                    )
+                else:
+                    logger.error(
+                        f"LangSmith API key validation FAILED for app '{agent.app.name}': "
+                        f"{type(validation_err).__name__}: {validation_err}. "
+                        f"Traces will NOT be sent."
+                    )
+                return None
+            
+            return {
+                "client": client,
+                "project_name": agent.app.name,
+            }
+        except Exception as e:
+            logger.error(
+                f"Failed to create LangSmith client for app '{agent.app.name}': "
+                f"{type(e).__name__}: {e}"
+            )
+            return None
+    return None
 
 
 class IACTTool(BaseTool):
@@ -329,49 +406,18 @@ class IACTTool(BaseTool):
             if retriever_tool is not None:
                 tools.append(retriever_tool)
         
-        # Create a prompt function that properly injects the system_prompt
-        def agent_tool_prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-            """Prepare messages for the agent tool, ensuring system prompt is included."""
-            history = state.get("messages", [])
-            
-            # Apply hybrid memory management if agent has memory enabled
-            if agent.has_memory:
-                try:
-                    history = MemoryManagementService.apply_hybrid_strategy(
-                        messages=history,
-                        max_messages=agent.memory_max_messages or 20,
-                        max_tokens=agent.memory_max_tokens
-                    )
-                    
-                    # Log memory statistics
-                    stats = MemoryManagementService.get_memory_stats(history)
-                    logger.info(f"Memory stats for agent tool {agent.agent_id} ({self.name}): {stats}")
-                    
-                except Exception as e:
-                    logger.error(f"Error applying memory management for agent tool {self.name}: {e}. Using unmodified history.")
-            
-            # Build final message list
-            messages = []
+        # Build system prompt with optional skills section (LangChain v1 pattern)
+        tool_system_prompt = agent.system_prompt or ""
+        if agent.system_prompt and hasattr(agent, 'skill_associations') and agent.skill_associations:
+            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+            if skills_section:
+                tool_system_prompt = tool_system_prompt + "\n" + skills_section
 
-            # Add system prompt if available, with optional skills section
-            if agent.system_prompt:
-                system_prompt_content = agent.system_prompt
-                if hasattr(agent, 'skill_associations') and agent.skill_associations:
-                    skills_section = generate_skills_system_prompt_section(agent.skill_associations)
-                    if skills_section:
-                        system_prompt_content = system_prompt_content + "\n" + skills_section
-                messages.append(SystemMessage(content=system_prompt_content))
-
-            # Add conversation history
-            messages.extend(history)
-
-            return messages
-
-        self.react_agent = create_react_agent(
-            model=self.llm, 
-            tools=tools, 
-            prompt=agent_tool_prompt,
-            debug=False
+        # Create sub-agent
+        self.react_agent = create_langchain_agent(
+            model=self.llm,
+            tools=tools,
+            system_prompt=tool_system_prompt if tool_system_prompt else None,
         )
 
     def _run(self, query: str, *args, **kwargs) -> str:

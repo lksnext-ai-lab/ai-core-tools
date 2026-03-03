@@ -82,16 +82,24 @@ async def lifespan(app: FastAPI):
                 "EntraID provider NOT initialized (development/testing only)"
             )
         
+        # Initialize checkpointer connection pool for LangGraph agent memory
+        from services.agent_cache_service import CheckpointerCacheService
+        await CheckpointerCacheService.initialize_pool()
+
         print("✅ Application startup complete")
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
         print(f"❌ Error during startup: {e}")
         raise
-    
+
     yield
-    
+
     # Shutdown
     try:
+        # Close checkpointer connection pool
+        from services.agent_cache_service import CheckpointerCacheService
+        await CheckpointerCacheService.close_pool()
+
         # Only shutdown provider if it was initialized (OIDC mode)
         if AuthConfig.LOGIN_MODE == "OIDC":
             await shutdown_provider()
@@ -120,31 +128,33 @@ tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
 os.makedirs(tmp_base_folder, exist_ok=True)
 
 @app.get("/static/{file_path:path}")
-async def get_static_file(file_path: str, user: str = None, sig: str = None):
+async def get_static_file(file_path: str, user: str = None, sig: str = None, filename: str = None):
     # Verify signature
     if not user or not sig or not verify_signature(file_path, user, sig):
         raise HTTPException(status_code=403, detail="Invalid signature or missing parameters")
-    
+
     # Prevent directory traversal - check for .. sequences
     if ".." in file_path:
         raise HTTPException(status_code=403, detail="Invalid path")
-    
+
     # Strip leading slashes to prevent absolute path injection
     # os.path.join("data/tmp", "/etc/passwd") would return "/etc/passwd" otherwise
     file_path = file_path.lstrip("/\\")
-    
+
     # Build full path and resolve to absolute
     full_path = os.path.abspath(os.path.join(tmp_base_folder, file_path))
     base_path = os.path.abspath(tmp_base_folder)
-    
+
     # Verify the resolved path is within the allowed directory
     if not full_path.startswith(base_path + os.sep) and full_path != base_path:
         raise HTTPException(status_code=403, detail="Invalid path")
 
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="File not found")
-        
-    return FileResponse(full_path)
+
+    # Use original filename for Content-Disposition if provided, else use path basename
+    download_filename = filename or os.path.basename(full_path)
+    return FileResponse(full_path, filename=download_filename)
 
 
 # ==================== CORS MIDDLEWARE ====================
@@ -198,35 +208,50 @@ async def get_client_config():
 
 # ==================== CUSTOM OPENAPI DOCS ====================
 
+_openapi_internal_schema = None
+_openapi_public_schema = None
+
 def get_openapi_internal():
-    """Generate OpenAPI schema for internal API only"""
+    """Generate OpenAPI schema for internal API only."""
+    global _openapi_internal_schema
     from fastapi.openapi.utils import get_openapi
     
-    if app.openapi_schema:
-        return app.openapi_schema
+    if _openapi_internal_schema:
+        return _openapi_internal_schema
     
-    openapi_schema = get_openapi(
+    internal_routes = [
+        route for route in app.routes
+        if hasattr(route, 'path') and route.path.startswith('/internal')
+    ]
+    
+    _openapi_internal_schema = get_openapi(
         title=os.getenv('INTERNAL_API_TITLE', 'IA Core Tools - Internal API'),
         version=os.getenv('INTERNAL_API_VERSION', '2.0.0'),
         description=os.getenv('INTERNAL_API_DESCRIPTION', 'Internal API for frontend-backend communication'),
-        routes=internal_router.routes,
+        routes=internal_routes,
     )
-    return openapi_schema
+    return _openapi_internal_schema
 
 def get_openapi_public():
-    """Generate OpenAPI schema for public API only"""
+    """Generate OpenAPI schema for public API only."""
+    global _openapi_public_schema
     from fastapi.openapi.utils import get_openapi
     
-    temp_app = FastAPI()
-    temp_app.include_router(public_v1_router, prefix="/public/v1")
+    if _openapi_public_schema:
+        return _openapi_public_schema
     
-    openapi_schema = get_openapi(
+    public_routes = [
+        route for route in app.routes
+        if hasattr(route, 'path') and route.path.startswith('/public')
+    ]
+    
+    _openapi_public_schema = get_openapi(
         title=os.getenv('PUBLIC_API_TITLE', 'IA Core Tools - Public API'),
         version=os.getenv('PUBLIC_API_VERSION', '1.0.0'), 
         description=os.getenv('PUBLIC_API_DESCRIPTION', 'Public API for external applications'),
-        routes=temp_app.routes,
+        routes=public_routes,
     )
-    return openapi_schema
+    return _openapi_public_schema
 
 @app.get("/docs/internal", include_in_schema=False)
 async def internal_docs():
