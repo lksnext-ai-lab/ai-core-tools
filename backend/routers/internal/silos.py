@@ -14,7 +14,6 @@ from schemas.silo_schemas import (
 )
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import SiloExportFileSchema
-from models.silo import Silo
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -27,30 +26,6 @@ SILO_NOT_FOUND_MSG = "Silo not found"
 logger = get_logger(__name__)
 
 silos_router = APIRouter()
-
-
-def _validate_silo_app_ownership(silo_id: int, app_id: int, db: Session) -> Silo:
-    silo = SiloService.get_silo(silo_id, db)
-    if not silo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=SILO_NOT_FOUND_MSG
-        )
-
-    if silo.app_id != app_id:
-        logger.warning(
-            "Security event: silo access denied due to app ownership mismatch "
-            "(silo_id=%s, requested_app_id=%s, silo_app_id=%s)",
-            silo_id,
-            app_id,
-            silo.app_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Silo does not belong to this app"
-        )
-
-    return silo
 
 # ==================== SILO MANAGEMENT ====================
 
@@ -140,6 +115,9 @@ async def list_silos(
     """
     List all silos for a specific app.
     """
+    
+    # TODO: Add app access validation
+    
     try:
         result = SiloService.get_silos_list(app_id, db)
         return result
@@ -164,10 +142,9 @@ async def get_silo(
     """
     Get detailed information about a specific silo including form data for editing.
     """    
+    # TODO: Add app access validation
+    
     try:
-        if silo_id != 0:
-            _validate_silo_app_ownership(silo_id, app_id, db)
-
         result = SiloService.get_silo_detail(app_id, silo_id, db)
         if result is None and silo_id != 0:
             raise HTTPException(
@@ -199,10 +176,9 @@ async def create_or_update_silo(
     """
     Create a new silo or update an existing one.
     """    
+    # TODO: Add app access validation
+    
     try:
-        if silo_id != 0:
-            _validate_silo_app_ownership(silo_id, app_id, db)
-
         # Create or update using the service
         silo = SiloService.create_or_update_silo_router(app_id, silo_id, silo_data, db)
         
@@ -233,9 +209,9 @@ async def delete_silo(
     """
     Delete a silo and all its documents.
     """    
+    # TODO: Add app access validation
+    
     try:
-        _validate_silo_app_ownership(silo_id, app_id, db)
-
         success = SiloService.delete_silo_router(silo_id, db)
         if not success:
             raise HTTPException(
@@ -313,9 +289,10 @@ async def silo_playground(
     """
     Get silo playground interface for testing document search.
     """
+    
+    # TODO: Add app access validation
+    
     try:
-        _validate_silo_app_ownership(silo_id, app_id, db)
-
         result = SiloService.get_silo_playground_info(silo_id, db)
         if result is None:
             raise HTTPException(
@@ -350,9 +327,10 @@ async def search_silo_documents(
     logger.info(f"Search request received - app_id: {app_id}, silo_id: {silo_id}, user_id: {auth_context.identity.id}")
     logger.info(f"Search query: {search_query.query}, limit: {search_query.limit}, filter_metadata: {search_query.filter_metadata}")
         
+    # TODO: Add app access validation
+    
     try:
         logger.info(f"Getting silo {silo_id} for validation")
-        _validate_silo_app_ownership(silo_id, app_id, db)
         
         result = SiloService.search_silo_documents_router(
             silo_id, 
@@ -397,6 +375,8 @@ async def delete_silo_documents(
     Delete documents from a silo by their IDs.
     Example request body: {"document_ids": ["uuid-1", "uuid-2"]}
     """    
+    # TODO: Add app access validation
+    
     try:
         # Validate silo exists and belongs to app
         silo = SiloService.get_silo(silo_id, db)
