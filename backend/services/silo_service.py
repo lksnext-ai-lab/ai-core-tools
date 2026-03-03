@@ -902,6 +902,26 @@ class SiloService:
         logger.info(f"Documentos eliminados correctamente del silo {silo_id}")
 
     @staticmethod
+    def delete_all_docs_in_collection(silo_id: int, db: Session):
+        """
+        Delete all documents from a silo collection.
+        """
+        logger.info(f"Deleting all documents from silo {silo_id}")
+        
+        if not SiloService.check_silo_collection_exists(silo_id, db):
+            logger.warning(f"Collection for silo {silo_id} does not exist, nothing to delete")
+            return
+
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo:
+            logger.error(f"Silo {silo_id} not found")
+            return
+
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        _get_vector_store(silo).delete_collection(collection_name, silo.embedding_service)
+        logger.info(f"All documents deleted from silo {silo_id}")
+
+    @staticmethod
     def delete_docs_by_metadata(silo_id: int, filter_metadata: Dict[str, Any], db: Session) -> int:
         """
         Delete documents from a silo using metadata filters.

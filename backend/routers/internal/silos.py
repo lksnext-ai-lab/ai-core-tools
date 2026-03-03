@@ -8,6 +8,7 @@ import json
 from services.silo_service import SiloService
 from services.silo_export_service import SiloExportService
 from services.silo_import_service import SiloImportService
+from models.silo import Silo
 
 from schemas.silo_schemas import (
     SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema, SiloSearchSchema
@@ -26,6 +27,31 @@ SILO_NOT_FOUND_MSG = "Silo not found"
 logger = get_logger(__name__)
 
 silos_router = APIRouter()
+
+
+def _validate_silo_app_ownership(silo_id: int, app_id: int, db: Session) -> Silo:
+    """
+    Validate that a silo exists and belongs to the specified app.
+    
+    Returns the Silo object if validation passes.
+    Raises HTTPException(404) if silo not found.
+    Raises HTTPException(403) if silo belongs to a different app.
+    """
+    silo = SiloService.get_silo(silo_id, db)
+    if not silo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=SILO_NOT_FOUND_MSG
+        )
+    if silo.app_id != app_id:
+        logger.warning(
+            f"Access violation: silo {silo_id} (app {silo.app_id}) accessed from app {app_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Silo does not belong to this app"
+        )
+    return silo
 
 # ==================== SILO MANAGEMENT ====================
 
@@ -116,8 +142,6 @@ async def list_silos(
     List all silos for a specific app.
     """
     
-    # TODO: Add app access validation
-    
     try:
         result = SiloService.get_silos_list(app_id, db)
         return result
@@ -142,7 +166,7 @@ async def get_silo(
     """
     Get detailed information about a specific silo including form data for editing.
     """    
-    # TODO: Add app access validation
+    _validate_silo_app_ownership(silo_id, app_id, db)
     
     try:
         result = SiloService.get_silo_detail(app_id, silo_id, db)
@@ -176,7 +200,8 @@ async def create_or_update_silo(
     """
     Create a new silo or update an existing one.
     """    
-    # TODO: Add app access validation
+    if silo_id != 0:
+        _validate_silo_app_ownership(silo_id, app_id, db)
     
     try:
         # Create or update using the service
@@ -209,7 +234,7 @@ async def delete_silo(
     """
     Delete a silo and all its documents.
     """    
-    # TODO: Add app access validation
+    _validate_silo_app_ownership(silo_id, app_id, db)
     
     try:
         success = SiloService.delete_silo_router(silo_id, db)
@@ -290,7 +315,7 @@ async def silo_playground(
     Get silo playground interface for testing document search.
     """
     
-    # TODO: Add app access validation
+    _validate_silo_app_ownership(silo_id, app_id, db)
     
     try:
         result = SiloService.get_silo_playground_info(silo_id, db)
@@ -327,7 +352,7 @@ async def search_silo_documents(
     logger.info(f"Search request received - app_id: {app_id}, silo_id: {silo_id}, user_id: {auth_context.identity.id}")
     logger.info(f"Search query: {search_query.query}, limit: {search_query.limit}, filter_metadata: {search_query.filter_metadata}")
         
-    # TODO: Add app access validation
+    _validate_silo_app_ownership(silo_id, app_id, db)
     
     try:
         logger.info(f"Getting silo {silo_id} for validation")
@@ -375,22 +400,9 @@ async def delete_silo_documents(
     Delete documents from a silo by their IDs.
     Example request body: {"document_ids": ["uuid-1", "uuid-2"]}
     """    
-    # TODO: Add app access validation
-    
     try:
         # Validate silo exists and belongs to app
-        silo = SiloService.get_silo(silo_id, db)
-        if not silo:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=SILO_NOT_FOUND_MSG
-            )
-        
-        if silo.app_id != app_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Silo does not belong to this app"
-            )
+        _validate_silo_app_ownership(silo_id, app_id, db)
         
         # Delete documents using existing service method
         SiloService.delete_docs_in_collection(silo_id, document_ids, db)
