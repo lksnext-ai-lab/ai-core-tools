@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-02-20 (based on commit `6bea1f2`)
+> Last updated: 2026-03-03 (based on commit `91a003b`)
 
 ## Table of Contents
 
@@ -44,6 +44,7 @@
 - [Plugin Development](guides/plugin-development.md) — Building plugins for client projects
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
 - [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
+- [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
 
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph

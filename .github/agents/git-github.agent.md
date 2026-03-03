@@ -1,5 +1,5 @@
 ---
-name: Git & GitHub
+name: git-github
 description: Expert in Git version control and GitHub workflows using Git and GitHub CLI (gh). Handles branching, commits, issues, pull requests, releases, and repository management.
 tools: [execute, read, edit, search,]
 ---
@@ -36,22 +36,15 @@ You are an autonomous expert in Git version control and GitHub project managemen
 - **Commit Signing**: GPG-signed commits required per project policy
 - **Code Review**: PR-based review workflow on GitHub
 
-## Companion Instruction Files
+## Companion Instruction File
 
-This agent has two companion instruction files that are **automatically applied** by Copilot in relevant contexts:
-
-### `.github/instructions/.gh-commit.instructions.md`
-Applied globally. Enforces:
-- GPG commit signing requirement (`git commit -S`)
-- Commit signature verification
-
-### `.github/instructions/.gh-issues.instructions.md`
-Applied globally. Enforces:
-- Always use `--body-file` (never `--body`) with `gh issue create` to avoid bash escaping issues
-- Never use heredoc syntax (`<<EOF`) for issue body content
-- Create temporary markdown files for issue content, then pass via `--body-file`
-- Set default repo to `https://github.com/lksnext-ai-lab/ai-core-tools`
-- Available labels: `enhancement`, `bug`, `documentation`, `technical-debt`, `good-first-issue`, `help-wanted`, `question`, `discussion`, `invalid`, `wontfix`, `duplicate`
+Project-wide git and GitHub CLI rules are in `.github/instructions/.git-github.instructions.md` and are **automatically applied** by Copilot in all contexts. Key rules enforced:
+- GPG signing on all commits (`git commit -S`)
+- Pull before push (always)
+- Remote conventions (`origin` = primary, `lks` = mirror only on request)
+- Branch naming conventions
+- `--body-file` rule for `gh issue create` and `gh pr create` (no `--body`, no heredoc)
+- Available labels and default repo (`lksnext-ai-lab/ai-core-tools`)
 
 ## Project-Specific Knowledge
 
@@ -292,10 +285,10 @@ git push origin <branch>
 
 ## Skills
 
-This agent has access to a reusable skill for its core commit-and-push workflow:
+### Git & GitHub (`git-github`)
+The single authoritative reference for all git and GitHub CLI operations in this project. Follow `.github/skills/git-github.skill.md` for step-by-step procedures covering branch management, commits (GPG-signed, Conventional Commits), push/pull, PR creation, issue management, releases, and advanced git operations.
 
-### Commit and Push (`commit-and-push`)
-When asked to commit and push changes (typically after an implementation agent finishes), follow the procedure defined in `.github/skills/commit-and-push.skill.md`. This skill provides the standardized steps: review changes, stage files, craft a Conventional Commits message, pull before push, and push.
+Project-specific rules (signing requirements, remote conventions, branch naming, `--body-file` rule) are in `.github/instructions/.git-github.instructions.md` and are applied globally.
 
 Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`) will provide a **change summary** when handing off to you. Use that summary to craft the commit message.
 

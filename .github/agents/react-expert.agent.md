@@ -1,5 +1,5 @@
 ---
-name: React Expert
+name: react-expert
 description: Expert in React development, TypeScript, hooks, state management, performance optimization, and modern frontend patterns. Specializes in React 18+, Next.js, testing, and UI libraries.
 ---
 

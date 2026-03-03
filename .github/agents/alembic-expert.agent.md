@@ -1,5 +1,5 @@
 ---
-name: Alembic Expert
+name: alembic-expert
 description: Expert in Alembic database migrations, schema versioning, SQLAlchemy model evolution, and PostgreSQL schema management for the Mattin AI project.
 ---
 
