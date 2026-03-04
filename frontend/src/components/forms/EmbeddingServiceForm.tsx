@@ -23,7 +23,8 @@ const EMBEDDING_PROVIDERS: ProviderConfig[] = [
   { value: 'Azure', name: 'Azure OpenAI' },
   { value: 'Ollama', name: 'Ollama' },
   { value: 'MistralAI', name: 'Mistral' },
-  { value: 'Custom', name: 'Custom' }
+  { value: 'Custom', name: 'Custom' },
+  { value: 'Jina', name: 'Jina'}
 ];
 
 const getEmbeddingProviderDefaults = (provider: string): ProviderDefaults => {
@@ -47,6 +48,10 @@ const getEmbeddingProviderDefaults = (provider: string): ProviderDefaults => {
     'Custom': {
       baseUrl: '',
       modelPlaceholder: 'custom-embedding-model'
+    },
+    'Jina': {
+      baseUrl: 'https://api.jina.ai/v1',
+      modelPlaceholder: 'jina-embeddings-v3'
     }
   };
   return defaults[provider] || { baseUrl: '', modelPlaceholder: '' };

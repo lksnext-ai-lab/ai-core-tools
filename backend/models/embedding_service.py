@@ -9,6 +9,7 @@ class EmbeddingProvider(enum.Enum):
     Ollama = "Ollama"
     Custom = "Custom"
     Azure = "Azure"
+    Jina = "Jina"
 
 class EmbeddingService(BaseService):
     __tablename__ = 'embedding_service'

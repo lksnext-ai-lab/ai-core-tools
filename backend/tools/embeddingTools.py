@@ -2,6 +2,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 from langchain_mistralai import MistralAIEmbeddings
 from langchain_azure_ai.embeddings import AzureAIEmbeddingsModel
+from langchain_community.embeddings import JinaEmbeddings
 from huggingface_hub import InferenceClient
 from models.embedding_service import EmbeddingProvider
 import logging
@@ -67,6 +68,10 @@ def get_embeddings_model(embedding_service):
             credential=embedding_service.api_key,
             endpoint=embedding_service.endpoint
         )
-
+    elif embedding_service.provider == EmbeddingProvider.Jina.value:
+        return JinaEmbeddings(
+            jina_api_key=embedding_service.api_key,
+            model_name=embedding_service.description
+        )
     else:
         raise ValueError(f"Unsupported embedding provider: {embedding_service.provider}")
