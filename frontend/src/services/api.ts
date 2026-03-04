@@ -1,5 +1,16 @@
 // API Service - Think of this like your backend services!
 import { configService } from '../core/ConfigService';
+import type {
+  MarketplaceCatalogParams,
+  MarketplaceCatalogResponse,
+  MarketplaceAgentDetail,
+  MarketplaceConversation,
+  MarketplaceProfile,
+  MarketplaceProfileUpdate,
+  MarketplaceVisibility,
+  AgentRatingResponse,
+  UserRatingResponse,
+} from '../types/marketplace';
 
 class ApiService {
   private get baseURL(): string {
@@ -210,6 +221,91 @@ class ApiService {
     });
   }
 
+  async exportAgent(
+    appId: number,
+    agentId: number,
+    includeAIService: boolean = true,
+    includeSilo: boolean = true,
+    includeOutputParser: boolean = true,
+    includeMCPConfigs: boolean = true,
+    includeAgentTools: boolean = true
+  ): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams({
+      include_ai_service: String(includeAIService),
+      include_silo: String(includeSilo),
+      include_output_parser: String(includeOutputParser),
+      include_mcp_configs: String(includeMCPConfigs),
+      include_agent_tools: String(includeAgentTools),
+    });
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/export?${params}`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importAgent(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string,
+    selectedAIServiceId?: number,
+    selectedSiloId?: number,
+    selectedOutputParserId?: number
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/agents/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    if (selectedAIServiceId !== undefined) {
+      url += `&selected_ai_service_id=${selectedAIServiceId}`;
+    }
+    if (selectedSiloId !== undefined) {
+      url += `&selected_silo_id=${selectedSiloId}`;
+    }
+    if (selectedOutputParserId !== undefined) {
+      url += `&selected_output_parser_id=${selectedOutputParserId}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);
@@ -258,6 +354,63 @@ class ApiService {
     });
   }
 
+  async exportAIService(appId: number, serviceId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/ai-services/${serviceId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importAIService(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/ai-services/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== EMBEDDING SERVICES ====================
   async getEmbeddingServices(appId: number) {
     return this.request(`/internal/apps/${appId}/embedding-services/`);
@@ -285,6 +438,63 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
     });
+  }
+
+  async exportEmbeddingService(appId: number, serviceId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/embedding-services/${serviceId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importEmbeddingService(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/embedding-services/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   // ==================== MCP CONFIGS ====================
@@ -329,6 +539,62 @@ class ApiService {
     });
   }
 
+  async exportMCPConfig(appId: number, configId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/mcp-configs/${configId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importMCPConfig(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/mcp-configs/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+  
+    return response.json();
+}
   // ==================== SKILLS ====================
   async getSkills(appId: number) {
     return this.request(`/internal/apps/${appId}/skills/`);
@@ -464,6 +730,63 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
       method: 'DELETE',
     });
+  }
+
+  async exportOutputParser(appId: number, parserId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/output-parsers/${parserId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importOutputParser(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/output-parsers/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   // ==================== COLLABORATION ====================
@@ -649,6 +972,67 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'DELETE',
     });
+  }
+
+  async exportSilo(appId: number, siloId: number, includeDependencies: boolean = true): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/export?include_dependencies=${includeDependencies}`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importSilo(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string,
+    selectedEmbeddingServiceId?: number
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/silos/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    if (selectedEmbeddingServiceId !== undefined) {
+      url += `&selected_embedding_service_id=${selectedEmbeddingServiceId}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
@@ -857,6 +1241,13 @@ class ApiService {
     });
   }
 
+  async getFileDownloadUrl(appId: number, agentId: number, fileId: string, conversationId?: number | null): Promise<string> {
+    const base = `/internal/apps/${appId}/agents/${agentId}/files/${fileId}/download`;
+    const url = conversationId ? `${base}?conversation_id=${conversationId}` : base;
+    const response = await this.request(url, { method: 'GET' });
+    return response.download_url as string;
+  }
+
   async processOCR(appId: number, agentId: number, file: File) {
     const formData = new FormData();
     formData.append('pdf_file', file);
@@ -911,7 +1302,7 @@ class ApiService {
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1055,6 +1446,380 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'DELETE',
     });
+  }
+
+  // ==================== MARKETPLACE ====================
+
+  async getMarketplaceCatalog(
+    params: MarketplaceCatalogParams = {},
+  ): Promise<MarketplaceCatalogResponse> {
+    const queryParams = new URLSearchParams();
+    if (params.search) queryParams.set('search', params.search);
+    if (params.category) queryParams.set('category', params.category);
+    if (params.my_apps_only) queryParams.set('my_apps_only', 'true');
+    if (params.page) queryParams.set('page', String(params.page));
+    if (params.page_size) queryParams.set('page_size', String(params.page_size));
+    if (params.sort_by) queryParams.set('sort_by', params.sort_by);
+    const qs = queryParams.toString();
+    const endpoint = qs
+      ? '/internal/marketplace/agents?' + qs
+      : '/internal/marketplace/agents';
+    return this.request(endpoint);
+  }
+
+  async getMarketplaceAgentDetail(
+    agentId: number,
+  ): Promise<MarketplaceAgentDetail> {
+    return this.request(`/internal/marketplace/agents/${agentId}`);
+  }
+
+  async getMarketplaceCategories(): Promise<{ categories: string[] }> {
+    return this.request('/internal/marketplace/categories');
+  }
+
+  async rateMarketplaceAgent(
+    agentId: number,
+    rating: number,
+  ): Promise<AgentRatingResponse> {
+    return this.request(`/internal/marketplace/agents/${agentId}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ rating }),
+    });
+  }
+
+  async getMyMarketplaceRating(agentId: number): Promise<UserRatingResponse> {
+    return this.request(`/internal/marketplace/agents/${agentId}/my-rating`);
+  }
+
+  async createMarketplaceConversation(
+    agentId: number,
+    title?: string,
+  ): Promise<any> {
+    const titleParam = title
+      ? `?title=${encodeURIComponent(title)}`
+      : '';
+    return this.request(
+      `/internal/marketplace/agents/${agentId}/conversations${titleParam}`,
+      { method: 'POST' },
+    );
+  }
+
+  async getMarketplaceConversations(
+    limit = 50,
+    offset = 0,
+  ): Promise<{ conversations: MarketplaceConversation[]; total: number }> {
+    return this.request(
+      `/internal/marketplace/conversations?limit=${limit}&offset=${offset}`,
+    );
+  }
+
+  async getMarketplaceConversationHistory(
+    conversationId: number,
+  ): Promise<any> {
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}`,
+    );
+  }
+
+  async sendMarketplaceMessage(
+    conversationId: number,
+    message: string,
+    fileReferences?: string[],
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('message', message);
+    if (fileReferences && fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(fileReferences));
+    }
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/chat`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+  }
+
+  async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/upload-file`,
+      { method: 'POST', body: formData },
+    );
+  }
+
+  async listMarketplaceFiles(conversationId: number): Promise<any> {
+    return this.request(`/internal/marketplace/conversations/${conversationId}/files`);
+  }
+
+  async removeMarketplaceFile(conversationId: number, fileId: string): Promise<any> {
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/files/${fileId}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  async getMarketplaceFileDownloadUrl(conversationId: number, fileId: string): Promise<string> {
+    const response = await this.request(
+      `/internal/marketplace/conversations/${conversationId}/files/${fileId}/download`,
+      { method: 'GET' },
+    );
+    return response.download_url as string;
+  }
+
+  // Agent marketplace management (EDITOR+)
+
+  async getAgentMarketplaceProfile(
+    appId: number,
+    agentId: number,
+  ): Promise<MarketplaceProfile> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-profile`,
+    );
+  }
+
+  async updateAgentMarketplaceProfile(
+    appId: number,
+    agentId: number,
+    data: MarketplaceProfileUpdate,
+  ): Promise<MarketplaceProfile> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-profile`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async updateAgentMarketplaceVisibility(
+    appId: number,
+    agentId: number,
+    visibility: MarketplaceVisibility,
+  ): Promise<{ marketplace_visibility: string }> {
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/marketplace-visibility`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ marketplace_visibility: visibility }),
+      },
+    );
+  }
+
+  // ==================== FULL APP EXPORT/IMPORT ====================
+  async exportFullApp(appId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/export`, {
+      method: 'POST',
+      headers: this.prepareHeaders({}),
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importFullApp(
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Build query params
+    const params = new URLSearchParams();
+    params.append('conflict_mode', conflictMode);
+    
+    if (newName) {
+      params.append('new_name', newName);
+    }
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Use fetch directly to avoid issues with FormData
+    const url = `${this.baseURL}/internal/apps/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  // ==================== IMPORT PREVIEW API ====================
+
+  async previewAgentImport(appId: number, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/preview-import`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async previewAppImport(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}/internal/apps/preview-import`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importAgentWithOptions(
+    appId: number,
+    file: File,
+    options: {
+      conflictMode: string;
+      newName?: string;
+      selectedAIServiceId?: number;
+      importBundledSilo?: boolean;
+      importBundledOutputParser?: boolean;
+      importBundledMCPConfigs?: boolean;
+      importBundledAgentTools?: boolean;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams();
+    params.append('conflict_mode', options.conflictMode);
+    if (options.newName) {
+      params.append(
+        'new_name',
+        options.newName
+      );
+    }
+    if (options.selectedAIServiceId !== undefined) {
+      params.append(
+        'selected_ai_service_id',
+        String(options.selectedAIServiceId)
+      );
+    }
+    if (options.importBundledSilo === false) {
+      params.append('import_bundled_silo', 'false');
+    }
+    if (options.importBundledOutputParser === false) {
+      params.append('import_bundled_output_parser', 'false');
+    }
+    if (options.importBundledMCPConfigs === false) {
+      params.append('import_bundled_mcp_configs', 'false');
+    }
+    if (options.importBundledAgentTools === false) {
+      params.append('import_bundled_agent_tools', 'false');
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importAppWithOptions(
+    file: File,
+    options: {
+      conflictMode: string;
+      newAppName?: string;
+      componentSelection?: Record<string, string[]>;
+      apiKeys?: Record<string, string>;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const params = new URLSearchParams();
+    params.append('conflict_mode', options.conflictMode);
+    if (options.newAppName) {
+      params.append('new_name', options.newAppName);
+    }
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (options.componentSelection) {
+      formData.append(
+        'component_selection_json',
+        JSON.stringify(options.componentSelection),
+      );
+    }
+    if (options.apiKeys && Object.keys(options.apiKeys).length > 0) {
+      formData.append(
+        'api_keys_json',
+        JSON.stringify(options.apiKeys),
+      );
+    }
+
+    const url = `${this.baseURL}/internal/apps/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   // ==================== UTILITY METHODS ====================

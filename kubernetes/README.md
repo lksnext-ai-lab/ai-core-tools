@@ -37,14 +37,14 @@ kubernetes/
 - `FRONTEND_URL`: URL del frontend para CORS y redirects
 - `DATABASE_*`: Configuración de la base de datos
 - `AICT_MODE`: Modo de la aplicación (SELF-HOSTED)
-- `LANGCHAIN_*`: Configuración de LangChain
+- `LANGSMITH_*`: Configuración de LangSmith
 
 ### Secrets (secrets.yaml)
 - `OPENAI_API_KEY`: Clave de OpenAI
 - `ANTHROPIC_API_KEY`: Clave de Anthropic
 - `GOOGLE_CLIENT_*`: Credenciales OAuth de Google
 - `SECRET_KEY`: Clave secreta para JWT
-- `LANGCHAIN_API_KEY`: Clave de LangSmith
+- `LANGSMITH_API_KEY`: Clave de LangSmith
 
 ## Despliegue
 

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Tuple
+from fastapi import APIRouter, Depends, Form, HTTPException, status, UploadFile, File, Query
+from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
+import json
+from pydantic import ValidationError
 
 # Import database
 from db.database import get_db
@@ -16,6 +18,14 @@ from schemas.apps_schemas import (
     AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema, AppUsageStatsSchema
 )
 from schemas.common_schemas import MessageResponseSchema
+from schemas.export_schemas import AppExportFileSchema
+from schemas.import_schemas import (
+    ConflictMode,
+    ImportTargetMode,
+    ComponentSelectionSchema,
+    FullAppImportResponseSchema,
+    AppImportPreviewSchema,
+)
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -47,6 +57,191 @@ DEFAULT_MAX_FILE_SIZE_MB = 0
 
 # Error messages
 APP_NOT_FOUND_MSG = "App not found"
+
+# ==================== STATIC ROUTES (must come before dynamic routes) ====================
+
+@apps_router.post(
+    "/preview-import",
+    response_model=AppImportPreviewSchema,
+    summary="Preview app import",
+    tags=["Apps", "Export/Import"],
+)
+async def preview_import_app(
+    file: UploadFile = File(...),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+):
+    """Preview full app import without importing.
+
+    Parses the export file and returns a structured preview
+    with component inventory, dependency graph, and warnings.
+    Read-only -- no database modifications.
+    """
+    from services.full_app_import_service import (
+        FullAppImportService,
+    )
+
+    try:
+        contents = await file.read()
+        export_dict = json.loads(contents)
+        export_data = AppExportFileSchema(**export_dict)
+
+        import_service = FullAppImportService(db)
+        return import_service.preview_import(export_data)
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Invalid export file: {e}",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            str(e),
+        )
+    except Exception as e:
+        logger.error(
+            f"Preview import error: {str(e)}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Preview failed",
+        )
+
+
+@apps_router.post(
+    "/import",
+    response_model=FullAppImportResponseSchema,
+    summary="Import complete app configuration",
+    tags=["Apps", "Export/Import"],
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_full_app(
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(
+        ConflictMode.FAIL,
+        description="How to handle name conflicts (fail/rename/override)",
+    ),
+    new_name: Optional[str] = Query(
+        None, description="New app name (for rename mode)"
+    ),
+    component_selection_json: Optional[str] = Form(
+        None,
+        description=(
+            "JSON object mapping singular component-type keys to lists of "
+            "names to import. Omit to import all components. "
+            "Example: {\"ai_service\":[\"My Service\"]}"
+        ),
+    ),
+    api_keys_json: Optional[str] = Form(
+        None,
+        description=(
+            "JSON object mapping original service names to API keys. "
+            "Example: {\"My Service\":\"sk-...\"}"
+        ),
+    ),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+) -> FullAppImportResponseSchema:
+    """Import complete app configuration from JSON file.
+
+    Creates a new app from the exported configuration.
+    
+    Query Parameters:
+    - conflict_mode: How to handle name conflicts (fail/rename/override)
+    - new_name: Optional new name for the app (auto-generated if conflict and rename mode)
+
+    File Format: JSON matching AppExportFileSchema
+    
+    Note: Always creates a NEW app (does not override existing apps).
+    """
+    from services.full_app_import_service import FullAppImportService
+
+    user_id = int(auth_context.identity.id)
+
+    # Read and parse file
+    try:
+        contents = await file.read()
+        export_dict = json.loads(contents)
+        export_data = AppExportFileSchema(**export_dict)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON: {str(e)}",
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid export format: {str(e)}",
+        )
+
+    # Parse optional JSON form fields
+    component_selection = None
+    if component_selection_json:
+        try:
+            component_selection = json.loads(component_selection_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid component_selection JSON: {e}",
+            )
+
+    api_keys = None
+    if api_keys_json:
+        try:
+            api_keys = json.loads(api_keys_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid api_keys JSON: {e}",
+            )
+
+    # Import (always creates new app)
+    service = FullAppImportService(db)
+    try:
+        summary = service.import_full_app(
+            export_data=export_data,
+            user_id=user_id,
+            conflict_mode=conflict_mode,
+            new_name=new_name,
+            component_selection=component_selection,
+            api_keys=api_keys,
+        )
+
+        logger.info(
+            f"User {user_id} imported full app '{summary.app_name}': {summary.total_components} components"
+        )
+
+        return FullAppImportResponseSchema(
+            success=len(summary.total_errors) == 0,
+            message=(
+                f"App '{summary.app_name}' imported successfully with {summary.total_components} components"
+                if len(summary.total_errors) == 0
+                else f"Import completed with {len(summary.total_errors)} errors"
+            ),
+            summary=summary,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Full app import failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}",
+        )
+
+
+# ==================== INCLUDE NESTED ROUTERS (dynamic routes) ====================
 
 # Include nested routers under apps/{app_id}/
 # Based on frontend API calls - all app-specific resources go here
@@ -442,6 +637,73 @@ async def delete_app(
     return MessageResponseSchema(message="App deleted successfully")
 
 
+@apps_router.post("/{app_id}/validate-langsmith-key",
+                 summary="Validate LangSmith API key",
+                 tags=["Apps"],
+                 response_model=MessageResponseSchema)
+async def validate_langsmith_key(
+    app_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """
+    Validate the LangSmith API key configured for an app.
+    Tests connectivity to the LangSmith API and returns the result.
+    """
+    import langsmith as ls
+
+    app_service, _ = get_services(db)
+    app = app_service.get_app(app_id)
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=APP_NOT_FOUND_MSG
+        )
+
+    if not app.langsmith_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No LangSmith API key configured for this app"
+        )
+
+    try:
+        client = ls.Client(
+            api_key=app.langsmith_api_key,
+            api_url="https://api.smith.langchain.com",
+        )
+        settings = client._get_settings()
+        tenant_handle = getattr(settings, 'tenant_handle', None)
+        logger.info(
+            f"LangSmith API key validated for app '{app.name}'. "
+            f"Tenant: {tenant_handle or 'default'}"
+        )
+        return MessageResponseSchema(
+            message=f"LangSmith API key is valid. "
+                    f"Tenant: {tenant_handle or 'default'}. "
+                    f"Traces will be sent to project '{app.name}'."
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(
+            f"LangSmith API key validation failed for app '{app.name}': "
+            f"{type(e).__name__}: {error_msg}"
+        )
+        if "403" in error_msg or "Forbidden" in error_msg:
+            detail = (
+                "LangSmith API key is invalid or expired. "
+                "Generate a new key at https://smith.langchain.com/settings"
+            )
+        elif "401" in error_msg or "Unauthorized" in error_msg:
+            detail = "LangSmith API key is missing or malformed."
+        else:
+            detail = f"Cannot connect to LangSmith: {error_msg}"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail
+        )
+
+
 @apps_router.post("/{app_id}/leave",
                  summary="Leave app collaboration",
                  tags=["Apps"],
@@ -491,3 +753,59 @@ async def leave_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to leave app"
         )
+
+
+# ==================== FULL APP EXPORT ====================
+
+
+@apps_router.post(
+    "/{app_id}/export",
+    response_model=AppExportFileSchema,
+    summary="Export complete app configuration",
+    tags=["Apps", "Export/Import"],
+)
+async def export_full_app(
+    app_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+) -> AppExportFileSchema:
+    """Export complete app configuration to JSON.
+
+    Includes:
+    - AI Services (API keys removed)
+    - Embedding Services (API keys removed)
+    - Output Parsers
+    - MCP Configs (secrets removed)
+    - Silos
+    - Agents (conversation history excluded)
+
+    Excludes:
+    - User accounts and permissions
+    - Conversation history
+    - Vector data
+    - Files/attachments
+    - Usage statistics
+    """
+    from services.full_app_export_service import FullAppExportService
+
+    user_id = int(auth_context.identity.id)
+
+    try:
+        service = FullAppExportService(db)
+        export_data = service.export_full_app(app_id=app_id, user_id=user_id)
+
+        logger.info(f"User {user_id} exported app {app_id}")
+        return export_data
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error exporting app {app_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Export failed: {str(e)}",
+        )
+

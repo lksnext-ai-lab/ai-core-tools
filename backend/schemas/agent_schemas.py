@@ -16,6 +16,7 @@ class AgentListItemSchema(BaseModel):
     request_count: int
     service_id: Optional[int] = None
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
+    marketplace_visibility: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,9 +31,11 @@ class AgentDetailSchema(BaseModel):
     type: str
     is_tool: bool
     has_memory: bool
+    enable_code_interpreter: bool = False
+    server_tools: List[str] = []
     memory_max_messages: int = 20
     memory_max_tokens: Optional[int] = 4000
-    memory_summarize_threshold: int = 10
+    memory_summarize_threshold: int = 4000
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
@@ -57,6 +60,8 @@ class AgentDetailSchema(BaseModel):
     tools: List[Dict[str, Any]]
     mcp_configs: List[Dict[str, Any]]
     skills: List[Dict[str, Any]]
+    marketplace_visibility: Optional[str] = None
+    marketplace_profile: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -70,9 +75,11 @@ class CreateUpdateAgentSchema(BaseModel):
     type: str = "agent"  # "agent", "ocr_agent"
     is_tool: bool = False
     has_memory: bool = False
+    enable_code_interpreter: bool = False
+    server_tools: Optional[List[str]] = []
     memory_max_messages: Optional[int] = 20
     memory_max_tokens: Optional[int] = 4000
-    memory_summarize_threshold: Optional[int] = 10
+    memory_summarize_threshold: Optional[int] = 4000
     service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
@@ -120,6 +127,9 @@ class PublicAgentDetailSchema(BaseModel):
     status: Optional[str] = None
     is_tool: bool
     has_memory: Optional[bool] = None
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 4000
     system_prompt: Optional[str] = None
     prompt_template: Optional[str] = None
     create_date: Optional[datetime] = None
@@ -141,6 +151,9 @@ class CreateAgentRequestSchema(BaseModel):
     type: str = "agent"  # "agent" or "ocr_agent"
     is_tool: bool = False
     has_memory: bool = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 4000
     system_prompt: Optional[str] = ""
     prompt_template: Optional[str] = ""
     service_id: Optional[int] = None
@@ -158,6 +171,9 @@ class CreateOCRAgentRequestSchema(BaseModel):
     description: Optional[str] = ""
     is_tool: bool = False
     has_memory: bool = False
+    memory_max_messages: Optional[int] = 20
+    memory_max_tokens: Optional[int] = 4000
+    memory_summarize_threshold: Optional[int] = 4000
     service_id: Optional[int] = None
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = ""
@@ -175,6 +191,9 @@ class UpdateAgentRequestSchema(BaseModel):
     description: Optional[str] = None
     is_tool: Optional[bool] = None
     has_memory: Optional[bool] = None
+    memory_max_messages: Optional[int] = None
+    memory_max_tokens: Optional[int] = None
+    memory_summarize_threshold: Optional[int] = None
     system_prompt: Optional[str] = None
     prompt_template: Optional[str] = None
     service_id: Optional[int] = None
@@ -192,6 +211,9 @@ class UpdateOCRAgentRequestSchema(BaseModel):
     description: Optional[str] = None
     is_tool: Optional[bool] = None
     has_memory: Optional[bool] = None
+    memory_max_messages: Optional[int] = None
+    memory_max_tokens: Optional[int] = None
+    memory_summarize_threshold: Optional[int] = None
     service_id: Optional[int] = None
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None

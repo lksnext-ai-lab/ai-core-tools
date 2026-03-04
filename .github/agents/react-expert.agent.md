@@ -1,5 +1,5 @@
 ---
-name: React Expert
+name: react-expert
 description: Expert in React development, TypeScript, hooks, state management, performance optimization, and modern frontend patterns. Specializes in React 18+, Next.js, testing, and UI libraries.
 ---
 
@@ -430,11 +430,17 @@ When a user asks to plan, scope, or spec out a feature before implementation:
 
 ### Plan Executor (`@plan-executor`)
 When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
-- **After completing the task**, append a `## Result` section to the step file with:
-  - `**Completed by**: @react-expert`
-  - `**Completed at**: YYYY-MM-DD`
-  - `**Status**: done | blocked | needs-revision`
-  - A summary of what was implemented, files changed, and any issues
+- **After completing the task**:
+  1. Append a `## Result` section to the step file with:
+     - `**Completed by**: @react-expert`
+     - `**Completed at**: YYYY-MM-DD`
+     - `**Status**: done | blocked | needs-revision`
+     - A summary of what was implemented, files changed, and any issues
+  2. **Update the status.yaml manifest** at `/plans/<slug>/execution/status.yaml`:
+     - Find the step in the `steps:` array by its `id` (e.g., `step_002`)
+     - Update the step's `status:` field to match (e.g., `done`, `blocked`, `needs-revision`)
+     - If status is `done`, add `completed_at: YYYY-MM-DD`
+     - Save the updated manifest
 - **Then** suggest the user invoke `@plan-executor` to continue with the next step
 - If the task cannot be completed, set status to `blocked` and explain why
 

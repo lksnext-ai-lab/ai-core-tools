@@ -1,5 +1,5 @@
 ---
-name: AI Dev Architect
+name: ai-dev-architect
 description: Expert in designing, creating, and managing AI-assisted development environments. Specializes in GitHub Copilot agents, instruction files, CLAUDE.md configurations, MCP setups, prompt engineering for dev tools, and orchestrating multi-agent workflows.
 ---
 
@@ -107,7 +107,7 @@ Structure agent definitions from high-level overview to detailed specifics:
 ├── agents/
 │   ├── backend-expert.agent.md      # Python/FastAPI specialist
 │   ├── react-expert.agent.md        # React/TypeScript specialist
-│   ├── test.agent.md                # Testing agent
+│   ├── test-expert.agent.md         # Testing agent
 │   ├── version-bumper.agent.md      # Version management
 │   ├── ai-dev-architect.agent.md    # This agent (meta-agent)
 │   └── <new-agent>.agent.md         # New agents go here
@@ -171,7 +171,7 @@ description: <One-line description of what this agent does and its specializatio
 ## Collaborating with Other Agents
 
 ### <Agent Name> (`@<agent-slug>`)
-- **Delegate to**: `@<agent-slug>` when <condition>
+- **Delegate to**: `@<agent-slug>` when <condition>  ← use the slug from the agent's `name:` field
 - **Purpose**: <What it handles>
 
 ```
@@ -321,9 +321,10 @@ Periodically review agents for:
 - **Gaps**: Are there areas without agent coverage?
 
 ### Agent Naming Conventions
-- Use descriptive, role-based names: `Backend Expert`, `React Expert`, `Version Bumper`
+- **File name = `name` field = `@`-reference**: The filename stem, the `name:` frontmatter field, and the `@mention` must all be the same kebab-case slug (e.g., `backend-expert.agent.md` → `name: backend-expert` → `@backend-expert`)
 - File names: `kebab-case.agent.md` (e.g., `backend-expert.agent.md`)
-- Keep names short (2-3 words) for easy `@mention` usage
+- Keep names short (2-4 words hyphenated) for easy `@mention` usage
+- The `agents:` frontmatter list uses the same slug values (not human-readable display names)
 
 ### Instruction Naming Conventions
 - Prefix with scope indicator: `.gh-` for GitHub workflows, `.py-` for Python, `.ts-` for TypeScript

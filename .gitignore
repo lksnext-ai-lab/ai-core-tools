@@ -48,4 +48,9 @@ logs/
 local/
 clients/
 qdrant_storage/
+.playwright-mcp/
+temp/
+.serena
+tmpclaude*
 plans/
+

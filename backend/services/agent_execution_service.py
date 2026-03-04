@@ -2,7 +2,7 @@ import os
 import asyncio
 import ast
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
@@ -21,12 +21,43 @@ from tools.ocrAgentTools import (
 from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
+from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
 from utils.config import get_app_config
 
 logger = get_logger(__name__)
+
+_IMAGE_FILE_TYPES = {"image"}
+
+
+def _inject_file_markers(text: str, files: list) -> str:
+    """Replace [Image saved: x] placeholders with file:// markdown markers.
+
+    Files whose placeholder is not found in the text are appended at the end.
+    Images become standard markdown images; other files become download links.
+    """
+    if not isinstance(text, str):
+        return text
+
+    remaining = []
+    for f in files:
+        if f.file_type in _IMAGE_FILE_TYPES:
+            marker = f"![{f.filename}](file://{f.file_id})"
+        else:
+            marker = f"[📎 {f.filename}](file://{f.file_id})"
+
+        placeholder = f"[Image saved: {f.filename}]"
+        if placeholder in text:
+            text = text.replace(placeholder, marker)
+        else:
+            remaining.append(marker)
+
+    if remaining:
+        text = text.rstrip() + "\n\n" + "\n\n".join(remaining)
+
+    return text
 
 
 class AgentExecutionService:
@@ -139,10 +170,41 @@ class AgentExecutionService:
             # Determine session ID for checkpointer
             session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
 
+            # Use the actual conversation ID — the auto-created one if none was passed in.
+            # This ensures files are registered in the same bucket that the download API
+            # will look up later (keyed by conversation_id).
+            effective_conv_id = conversation_id or (conversation.conversation_id if conversation else None)
+
+            # Resolve working directory (always — used by download_url_to_workspace
+            # and, when enable_code_interpreter is on, by python_repl too)
+            app_config = get_app_config()
+            tmp_base = app_config['TMP_BASE_FOLDER']
+            if effective_conv_id:
+                working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
+            else:
+                user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
+                app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
+                session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
+                working_dir = os.path.join(tmp_base, "persistent", session_key)
+
             # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
             response = await self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
+                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files,
+                working_dir=working_dir
             )
+
+            # Auto-register any files written to the working dir during this turn
+            # (code interpreter output, downloaded URLs, etc.)
+            if working_dir:
+                file_service = FileManagementService()
+                new_files = await file_service.sync_output_files(
+                    working_dir=working_dir,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=str(effective_conv_id) if effective_conv_id else None,
+                )
+                if new_files:
+                    response = _inject_file_markers(response, new_files)
 
             # Parse response based on agent's output parser
             from tools.agentTools import parse_agent_response
@@ -160,7 +222,7 @@ class AgentExecutionService:
                 from services.conversation_service import ConversationService
                 # Get last message preview (truncate response if too long)
                 last_message_preview = parsed_response[:200] if isinstance(parsed_response, str) else str(parsed_response)[:200]
-                
+
                 # Clean message for preview if it's a list (multimodal)
                 # This ensures the conversation list shows clean text instead of JSON structure
                 if isinstance(parsed_response, list):
@@ -173,6 +235,12 @@ class AgentExecutionService:
                             last_message_preview = " ".join(text_parts)[:200]
                     except Exception:
                         pass
+
+                # Strip file:// markers from preview — replace with human-readable placeholders
+                import re as _re
+                last_message_preview = _re.sub(r'!\[[^\]]*\]\(file://[^\)]*\)', '[imagen]', last_message_preview)
+                last_message_preview = _re.sub(r'\[📎[^\]]*\]\(file://[^\)]*\)', '[archivo]', last_message_preview)
+                last_message_preview = last_message_preview.strip() or '[imagen generada]'
                 
                 # Increment by 2 (user message + agent response)
                 ConversationService.increment_message_count(
@@ -507,11 +575,26 @@ class AgentExecutionService:
                             cleaned_history.append(clean_msg)
                         else:
                             cleaned_history.append(msg)
-                            
-                    return cleaned_history
-            
+
+                    # Resolve [IMAGE:{block_id}] placeholders to inline file:// markers
+                    from services.conversation_service import _resolve_image_placeholders
+                    resolved_history = []
+                    for msg in cleaned_history:
+                        if msg.get("role") == "agent" and isinstance(msg.get("content"), str) and "[IMAGE:" in msg["content"]:
+                            resolved_msg = msg.copy()
+                            resolved_msg["content"] = await _resolve_image_placeholders(
+                                msg["content"],
+                                agent_id=agent_id,
+                                user_context=user_context,
+                                conversation_id=None,
+                            )
+                            resolved_history.append(resolved_msg)
+                        else:
+                            resolved_history.append(msg)
+                    return resolved_history
+
             return []
-            
+
         except Exception as e:
             logger.error(f"Error getting conversation history: {str(e)}")
             return []
@@ -776,6 +859,66 @@ class AgentExecutionService:
 
         return enhanced_message, image_files
 
+    def _save_generated_image(self, b64_data: str, working_dir: str, block_id: str = None) -> str:
+        """Decode a base64 image and save it to working_dir. Returns a status string."""
+        import base64
+        import time
+        try:
+            os.makedirs(working_dir, exist_ok=True)
+            safe_id = block_id[:48] if block_id else str(int(time.time()))
+            filename = f"generated_image_{safe_id}.png"
+            dest = os.path.join(working_dir, filename)
+            with open(dest, "wb") as f:
+                f.write(base64.b64decode(b64_data))
+            logger.info("Saved generated image to %s", dest)
+            return f"[Image saved: {filename}]"
+        except Exception as exc:
+            logger.error("Failed to save generated image: %s", exc)
+            return "[Image generated but could not be saved]"
+
+    def _extract_content_blocks(self, blocks: list, working_dir: Optional[str] = None) -> str:
+        """
+        Extract a plain-text response from a multimodal content block list.
+
+        Handles:
+        - text blocks           → concatenated as-is
+        - image_generation_call → base64 result decoded and saved to working_dir;
+                                   sync_output_files will register the file afterwards
+        - image_url (data URI)  → Gemini native image generation; decoded and saved to
+                                   working_dir the same way as image_generation_call
+        - anything else         → silently ignored (tool call artefacts, etc.)
+        """
+        text_parts = []
+
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type", "")
+            if block_type == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    text_parts.append(text)
+            elif block_type == "image_generation_call":
+                b64_data = block.get("result", "")
+                block_id = block.get("id", "")
+                label = self._save_generated_image(b64_data, working_dir, block_id) if b64_data and working_dir else "[Image generated]"
+                text_parts.append(label)
+            elif block_type == "image_url":
+                # Gemini native image generation returns inline images as data URIs:
+                # {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+                url = (block.get("image_url") or {}).get("url", "")
+                if url.startswith("data:image/") and ";base64," in url:
+                    import hashlib as _hl
+                    import base64 as _b64
+                    b64_data = url.split(";base64,", 1)[1]
+                    # Use a content hash as stable block_id so history reload can
+                    # recompute the same ID and resolve the file via _resolve_image_placeholders
+                    img_hash = _hl.sha256(_b64.b64decode(b64_data)).hexdigest()[:16]
+                    label = self._save_generated_image(b64_data, working_dir, block_id=img_hash) if working_dir else "[Image generated]"
+                    text_parts.append(label)
+
+        return " ".join(text_parts) if text_parts else str(blocks)
+
     async def _execute_agent_async(
         self,
         fresh_agent: Agent,
@@ -783,21 +926,27 @@ class AgentExecutionService:
         search_params: Dict = None,
         session_id_for_cache: str = None,
         user_context: Dict = None,
-        image_files: List[Dict] = None
-    ) -> str:
-        """Execute agent in FastAPI's event loop using shared checkpointer pool"""
+        image_files: List[Dict] = None,
+        working_dir: Optional[str] = None
+    ) -> Any:
+        """Execute agent in FastAPI's event loop using shared checkpointer pool.
+        
+        Returns:
+            str for plain text responses, dict/Pydantic model for structured output (v1).
+        """
+        import langsmith as ls
         from tools.agentTools import create_agent, prepare_agent_config
-        from langchain_core.messages import HumanMessage
+        from langchain.messages import HumanMessage
 
         mcp_client = None
         try:
             # Create the agent chain with all tools and capabilities
-            agent_chain, tracer, mcp_client = await create_agent(
-                fresh_agent, search_params, session_id_for_cache, user_context
+            agent_chain, langsmith_config, mcp_client = await create_agent(
+                fresh_agent, search_params, session_id_for_cache, user_context, working_dir
             )
             
-            # Prepare configuration with tracer
-            config = prepare_agent_config(fresh_agent, tracer)
+            # Prepare configuration
+            config = prepare_agent_config(fresh_agent)
             
             # Add session-specific configuration if memory is enabled
             if fresh_agent.has_memory and session_id_for_cache:
@@ -901,15 +1050,52 @@ class AgentExecutionService:
             else:
                 message_payload = HumanMessage(content=formatted_user_message)
             
-            result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+            if langsmith_config:
+                from langchain_core.tracers.langchain import LangChainTracer, wait_for_all_tracers
+                
+                logger.info(
+                    f"LangSmith tracing ENABLED for app '{langsmith_config['project_name']}'"
+                )
+                
+                per_app_tracer = LangChainTracer(
+                    client=langsmith_config["client"],
+                    project_name=langsmith_config["project_name"],
+                )
+                config.setdefault("callbacks", []).append(per_app_tracer)
+                
+                with ls.tracing_context(
+                    client=langsmith_config["client"],
+                    project_name=langsmith_config["project_name"],
+                    enabled=True,
+                ):
+                    result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+                
+                try:
+                    wait_for_all_tracers()
+                except Exception as flush_err:
+                    logger.warning(f"Error flushing LangSmith traces: {flush_err}")
+            else:
+                result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
             
-            # Extract the response from the result
+            # LangChain v1: structured output is in 'structured_response' key
+            # when create_agent is called with response_format=pydantic_model
+            if isinstance(result, dict) and "structured_response" in result:
+                structured = result["structured_response"]
+                if structured is not None:
+                    return structured
+            
+            # Extract the response from the result messages
             if isinstance(result, dict) and "messages" in result:
                 # Get the last AI message
                 messages = result["messages"]
                 for msg in reversed(messages):
                     if hasattr(msg, 'content') and msg.content:
-                        return msg.content
+                        content = msg.content
+                        if isinstance(content, str):
+                            return content
+                        if isinstance(content, list):
+                            return self._extract_content_blocks(content, working_dir)
+                        return content
                 # Fallback: return the last message content
                 if messages:
                     return str(messages[-1].content) if hasattr(messages[-1], 'content') else str(messages[-1])

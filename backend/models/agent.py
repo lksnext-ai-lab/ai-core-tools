@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float
+import enum
+
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
+
+
+class MarketplaceVisibility(enum.Enum):
+    UNPUBLISHED = "unpublished"
+    PRIVATE = "private"
+    PUBLIC = "public"
 
 AGENT_ID = 'Agent.agent_id'
 
@@ -62,17 +70,25 @@ class Agent(Base):
                         nullable=True)
 
     has_memory = Column(Boolean)
-    
-    # Memory management configuration (hybrid strategy applied when has_memory=True)
-    memory_max_messages = Column(Integer, default=20, nullable=False)  # Maximum number of messages to keep
-    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # Maximum tokens for history (optional)
-    memory_summarize_threshold = Column(Integer, default=10, nullable=False)  # When to start summarizing
+    enable_code_interpreter = Column(Boolean, default=False, nullable=False, server_default='false')
+    server_tools = Column(JSON, default=list, nullable=False, server_default='[]')
+
+    # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
+    memory_max_messages = Column(Integer, default=20, nullable=False)  # SummarizationMiddleware.keep=("messages", N) — messages to preserve after summarization
+    memory_max_tokens = Column(Integer, default=4000, nullable=True)  # SummarizationMiddleware.trigger=("tokens", N) — token count that triggers summarization
+    memory_summarize_threshold = Column(Integer, default=4000, nullable=False)  # SummarizationMiddleware.trim_tokens_to_summarize — max tokens sent to summarizer LLM
     
     output_parser_id = Column(Integer,
                         ForeignKey('OutputParser.parser_id'),
                         nullable=True)
     temperature = Column(Float, default=DEFAULT_AGENT_TEMPERATURE, nullable=False)
-    
+
+    marketplace_visibility = Column(
+        Enum(MarketplaceVisibility),
+        nullable=False,
+        default=MarketplaceVisibility.UNPUBLISHED
+    )
+
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
 
@@ -101,6 +117,14 @@ class Agent(Base):
     skill_associations = relationship('AgentSkill',
                                      primaryjoin=(agent_id == AgentSkill.agent_id),
                                      back_populates='agent')
+
+    # Marketplace profile (1:1)
+    marketplace_profile = relationship(
+        'AgentMarketplaceProfile',
+        back_populates='agent',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
 
     __mapper_args__ = {
         'polymorphic_identity': 'agent',

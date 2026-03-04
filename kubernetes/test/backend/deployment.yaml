@@ -22,11 +22,11 @@ spec:
             - containerPort: 8000
           resources:
             requests:
-              memory: "256Mi"
+              memory: "1536Mi"
               cpu: "200m"
               ephemeral-storage: "2Gi"
             limits:
-              memory: "1Gi"
+              memory: "3Gi"
               cpu: "500m"
               ephemeral-storage: "4Gi"
           volumeMounts:
@@ -275,6 +275,11 @@ spec:
                   name: ia-core-tools-api-secret-test
                   key: ENTRA_VALIDATE_ISSUER
             # Application configuration
+            - name: AICT_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ia-core-tools-config-test
+                  key: AICT_BASE_URL
             - name: AICT_MODE
               valueFrom:
                 configMapKeyRef:
@@ -308,27 +313,27 @@ spec:
                   name: ia-core-tools-api-secret-test
                   key: ANTHROPIC_API_KEY
             
-            # LangChain configuration
-            - name: LANGCHAIN_API_KEY
+            # LangSmith configuration
+            - name: LANGSMITH_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ia-core-tools-api-secret-test
-                  key: LANGCHAIN_API_KEY
-            - name: LANGCHAIN_TRACING_V2
+                  key: LANGSMITH_API_KEY
+            - name: LANGSMITH_TRACING
               valueFrom:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
-                  key: LANGCHAIN_TRACING_V2
-            - name: LANGCHAIN_PROJECT
+                  key: LANGSMITH_TRACING
+            - name: LANGSMITH_PROJECT
               valueFrom:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
-                  key: LANGCHAIN_PROJECT
-            - name: LANGCHAIN_ENDPOINT
+                  key: LANGSMITH_PROJECT
+            - name: LANGSMITH_ENDPOINT
               valueFrom:
                 configMapKeyRef:
                   name: ia-core-tools-config-test
-                  key: LANGCHAIN_ENDPOINT
+                  key: LANGSMITH_ENDPOINT
             
             # Python environment
             - name: PYTHONUNBUFFERED

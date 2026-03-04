@@ -2,6 +2,7 @@ import uuid
 import hashlib
 import ast
 import json
+import re
 from typing import List, Optional, Dict
 from numpy import isin
 from sqlalchemy.orm import Session
@@ -16,6 +17,44 @@ from utils.logger import get_logger
 from lks_idprovider import AuthContext
 
 logger = get_logger(__name__)
+
+
+async def _resolve_image_placeholders(
+    content: str,
+    agent_id: int,
+    user_context: dict,
+    conversation_id: str = None,
+) -> str:
+    """Replace [IMAGE:{block_id}] markers with inline file:// markdown.
+
+    When an AI message contained an image_generation_call block the cache
+    service now emits [IMAGE:{block_id}] instead of plain text.  We resolve
+    that marker to the registered FileReference so the frontend can render
+    the image inline.  Falls back to '[Imagen generada]' when the file is
+    not found (e.g. older messages saved before block_id was embedded in
+    the filename).
+    """
+    if "[IMAGE:" not in content:
+        return content
+
+    from services.file_management_service import FileManagementService
+    file_service = FileManagementService()
+    # Try conversation-scoped first; fall back to global session for legacy files
+    files = await file_service.list_attached_files(agent_id, user_context, conversation_id)
+    if not files and conversation_id:
+        files = await file_service.list_attached_files(agent_id, user_context, None)
+
+    def replace_marker(m: re.Match) -> str:
+        block_id = m.group(1)
+        for f in files:
+            fname = f.get("filename", "")
+            # The filename was generated as generated_image_{block_id[:48]}.png
+            if block_id[:48] in fname:
+                file_id = f.get("file_id", "")
+                return f"![{fname}](file://{file_id})"
+        return "[Imagen generada]"
+
+    return re.sub(r'\[IMAGE:([^\]]+)\]', replace_marker, content)
 
 
 class ConversationService:
@@ -327,8 +366,28 @@ class ConversationService:
                 if isinstance(parsed_content, str):
                     clean_msg["content"] = ConversationService._clean_attached_files_content(parsed_content)
                 cleaned_history.append(clean_msg)
-        
-        return cleaned_history
+
+        # Resolve [IMAGE:{block_id}] placeholders to inline file:// markers.
+        # The conversations endpoint user_context lacks app_id; enrich it from the agent.
+        resolve_user_ctx = user_context
+        if 'app_id' not in resolve_user_ctx and conversation.agent and conversation.agent.app_id:
+            resolve_user_ctx = {**resolve_user_ctx, 'app_id': conversation.agent.app_id}
+
+        resolved_history = []
+        for msg in cleaned_history:
+            if msg.get("role") == "agent" and isinstance(msg.get("content"), str) and "[IMAGE:" in msg["content"]:
+                resolved_msg = msg.copy()
+                resolved_msg["content"] = await _resolve_image_placeholders(
+                    msg["content"],
+                    agent_id=conversation.agent_id,
+                    user_context=resolve_user_ctx,
+                    conversation_id=str(conversation_id),
+                )
+                resolved_history.append(resolved_msg)
+            else:
+                resolved_history.append(msg)
+
+        return resolved_history
     
     @staticmethod
     def _clean_attached_files_content(text: str) -> str:
