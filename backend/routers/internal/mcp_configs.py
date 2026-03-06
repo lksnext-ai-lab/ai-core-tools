@@ -194,7 +194,9 @@ async def test_mcp_connection_with_config(
                 detail="Config cannot be empty"
             )
              
-        result = await MCPConfigService.test_connection_with_config(actual_config)
+        result = await MCPConfigService.test_connection_with_config(
+            actual_config, ssl_verify=config_data.ssl_verify
+        )
         return result
     except HTTPException:
         raise

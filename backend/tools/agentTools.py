@@ -22,6 +22,7 @@ import asyncio
 import os
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
+from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
 from tools.python_sandbox_tools import create_python_repl_tool
 
@@ -79,6 +80,17 @@ class MCPClientManager:
                     continue
                 
             if connections:
+                # Inject SSL configuration for connections that need it
+                # Check each MCP config's ssl_verify setting
+                for mcp_assoc in agent.mcp_associations:
+                    mcp_cfg = mcp_assoc.mcp
+                    ssl_verify = mcp_cfg.ssl_verify if mcp_cfg.ssl_verify is not None else True
+                    if not ssl_verify:
+                        cfg_dict = mcp_cfg.to_connection_dict()
+                        for server_name in cfg_dict:
+                            if server_name in connections:
+                                inject_ssl_config({server_name: connections[server_name]}, ssl_verify=False)
+                
                 logger.info(f"Creating new MCP client with connections: {connections}")
                 # Create a new client each time - don't reuse the singleton
                 # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager

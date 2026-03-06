@@ -7,6 +7,7 @@ interface MCPConfigFormData {
   name: string;
   description: string;
   config: string;
+  ssl_verify: boolean;
 }
 
 interface MCPConfig {
@@ -14,6 +15,7 @@ interface MCPConfig {
   name: string;
   description: string;
   config: string;
+  ssl_verify?: boolean;
   created_at: string;
 }
 
@@ -28,7 +30,8 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
   const [formData, setFormData] = useState<MCPConfigFormData>({
     name: '',
     description: '',
-    config: '{}'
+    config: '{}',
+    ssl_verify: true
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +46,8 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       setFormData({
         name: mcpConfig.name || '',
         description: mcpConfig.description || '',
-        config: mcpConfig.config || '{}'
+        config: mcpConfig.config || '{}',
+        ssl_verify: mcpConfig.ssl_verify ?? true
       });
     }
   }, [mcpConfig]);
@@ -75,7 +79,8 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       const result = await apiService.testMCPConnectionWithConfig(parseInt(appId), {
         name: formData.name,
         description: formData.description,
-        config: formData.config
+        config: formData.config,
+        ssl_verify: formData.ssl_verify
       });
       setTestResult(result);
     } catch (err) {
@@ -179,6 +184,28 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
         <p className="mt-2 text-xs text-gray-500">
           Full MCP server configuration in JSON format. This matches the structure used in your <code className="bg-gray-100 px-1 py-0.5 rounded">mcp.json</code> file.
         </p>
+      </div>
+
+      {/* SSL Verify */}
+      <div className="flex items-center gap-3">
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.ssl_verify}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, ssl_verify: e.target.checked }))
+            }
+            className="sr-only peer"
+            aria-label="Verify SSL Certificates"
+          />
+          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+        </label>
+        <div>
+          <span className="text-sm font-medium text-gray-700">Verify SSL Certificates</span>
+          <p className="text-xs text-gray-500">
+            Disable this if the MCP server uses a self-signed certificate.
+          </p>
+        </div>
       </div>
 
       {/* Test Result */}
