@@ -345,49 +345,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     </ProtectedLayoutRoute>
                 } />
 
-                {/* Global settings routes */}
-                <Route path="/settings/ai-services" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><AIServicesPage /></SettingsLayout>
-                  </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/api-keys" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><APIKeysPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/collaboration" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><CollaborationPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/embedding-services" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/general" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
-                  </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/mcp-configs" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><MCPConfigsPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/data-structures" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><DataStructuresPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
                 {/* Admin routes */}
                 <Route path="/admin/users" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
