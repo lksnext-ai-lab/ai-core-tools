@@ -1828,14 +1828,14 @@ class ApiService {
   }
 
   async updateSystemSetting(key: string, value: string) {
-    return this.request(`/internal/admin/settings/${key}`, {
+    return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
     });
   }
 
   async resetSystemSetting(key: string) {
-    return this.request(`/internal/admin/settings/${key}`, {
+    return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
       method: 'DELETE',
     });
   }
