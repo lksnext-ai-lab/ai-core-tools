@@ -8,6 +8,9 @@ metadata:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/secure-backends: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "server: hide";
       more_set_headers "X-Content-Type-Options: nosniff";
@@ -26,6 +29,13 @@ spec:
         paths:
           # Backend API routes
           - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ia-core-tools-backend-service-test
+                port:
+                  number: 8000
+          - path: /static
             pathType: Prefix
             backend:
               service:

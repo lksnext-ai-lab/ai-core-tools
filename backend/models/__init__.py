@@ -24,6 +24,7 @@ from .domain import Domain
 from .url import Url
 from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
+from .system_setting import SystemSetting
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -33,5 +34,6 @@ __all__ = [
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
     'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'Media',
-    'MCPServer', 'MCPServerAgent'
+    'MCPServer', 'MCPServerAgent',
+    'SystemSetting'
 ] 

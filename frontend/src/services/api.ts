@@ -221,6 +221,91 @@ class ApiService {
     });
   }
 
+  async exportAgent(
+    appId: number,
+    agentId: number,
+    includeAIService: boolean = true,
+    includeSilo: boolean = true,
+    includeOutputParser: boolean = true,
+    includeMCPConfigs: boolean = true,
+    includeAgentTools: boolean = true
+  ): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams({
+      include_ai_service: String(includeAIService),
+      include_silo: String(includeSilo),
+      include_output_parser: String(includeOutputParser),
+      include_mcp_configs: String(includeMCPConfigs),
+      include_agent_tools: String(includeAgentTools),
+    });
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/export?${params}`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importAgent(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string,
+    selectedAIServiceId?: number,
+    selectedSiloId?: number,
+    selectedOutputParserId?: number
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/agents/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    if (selectedAIServiceId !== undefined) {
+      url += `&selected_ai_service_id=${selectedAIServiceId}`;
+    }
+    if (selectedSiloId !== undefined) {
+      url += `&selected_silo_id=${selectedSiloId}`;
+    }
+    if (selectedOutputParserId !== undefined) {
+      url += `&selected_output_parser_id=${selectedOutputParserId}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== AI SERVICES API ====================
   async getAIServices(appId: number) {
     return this.request(`/internal/apps/${appId}/ai-services/`);
@@ -269,6 +354,63 @@ class ApiService {
     });
   }
 
+  async exportAIService(appId: number, serviceId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/ai-services/${serviceId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importAIService(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/ai-services/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
   // ==================== EMBEDDING SERVICES ====================
   async getEmbeddingServices(appId: number) {
     return this.request(`/internal/apps/${appId}/embedding-services/`);
@@ -296,6 +438,63 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
     });
+  }
+
+  async exportEmbeddingService(appId: number, serviceId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/embedding-services/${serviceId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importEmbeddingService(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/embedding-services/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   // ==================== MCP CONFIGS ====================
@@ -340,6 +539,62 @@ class ApiService {
     });
   }
 
+  async exportMCPConfig(appId: number, configId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/mcp-configs/${configId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importMCPConfig(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/mcp-configs/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+  
+    return response.json();
+}
   // ==================== SKILLS ====================
   async getSkills(appId: number) {
     return this.request(`/internal/apps/${appId}/skills/`);
@@ -475,6 +730,63 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
       method: 'DELETE',
     });
+  }
+
+  async exportOutputParser(appId: number, parserId: number): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/output-parsers/${parserId}/export`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importOutputParser(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/output-parsers/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   // ==================== COLLABORATION ====================
@@ -660,6 +972,67 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'DELETE',
     });
+  }
+
+  async exportSilo(appId: number, siloId: number, includeDependencies: boolean = true): Promise<Blob> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/export?include_dependencies=${includeDependencies}`,
+      {
+        method: 'POST',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importSilo(
+    appId: number,
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string,
+    selectedEmbeddingServiceId?: number
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = `${this.baseURL}/internal/apps/${appId}/silos/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    if (selectedEmbeddingServiceId !== undefined) {
+      url += `&selected_embedding_service_id=${selectedEmbeddingServiceId}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
   }
 
   async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
@@ -1232,6 +1605,239 @@ class ApiService {
         body: JSON.stringify({ marketplace_visibility: visibility }),
       },
     );
+  }
+
+  // ==================== FULL APP EXPORT/IMPORT ====================
+  async exportFullApp(appId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/export`, {
+      method: 'POST',
+      headers: this.prepareHeaders({}),
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importFullApp(
+    file: File,
+    conflictMode: 'fail' | 'rename' | 'override',
+    newName?: string
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Build query params
+    const params = new URLSearchParams();
+    params.append('conflict_mode', conflictMode);
+    
+    if (newName) {
+      params.append('new_name', newName);
+    }
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Use fetch directly to avoid issues with FormData
+    const url = `${this.baseURL}/internal/apps/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  // ==================== IMPORT PREVIEW API ====================
+
+  async previewAgentImport(appId: number, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/preview-import`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async previewAppImport(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}/internal/apps/preview-import`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importAgentWithOptions(
+    appId: number,
+    file: File,
+    options: {
+      conflictMode: string;
+      newName?: string;
+      selectedAIServiceId?: number;
+      importBundledSilo?: boolean;
+      importBundledOutputParser?: boolean;
+      importBundledMCPConfigs?: boolean;
+      importBundledAgentTools?: boolean;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const params = new URLSearchParams();
+    params.append('conflict_mode', options.conflictMode);
+    if (options.newName) {
+      params.append(
+        'new_name',
+        options.newName
+      );
+    }
+    if (options.selectedAIServiceId !== undefined) {
+      params.append(
+        'selected_ai_service_id',
+        String(options.selectedAIServiceId)
+      );
+    }
+    if (options.importBundledSilo === false) {
+      params.append('import_bundled_silo', 'false');
+    }
+    if (options.importBundledOutputParser === false) {
+      params.append('import_bundled_output_parser', 'false');
+    }
+    if (options.importBundledMCPConfigs === false) {
+      params.append('import_bundled_mcp_configs', 'false');
+    }
+    if (options.importBundledAgentTools === false) {
+      params.append('import_bundled_agent_tools', 'false');
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importAppWithOptions(
+    file: File,
+    options: {
+      conflictMode: string;
+      newAppName?: string;
+      componentSelection?: Record<string, string[]>;
+      apiKeys?: Record<string, string>;
+    }
+  ) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const params = new URLSearchParams();
+    params.append('conflict_mode', options.conflictMode);
+    if (options.newAppName) {
+      params.append('new_name', options.newAppName);
+    }
+
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (options.componentSelection) {
+      formData.append(
+        'component_selection_json',
+        JSON.stringify(options.componentSelection),
+      );
+    }
+    if (options.apiKeys && Object.keys(options.apiKeys).length > 0) {
+      formData.append(
+        'api_keys_json',
+        JSON.stringify(options.apiKeys),
+      );
+    }
+
+    const url = `${this.baseURL}/internal/apps/import?${params}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  // ==================== SYSTEM SETTINGS (ADMIN) ====================
+  async fetchSystemSettings() {
+    return this.request('/internal/admin/settings');
+  }
+
+  async updateSystemSetting(key: string, value: string) {
+    return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async resetSystemSetting(key: string) {
+    return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== UTILITY METHODS ====================

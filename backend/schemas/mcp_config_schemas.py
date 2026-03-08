@@ -21,6 +21,7 @@ class MCPConfigDetailSchema(BaseModel):
     name: str
     description: Optional[str] = ""
     config: str  # JSON string containing the full MCP server configuration
+    ssl_verify: bool = True
     created_at: Optional[datetime]
     
     model_config = ConfigDict(from_attributes=True)
@@ -31,3 +32,4 @@ class CreateUpdateMCPConfigSchema(BaseModel):
     name: str
     description: Optional[str] = ""
     config: str  # JSON string containing the full MCP server configuration
+    ssl_verify: bool = True

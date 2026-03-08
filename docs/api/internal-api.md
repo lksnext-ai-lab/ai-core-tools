@@ -85,6 +85,9 @@ async def create_agent(
 | PUT | `/{app_id}` | Update app | owner |
 | DELETE | `/{app_id}` | Delete app | owner |
 | GET | `/{app_id}/usage` | Get app usage stats | viewer |
+| POST | `/{app_id}/export` | Export full app configuration | viewer |
+| POST | `/preview-import` | Preview app import | user |
+| POST | `/import` | Import full app configuration | user |
 
 **Example: List Apps**
 
@@ -103,6 +106,25 @@ Response:
   }
 ]
 ```
+
+### App Export and Import
+
+**Export**: `POST /internal/apps/{app_id}/export`
+
+- Returns a JSON export with app configuration and component definitions.
+- Secrets are sanitized; heavy data and conversations are excluded.
+
+**Preview Import**: `POST /internal/apps/preview-import`
+
+- Upload an export file to preview components, dependencies, and warnings.
+- Read-only; no database changes.
+
+**Import**: `POST /internal/apps/import`
+
+- Upload an export file to create a new app from the configuration.
+- Supports conflict handling and optional component selection.
+
+See [App Export and Import](../guides/app-export-import.md) for details.
 
 ### Collaboration
 

@@ -1,5 +1,5 @@
 ---
-name: Version Bumper
+name: version-bumper
 description: Specialized agent for managing semantic versioning in pyproject.toml. Bumps major, minor, or patch versions following semantic versioning principles.
 ---
 

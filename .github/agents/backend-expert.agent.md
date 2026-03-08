@@ -1,5 +1,5 @@
 ---
-name: Backend Expert
+name: backend-expert
 description: Expert in Python backend development with FastAPI, SQLAlchemy, Pydantic, LangChain, PostgreSQL, and AI/LLM integration. Specializes in REST APIs, database design, service architecture, and AI tooling.
 ---
 

@@ -7,6 +7,7 @@ import ActionDropdown from '../components/ui/ActionDropdown';
 import Speedometer from '../components/ui/Speedometer';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
+import AppImportStepper from '../components/import/AppImportStepper';
 
 // Define the App type (like your Pydantic models!)
 interface UsageStats {
@@ -48,6 +49,7 @@ function AppsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [usageStats, setUsageStats] = useState<Record<number, UsageStats>>({});
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
@@ -85,6 +87,26 @@ function AppsPage() {
     }
   }
 
+  // Function to refresh apps without showing loading spinner (for after create/import)
+  async function refreshApps() {
+    try {
+      const response = await apiService.getApps();
+      setApps(response);
+      
+      // Extract usage stats from response
+      const stats: Record<number, UsageStats> = {};
+      response.forEach((app: App) => {
+        if (app.usage_stats) {
+          stats[app.app_id] = app.usage_stats;
+        }
+      });
+      setUsageStats(stats);
+    } catch (err) {
+      // Silently fail to avoid disrupting user experience
+      console.error('Failed to refresh apps:', err);
+    }
+  }
+
   // Function to load only usage stats (optimized for auto-refresh)
   async function loadUsageStats() {
     try {
@@ -116,7 +138,9 @@ function AppsPage() {
     setShowCreateModal(false);
     setSuccess(`App "${data.name}" created successfully!`);
     setError(null);
-    loadApps(); // Reload the list
+    refreshApps(); // Refresh the list without loading spinner
+    // Auto-dismiss notification after 5 seconds
+    setTimeout(() => setSuccess(null), 5000);
   }
 
   // Function to leave an app (for editors only)
@@ -130,7 +154,7 @@ function AppsPage() {
       setSuccess(null);
       await apiService.leaveApp(app.app_id);
       setSuccess(`Successfully left "${app.name}"`);
-      loadApps(); // Reload the list
+      refreshApps(); // Refresh the list without loading spinner
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to leave app');
     }
@@ -168,12 +192,45 @@ Type the app name to confirm: "${app.name}"`;
       setSuccess(null);
       await apiService.deleteApp(app.app_id);
       setSuccess(`App "${app.name}" has been successfully deleted.`);
-      loadApps(); // Reload the list
+      refreshApps(); // Refresh the list without loading spinner
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete app');
     } finally {
       setLoading(false);
     }
+  }
+
+  // Function to export full app
+  async function handleExportApp(app: App) {
+    try {
+      setError(null);
+      setSuccess(null);
+      const blob = await apiService.exportFullApp(app.app_id);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      a.download = `${app.name.replace(/\s+/g, '-')}-full-export-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      setSuccess(`Full app "${app.name}" exported successfully!`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export app');
+    }
+  }
+
+  // Function to handle import completion
+  function handleImportComplete() {
+    setShowImportModal(false);
+    setSuccess('App imported successfully!');
+    refreshApps();
+    setTimeout(() => setSuccess(null), 5000);
   }
 
   // Function to get user initials for avatar
@@ -209,13 +266,22 @@ Type the app name to confirm: "${app.name}"`;
           <h1 className="text-2xl font-bold text-gray-900">My Apps</h1>
           <p className="text-gray-600">Manage your AI applications and workspaces</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-        >
-          <span className="mr-2">+</span>
-          {' '}New App
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+          >
+            <span className="mr-2">📥</span>
+            Import App
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+          >
+            <span className="mr-2">+</span>
+            {' '}New App
+          </button>
+        </div>
       </div>
 
       {/* Apps Table */}
@@ -422,6 +488,12 @@ Type the app name to confirm: "${app.name}"`;
                     icon: '⚙️',
                     variant: 'secondary'
                   },
+                  {
+                    label: 'Export Full App',
+                    onClick: () => handleExportApp(app),
+                    icon: '📤',
+                    variant: 'secondary'
+                  },
                   ...(app.role !== 'owner' ? [{
                     label: 'Leave App',
                     onClick: () => handleLeaveApp(app),
@@ -468,6 +540,15 @@ Type the app name to confirm: "${app.name}"`;
           onCancel={() => setShowCreateModal(false)}
         />
       </Modal>
+
+      {/* Import App Stepper */}
+      {showImportModal && (
+        <AppImportStepper
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={handleImportComplete}
+        />
+      )}
     </div>
   );
 }

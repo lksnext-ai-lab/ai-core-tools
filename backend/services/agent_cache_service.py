@@ -6,6 +6,39 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
+def _content_blocks_to_str(blocks: list) -> str:
+    """Convert a LangChain multimodal content block list to a display string.
+
+    Handles text, image_url and image_generation_call block types so that
+    conversation history never shows raw Python repr of the block list.
+    """
+    text_parts = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        block_type = block.get("type", "")
+        if block_type == "text":
+            text = block.get("text", "").strip()
+            if text:
+                text_parts.append(text)
+        elif block_type == "image_generation_call":
+            block_id = block.get("id", "")
+            text_parts.append(f"[IMAGE:{block_id}]" if block_id else "[Imagen generada]")
+        elif block_type == "image_url":
+            # For Gemini-generated images the URL is a data URI; derive a stable
+            # ID from a content hash so _resolve_image_placeholders can match
+            # the registered file (saved as generated_image_{hash}.png).
+            url = (block.get("image_url") or {}).get("url", "")
+            if url.startswith("data:image/") and ";base64," in url:
+                import hashlib as _hl
+                import base64 as _b64
+                b64_data = url.split(";base64,", 1)[1]
+                img_hash = _hl.sha256(_b64.b64decode(b64_data)).hexdigest()[:16]
+                text_parts.append(f"[IMAGE:{img_hash}]")
+            # External-URL images are not resolved; skip silently.
+    return " ".join(text_parts) if text_parts else ""
+
 class CheckpointerCacheService:
     """
     Service to manage a shared AsyncConnectionPool for LangGraph's PostgreSQL checkpointer.
@@ -168,7 +201,7 @@ class CheckpointerCacheService:
                             content = msg.content if hasattr(msg, 'content') else str(msg)
 
                             if isinstance(content, list):
-                                content_str = str(content)
+                                content_str = _content_blocks_to_str(content)
                             else:
                                 content_str = str(content) if content else ""
 
@@ -188,7 +221,7 @@ class CheckpointerCacheService:
                         content = msg.content if hasattr(msg, 'content') else str(msg)
 
                         if isinstance(content, list):
-                            content_str = str(content)
+                            content_str = _content_blocks_to_str(content)
                         else:
                             content_str = str(content) if content else ""
 

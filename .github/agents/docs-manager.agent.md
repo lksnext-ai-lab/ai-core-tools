@@ -1,5 +1,5 @@
 ---
-name: Documentation Manager
+name: docs-manager
 description: Expert in managing project documentation in the docs/ folder. Maintains index, TOC, sections, and tracks documentation freshness against git commits. Can self-describe its capabilities.
 tools: [read, edit]
 ---

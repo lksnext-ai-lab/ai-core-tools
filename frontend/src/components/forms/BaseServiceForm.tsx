@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import FormActions from './FormActions';
 import { apiService } from '../../services/api';
+import Alert from '../ui/Alert';
 
 export interface ServiceFormData {
   name: string;
@@ -40,6 +41,7 @@ interface BaseServiceFormProps {
   getProviderDefaults: (provider: string) => ProviderDefaults;
   formTitle: string;
   serviceType: string; // "AI Service" or "Embedding Service"
+  needsApiKey?: boolean;
 }
 
 function BaseServiceForm({
@@ -49,7 +51,8 @@ function BaseServiceForm({
   providers,
   getProviderDefaults,
   formTitle,
-  serviceType
+  serviceType,
+  needsApiKey = false
 }: Readonly<BaseServiceFormProps>) {
   const { appId } = useParams();
   const [formData, setFormData] = useState<ServiceFormData>({
@@ -73,7 +76,7 @@ function BaseServiceForm({
         name: service.name || '',
         provider: service.provider || '',
         model_name: service.model_name || '',
-        api_key: service.api_key || '',
+        api_key: service.api_key === 'CHANGE_ME' ? '' : (service.api_key || ''),
         base_url: service.base_url || ''
       });
     }
@@ -173,6 +176,15 @@ function BaseServiceForm({
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-800 text-sm">{error}</p>
         </div>
+      )}
+
+      {needsApiKey && (
+        <Alert
+          type="warning"
+          title="API Key Required"
+          message="This service was imported without an API key. Please enter a valid API key before saving."
+          className="mb-4"
+        />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">

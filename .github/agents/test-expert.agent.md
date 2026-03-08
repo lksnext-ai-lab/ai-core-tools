@@ -1,5 +1,5 @@
 ---
-name: Test Expert
+name: test-expert
 description: Expert in writing, running, and maintaining backend tests for the Mattin AI project. Specializes in pytest, test fixtures, transaction isolation, mocking, and CI/CD integration for FastAPI + SQLAlchemy applications.
 ---
 

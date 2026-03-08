@@ -239,7 +239,7 @@ function ChatInterface({
         setCurrentConversationId(targetConversationId);
         
         // Notify parent component about the new conversation
-        if (onConversationCreated) {
+        if (onConversationCreated && targetConversationId) {
           onConversationCreated(targetConversationId);
         }
         console.log(`Created conversation ${targetConversationId} for file attachment`);
@@ -286,9 +286,15 @@ function ChatInterface({
     }
   };
 
+  const resolveFileUrl = useCallback(
+    (fileId: string): Promise<string> =>
+      apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId),
+    [appId, agentId, currentConversationId],
+  );
+
   const handleDownloadFile = async (fileId: string) => {
     try {
-      const url = await apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId);
+      const url = await resolveFileUrl(fileId);
       window.open(url, '_blank');
     } catch (error) {
       console.error('Error getting download URL:', error);
@@ -418,7 +424,7 @@ function ChatInterface({
                     <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bubbleClass}`}>
                       <div className="text-sm font-medium mb-1">{senderLabel}</div>
                       <div>
-                        <MessageContent content={message.content} />
+                        <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
                       </div>
                       {message.files && message.files.length > 0 && (
                         <div className="mt-2 text-xs opacity-75">

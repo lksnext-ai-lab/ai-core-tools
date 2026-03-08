@@ -233,16 +233,22 @@ export default function MarketplaceChatPage() {
     [numericId],
   );
 
+  const resolveFileUrl = useCallback(
+    (fileId: string): Promise<string> =>
+      apiService.getMarketplaceFileDownloadUrl(numericId, fileId),
+    [numericId],
+  );
+
   const handleDownloadFile = useCallback(
     async (fileId: string) => {
       try {
-        const url = await apiService.getMarketplaceFileDownloadUrl(numericId, fileId);
+        const url = await resolveFileUrl(fileId);
         window.open(url, '_blank');
       } catch (error) {
         console.error('Error getting download URL:', error);
       }
     },
-    [numericId],
+    [resolveFileUrl],
   );
 
   const handleRemoveFile = useCallback(
@@ -348,7 +354,7 @@ export default function MarketplaceChatPage() {
         )}
 
         {messages.map((msg) => (
-          <ChatBubble key={msg.id} message={msg} />
+          <ChatBubble key={msg.id} message={msg} resolveFileUrl={resolveFileUrl} />
         ))}
 
         {isSending && (
@@ -428,9 +434,10 @@ export default function MarketplaceChatPage() {
 
 interface ChatBubbleProps {
   readonly message: ChatMessage;
+  readonly resolveFileUrl: (fileId: string) => Promise<string>;
 }
 
-function ChatBubble({ message }: ChatBubbleProps) {
+function ChatBubble({ message, resolveFileUrl }: ChatBubbleProps) {
   if (message.type === 'user') {
     return (
       <div className="flex items-start gap-3 justify-end">
@@ -457,7 +464,7 @@ function ChatBubble({ message }: ChatBubbleProps) {
     <div className="flex items-start gap-3">
       <span className="text-lg flex-shrink-0" aria-hidden="true">🤖</span>
       <div className="bg-gray-100 rounded-lg px-4 py-3 max-w-[75%]">
-        <MessageContent content={message.content} />
+        <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
       </div>
     </div>
   );
