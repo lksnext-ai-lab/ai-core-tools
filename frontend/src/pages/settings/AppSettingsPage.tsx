@@ -6,7 +6,7 @@ import { useAppRole } from '../../hooks/useAppRole';
 import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 
-function GeneralSettingsPage() {
+function AppSettingsPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -436,4 +436,4 @@ function GeneralSettingsPage() {
   );
 }
 
-export default GeneralSettingsPage; 
+export default AppSettingsPage; 

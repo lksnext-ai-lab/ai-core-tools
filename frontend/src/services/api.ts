@@ -1822,6 +1822,24 @@ class ApiService {
     return response.json();
   }
 
+  // ==================== SYSTEM SETTINGS (ADMIN) ====================
+  async fetchSystemSettings() {
+    return this.request('/internal/admin/settings');
+  }
+
+  async updateSystemSetting(key: string, value: string) {
+    return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async resetSystemSetting(key: string) {
+    return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== UTILITY METHODS ====================
 }
 

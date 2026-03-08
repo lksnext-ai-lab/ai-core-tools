@@ -1,0 +1,11 @@
+# system_defaults.yaml
+# Default system settings for Mattin AI.
+# These values are used when no DB override or env var exists.
+# Committed to git — safe to edit for fresh installs.
+
+settings:
+  marketplace_call_quota:
+    value: "0"
+    type: "integer"
+    category: "marketplace"
+    description: "Maximum API calls per user per month to marketplace agents. 0 = unlimited."
