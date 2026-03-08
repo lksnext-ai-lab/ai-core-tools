@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.3.16] - 2026-03-08
+
+### Added
+
+- **Chat Image Rendering**: Added inline display support for agent-generated images in chat conversations.
+- **SSL Connectivity Option**: Added configuration support to disable SSL verification / allow unsafe SSL connections for integrations that require it.
+- **System Settings Management**: Added a full app-scoped settings management experience under `/apps/:appId/settings`, including dedicated sections for `general`, `ai-services`, `embedding-services`, `api-keys`, `collaboration`, `mcp-configs`, and `data-structures`.
+
+### Changed
+
+- **Gemini Chat Handling**: Improved Gemini call handling and rendering behavior for native Gemini-generated images.
+- **Development Agent Config**: Updated development agent definitions/instructions.
+
+### Fixed
+
+- **Chat UI Stability**: Resolved image flickering in chat when rendering generated images.
+- **Frontend Routing**: Removed orphan non-app-scoped `/settings/*` routes (`ai-services`, `api-keys`, `collaboration`, `embedding-services`, `general`, `mcp-configs`, `data-structures`) that rendered settings pages with undefined `appId` and broken tab navigation.
+- **System Settings Access**: Settings pages are now consistently reachable only through app-scoped routes (`/apps/:appId/settings`), preventing undefined context errors.
+- **Navigation Targets**: Header settings link and About page shortcuts no longer point to dead non-app-scoped settings routes.
+
 ## [0.3.15] - 2026-03-02
 
 ### Added
