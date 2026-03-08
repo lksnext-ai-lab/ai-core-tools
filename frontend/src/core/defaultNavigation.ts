@@ -90,6 +90,13 @@ export const defaultNavigation: NavigationConfig = {
       adminOnly: true
     },
     {
+      path: '/admin/settings',
+      name: 'Settings',
+      icon: '⚙️',
+      section: 'admin',
+      adminOnly: true
+    },
+    {
       path: '/about',
       name: 'About',
       icon: 'ℹ️',
