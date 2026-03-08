@@ -35,7 +35,7 @@ import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
-import GeneralSettingsPage from '../pages/settings/GeneralSettingsPage';
+import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
@@ -300,13 +300,13 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 {/* App-specific settings routes */}
                 <Route path="/apps/:appId/settings" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    <SettingsLayout><AppSettingsPage /></SettingsLayout>
                   </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/general" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    <SettingsLayout><AppSettingsPage /></SettingsLayout>
                   </ProtectedLayoutRoute>
                 } />
 
