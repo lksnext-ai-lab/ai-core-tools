@@ -193,6 +193,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Plan Executor | `@plan-executor` | Reads plans from /plans, generates sequenced step files for implementation agents, executes plan extensions with continuous step numbering |
 | Documentation Manager | `@docs-manager` | Documentation management, index/TOC, freshness tracking |
 | Open Source Manager | `@oss-manager` | Licensing, community files, changelog, release notes, OSS governance |
+| Release Manager | `@release-manager` | Complete release workflow — version bump, changelog, merge to main, tagging, GitHub releases |
 
 ## Architecture Conventions
 
