@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.3.17] - 2026-03-08
+
+### Added
+
+- **Release Manager Agent**: Added dedicated agent for orchestrating complete release workflows (version bump, changelog, merge, tag, GitHub release).
+- **Agent Documentation**: Added `.github/README.md` documenting all specialized Copilot agents and their capabilities.
+
 ## [0.3.16] - 2026-03-08
 
 ### Added
