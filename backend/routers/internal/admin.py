@@ -7,9 +7,11 @@ from models.app import App
 from models.agent import Agent
 from models.api_key import APIKey
 from services.user_service import UserService
+from services.system_settings_service import SystemSettingsService
 from utils.config import is_omniadmin
 from routers.internal.auth_utils import get_current_user_oauth
 from schemas.admin_schemas import UserListResponse, UserDetailResponse, SystemStatsResponse
+from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -178,4 +180,68 @@ async def get_system_stats(
         )
     except Exception as e:
         logger.error(f"Error retrieving system stats: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving system stats: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error retrieving system stats: {str(e)}")
+
+
+@router.get("/settings", response_model=list[SystemSettingRead])
+async def list_settings(
+    auth_context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """List all system settings with resolved values and metadata"""
+    try:
+        service = SystemSettingsService(db)
+        settings = service.get_all_settings()
+        return [SystemSettingRead(**setting) for setting in settings]
+    except Exception as e:
+        logger.error(f"Error retrieving system settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving system settings: {str(e)}")
+
+
+@router.put("/settings/{key}", response_model=SystemSettingRead)
+async def update_setting(
+    key: str,
+    update: SystemSettingUpdate,
+    auth_context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Update a system setting value"""
+    try:
+        service = SystemSettingsService(db)
+        service.update_setting(key, update.value)
+        
+        # Get full setting with resolved value for response
+        all_settings = service.get_all_settings()
+        updated_setting = next((s for s in all_settings if s["key"] == key), None)
+        
+        if updated_setting is None:
+            raise HTTPException(status_code=500, detail="Failed to retrieve updated setting")
+        
+        logger.info(f"Setting '{key}' updated by admin {auth_context.identity.email}")
+        return SystemSettingRead(**updated_setting)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating setting '{key}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating setting: {str(e)}")
+
+
+@router.delete("/settings/{key}")
+async def reset_setting(
+    key: str,
+    auth_context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Reset a system setting to its default value"""
+    try:
+        service = SystemSettingsService(db)
+        service.reset_setting(key)
+        logger.info(f"Setting '{key}' reset to default by admin {auth_context.identity.email}")
+        return {"message": f"Setting '{key}' has been reset to its default value"}
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error resetting setting '{key}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error resetting setting: {str(e)}") 
