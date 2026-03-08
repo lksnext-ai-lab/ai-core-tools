@@ -255,9 +255,21 @@ class SystemSettingsService:
 
     @staticmethod
     def _cast_boolean(raw_value: Any) -> bool:
-        value_text = "" if raw_value is None else str(raw_value)
-        return value_text.lower() in ("true", "1", "yes")
+        # Preserve explicit booleans as-is
+        if isinstance(raw_value, bool):
+            return raw_value
 
+        value_text = str(raw_value).strip().lower()
+        true_values = {"true", "1", "yes"}
+        false_values = {"false", "0", "no"}
+
+        if value_text in true_values:
+            return True
+        if value_text in false_values:
+            return False
+
+        # Any other value (including None / empty string / arbitrary text) is invalid
+        raise ValueError(f"Cannot interpret {raw_value!r} as boolean")
     @staticmethod
     def _cast_json(raw_value: Any) -> Any:
         if isinstance(raw_value, (dict, list, int, float, bool)) or raw_value is None:
