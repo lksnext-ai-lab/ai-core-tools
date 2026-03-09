@@ -409,6 +409,35 @@ class TestImportMCPConfigAPI:
             # If route ordering is correct, should get 201, not 422 or 404
             assert response.status_code == 201
 
+class TestMCPConfigConnectionAPI:
+    """Verify behaviour of the `/test-connection` endpoint itself."""
+
+    def test_test_connection_endpoint_includes_details(self, test_client):
+        # service returns a dictionary with details key; router should pass it through
+        with patch(
+            "routers.internal.mcp_configs.MCPConfigService.test_connection_with_config"
+        ) as mock_test:
+            mock_test.return_value = {
+                "status": "error",
+                "message": "something is wrong",
+                "details": "underlying cause here"
+            }
+
+            payload = {
+                "name": "Foo",
+                "description": "",
+                "config": "{}",
+                "ssl_verify": True
+            }
+
+            response = test_client.post(
+                "/internal/apps/1/mcp-configs/test-connection",
+                json=payload,
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "error"
+            assert data.get("details") == "underlying cause here"
 
 # ==================== ERROR HANDLING TESTS ====================
 
