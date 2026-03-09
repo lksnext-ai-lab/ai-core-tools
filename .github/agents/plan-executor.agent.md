@@ -203,7 +203,7 @@ When the user confirms a commit or returns after a pause:
 2. **Check for completed steps**: Scan all step files for appended Result sections that haven't been reflected in the manifest yet. Update the manifest accordingly.
 3. **Identify next actionable step**: Find the next `pending` step whose dependencies are all `done`.
 4. **Process next step**:
-   - **Implementation step** (@backend-expert, @react-expert, @alembic-expert, @docs-manager): Invoke directly, wait for result, update manifest to `done`, then proceed to commit confirmation.
+   - **Implementation step** (@backend-expert, @react-expert, @alembic-expert, @docs-manager): **Use the `agent` tool** with the agent's slug (no `@`) and the step's full task+context as the prompt. Wait for the result, append it to the step file's `## Result` section, update manifest to `done`, then proceed to commit confirmation. Do NOT describe what the agent will do — call the `agent` tool immediately.
    - **Commit confirmation**: Run `git status` and `git diff --stat`, show the user the files and commit message, wait for confirmation before running `git add` + `git commit -S` + `git pull` + `git push`.
 5. **Generate new steps if needed**: If fewer than 2 pending steps remain, generate the next 2-3 steps.
 6. **Continue until pause point**: After each confirmed commit, automatically invoke the next implementation step. Always pause before each commit.
@@ -466,18 +466,59 @@ FR: FR-1
 
 ## Delegatable Agents
 
-| Agent | When to Delegate | Invocation Mode |
-|-------|-----------------|-----------------|
-| `@backend-expert` | Models, schemas, services, repositories, routes | **Auto-invoke** (subagent, file ops) |
-| `@react-expert` | Pages, components, hooks, forms | **Auto-invoke** (subagent, file ops) |
-| `@alembic-expert` | Database migrations | **Auto-invoke** (subagent, file ops) |
-| `@docs-manager` | Documentation updates | **Auto-invoke** (subagent, file ops) |
+| Agent | Slug for Tool Call | When to Delegate |
+|-------|-------------------|-----------------|
+| `@backend-expert` | `backend-expert` | Models, schemas, services, repositories, routes |
+| `@react-expert` | `react-expert` | Pages, components, hooks, forms |
+| `@alembic-expert` | `alembic-expert` | Database migrations |
+| `@docs-manager` | `docs-manager` | Documentation updates |
 
 **Git operations** (branch creation, commits, push, PR creation) are handled **directly by this agent** using the `git-github` skill — no delegation needed.
 
 **Note**: Subagents (the four agents above) do not have terminal access. This means they handle only file operations. Git is handled by plan-executor itself.
 
 The `@test-expert` agent is **not included** for now.
+
+---
+
+## Subagent Invocation Mechanism
+
+### How to Actually Invoke a Subagent
+
+**CRITICAL**: Step files use `@react-expert` as a display label — that is documentation only. To actually run a subagent you MUST use the **`agent` tool** with the slug **without `@`**.
+
+When you process an implementation step whose `target_agent` is (for example) `@react-expert`, you must:
+
+1. Read the full task content from the step file
+2. **Immediately call the `agent` tool** with:
+   - Agent slug: `react-expert` (no `@`)
+   - Prompt: the complete task description from the step's `## Task` section (plus relevant context sections)
+3. Wait for the agent's response
+4. Update the step file's `## Result` section with the outcome
+5. Update `status.yaml`
+
+The mapping from step `target_agent` value → tool call slug:
+
+| `target_agent` in step file | `agent` tool slug to use |
+|----------------------------|--------------------------|
+| `@backend-expert` | `backend-expert` |
+| `@react-expert` | `react-expert` |
+| `@alembic-expert` | `alembic-expert` |
+| `@docs-manager` | `docs-manager` |
+
+### What "Auto-Invoke" Means
+
+"Auto-invoke" means: **in the same turn**, without asking the user, call the `agent` tool with the target agent's slug and the step's task as the prompt. Do NOT describe what the agent *should* do — actually invoke it.
+
+### What to Pass as the Prompt
+
+Pass the entire `## Task` section of the step file, followed by any `## Context` and `## Expected Outcome` sections. The subagent should receive a self-contained prompt that does not require reading the spec.
+
+### Do NOT
+
+- ❌ Describe the invocation without making the tool call ("I will now invoke @react-expert to…")
+- ❌ Use `@react-expert` (with `@`) as the agent slug in the tool call — this is display notation only
+- ❌ Skip the invocation and just update status.yaml to `done` without actually running the agent
 
 ## Skills
 
@@ -504,7 +545,7 @@ Project rules (signing, remotes, branch naming, `--body-file` rule) are in `.git
 - ✅ **Pause for commit confirmation** after every implementation step — show files + message before committing
 - ✅ Update `status.yaml` on every change
 - ✅ Reference specific files, patterns, and conventions from the Mattin AI codebase in step prompts
-- ✅ **Directly invoke** file-operation agents (@backend-expert, @react-expert, @alembic-expert, @docs-manager)
+- ✅ **Directly invoke** file-operation agents (@backend-expert, @react-expert, @alembic-expert, @docs-manager) — use the `agent` tool with the slug **without `@`** (e.g., `react-expert`) and the step's full task as the prompt; never just describe the invocation
 - ✅ **Run git commands directly** following the `git-github` skill
 - ✅ Check for and process results from invoked agents before proceeding to next steps
 - ✅ Map every step to its source FR and AC
@@ -525,6 +566,8 @@ Project rules (signing, remotes, branch naming, `--body-file` rule) are in `.git
 - ❌ Assume a step is done without a Result section in the step file
 - ❌ Commit without first showing the user the staged files and message
 - ❌ Stage or commit any file under `/plans/` — plan files never go into source control
+- ❌ Describe an agent invocation in text without actually calling the `agent` tool — "I will now invoke @react-expert" is NOT an invocation
+- ❌ Use `@agentname` (with `@`) as the agent slug in a tool call — slugs have no `@`
 
 ---
 
