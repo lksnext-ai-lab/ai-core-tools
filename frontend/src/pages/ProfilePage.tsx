@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useUser } from '../contexts/UserContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
+import { MarketplaceQuotaUsage } from '../types/marketplace';
 
 interface App {
   app_id: number;
@@ -27,6 +28,7 @@ const ProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [quotaUsage, setQuotaUsage] = useState<MarketplaceQuotaUsage | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -51,6 +53,14 @@ const ProfilePage: React.FC = () => {
       // Don't show error if it's just empty data or minor issue
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const quotaData = await apiService.getMarketplaceQuotaUsage();
+      setQuotaUsage(quotaData);
+    } catch (err) {
+      // Quota fetch is non-critical; silently ignore
+      console.error('Failed to fetch marketplace quota usage', err);
     }
   }
 
@@ -102,6 +112,46 @@ const ProfilePage: React.FC = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const renderQuotaContent = () => {
+    if (!quotaUsage) {
+      return (
+        <div className="flex items-center space-x-2 text-sm text-gray-400">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+          <span>Loading...</span>
+        </div>
+      );
+    }
+    if (quotaUsage.is_exempt) {
+      return <p className="text-sm font-medium text-blue-600">Exempt (Admin)</p>;
+    }
+    if (quotaUsage.quota === 0) {
+      return (
+        <p className="text-sm text-gray-600">
+          <span className="font-semibold text-gray-900">{quotaUsage.call_count}</span> / Unlimited
+        </p>
+      );
+    }
+    const atLimit = quotaUsage.call_count >= quotaUsage.quota;
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className={`text-sm font-semibold ${atLimit ? 'text-red-600' : 'text-gray-900'}`}>
+            {quotaUsage.call_count} / {quotaUsage.quota}
+          </p>
+          {atLimit && (
+            <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Limit reached</span>
+          )}
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-2 rounded-full transition-all ${atLimit ? 'bg-red-500' : 'bg-indigo-500'}`}
+            style={{ width: `${Math.min(100, (quotaUsage.call_count / quotaUsage.quota) * 100)}%` }}
+          />
+        </div>
+      </div>
+    );
   };
 
   if (userLoading) {
@@ -160,6 +210,16 @@ const ProfilePage: React.FC = () => {
               </dd>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Marketplace Call Usage */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+          <span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg mr-3">📊</span>Marketplace Call Usage (Current Month)
+        </h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          {renderQuotaContent()}
         </div>
       </div>
 
