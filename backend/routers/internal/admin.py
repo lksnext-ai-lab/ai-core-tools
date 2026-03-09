@@ -8,11 +8,13 @@ from models.agent import Agent
 from models.api_key import APIKey
 from services.user_service import UserService
 from services.system_settings_service import SystemSettingsService
+from services.marketplace_quota_service import MarketplaceQuotaService
 from utils.config import is_omniadmin
 from routers.internal.auth_utils import get_current_user_oauth
-from schemas.admin_schemas import UserListResponse, UserDetailResponse, SystemStatsResponse
+from schemas.admin_schemas import UserListResponse, UserDetailResponse, SystemStatsResponse, MarketplaceQuotaResetResponse
 from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
 from utils.logger import get_logger
+from datetime import datetime, timezone
 
 logger = get_logger(__name__)
 
@@ -146,6 +148,69 @@ async def deactivate_user(
     except Exception as e:
         logger.error(f"Error deactivating user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deactivating user: {str(e)}")
+
+
+@router.post("/users/{user_id}/reset-marketplace-quota", response_model=MarketplaceQuotaResetResponse)
+async def reset_user_marketplace_quota(
+    user_id: int,
+    auth_context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Reset a user's current month marketplace quota to 0.
+    
+    This endpoint is only accessible to OMNIADMIN users and is used for:
+    - Granting additional quota when a user reports counting errors
+    - Providing extra quota to VIP users
+    - Testing/debugging purposes
+    
+    The reset only affects the current UTC month; previous months remain unchanged.
+    """
+    try:
+        # Get the target user and validate exists
+        user = UserService.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get current usage before reset
+        previous_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+        
+        # Perform the reset (handle case where no record exists - idempotent behavior)
+        try:
+            MarketplaceQuotaService.reset_user_current_month_usage(user_id, db)
+        except ValueError:
+            # No usage record exists for current month - user already at 0, which is desired state
+            # Log this and return success anyway (idempotent)
+            logger.info(
+                f"OMNIADMIN {auth_context.identity.email} attempted to reset marketplace quota "
+                f"for user {user.email} (ID: {user_id}) but no usage record exists. "
+                f"User already has 0 usage for current month."
+            )
+        
+        # Get current timestamp
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        
+        # Log the reset action for audit trail
+        logger.info(
+            f"OMNIADMIN {auth_context.identity.email} (email) reset marketplace quota "
+            f"for user {user.email} (ID: {user_id}). Previous count: {previous_count}, New count: 0. "
+            f"Timestamp: {timestamp}"
+        )
+        
+        return MarketplaceQuotaResetResponse(
+            message="Marketplace quota reset successfully",
+            user_id=user_id,
+            user_email=user.email,
+            previous_count=previous_count,
+            new_count=0,
+            reset_by=auth_context.identity.email,
+            timestamp=timestamp
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resetting marketplace quota for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error resetting marketplace quota: {str(e)}")
 
 
 @router.get("/stats", response_model=SystemStatsResponse)
