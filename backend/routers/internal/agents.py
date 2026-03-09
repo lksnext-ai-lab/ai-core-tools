@@ -12,6 +12,8 @@ from services.agent_export_service import AgentExportService
 from services.agent_import_service import AgentImportService
 from services.mcp_server_service import MCPServerService
 from services.marketplace_service import MarketplaceService
+from services.marketplace_quota_service import MarketplaceQuotaService
+from services.system_settings_service import SystemSettingsService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
@@ -31,6 +33,8 @@ from services.file_management_service import FileManagementService, FileReferenc
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
+from models.agent import Agent, MarketplaceVisibility
+from models.user import User
 
 from utils.logger import get_logger
 
@@ -536,6 +540,32 @@ async def chat_with_agent(
         conversation_id: Optional conversation ID to continue existing conversation
     """
     try:
+        # Fetch agent to check marketplace visibility
+        agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND_ERROR)
+        
+        # Check marketplace quota enforcement (only for public marketplace agents)
+        if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
+            # Get user from database
+            user = db.query(User).filter(User.user_id == int(auth_context.identity.id)).first()
+            
+            # Check if user is exempt (OMNIADMIN)
+            if user and not MarketplaceQuotaService.is_user_exempt(user):
+                # Fetch quota setting
+                settings_service = SystemSettingsService(db)
+                quota_value = settings_service.get_setting("marketplace_call_quota")
+                
+                # Enforce quota if quota > 0
+                if quota_value and int(quota_value) > 0:
+                    quota = int(quota_value)
+                    if MarketplaceQuotaService.check_quota_exceeded(user.user_id, db, quota):
+                        current_usage = MarketplaceQuotaService.get_current_month_usage(user.user_id, db)
+                        raise HTTPException(
+                            status_code=429,
+                            detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC)."
+                        )
+        
         # Parse search params if provided
         parsed_search_params = None
         if search_params:
@@ -625,6 +655,18 @@ async def chat_with_agent(
             conversation_id=conversation_id,
             db=db
         )
+        
+        # Increment marketplace usage counter (if marketplace agent and not exempt)
+        if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
+            user = db.query(User).filter(User.user_id == int(auth_context.identity.id)).first()
+            if user and not MarketplaceQuotaService.is_user_exempt(user):
+                try:
+                    MarketplaceQuotaService.increment_usage(user.user_id, db)
+                    # Note: increment_usage already commits internally
+                    logger.debug(f"Incremented marketplace usage for user {user.user_id}")
+                except Exception as e:
+                    logger.error(f"Failed to increment marketplace usage for user {user.user_id}: {e}")
+                    # Continue — don't fail the request if counter fails
         
         logger.info(f"Chat request processed for agent {agent_id} by user {auth_context.identity.id}")
         return ChatResponseSchema(**result)
