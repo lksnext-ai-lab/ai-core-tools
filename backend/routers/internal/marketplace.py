@@ -16,6 +16,9 @@ from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_service import AgentService
 from services.file_management_service import FileManagementService, FileReference
+from services.marketplace_quota_service import MarketplaceQuotaService
+from services.system_settings_service import SystemSettingsService
+from utils.config import is_omniadmin
 from models.conversation import Conversation, ConversationSource
 from models.agent import Agent, MarketplaceVisibility
 from schemas.marketplace_schemas import (
@@ -45,6 +48,31 @@ def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
         "user_id": int(auth_context.identity.id),
         "email": auth_context.identity.email,
         "oauth": True,
+    }
+
+
+# ==================== QUOTA USAGE ====================
+
+
+@marketplace_router.get(
+    "/quota-usage",
+    summary="Get current user's marketplace quota usage",
+)
+async def get_marketplace_quota_usage(
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+) -> dict:
+    """Get current user's marketplace quota usage for the current UTC month."""
+    user_id = int(current_user.identity.id)
+    is_exempt = is_omniadmin(current_user.identity.email)
+    call_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+    settings_service = SystemSettingsService(db)
+    quota_value = settings_service.get_setting("marketplace_call_quota")
+    quota = int(quota_value) if quota_value is not None else 0
+    return {
+        "call_count": call_count,
+        "quota": quota,
+        "is_exempt": is_exempt,
     }
 
 
