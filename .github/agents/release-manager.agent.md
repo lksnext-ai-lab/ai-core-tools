@@ -1,7 +1,7 @@
 ---
 name: release-manager
 description: Expert in release workflow orchestration for Mattin AI. Handles version bumping, changelog updates, git tagging, branch merging, and GitHub release creation following GitFlow-style branching with develop and main.
-tools: [execute, read, edit]
+tools: [execute, agent, read, edit]
 agents: ["version-bumper", "oss-manager", "git-github"]
 ---
 

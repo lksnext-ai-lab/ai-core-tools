@@ -204,7 +204,7 @@ When the user confirms a commit or returns after a pause:
 3. **Identify next actionable step**: Find the next `pending` step whose dependencies are all `done`.
 4. **Process next step**:
    - **Implementation step** (@backend-expert, @react-expert, @alembic-expert, @docs-manager): **Use the `agent` tool** with the agent's slug (no `@`) and the step's full task+context as the prompt. Wait for the result, append it to the step file's `## Result` section, update manifest to `done`, then proceed to commit confirmation. Do NOT describe what the agent will do — call the `agent` tool immediately.
-   - **Commit confirmation**: Run `git status` and `git diff --stat`, show the user the files and commit message, wait for confirmation before running `git add` + `git commit -S` + `git pull` + `git push`.
+   - **Commit confirmation**: Run `git status --porcelain` and `git add <specific files>` and `git diff --staged --name-status` **first**, then show the user the **actual** staged file list and commit message. Only after user confirmation run `git commit -S` + `git pull` + `git push`. See Section 5 for the full procedure.
 5. **Generate new steps if needed**: If fewer than 2 pending steps remain, generate the next 2-3 steps.
 6. **Continue until pause point**: After each confirmed commit, automatically invoke the next implementation step. Always pause before each commit.
 
@@ -230,40 +230,61 @@ Follow the procedure in `.github/instructions/.plan-extensions.instructions.md` 
 
 When a step file has a Result section appended by an implementation agent:
 
-- If status is `done`: Update manifest, move to next step.
+- If status is `done`: Check for a `## Terminal Commands Required` block (see below), then update manifest and move to commit confirmation.
 - If status is `blocked`: Explain the blocker, suggest resolution, potentially regenerate the step or create a fix-up step.
 - If status is `needs-revision`: Read the feedback, regenerate the step prompt with corrections, create a new step file (e.g., `step_NNN_retry.md`).
 
+#### Terminal Commands Required (sub-agent delegation)
+
+Some sub-agents (especially `@alembic-expert`) cannot execute terminal commands and will include a `## Terminal Commands Required` block in their Result. When you see this block:
+
+1. **Run each listed command in order** using your terminal access before proceeding to commit confirmation.
+2. **Check the output** — if any command fails, set the step to `blocked`, report the error, and do not commit.
+3. **Only after all commands succeed**, proceed to the commit confirmation flow (Section 5).
+
+Example block from `@alembic-expert`:
+```
+## Terminal Commands Required
+Run these in order before committing:
+1. poetry run alembic upgrade head
+2. poetry run alembic downgrade -1
+3. poetry run alembic upgrade head
+```
+You run these directly (you have terminal access, subagents do not).
+
 ### 5. Commit Confirmation Flow
 
-After every implementation step completes, pause and show the user what will be committed:
+After every implementation step completes, pause and show the user what will be committed. **You MUST execute all terminal commands first and use their actual output — never show placeholder text.**
 
-1. **Run `git status` and `git diff --stat`**: Identify which files the implementation agent created/modified.
-2. **Stage the relevant files**: `git add <specific files>` — only application files (`backend/`, `frontend/`, `alembic/`, `docs/`, etc.). **Never stage anything under `/plans/`.**
-3. **Compose commit message**: Use Conventional Commits format. For plan steps, include the body with `Plan:`, `Step:`, and `FR:` references.
-4. **Present to user**:
+1. **Run `git status --porcelain`**: Execute this terminal command NOW. Collect the actual output to identify which files were created or modified by the implementation agent.
+2. **Stage the relevant files**: `git add <specific files>` — only application files (`backend/`, `frontend/`, `alembic/`, `docs/`, etc.). **Never stage anything under `/plans/`.** Use the actual file paths from step 1.
+3. **Run `git diff --staged --name-status`**: Execute this terminal command to confirm exactly what is staged. Use its output for the "Files staged" section below.
+4. **Compose commit message**: Use Conventional Commits format derived from the step's FR and the work actually done. Include the body with `Plan:`, `Step:`, and `FR:` references using the real step number and FR identifiers.
+5. **Present to user — every value must be filled in from real command output and step context**:
 
 ```
 ⏸️  COMMIT CONFIRMATION — Step NNN [Extension-1 if applicable]
 ═══════════════════════════════════════════════════════════
 Files staged:
-  M  <file1>
-  A  <file2>
+  M  backend/models/agent.py       ← ACTUAL lines from git diff --staged --name-status
+  A  alembic/versions/abc123.py    ← never use placeholder text like <file1>
 
 Commit message:
-  type(scope): description
+  feat(backend): add visibility field to Agent model  ← ACTUAL message
 
-  Plan: <slug>
-  Step: NNN
-  FR: FR-N
+  Plan: agent-marketplace   ← ACTUAL plan slug
+  Step: 002                 ← ACTUAL step number
+  FR: FR-1                  ← ACTUAL FR reference
 
 Confirm? (yes / skip / abort)
 ═══════════════════════════════════════════════════════════
 ```
 
-5. **On "yes"**: Run `git commit -S -m "..."`, then `git pull origin <branch>`, then `git push origin <branch>`. Update manifest step to `done`. Proceed to next implementation step.
-6. **On "skip"**: Mark step as `done` without committing. Continue execution.
-7. **On "abort"**: Stop execution. Leave manifest in current state. User can resume later.
+> ⚠️ **Do NOT show placeholder text** (`<file1>`, `<description>`, `NNN`, `<slug>`, etc.) in the confirmation block. If a section would be empty, explain why (e.g., "No files were modified — the agent reported no changes") and offer skip or abort.
+
+6. **On "yes"**: Run `git commit -S -m "..."`, then `git pull origin <branch>`, then `git push origin <branch>`. Update manifest step to `done`. Proceed to next implementation step.
+7. **On "skip"**: Mark step as `done` without committing. Continue execution.
+8. **On "abort"**: Stop execution. Leave manifest in current state. User can resume later.
 
 ### 6. Completion
 
