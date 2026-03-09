@@ -741,6 +741,7 @@ class FileManagementService:
         agent_id: int,
         user_context: Dict = None,
         conversation_id: Optional[str] = None,
+        exclude_filenames: set = None,
     ) -> List["FileReference"]:
         """
         Scan working_dir for files that are not yet registered and register them
@@ -752,6 +753,9 @@ class FileManagementService:
             agent_id: ID of the agent
             user_context: User context
             conversation_id: Conversation scope
+            exclude_filenames: Set of filenames that existed before the current
+                execution turn — these are skipped to avoid registering stale
+                files left over from a previous conversation.
 
         Returns:
             List of newly registered FileReferences (may be empty)
@@ -760,21 +764,34 @@ class FileManagementService:
             if not os.path.exists(working_dir):
                 return []
 
-            session_key = self._get_session_key(agent_id, user_context, conversation_id)
-            if session_key not in self._files:
-                self._load_session_files(session_key)
+            _exclude = exclude_filenames or set()
 
-            # Build a set of file paths already registered for this session
-            registered_paths = {
-                ref.file_path
-                for ref in self._files.get(session_key, {}).values()
-                if ref.file_path
-            }
+            # When exclude_filenames is provided we already know which files
+            # existed before the current execution turn, so we can skip the
+            # expensive _load_session_files() call that reads every historical
+            # file into memory.  This avoids O(N) memory/IO overhead when the
+            # persistent directory has accumulated thousands of files from
+            # previous agent calls (e.g. vision agent via public API).
+            if not _exclude:
+                session_key = self._get_session_key(agent_id, user_context, conversation_id)
+                if session_key not in self._files:
+                    self._load_session_files(session_key)
+
+                registered_paths = {
+                    ref.file_path
+                    for ref in self._files.get(session_key, {}).values()
+                    if ref.file_path
+                }
+            else:
+                registered_paths = set()
 
             newly_registered: List[FileReference] = []
             for fname in os.listdir(working_dir):
                 # Skip hidden files and Python temp scripts
                 if fname.startswith('.') or fname.endswith('.py'):
+                    continue
+                # Skip files that existed before the current execution turn
+                if fname in _exclude:
                     continue
                 abs_path = os.path.join(working_dir, fname)
                 if not os.path.isfile(abs_path):
