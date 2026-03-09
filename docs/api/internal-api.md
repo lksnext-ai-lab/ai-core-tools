@@ -381,6 +381,22 @@ Content-Type: application/json
 | GET | `/users/{user_id}` | Get user details | omniadmin |
 | PUT | `/users/{user_id}` | Update user | omniadmin |
 | DELETE | `/users/{user_id}` | Delete user | omniadmin |
+| POST | `/users/{user_id}/reset-marketplace-quota` | Reset user's monthly marketplace quota | omniadmin |
+
+**Example: Reset Marketplace Quota**
+
+```http
+POST /internal/admin/users/7/reset-marketplace-quota
+Cookie: session=...
+
+Response:
+{
+  "user_id": 7,
+  "call_count": 0,
+  "year": 2026,
+  "month": 3
+}
+```
 
 ### OCR
 
@@ -444,6 +460,25 @@ Endpoints for browsing and consuming published agents.
 | GET | `/agents` | List published agents | user |
 | GET | `/agents/{id}` | Get agent detail | user |
 | GET | `/categories` | List predefined categories | user |
+| GET | `/quota-usage` | Get current user's monthly quota status | user |
+
+**Example: Get Quota Usage**
+
+```http
+GET /internal/marketplace/quota-usage
+Cookie: session=...
+
+Response:
+{
+  "call_count": 12,
+  "quota": 50,
+  "is_exempt": false
+}
+```
+
+- `call_count`: number of marketplace calls made in the current calendar month
+- `quota`: configured monthly limit (`0` = unlimited)
+- `is_exempt`: `true` for OMNIADMIN users (quota is never enforced)
 
 **Example: Browse Marketplace**
 

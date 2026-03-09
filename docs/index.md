@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-03-03 (based on commit `91a003b`)
+> Last updated: 2026-03-09 (based on commit `91a003b`)
 
 ## Table of Contents
 

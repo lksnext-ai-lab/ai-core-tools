@@ -451,6 +451,29 @@ Provides common fields and methods for AIService and EmbeddingService.
 **Relationships**:
 - `app` → Owning app
 
+### MarketplaceUsage
+
+**Table**: `marketplace_usage`  
+**Purpose**: Tracks per-user monthly API call counts to marketplace agents
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Integer (PK) | Unique record identifier |
+| `user_id` | Integer (FK → User) | User whose usage is tracked |
+| `year` | Integer | Calendar year of the usage period |
+| `month` | Integer | Calendar month (1–12) of the usage period |
+| `call_count` | Integer | Number of marketplace agent calls in this period |
+
+**Unique constraint**: `(user_id, year, month)` — one record per user per month.
+
+**Relationships**:
+- `user` → User whose calls are counted (cascade delete)
+
+**Notes**:
+- Records for past months are retained for auditing; they are never automatically deleted.
+- Quota enforcement reads `marketplace_call_quota` from the `system_settings` table. A value of `0` means unlimited.
+- OMNIADMIN users are always exempt from quota limits regardless of this table.
+
 ## Migrations
 
 All schema changes are managed via **Alembic**:
