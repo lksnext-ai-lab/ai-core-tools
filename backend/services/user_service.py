@@ -105,7 +105,44 @@ class UserService:
         """Get all apps user has access to (owned + collaborated)"""
         # TODO: Implement this method
         pass
-    
+
+    @staticmethod
+    def update_avatar_path(db: Session, user_id: int, avatar_path: str) -> "User":
+        """
+        Update the avatar_path for a user.
+
+        Args:
+            db: Database session
+            user_id: ID of the user
+            avatar_path: Relative path within TMP_BASE_FOLDER (e.g. avatars/42.png)
+
+        Returns:
+            Updated User instance
+        """
+        user = UserService._get_user_or_raise(db, user_id)
+        user.avatar_path = avatar_path
+        db.commit()
+        db.refresh(user)
+        return user
+
+    @staticmethod
+    def clear_avatar(db: Session, user_id: int) -> "User":
+        """
+        Clear the avatar_path for a user (set to None).
+
+        Args:
+            db: Database session
+            user_id: ID of the user
+
+        Returns:
+            Updated User instance
+        """
+        user = UserService._get_user_or_raise(db, user_id)
+        user.avatar_path = None
+        db.commit()
+        db.refresh(user)
+        return user
+
     # ============================================================================
     # ADMIN METHODS
     # ============================================================================

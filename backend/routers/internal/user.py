@@ -4,6 +4,7 @@ User endpoints for getting current user information.
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 from db.database import get_db
@@ -24,6 +25,7 @@ class CurrentUserResponse(BaseModel):
     name: str
     is_admin: bool
     is_omniadmin: bool
+    avatar_url: Optional[str] = None
 
 
 @router.get(
@@ -59,10 +61,13 @@ async def get_current_user(
             detail="User not found in database",
         )
     
+    avatar_url = f"/public/avatars/{user.user_id}" if user.avatar_path else None
+
     return CurrentUserResponse(
         user_id=user.user_id,
         email=user.email,
         name=user.name or "",
         is_admin=is_omniadmin(user.email),
         is_omniadmin=is_omniadmin(user.email),
+        avatar_url=avatar_url,
     )

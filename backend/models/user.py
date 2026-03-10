@@ -11,6 +11,7 @@ class User(Base):
     name = Column(String(255))
     create_date = Column(DateTime, default=datetime.now)
     is_active = Column(Boolean, default=True, nullable=False)
+    avatar_path = Column(String(500), nullable=True)
     
     # Relationships
     owned_apps = relationship('App', foreign_keys='App.owner_id', back_populates='owner', lazy=True)
