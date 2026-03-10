@@ -1850,14 +1850,14 @@ class ApiService {
   async uploadAvatar(file: File) {
     const formData = new FormData();
     formData.append('file', file);
-    return this.request('/internal/users/me/avatar', {
+    return this.request('/internal/me/avatar', {
       method: 'POST',
       body: formData,
     });
   }
 
   async removeAvatar() {
-    return this.request('/internal/users/me/avatar', {
+    return this.request('/internal/me/avatar', {
       method: 'DELETE',
     });
   }

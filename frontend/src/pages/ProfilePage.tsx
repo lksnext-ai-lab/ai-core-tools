@@ -145,16 +145,6 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const getUserInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase().slice(0, 2);
-    }
-    return 'U';
-  };
-
   const getRoleBadgeClass = (role: string) => {
     switch (role) {
       case 'administrator':
@@ -307,16 +297,9 @@ const ProfilePage: React.FC = () => {
             {avatarSuccess && <div className="mt-3 w-full"><Alert type="success" message={avatarSuccess} /></div>}
           </div>
 
-          <div className="relative flex items-end -mt-6 mb-4">
-            <div className="h-24 w-24 rounded-2xl bg-white p-1 shadow-lg">
-              <div className="h-full w-full rounded-xl bg-indigo-100 flex items-center justify-center text-2xl font-bold text-indigo-600">
-                {getUserInitials(user.name, user.email)}
-              </div>
-            </div>
-            <div className="ml-4 mb-1">
-              <h1 className="text-2xl font-bold text-gray-900">{user.name || 'User'}</h1>
-              <p className="text-sm text-gray-500">{user.email}</p>
-            </div>
+          <div className="mb-4 text-center">
+            <h1 className="text-2xl font-bold text-gray-900">{user.name || 'User'}</h1>
+            <p className="text-sm text-gray-500">{user.email}</p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-gray-100 pt-6">
