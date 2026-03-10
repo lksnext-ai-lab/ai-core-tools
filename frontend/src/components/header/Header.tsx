@@ -218,11 +218,19 @@ export const Header: React.FC<HeaderProps> = ({
               aria-expanded={isUserMenuOpen}
               aria-haspopup="true"
             >
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
-                  {getUserInitials(user?.name, user?.email)}
-                </span>
-              </div>
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt="User avatar"
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {getUserInitials(user?.name, user?.email)}
+                  </span>
+                </div>
+              )}
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-900">
                   {user?.name || 'User'}

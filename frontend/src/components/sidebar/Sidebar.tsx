@@ -84,6 +84,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Custom children */}
         {children}
       </nav>
+
+      {/* User identity at bottom */}
+      {user && (
+        <div className="p-4 border-t border-gray-200">
+          <Link to="/profile" className="flex items-center space-x-3 hover:bg-gray-50 rounded-md p-2 transition-colors">
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt="User avatar"
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-medium">
+                  {user.name
+                    ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+                    : user.email?.[0]?.toUpperCase() ?? '?'}
+                </span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-900 truncate">{user.name || 'Profile'}</p>
+              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+            </div>
+          </Link>
+        </div>
+      )}
     </div>
   );
 };

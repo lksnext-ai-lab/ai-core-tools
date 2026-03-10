@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useUser } from '../contexts/UserContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
@@ -22,13 +22,19 @@ interface PendingInvitation {
 }
 
 const ProfilePage: React.FC = () => {
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading, refreshUser } = useUser();
   const [collaborations, setCollaborations] = useState<App[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [quotaUsage, setQuotaUsage] = useState<MarketplaceQuotaUsage | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -92,6 +98,52 @@ const ProfilePage: React.FC = () => {
       setTimeout(() => setError(null), 3000);
     }
   }
+
+  const getInitials = (name?: string, email?: string) => {
+    if (name) return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    if (email) return email[0].toUpperCase();
+    return '?';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    setAvatarPreview(URL.createObjectURL(file));
+    setPendingFile(file);
+  };
+
+  const handleUploadConfirm = async () => {
+    if (!pendingFile) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      await apiService.uploadAvatar(pendingFile);
+      await refreshUser();
+      setAvatarPreview(null);
+      setPendingFile(null);
+      setAvatarSuccess('Avatar updated successfully.');
+    } catch (err: any) {
+      setAvatarError(err?.message || 'Failed to upload avatar.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      await apiService.removeAvatar();
+      await refreshUser();
+      setAvatarSuccess('Avatar removed.');
+    } catch (err: any) {
+      setAvatarError(err?.message || 'Failed to remove avatar.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const getUserInitials = (name?: string, email?: string) => {
     if (name) {
@@ -182,6 +234,79 @@ const ProfilePage: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="h-32 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
         <div className="px-6 pb-6">
+          {/* Avatar Section */}
+          <div className="flex flex-col items-center mb-6">
+            <div className="relative mb-4">
+              {(avatarPreview || user?.avatar_url) ? (
+                <img
+                  src={avatarPreview || user?.avatar_url || ''}
+                  alt="User avatar"
+                  className="w-24 h-24 rounded-full object-cover border-2 border-gray-200"
+                />
+              ) : (
+                <div className="w-24 h-24 bg-blue-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-2xl font-medium">
+                    {getInitials(user?.name, user?.email)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Hidden file input */}
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            {/* Avatar Controls */}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {pendingFile ? (
+                <>
+                  <button
+                    onClick={handleUploadConfirm}
+                    disabled={avatarUploading}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {avatarUploading ? 'Uploading...' : 'Confirm upload'}
+                  </button>
+                  <button
+                    onClick={() => { setAvatarPreview(null); setPendingFile(null); }}
+                    disabled={avatarUploading}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    Change avatar
+                  </button>
+                  {user?.avatar_url && (
+                    <button
+                      onClick={handleRemoveAvatar}
+                      disabled={avatarUploading}
+                      className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-md hover:bg-red-200 disabled:opacity-50 transition-colors"
+                    >
+                      {avatarUploading ? 'Removing...' : 'Remove avatar'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Avatar feedback */}
+            {avatarError && <div className="mt-3 w-full"><Alert type="error" message={avatarError} /></div>}
+            {avatarSuccess && <div className="mt-3 w-full"><Alert type="success" message={avatarSuccess} /></div>}
+          </div>
+
           <div className="relative flex items-end -mt-6 mb-4">
             <div className="h-24 w-24 rounded-2xl bg-white p-1 shadow-lg">
               <div className="h-full w-full rounded-xl bg-indigo-100 flex items-center justify-center text-2xl font-bold text-indigo-600">

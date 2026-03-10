@@ -11,6 +11,7 @@ export interface User {
   is_authenticated: boolean;
   is_admin?: boolean;
   is_omniadmin?: boolean;
+  avatar_url: string | null;
 }
 
 interface UserContextType {
@@ -64,7 +65,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
               name: userData.name,
               is_authenticated: true,
               is_admin: userData.is_admin || userData.is_omniadmin,
-              is_omniadmin: userData.is_omniadmin
+              is_omniadmin: userData.is_omniadmin,
+              avatar_url: userData.avatar_url ? `${configService.getApiBaseUrl()}${userData.avatar_url}` : null,
             });
             return;
           }
@@ -80,7 +82,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
           is_authenticated: true,
           is_admin: false,
-          is_omniadmin: false
+          is_omniadmin: false,
+          avatar_url: null,
         };
         setUser(userData);
       } else if (authService.isAuthenticated()) {
@@ -93,7 +96,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             name: userData.name,
             is_authenticated: true,
             is_admin: userData.is_admin || userData.is_omniadmin,
-            is_omniadmin: userData.is_omniadmin
+            is_omniadmin: userData.is_omniadmin,
+            avatar_url: userData.avatar_url ? `${configService.getApiBaseUrl()}${userData.avatar_url}` : null,
           });
         } catch (error) {
           console.error('Failed to fetch user data in dev mode during refresh:', error);
@@ -143,7 +147,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
                 name: userData.name,
                 is_authenticated: true,
                 is_admin: userData.is_admin || userData.is_omniadmin,
-                is_omniadmin: userData.is_omniadmin
+                is_omniadmin: userData.is_omniadmin,
+                avatar_url: userData.avatar_url ? `${configService.getApiBaseUrl()}${userData.avatar_url}` : null,
               });
               setLoading(false);
               return;
@@ -160,7 +165,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
             is_authenticated: true,
             is_admin: false,
-            is_omniadmin: false
+            is_omniadmin: false,
+            avatar_url: null,
           };
           setUser(userData);
         } else if (authService.isAuthenticated()) {
@@ -173,7 +179,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
               name: userData.name,
               is_authenticated: true,
               is_admin: userData.is_admin || userData.is_omniadmin,
-              is_omniadmin: userData.is_omniadmin
+              is_omniadmin: userData.is_omniadmin,
+              avatar_url: userData.avatar_url ? `${configService.getApiBaseUrl()}${userData.avatar_url}` : null,
             });
           } catch (error) {
             console.error('Failed to fetch user data in dev mode:', error);
@@ -184,7 +191,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
               name: '',
               is_authenticated: true,
               is_admin: false,
-              is_omniadmin: false
+              is_omniadmin: false,
+              avatar_url: null,
             });
           }
         } else {

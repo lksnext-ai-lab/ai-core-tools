@@ -1846,6 +1846,21 @@ class ApiService {
   }
 
   // ==================== UTILITY METHODS ====================
+
+  async uploadAvatar(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request('/internal/users/me/avatar', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async removeAvatar() {
+    return this.request('/internal/users/me/avatar', {
+      method: 'DELETE',
+    });
+  }
 }
 
 // Export singleton instance - like how you'd use services in backend
