@@ -55,6 +55,8 @@ from lks_idprovider_fastapi.dependencies import get_default_provider
 
 from utils.logger import get_logger
 from utils.auth_config import AuthConfig
+from db.database import get_db
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 
@@ -155,6 +157,40 @@ async def get_static_file(file_path: str, user: str = None, sig: str = None, fil
     # Use original filename for Content-Disposition if provided, else use path basename
     download_filename = filename or os.path.basename(full_path)
     return FileResponse(full_path, filename=download_filename)
+
+
+@app.get("/public/avatars/{user_id}", tags=["avatars"])
+async def get_user_avatar(user_id: int, db: Session = Depends(get_db)):
+    """
+    Public endpoint to serve a user's avatar image.
+    No authentication required — avatar URLs can be used in <img> tags directly.
+    Returns 404 if the user has no avatar.
+    """
+    from models.user import User as UserModel
+    user = db.query(UserModel).filter(UserModel.user_id == user_id).first()
+    if not user or not user.avatar_path:
+        raise HTTPException(status_code=404, detail="Avatar not found")
+
+    # Path safety: avatar_path is always relative (e.g. avatars/42.png)
+    avatar_path = user.avatar_path.lstrip("/\\")
+    if ".." in avatar_path:
+        raise HTTPException(status_code=403, detail="Invalid path")
+
+    full_path = os.path.abspath(os.path.join(tmp_base_folder, avatar_path))
+    base_path = os.path.abspath(tmp_base_folder)
+    if not full_path.startswith(base_path + os.sep):
+        raise HTTPException(status_code=403, detail="Invalid path")
+
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="Avatar file not found")
+
+    import mimetypes
+    media_type, _ = mimetypes.guess_type(full_path)
+    return FileResponse(
+        full_path,
+        media_type=media_type or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 # ==================== CORS MIDDLEWARE ====================
