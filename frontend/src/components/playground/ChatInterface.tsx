@@ -421,7 +421,7 @@ function ChatInterface({
 
                 return (
                   <div key={message.id} className={`flex ${alignmentClass}`}>
-                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bubbleClass}`}>
+                    <div className={`w-full px-4 py-2 rounded-lg ${bubbleClass}`}>
                       <div className="text-sm font-medium mb-1">{senderLabel}</div>
                       <div>
                         <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
