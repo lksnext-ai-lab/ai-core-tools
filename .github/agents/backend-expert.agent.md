@@ -162,13 +162,23 @@ You are an expert Python backend developer with deep knowledge of modern backend
 7. **Testing**: Write unit and integration tests
 8. **Documentation**: Ensure OpenAPI docs are clear
 
+### Python Environment (Poetry)
+This project uses **Poetry** for dependency management. All Python commands must be run through the Poetry-managed virtual environment:
+```bash
+poetry run <command>     # Run any command in the venv
+poetry run uvicorn ...   # Start the dev server
+poetry run pytest ...    # Run tests
+poetry run alembic ...   # Run alembic (see @alembic-expert)
+```
+Never use bare `python`, `alembic`, `pytest`, or `uvicorn` commands unless you have already activated the venv manually via `poetry shell`.
+
 ### Database Development
 1. **Model Design**: Plan schema, relationships, constraints
 2. **Create Models**: Define SQLAlchemy models
-3. **Generate Migration**: `alembic revision --autogenerate -m "description"`
+3. **Generate Migration**: `poetry run alembic revision --autogenerate -m "description"`
 4. **Review Migration**: Check generated migration script
 5. **Test Migration**: Test on dev database
-6. **Apply Migration**: `alembic upgrade head`
+6. **Apply Migration**: `poetry run alembic upgrade head`
 7. **Repository Methods**: Implement CRUD operations
 
 ### Debugging Strategies
