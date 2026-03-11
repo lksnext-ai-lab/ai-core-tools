@@ -13,6 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.3.18] - 2026-03-11
+
+### Added
+
+- **Marketplace Call Quota Enforcement**: Added per-user call quota tracking and enforcement for marketplace agents, including `MarketplaceUsageTracking` table, `MarketplaceQuotaService`, and quota enforcement on the marketplace conversation chat route.
+- **OMNIADMIN Quota Reset**: Added endpoint for OMNIADMIN users to reset marketplace call quotas for any user.
+- **Marketplace Quota UI**: Added quota usage display in chat UI, call usage section on user profile page, and Reset Quota action in admin user list.
+- **GFM Table Support**: Added `remark-gfm` plugin for GitHub Flavored Markdown table rendering in chat messages.
+
+### Changed
+
+- **Chat Bubble Layout**: Removed max-width constraint on message bubbles for better content display.
+
+### Fixed
+
+- **Non-conversational Agents**: Fixed `NoneType` iterable error when middleware returns `None` for non-conversational agents.
+- **Silo Validation (Security)**: Validated that silo belongs to app in public API document endpoints to prevent cross-app data access.
+- **Quota Enforcement**: Enforced marketplace call quota checks on the agent chat route.
+
 ## [0.3.17] - 2026-03-08
 
 ### Added
