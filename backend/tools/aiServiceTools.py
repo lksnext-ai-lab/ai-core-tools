@@ -217,7 +217,7 @@ def _build_google_llm(ai_service, temperature):
     google_kwargs = {
         "model": ai_service.description,
         "temperature": temperature,
-        "google_api_key": ai_service.api_key,
+        "api_key": ai_service.api_key,
     }
 
     endpoint_raw = (ai_service.endpoint or "").strip()
@@ -233,7 +233,6 @@ def _build_google_llm(ai_service, temperature):
 def _build_google_cloud_llm(ai_service, temperature):
     import json, os
     from google.oauth2 import service_account
-    from langchain_google_vertexai import ChatVertexAI
 
     project_id = (ai_service.endpoint or "").strip()
     location = (getattr(ai_service, 'api_version', None) or "").strip() or "europe-west1"
@@ -252,45 +251,11 @@ def _build_google_cloud_llm(ai_service, temperature):
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )
 
-    return ChatVertexAI(
+    return ChatGoogleGenerativeAI(
         model=ai_service.description,
         temperature=temperature,
         credentials=credentials,
         project=project_id,
         location=location,
+        vertexai=True,
     )
-
-# def _build_google_cloud_llm(ai_service, temperature):
-#     import json
-#     import os
-#     from google.oauth2 import service_account
-#     from langchain_google_genai import ChatGoogleGenerativeAI
-
-#     project_id = (ai_service.endpoint or "").strip()
-#     location = (getattr(ai_service, 'api_version', None) or "").strip() or "europe-west1"
-#     api_key_raw = (ai_service.api_key or "").strip()
-
-#     if not api_key_raw:
-#         raise ValueError("Service Account JSON is required for Google Cloud provider.")
-
-#     try:
-#         sa_info = json.loads(api_key_raw)
-#     except json.JSONDecodeError as e:
-#         raise ValueError(f"Invalid Service Account JSON: {e}")
-
-#     os.environ.pop("GOOGLE_API_KEY", None)
-#     os.environ.pop("GEMINI_API_KEY", None)
-
-#     credentials = service_account.Credentials.from_service_account_info(
-#         sa_info,
-#         scopes=["https://www.googleapis.com/auth/cloud-platform"],
-#     )
-
-#     return ChatGoogleGenerativeAI(
-#         model=ai_service.description,
-#         temperature=temperature,
-#         credentials=credentials,
-#         project=project_id,
-#         location=location,
-#         vertexai=True,
-#     )

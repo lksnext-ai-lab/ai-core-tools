@@ -1,7 +1,7 @@
 """
 Video Analysis Service
 
-Sends video files to Video-LLMs (Gemini, Qwen, etc.) for temporal visual analysis.
+Sends video files to Gemini models (Google / GoogleCloud) for temporal visual analysis.
 Returns timestamped visual descriptions that can be merged with transcript chunks.
 """
 
@@ -258,24 +258,24 @@ def _parse_llm_response(response_text: str) -> List[Dict[str, Any]]:
 def _analyze_with_gemini(ai_service, video_path: str, prompt: str = VIDEO_ANALYSIS_PROMPT) -> List[Dict[str, Any]]:
     """Analyze video using Google Gemini via LangChain ChatGoogleGenerativeAI.
     
-    Uploads the video to the Google Files API, then uses LangChain to invoke
+    Uploads the video via the google-genai Files API, then uses LangChain to invoke
     the model with the file URI as multimodal input.
     """
     try:
-        import google.generativeai as genai
         import time
+        from google import genai
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
 
-        genai.configure(api_key=ai_service.api_key)
+        client = genai.Client(api_key=ai_service.api_key)
 
         logger.info(f"Uploading video to Gemini Files API: {video_path}")
-        video_file = genai.upload_file(video_path)
+        video_file = client.files.upload(file=video_path)
 
         while video_file.state.name == "PROCESSING":
             logger.info("Waiting for Gemini to process video...")
             time.sleep(5)
-            video_file = genai.get_file(video_file.name)
+            video_file = client.files.get(name=video_file.name)
 
         if video_file.state.name == "FAILED":
             raise ValueError(f"Gemini video processing failed: {video_file.state.name}")
@@ -284,7 +284,7 @@ def _analyze_with_gemini(ai_service, video_path: str, prompt: str = VIDEO_ANALYS
 
         llm = ChatGoogleGenerativeAI(
             model=ai_service.description,
-            google_api_key=ai_service.api_key,
+            api_key=ai_service.api_key,
             temperature=0.1,
             max_output_tokens=8192,
         )
@@ -298,7 +298,7 @@ def _analyze_with_gemini(ai_service, video_path: str, prompt: str = VIDEO_ANALYS
 
         # Cleanup uploaded file
         try:
-            genai.delete_file(video_file.name)
+            client.files.delete(name=video_file.name)
         except Exception:
             pass
 
@@ -307,7 +307,7 @@ def _analyze_with_gemini(ai_service, video_path: str, prompt: str = VIDEO_ANALYS
     except ImportError:
         raise ValueError(
             "Required packages not installed. "
-            "Install with: pip install langchain-google-genai google-generativeai"
+            "Install with: pip install langchain-google-genai google-genai"
         )
     except Exception as e:
         logger.error(f"Error analyzing video with Gemini: {str(e)}")
@@ -315,14 +315,14 @@ def _analyze_with_gemini(ai_service, video_path: str, prompt: str = VIDEO_ANALYS
 
 
 def _analyze_with_vertex_ai(ai_service, video_path: str, prompt: str = VIDEO_ANALYSIS_PROMPT) -> List[Dict[str, Any]]:
-    """Analyze video using Google Cloud Vertex AI via LangChain ChatVertexAI.
+    """Analyze video using Google Cloud Vertex AI via ChatGoogleGenerativeAI (vertexai=True).
     
     Reads the video as inline base64 data and passes it to the model
     using LangChain's HumanMessage multimodal content format.
     """
     try:
         from google.oauth2 import service_account
-        from langchain_google_vertexai import ChatVertexAI
+        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
 
         project_id = (ai_service.endpoint or "").strip()
@@ -356,13 +356,14 @@ def _analyze_with_vertex_ai(ai_service, video_path: str, prompt: str = VIDEO_ANA
         with open(video_path, 'rb') as f:
             video_b64 = base64.b64encode(f.read()).decode('utf-8')
 
-        llm = ChatVertexAI(
+        llm = ChatGoogleGenerativeAI(
             model=ai_service.description,
             credentials=credentials,
             project=project_id,
             location=location,
             temperature=0.1,
             max_output_tokens=8192,
+            vertexai=True,
         )
 
         logger.info(f"Requesting video analysis from Vertex AI ({project_id}/{location})...")
@@ -378,7 +379,7 @@ def _analyze_with_vertex_ai(ai_service, video_path: str, prompt: str = VIDEO_ANA
     except ImportError:
         raise ValueError(
             "Required packages not installed. "
-            "Install with: pip install langchain-google-vertexai google-auth"
+            "Install with: pip install langchain-google-genai google-auth"
         )
     except Exception as e:
         logger.error(f"Error analyzing video with Vertex AI: {str(e)}")
