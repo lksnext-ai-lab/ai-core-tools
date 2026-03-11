@@ -42,6 +42,20 @@ SILO_NOT_FOUND_MSG = "Silo not found"
 
 silos_router = APIRouter()
 
+
+def _get_silo_or_raise(silo_id: int, app_id: int, db: Session):
+    """Fetch the silo and verify it belongs to the given app.
+
+    Raises 404 if the silo does not exist and 403 if it belongs to a
+    different app, mirroring the checks in update_silo / delete_silo.
+    """
+    silo = SiloService.get_silo(silo_id, db)
+    if not silo:
+        raise HTTPException(status_code=404, detail=SILO_NOT_FOUND_MSG)
+    if silo.app_id != app_id:
+        raise HTTPException(status_code=403, detail="Silo does not belong to this app")
+    return silo
+
 # ==================== SILO CRUD ENDPOINTS ====================
 
 @silos_router.post("/",
@@ -243,7 +257,8 @@ async def count_docs_in_silo(
     """Count documents in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         count = SiloService.count_docs_in_silo(silo_id, db)
         return CountResponseSchema(count=count)
@@ -265,7 +280,8 @@ async def index_single_document(
     """Index a single document in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         SiloService.index_single_content(
             silo_id=silo_id,
@@ -292,7 +308,8 @@ async def index_multiple_documents(
     """Index multiple documents in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         documents = [doc.model_dump() for doc in request.documents]
         SiloService.index_multiple_content(silo_id, documents, db)
@@ -315,7 +332,8 @@ async def delete_docs_in_collection(
     """Delete documents in a silo collection."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         SiloService.delete_docs_in_collection(silo_id, request.ids, db)
         return MessageResponseSchema(message=f"Successfully deleted {len(request.ids)} document(s)")
@@ -344,7 +362,8 @@ async def delete_docs_by_metadata(
     """
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         # Validate that filter_metadata is not empty
         if not request.filter_metadata:
@@ -377,7 +396,8 @@ async def delete_all_docs_in_collection(
     """Delete all documents in a silo collection."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         SiloService.delete_all_docs_in_collection(silo_id, db)
         return MessageResponseSchema(message=f"Deleted all documents from silo {silo_id} successfully")
@@ -399,7 +419,8 @@ async def find_docs_in_collection(
     """Find documents in a silo collection."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     try:
         query = request.query if request.query else " "
         docs = SiloService.find_docs_in_collection(
@@ -438,7 +459,8 @@ async def index_file_document(
     """Index file content in a silo."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key)
-    
+    _get_silo_or_raise(silo_id, app_id, db)
+
     temp_file_path = None
     try:
         # Parse metadata if provided
