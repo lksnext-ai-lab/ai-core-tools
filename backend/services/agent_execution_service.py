@@ -263,7 +263,7 @@ class AgentExecutionService:
             }
             
         except Exception as e:
-            logger.error(f"Error executing agent chat: {str(e)}")
+            logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
 
     async def execute_agent_chat(
@@ -348,7 +348,7 @@ class AgentExecutionService:
             }
             
         except Exception as e:
-            logger.error(f"Error executing agent chat: {str(e)}")
+            logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
     
     async def execute_agent_ocr(
