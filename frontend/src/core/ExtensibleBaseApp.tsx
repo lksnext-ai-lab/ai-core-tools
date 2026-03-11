@@ -35,18 +35,23 @@ import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
-import GeneralSettingsPage from '../pages/settings/GeneralSettingsPage';
+import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
+import SystemSettingsPage from '../pages/admin/SystemSettingsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
 import ProfilePage from '../pages/ProfilePage';
 import MCPServersPage from '../pages/MCPServersPage';
 import MCPServerFormPage from '../pages/MCPServerFormPage';
 import MCPServerDetailPage from '../pages/MCPServerDetailPage';
+import MarketplacePage from '../pages/MarketplacePage';
+import MarketplaceAgentDetailPage from '../pages/MarketplaceAgentDetailPage';
+import MarketplaceChatPage from '../pages/MarketplaceChatPage';
+import MarketplaceHomePage from '../pages/MarketplaceHomePage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -145,6 +150,30 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/profile" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                       <ProfilePage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplacePage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace/agents/:agentId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceAgentDetailPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/marketplace/chat/:conversationId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceChatPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/home" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MarketplaceHomePage />
                   </ProtectedLayoutRoute>
                 } />
 
@@ -271,13 +300,13 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 {/* App-specific settings routes */}
                 <Route path="/apps/:appId/settings" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    <SettingsLayout><AppSettingsPage /></SettingsLayout>
                   </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/general" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
+                    <SettingsLayout><AppSettingsPage /></SettingsLayout>
                   </ProtectedLayoutRoute>
                 } />
 
@@ -317,49 +346,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     </ProtectedLayoutRoute>
                 } />
 
-                {/* Global settings routes */}
-                <Route path="/settings/ai-services" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><AIServicesPage /></SettingsLayout>
-                  </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/api-keys" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><APIKeysPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/collaboration" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><CollaborationPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/embedding-services" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/general" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                    <SettingsLayout><GeneralSettingsPage /></SettingsLayout>
-                  </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/mcp-configs" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><MCPConfigsPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
-                <Route path="/settings/data-structures" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      <SettingsLayout><DataStructuresPage /></SettingsLayout>
-                    </ProtectedLayoutRoute>
-                } />
-
                 {/* Admin routes */}
                 <Route path="/admin/users" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
@@ -370,6 +356,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/stats" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <StatsPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/settings" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSettingsPage />
                   </AdminLayoutRoute>
                 } />
 

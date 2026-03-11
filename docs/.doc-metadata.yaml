@@ -1,0 +1,24 @@
+# Documentation sync tracking — managed by @docs-manager agent
+# DO NOT EDIT MANUALLY unless you know what you're doing
+#
+# This file tracks which git commit the documentation was last synchronized to.
+# When @docs-manager updates documentation, it reads this file to determine
+# what commits need to be analyzed, then advances the baseline after updating.
+
+last_synced_commit: "91a003b1cc0ccc4dcb5843300e90e7bb8b438d75"
+last_synced_date: "2026-03-03T00:00:00+00:00"
+last_synced_by: "docs-manager-agent"
+
+# Summary of the last sync operation
+last_sync_summary:
+  files_updated:
+    - "docs/index.md"
+    - "docs/README.md"
+    - "docs/api/internal-api.md"
+    - "docs/.doc-metadata.yaml"
+  files_created:
+    - "docs/guides/app-export-import.md"
+  files_deleted: []
+  commits_covered: null
+  commit_range: "c11bee4..91a003b"
+  notes: "Documented app export/import endpoints, preview flow, and data inclusion/exclusion; added guide and index entries. Commit count not computed in this docs-only update."

@@ -306,7 +306,7 @@ const AboutPage: React.FC = () => {
               View on GitHub
             </a>
             <Link 
-              to="/settings/ai-services" 
+              to="/apps" 
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors"
             >
               Get Started
@@ -330,7 +330,7 @@ const AboutPage: React.FC = () => {
               Create Your First App
             </Link>
             <Link 
-              to="/settings/ai-services" 
+              to="/apps" 
               className="bg-white hover:bg-gray-50 text-blue-600 px-8 py-3 rounded-lg font-semibold border border-blue-600 transition-colors"
             >
               Configure AI Services

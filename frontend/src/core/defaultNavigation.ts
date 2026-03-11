@@ -4,9 +4,15 @@ export const defaultNavigation: NavigationConfig = {
   // Sidebar navigation
   mainFeatures: [
     {
-      path: '/',
+      path: '/home',
       name: 'Home',
       icon: '🏠',
+      section: 'mainFeatures'
+    },
+    {
+      path: '/marketplace',
+      name: 'Marketplace',
+      icon: '🏪',
       section: 'mainFeatures'
     }
   ],
@@ -80,6 +86,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/admin/stats',
       name: 'Statistics',
       icon: '📊',
+      section: 'admin',
+      adminOnly: true
+    },
+    {
+      path: '/admin/settings',
+      name: 'Settings',
+      icon: '⚙️',
       section: 'admin',
       adminOnly: true
     },

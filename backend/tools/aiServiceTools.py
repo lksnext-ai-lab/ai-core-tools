@@ -178,6 +178,41 @@ def _build_azure_llm(ai_service, temperature):
     )
 
 
+_DEFAULT_GOOGLE_HOST = "generativelanguage.googleapis.com"
+
+
+def _resolve_google_client_options(endpoint_raw, service_name):
+    """Return client_options dict for a custom Google endpoint, or None to use the library default.
+
+    The new google-genai REST client (v1.x) requires api_endpoint to include https://,
+    otherwise httpx raises 'Request URL is missing an http:// or https:// protocol'.
+    The default endpoint is skipped entirely — the library already knows it.
+    """
+    parsed = urlparse(endpoint_raw if "://" in endpoint_raw else f"https://{endpoint_raw}")
+    host = parsed.netloc or parsed.path
+    normalized_host = host.lower()
+
+    is_google = "googleapis.com" in normalized_host or "googleusercontent.com" in normalized_host
+    if not is_google:
+        logger.warning(
+            "Ignoring non-Google endpoint '%s' configured for provider Google on service '%s'",
+            endpoint_raw,
+            service_name,
+        )
+        return None
+
+    if normalized_host == _DEFAULT_GOOGLE_HOST:
+        return None  # Default endpoint — no override needed.
+
+    if parsed.path not in ("", "/") and parsed.netloc:
+        logger.warning(
+            "Ignoring path '%s' in Google endpoint '%s'; only host is supported",
+            parsed.path,
+            endpoint_raw,
+        )
+    return {"api_endpoint": f"https://{host}"}
+
+
 def _build_google_llm(ai_service, temperature):
     google_kwargs = {
         "model": ai_service.description,
@@ -187,24 +222,11 @@ def _build_google_llm(ai_service, temperature):
 
     endpoint_raw = (ai_service.endpoint or "").strip()
     if endpoint_raw:
-        parsed = urlparse(endpoint_raw if "://" in endpoint_raw else f"https://{endpoint_raw}")
-        host = parsed.netloc or parsed.path
-        normalized_host = host.lower()
-
-        if "googleapis.com" in normalized_host or "googleusercontent.com" in normalized_host:
-            if parsed.path not in ("", "/") and parsed.netloc:
-                logger.warning(
-                    "Ignoring path '%s' in Google endpoint '%s'; only host is supported",
-                    parsed.path,
-                    endpoint_raw,
-                )
-            google_kwargs["client_options"] = {"api_endpoint": host}
-        else:
-            logger.warning(
-                "Ignoring non-Google endpoint '%s' configured for provider Google on service '%s'",
-                endpoint_raw,
-                getattr(ai_service, "name", "unknown"),
-            )
+        client_options = _resolve_google_client_options(
+            endpoint_raw, getattr(ai_service, "name", "unknown")
+        )
+        if client_options:
+            google_kwargs["client_options"] = client_options
 
     return ChatGoogleGenerativeAI(**google_kwargs)
 

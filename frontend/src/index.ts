@@ -18,6 +18,8 @@ export { useFormState } from './hooks/useFormState';
 export { FormField, FormTextArea, FormSelect, FormCheckbox } from './components/ui/FormField';
 export { FormError } from './components/ui/FormError';
 export { FormActions } from './components/ui/FormActions';
+export { default as ImportModal } from './components/ui/ImportModal';
+export type { ImportResponse, ConflictMode, ComponentType } from './components/ui/ImportModal';
 
 // Export shared settings hooks and components
 export { useSettingsData } from './hooks/useSettingsData';
@@ -84,13 +86,18 @@ export { default as AIServicesPage } from './pages/settings/AIServicesPage';
 export { default as APIKeysPage } from './pages/settings/APIKeysPage';
 export { default as CollaborationPage } from './pages/settings/CollaborationPage';
 export { default as EmbeddingServicesPage } from './pages/settings/EmbeddingServicesPage';
-export { default as GeneralSettingsPage } from './pages/settings/GeneralSettingsPage';
+export { default as AppSettingsPage } from './pages/settings/AppSettingsPage';
 export { default as MCPConfigsPage } from './pages/settings/MCPConfigsPage';
 export { default as DataStructuresPage } from './pages/settings/DataStructuresPage';
 export { default as UsersPage } from './pages/admin/UsersPage';
 export { default as StatsPage } from './pages/admin/StatsPage';
 export { default as LoginPage } from './pages/LoginPage';
 export { default as AuthSuccessPage } from './pages/AuthSuccessPage';
+export { default as MarketplacePage } from './pages/MarketplacePage';
+export { MarketplaceAgentCard } from './components/marketplace/MarketplaceAgentCard';
+export { default as MarketplaceAgentDetailPage } from './pages/MarketplaceAgentDetailPage';
+export { default as MarketplaceChatPage } from './pages/MarketplaceChatPage';
+export { default as MarketplaceHomePage } from './pages/MarketplaceHomePage';
 
 // Export base theme
 export { baseTheme } from './themes/baseTheme';

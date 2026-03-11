@@ -1,19 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
+from fastapi.responses import RedirectResponse, JSONResponse
+from utils.security import generate_signature
+import os
 from typing import List, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 import json
 
 from services.agent_service import AgentService
+from services.agent_export_service import AgentExportService
+from services.agent_import_service import AgentImportService
 from services.mcp_server_service import MCPServerService
+from services.marketplace_service import MarketplaceService
+from services.marketplace_quota_service import MarketplaceQuotaService
+from services.system_settings_service import SystemSettingsService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
+from schemas.import_schemas import (
+    ConflictMode,
+    ImportResponseSchema,
+    AgentImportPreviewSchema,
+)
+from schemas.export_schemas import AgentExportFileSchema
+from schemas.marketplace_schemas import (
+    MarketplaceVisibilityUpdateSchema,
+    MarketplaceProfileCreateUpdateSchema,
+    MarketplaceProfileSchema,
+)
 from services.agent_execution_service import AgentExecutionService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
+from models.agent import Agent, MarketplaceVisibility
+from models.user import User
 
 from utils.logger import get_logger
 
@@ -31,6 +52,130 @@ def get_agent_service() -> AgentService:
     return AgentService()
 
 #AGENT MANAGEMENT
+
+@agents_router.post(
+    "/preview-import",
+    summary="Preview Agent Import",
+    tags=["Agents", "Export/Import"],
+    response_model=AgentImportPreviewSchema,
+)
+async def preview_import_agent(
+    app_id: int,
+    file: UploadFile = File(...),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db),
+):
+    """Preview agent import without importing.
+
+    Parses the export file and returns a structured preview with
+    conflict detection, dependency info, and warnings. Read-only.
+    """
+    try:
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = AgentExportFileSchema(**file_data)
+
+        import_service = AgentImportService(db)
+        return import_service.preview_import(export_data, app_id)
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Invalid export file: {e}",
+        )
+    except Exception as e:
+        logger.error(
+            f"Preview import error: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Preview failed",
+        )
+
+
+@agents_router.post("/import",
+                   summary="Import Agent",
+                   tags=["Agents", "Export/Import"],
+                   response_model=ImportResponseSchema,
+                   status_code=status.HTTP_201_CREATED)
+async def import_agent(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    selected_ai_service_id: Optional[int] = Query(None),
+    selected_silo_id: Optional[int] = Query(None),
+    selected_output_parser_id: Optional[int] = Query(None),
+    import_bundled_silo: bool = Query(True),
+    import_bundled_output_parser: bool = Query(True),
+    import_bundled_mcp_configs: bool = Query(True),
+    import_bundled_agent_tools: bool = Query(True),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db)
+):
+    """Import Agent from JSON file.
+    
+    Note: Conversation history is NOT imported (config only).
+    If AI service is not bundled, you must provide selected_ai_service_id.
+    """
+    try:
+        # Parse file
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = AgentExportFileSchema(**file_data)
+        
+        # Validate import
+        import_service = AgentImportService(db)
+        validation = import_service.validate_import(export_data, app_id)
+        
+        # Check if AI service selection is required but not provided
+        if validation.requires_ai_service_selection:
+            if selected_ai_service_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "AI service selection required. "
+                        "This agent requires an AI service but none is bundled. "
+                        "Please provide selected_ai_service_id parameter."
+                    )
+                )
+        
+        # Import
+        summary = import_service.import_agent(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name,
+            selected_ai_service_id,
+            selected_silo_id,
+            selected_output_parser_id,
+            import_bundled_silo=import_bundled_silo,
+            import_bundled_output_parser=import_bundled_output_parser,
+            import_bundled_mcp_configs=import_bundled_mcp_configs,
+            import_bundled_agent_tools=import_bundled_agent_tools,
+        )
+        
+        return ImportResponseSchema(
+            success=True,
+            message=f"Agent '{summary.component_name}' imported successfully",
+            summary=summary
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
+
 
 @agents_router.get("/", 
                   summary="List agents",
@@ -83,6 +228,51 @@ async def get_agent(
     return agent_detail
 
 
+@agents_router.post("/{agent_id}/export",
+                   summary="Export Agent",
+                   tags=["Agents", "Export/Import"],
+                   response_model=AgentExportFileSchema)
+async def export_agent(
+    app_id: int,
+    agent_id: int,
+    include_ai_service: bool = Query(True, description="Bundle AI service in export"),
+    include_silo: bool = Query(True, description="Bundle silo in export"),
+    include_output_parser: bool = Query(True, description="Bundle output parser in export"),
+    include_mcp_configs: bool = Query(True, description="Bundle MCP configs in export"),
+    include_agent_tools: bool = Query(True, description="Bundle agent tools in export"),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export Agent configuration (conversation history NOT included).
+    
+    Customize which dependencies to bundle:
+    - include_ai_service: Bundle the AI service configuration
+    - include_silo: Bundle the silo configuration
+    - include_output_parser: Bundle the output parser configuration
+    - include_mcp_configs: Bundle all MCP configurations
+    - include_agent_tools: Bundle all agent tool (other agents) configurations
+    """
+    try:
+        export_service = AgentExportService(db)
+        export_data = export_service.export_agent(
+            agent_id=agent_id,
+            app_id=app_id,
+            user_id=int(auth_context.identity.id),
+            include_ai_service=include_ai_service,
+            include_silo=include_silo,
+            include_output_parser=include_output_parser,
+            include_mcp_configs=include_mcp_configs,
+            include_agent_tools=include_agent_tools,
+        )
+        return export_data
+    except ValueError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+    except Exception as e:
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
+
+
 @agents_router.post("/{agent_id}",
                    summary="Create or update agent",
                    tags=["Agents"],
@@ -112,6 +302,11 @@ async def create_or_update_agent(
         'type': agent_data.type,
         'is_tool': agent_data.is_tool,
         'has_memory': agent_data.has_memory,
+        'enable_code_interpreter': agent_data.enable_code_interpreter,
+        'server_tools': agent_data.server_tools or [],
+        'memory_max_messages': agent_data.memory_max_messages,
+        'memory_max_tokens': agent_data.memory_max_tokens,
+        'memory_summarize_threshold': agent_data.memory_summarize_threshold,
         'service_id': agent_data.service_id,
         'silo_id': agent_data.silo_id,
         'output_parser_id': agent_data.output_parser_id,
@@ -345,6 +540,32 @@ async def chat_with_agent(
         conversation_id: Optional conversation ID to continue existing conversation
     """
     try:
+        # Fetch agent to check marketplace visibility
+        agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND_ERROR)
+        
+        # Check marketplace quota enforcement (only for public marketplace agents)
+        if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
+            # Get user from database
+            user = db.query(User).filter(User.user_id == int(auth_context.identity.id)).first()
+            
+            # Check if user is exempt (OMNIADMIN)
+            if user and not MarketplaceQuotaService.is_user_exempt(user):
+                # Fetch quota setting
+                settings_service = SystemSettingsService(db)
+                quota_value = settings_service.get_setting("marketplace_call_quota")
+                
+                # Enforce quota if quota > 0
+                if quota_value and int(quota_value) > 0:
+                    quota = int(quota_value)
+                    if MarketplaceQuotaService.check_quota_exceeded(user.user_id, db, quota):
+                        current_usage = MarketplaceQuotaService.get_current_month_usage(user.user_id, db)
+                        raise HTTPException(
+                            status_code=429,
+                            detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC)."
+                        )
+        
         # Parse search params if provided
         parsed_search_params = None
         if search_params:
@@ -434,6 +655,18 @@ async def chat_with_agent(
             conversation_id=conversation_id,
             db=db
         )
+        
+        # Increment marketplace usage counter (if marketplace agent and not exempt)
+        if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
+            user = db.query(User).filter(User.user_id == int(auth_context.identity.id)).first()
+            if user and not MarketplaceQuotaService.is_user_exempt(user):
+                try:
+                    MarketplaceQuotaService.increment_usage(user.user_id, db)
+                    # Note: increment_usage already commits internally
+                    logger.debug(f"Incremented marketplace usage for user {user.user_id}")
+                except Exception as e:
+                    logger.error(f"Failed to increment marketplace usage for user {user.user_id}: {e}")
+                    # Continue — don't fail the request if counter fails
         
         logger.info(f"Chat request processed for agent {agent_id} by user {auth_context.identity.id}")
         return ChatResponseSchema(**result)
@@ -684,3 +917,146 @@ async def remove_attached_file(
     except Exception as e:
         logger.error(f"Error in remove file endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to remove file") 
+
+
+@agents_router.get("/{agent_id}/files/{file_id}/download",
+                   summary="Download a file (uploaded or agent-generated)",
+                   tags=["Agents"])
+async def download_file(
+    app_id: int,
+    agent_id: int,
+    file_id: str,
+    request: Request,
+    conversation_id: Optional[int] = None,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db)
+):
+    """
+    Internal API: Download an uploaded or agent-generated file.
+
+    Looks up the file by file_id scoped to the calling user's session,
+    returns a signed URL for the /static/ endpoint (no auth required).
+    """
+    try:
+        user_context = {
+            "user_id": int(auth_context.identity.id),
+            "oauth": True,
+            "app_id": app_id
+        }
+
+        file_service = FileManagementService()
+
+        # Try with conversation_id first, then fall back to the global session so that
+        # files registered before the conversation was known (first-message auto-create)
+        # are still resolved correctly.
+        file_data = None
+        conv_ids_to_try = [str(conversation_id), None] if conversation_id else [None]
+        for try_conv_id in conv_ids_to_try:
+            files = await file_service.list_attached_files(
+                agent_id=agent_id,
+                user_context=user_context,
+                conversation_id=try_conv_id,
+            )
+            file_data = next((f for f in files if f.get("file_id") == file_id), None)
+            if file_data:
+                break
+
+        if not file_data or not file_data.get("file_path"):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        file_path = file_data["file_path"].lstrip("/")
+        filename = file_data.get("filename", os.path.basename(file_path))
+        user_email = auth_context.identity.email
+
+        # Build absolute base URL: prefer explicit env var, fall back to request origin
+        aict_base_url = os.getenv("AICT_BASE_URL", "").rstrip("/")
+        if not aict_base_url:
+            aict_base_url = str(request.base_url).rstrip("/")
+
+        sig = generate_signature(file_path, user_email)
+        download_url = (
+            f"{aict_base_url}/static/{file_path}"
+            f"?user={user_email}&sig={sig}"
+            f"&filename={filename}"
+        )
+
+        return {"download_url": download_url, "filename": filename}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in download file endpoint: {e}")
+        raise HTTPException(status_code=500, detail="File download failed")
+
+
+# ==================== MARKETPLACE MANAGEMENT ====================
+
+
+@agents_router.put("/{agent_id}/marketplace-visibility",
+                   summary="Update marketplace visibility",
+                   tags=["Agents", "Marketplace"])
+async def update_marketplace_visibility(
+    app_id: int,
+    agent_id: int,
+    data: MarketplaceVisibilityUpdateSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
+    db: Session = Depends(get_db),
+):
+    """Update an agent's marketplace visibility (unpublished/private/public)."""
+    try:
+        agent = MarketplaceService.update_marketplace_visibility(
+            db=db,
+            agent_id=agent_id,
+            app_id=app_id,
+            visibility_str=data.marketplace_visibility,
+        )
+        return {"marketplace_visibility": agent.marketplace_visibility.value}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@agents_router.get("/{agent_id}/marketplace-profile",
+                   summary="Get marketplace profile",
+                   tags=["Agents", "Marketplace"],
+                   response_model=MarketplaceProfileSchema)
+async def get_marketplace_profile(
+    app_id: int,
+    agent_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+):
+    """Get the marketplace profile for an agent (EDITOR+ management view)."""
+    profile = MarketplaceService.get_marketplace_profile(db, agent_id, app_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Marketplace profile not found",
+        )
+    return profile
+
+
+@agents_router.put("/{agent_id}/marketplace-profile",
+                   summary="Create or update marketplace profile",
+                   tags=["Agents", "Marketplace"],
+                   response_model=MarketplaceProfileSchema)
+async def update_marketplace_profile(
+    app_id: int,
+    agent_id: int,
+    profile_data: MarketplaceProfileCreateUpdateSchema,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
+    db: Session = Depends(get_db),
+):
+    """Create or update the marketplace profile for an agent."""
+    try:
+        profile = MarketplaceService.create_or_update_marketplace_profile(
+            db=db,
+            agent_id=agent_id,
+            app_id=app_id,
+            profile_data=profile_data,
+        )
+        return MarketplaceProfileSchema.model_validate(profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

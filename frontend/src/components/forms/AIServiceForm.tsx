@@ -10,6 +10,7 @@ interface AIService {
   supports_video: boolean;
   created_at: string;
   available_providers: Array<{value: string, name: string}>;
+  needs_api_key?: boolean;
 }
 
 interface AIServiceFormProps {
@@ -70,6 +71,8 @@ function AIServiceForm({ aiService, onSubmit, onCancel }: Readonly<AIServiceForm
     created_at: aiService.created_at
   } : null;
 
+  const needsApiKey = aiService?.needs_api_key ?? false;
+
   return (
     <BaseServiceForm
       service={serviceData}
@@ -79,6 +82,7 @@ function AIServiceForm({ aiService, onSubmit, onCancel }: Readonly<AIServiceForm
       serviceType="AI"
       onSubmit={onSubmit}
       onCancel={onCancel}
+      needsApiKey={needsApiKey}
     />
   );
 }

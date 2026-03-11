@@ -6,6 +6,8 @@ import Table from '../components/ui/Table';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
+import ImportModal, { type ConflictMode, type ImportResponse } from '../components/ui/ImportModal';
+import Alert from '../components/ui/Alert';
 
 // ...existing code...
 interface Silo {
@@ -26,6 +28,11 @@ function SilosPage() {
   const [silos, setSilos] = useState<Silo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  const [requiresEmbeddingServiceSelection, setRequiresEmbeddingServiceSelection] = useState(false);
+  const [availableEmbeddingServices, setAvailableEmbeddingServices] = useState<Array<{ id: number; name: string }>>([]);
+  const [selectedEmbeddingServiceId, setSelectedEmbeddingServiceId] = useState<number | undefined>(undefined);
   const navigate = useNavigate();
 
   // Load silos from the API
@@ -63,6 +70,109 @@ function SilosPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete silo');
       console.error('Error deleting silo:', err);
+    }
+  }
+
+  async function handleExport(siloId: number) {
+    if (!appId) return;
+
+    try {
+      const silo = silos.find(s => s.silo_id === siloId);
+      const siloName = silo?.name || 'silo';
+      
+      const blob = await apiService.exportSilo(parseInt(appId), siloId);
+      
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const sanitizedName = siloName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `silo-${sanitizedName}-${timestamp}.json`;
+      
+      // Download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // Show warning notification (7 seconds)
+      setNotification({
+        message: 'Silo exported successfully. Note: Vector data excluded. Re-upload documents after import.',
+        type: 'warning'
+      });
+      setTimeout(() => setNotification(null), 7000);
+    } catch (err) {
+      setNotification({
+        message: err instanceof Error ? err.message : 'Failed to export silo',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      console.error('Error exporting silo:', err);
+    }
+  }
+
+  async function handleImport(
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string
+  ): Promise<ImportResponse> {
+    if (!appId) {
+      throw new Error('App ID is required');
+    }
+
+    try {
+      // Parse file to check if embedding service selection is needed
+      if (!requiresEmbeddingServiceSelection) {
+        const fileContent = await file.text();
+        const fileData = JSON.parse(fileContent);
+        
+        // Check if embedding service is needed but not bundled
+        if (fileData.silo?.embedding_service_name && !fileData.embedding_service) {
+          // Fetch available embedding services
+          const services = await apiService.getEmbeddingServices(parseInt(appId));
+          setAvailableEmbeddingServices(
+            services.map((svc: any) => ({ id: svc.service_id, name: svc.name }))
+          );
+          setRequiresEmbeddingServiceSelection(true);
+          
+          return {
+            success: false,
+            message: 'Please select an embedding service to continue',
+          };
+        }
+      }
+
+      // Perform import
+      const result = await apiService.importSilo(
+        parseInt(appId),
+        file,
+        conflictMode,
+        newName,
+        selectedEmbeddingServiceId
+      );
+
+      if (result.success) {
+        setShowImportModal(false);
+        setNotification({
+          message: result.message || 'Silo imported successfully',
+          type: 'success'
+        });
+        void loadSilos(); // Reload silos list
+        setTimeout(() => setNotification(null), 5000);
+        
+        // Reset embedding service selection state
+        setRequiresEmbeddingServiceSelection(false);
+        setSelectedEmbeddingServiceId(undefined);
+      }
+
+      return result;
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Import failed',
+      };
     }
   } 
 
@@ -123,18 +233,38 @@ function SilosPage() {
           <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
           <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
         </div>
-        {canEdit && (
-          <Link 
-            to={`/apps/${appId}/silos/new`}
-            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span aria-hidden="true" className="mr-2">+</span>
-            <span>Create Silo</span>
-          </Link>
-        )}
+        <div className="flex items-center space-x-3">
+          {hasMinRole(AppRole.ADMINISTRATOR) && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span aria-hidden="true" className="mr-2">⬆️</span>
+              <span>Import Silo</span>
+            </button>
+          )}
+          {canEdit && (
+            <Link 
+              to={`/apps/${appId}/silos/new`}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span aria-hidden="true" className="mr-2">+</span>
+              <span>Create Silo</span>
+            </Link>
+          )}
+        </div>
       </div>
 
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
+
+      {/* Notification */}
+      {notification && (
+        <Alert
+          type={notification.type}
+          message={notification.message}
+          onDismiss={() => setNotification(null)}
+        />
+      )}
 
       {/* Silos List */}
       {silos.length === 0 ? (
@@ -229,6 +359,12 @@ function SilosPage() {
                       icon: '🎮',
                       variant: 'warning'
                     },
+                    {
+                      label: 'Export',
+                      onClick: () => { void handleExport(silo.silo_id); },
+                      icon: '⬇️',
+                      variant: 'primary' as const
+                    },
                     ...(canEdit ? [
                       {
                         label: 'Edit',
@@ -255,6 +391,23 @@ function SilosPage() {
           loading={loading}
         />
       )}
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => {
+          setShowImportModal(false);
+          setRequiresEmbeddingServiceSelection(false);
+          setSelectedEmbeddingServiceId(undefined);
+        }}
+        onImport={handleImport}
+        componentType="silo"
+        componentLabel="Silo"
+        requiresEmbeddingServiceSelection={requiresEmbeddingServiceSelection}
+        availableEmbeddingServices={availableEmbeddingServices}
+        selectedEmbeddingServiceId={selectedEmbeddingServiceId}
+        onEmbeddingServiceChange={setSelectedEmbeddingServiceId}
+      />
     </div>
   );
 }

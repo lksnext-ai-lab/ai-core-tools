@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query
+from fastapi.responses import JSONResponse
 from typing import List, Optional
 import os
+import json
 import logging
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
@@ -9,9 +11,13 @@ from sqlalchemy.orm import Session
 from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
 from services.media_service import MediaService
+from services.repository_export_service import RepositoryExportService
+from services.repository_import_service import RepositoryImportService
 
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, RepositorySearchSchema
 from schemas.media_schemas import MediaResponse, MediaUploadResponse
+from schemas.import_schemas import ConflictMode, ImportResponseSchema
+from schemas.export_schemas import RepositoryExportFileSchema
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -30,6 +36,74 @@ logger.info("Repositories router loaded successfully")
 
 
 # ==================== REPOSITORY MANAGEMENT ====================
+
+@repositories_router.post(
+    "/import",
+    summary="Import Repository",
+    tags=["Repositories", "Export/Import"],
+    response_model=ImportResponseSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_repository(
+    app_id: int,
+    file: UploadFile = File(...),
+    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
+    new_name: Optional[str] = Query(None),
+    selected_embedding_service_id: Optional[int] = Query(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("administrator")),
+    db: Session = Depends(get_db),
+):
+    """Import Repository from JSON file.
+
+    Note: Imports repository STRUCTURE only (no files).
+    Upload documents after import.
+    """
+    try:
+        content = await file.read()
+        file_data = json.loads(content)
+        export_data = RepositoryExportFileSchema(**file_data)
+
+        import_service = RepositoryImportService(db)
+        import_service.validate_import(export_data, app_id)
+
+        summary = import_service.import_repository(
+            export_data,
+            app_id,
+            conflict_mode,
+            new_name,
+            selected_embedding_service_id=(
+                selected_embedding_service_id
+            ),
+        )
+
+        return ImportResponseSchema(
+            success=True,
+            message=(
+                f"Repository '{summary.component_name}' "
+                f"imported successfully"
+            ),
+            summary=summary,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, str(e)
+            )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(e)
+        )
+    except Exception as e:
+        logger.error(
+            f"Import error: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Import failed",
+        )
+
 
 @repositories_router.get("/", 
                          summary="List repositories",
@@ -119,6 +193,70 @@ async def delete_repository(
     RepositoryService.delete_repository_router(repository_id, db)
     
     return {"message": "Repository deleted successfully"}
+
+
+@repositories_router.post(
+    "/{repository_id}/export",
+    summary="Export Repository",
+    tags=["Repositories", "Export/Import"],
+    status_code=status.HTTP_200_OK,
+)
+async def export_repository(
+    app_id: int,
+    repository_id: int,
+    include_dependencies: bool = Query(
+        True,
+        description="Bundle silo and its dependencies",
+    ),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("viewer")),
+    db: Session = Depends(get_db),
+):
+    """Export Repository configuration to JSON file.
+
+    Note: Exports repository STRUCTURE only (no files).
+    Files must be re-uploaded after import.
+    """
+    try:
+        export_service = RepositoryExportService(db)
+        export_data = export_service.export_repository(
+            repository_id,
+            app_id,
+            getattr(auth_context, "user_id", None),
+            include_dependencies,
+        )
+
+        filename = (
+            f"{export_data.repository.name.replace(' ', '_')}"
+            f"_repository.json"
+        )
+
+        return JSONResponse(
+            content=export_data.model_dump(mode="json"),
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{filename}"'
+                )
+            },
+        )
+    except ValueError as e:
+        logger.warning(f"Export failed: {str(e)}")
+        if "not found" in str(e):
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, str(e)
+            )
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, str(e)
+            )
+    except Exception as e:
+        logger.error(
+            f"Export error: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Export failed",
+        )
 
 
 # ==================== RESOURCE MANAGEMENT ====================

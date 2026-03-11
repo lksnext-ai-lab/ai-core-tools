@@ -6,6 +6,27 @@ from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
 
+
+def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
+    """Serialize an AgentMarketplaceProfile to a dict for schema response."""
+    if not profile:
+        return None
+    published_at = profile.published_at.isoformat() if profile.published_at else None
+    updated_at = profile.updated_at.isoformat() if profile.updated_at else None
+    return {
+        "id": profile.id,
+        "agent_id": profile.agent_id,
+        "display_name": profile.display_name,
+        "short_description": profile.short_description,
+        "long_description": profile.long_description,
+        "category": profile.category,
+        "tags": profile.tags,
+        "icon_url": profile.icon_url,
+        "cover_image_url": profile.cover_image_url,
+        "published_at": published_at,
+        "updated_at": updated_at,
+    }
+
 class AgentService:
 
     def get_agents_list(self, db: Session, app_id: int) -> List[AgentListItemSchema]:
@@ -31,7 +52,12 @@ class AgentService:
                 created_at=agent.create_date,
                 request_count=agent.request_count or 0,
                 service_id=getattr(agent, 'service_id', None),
-                ai_service=ai_service_info
+                ai_service=ai_service_info,
+                marketplace_visibility=(
+                    agent.marketplace_visibility.value
+                    if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
+                    else None
+                ),
             ))
         
         return result
@@ -71,6 +97,11 @@ class AgentService:
             type=agent.type or "agent",
             is_tool=agent.is_tool or False,
             has_memory=getattr(agent, 'has_memory', False) or False,
+            enable_code_interpreter=getattr(agent, 'enable_code_interpreter', False) or False,
+            server_tools=getattr(agent, 'server_tools', None) or [],
+            memory_max_messages=getattr(agent, 'memory_max_messages', 20) or 20,
+            memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
+            memory_summarize_threshold=getattr(agent, 'memory_summarize_threshold', 4000) or 4000,
             service_id=getattr(agent, 'service_id', None),
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
@@ -93,7 +124,16 @@ class AgentService:
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
             mcp_configs=form_data['mcp_configs'],
-            skills=form_data['skills']
+            skills=form_data['skills'],
+            # Marketplace
+            marketplace_visibility=(
+                agent.marketplace_visibility.value
+                if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
+                else None
+            ),
+            marketplace_profile=_serialize_marketplace_profile(
+                getattr(agent, 'marketplace_profile', None)
+            ),
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
@@ -193,6 +233,20 @@ class AgentService:
             agent.has_memory = has_memory_value
         else:
             agent.has_memory = has_memory_value == 'on'
+
+        enable_ci_value = data.get('enable_code_interpreter', False)
+        agent.enable_code_interpreter = bool(enable_ci_value)
+
+        agent.server_tools = data.get('server_tools') or []
+        
+        # Memory management fields
+        if data.get('memory_max_messages') is not None:
+            agent.memory_max_messages = data['memory_max_messages']
+        if data.get('memory_max_tokens') is not None:
+            agent.memory_max_tokens = data['memory_max_tokens']
+        if data.get('memory_summarize_threshold') is not None:
+            agent.memory_summarize_threshold = data['memory_summarize_threshold']
+        
         agent.output_parser_id = data.get('output_parser_id') or None
         
         # Handle temperature field - default to DEFAULT_AGENT_TEMPERATURE if not provided

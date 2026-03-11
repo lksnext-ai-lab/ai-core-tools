@@ -12,6 +12,7 @@ class MCPConfig(Base):
     name = Column(String(100), nullable=False)
     description = Column(String(1000))
     config = Column(JSON, nullable=False)  # Full MCP server config as JSON
+    ssl_verify = Column(Boolean, default=True, nullable=False, server_default='true')  # Whether to verify SSL certificates
     
     # Timestamps
     create_date = Column(DateTime, default=datetime.now)

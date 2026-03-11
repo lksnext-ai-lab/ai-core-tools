@@ -8,6 +8,7 @@ import asyncio
 from schemas.mcp_config_schemas import MCPConfigListItemSchema, MCPConfigDetailSchema, CreateUpdateMCPConfigSchema
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from utils.logger import get_logger
+from utils.mcp_ssl_utils import inject_ssl_config
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,7 @@ class MCPConfigService:
                 name="",
                 description="",
                 config="{}",
+                ssl_verify=True,
                 created_at=None
             )
         
@@ -55,6 +57,7 @@ class MCPConfigService:
             name=config.name,
             description=config.description or "",
             config=config_str,
+            ssl_verify=config.ssl_verify if config.ssl_verify is not None else True,
             created_at=config.create_date
         )
 
@@ -81,6 +84,7 @@ class MCPConfigService:
         # Update config data
         config.name = config_data.name
         config.description = config_data.description
+        config.ssl_verify = config_data.ssl_verify
         
         # Parse config JSON field
         try:
@@ -107,10 +111,11 @@ class MCPConfigService:
             return {"status": "error", "message": "MCP config not found"}
             
         connection_config = config.to_connection_dict()
-        return await MCPConfigService.test_connection_with_config(connection_config)
+        ssl_verify = config.ssl_verify if config.ssl_verify is not None else True
+        return await MCPConfigService.test_connection_with_config(connection_config, ssl_verify=ssl_verify)
 
     @staticmethod
-    async def test_connection_with_config(connection_config: dict) -> dict:
+    async def test_connection_with_config(connection_config: dict, ssl_verify: bool = True) -> dict:
         """Test connection to MCP server with provided config"""
         if not connection_config:
              return {"status": "error", "message": "Invalid MCP configuration"}
@@ -118,6 +123,9 @@ class MCPConfigService:
         # Validate config structure
         if not isinstance(connection_config, dict):
             return {"status": "error", "message": "MCP configuration must be a dictionary"}
+        
+        # Inject SSL configuration
+        connection_config = inject_ssl_config(connection_config, ssl_verify=ssl_verify)
              
         client = None
         try:
