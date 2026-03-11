@@ -123,3 +123,10 @@ export interface AgentRatingResponse {
 export interface UserRatingResponse {
   rating: number | null;
 }
+
+/** Current user's marketplace quota usage for the current UTC month */
+export interface MarketplaceQuotaUsage {
+  call_count: number;
+  quota: number;
+  is_exempt: boolean;
+}

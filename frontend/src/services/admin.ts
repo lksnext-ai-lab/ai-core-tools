@@ -78,6 +78,12 @@ class AdminService {
       method: 'POST',
     });
   }
+
+  async resetUserMarketplaceQuota(userId: number): Promise<{ message: string; user_id: number; previous_count: number; new_count: number; reset_by: string; timestamp: string }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/reset-marketplace-quota`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const adminService = new AdminService(); 

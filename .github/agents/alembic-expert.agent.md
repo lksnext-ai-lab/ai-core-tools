@@ -291,18 +291,39 @@ poetry run alembic upgrade <revision_id> --sql
 
 ### Plan Executor (`@plan-executor`)
 When your task originates from a plan execution step file (`/plans/<slug>/execution/step_NNN.md`):
-- **After completing the task**:
-  1. Append a `## Result` section to the step file with:
-     - `**Completed by**: @alembic-expert`
-     - `**Completed at**: YYYY-MM-DD`
-     - `**Status**: done | blocked | needs-revision`
-     - A summary of what migration was created, files changed, and any issues
-  2. **Update the status.yaml manifest** at `/plans/<slug>/execution/status.yaml`:
-     - Find the step in the `steps:` array by its `id` (e.g., `step_002`)
-     - Update the step's `status:` field to match (e.g., `done`, `blocked`, `needs-revision`)
-     - If status is `done`, add `completed_at: YYYY-MM-DD`
-     - Save the updated manifest
-- **Then** suggest the user invoke `@plan-executor` to continue with the next step
+
+> ⚠️ **Sub-agent constraint**: When invoked by `@plan-executor`, you do NOT have terminal access. You cannot run `poetry run alembic` commands. You must write migration files directly as file operations, and delegate all terminal commands back to plan-executor via a `## Terminal Commands Required` block in your Result.
+
+**How to handle migration creation as a sub-agent:**
+1. **Write the migration file manually**: Based on the model changes described in the step prompt, craft the migration file content directly (`alembic/versions/<revision_id>_<slug>.py`). Do NOT rely on autogenerate — write the `upgrade()` and `downgrade()` functions yourself from the model changes you know about.
+2. **Use the latest revision as `down_revision`**: Read the `alembic/versions/` directory to find the most recent migration file and use its revision ID as `down_revision`.
+3. **Generate a plausible revision ID**: Use a short hex string (e.g., `a1b2c3d4e5f6`) as the revision ID in the filename and in the migration file header.
+
+**After completing the task**:
+1. Append a `## Result` section to the step file with:
+   - `**Completed by**: @alembic-expert`
+   - `**Completed at**: YYYY-MM-DD`
+   - `**Status**: done | blocked | needs-revision`
+   - A summary of what migration was created, files changed, and any issues
+2. **Include a `## Terminal Commands Required` block** listing the exact commands plan-executor must run before staging the commit:
+   ```
+   ## Terminal Commands Required
+   Run these in order before committing:
+   1. poetry run alembic upgrade head
+   2. poetry run alembic downgrade -1
+   3. poetry run alembic upgrade head
+   ```
+   If the migration has issues that require autogenerate, include instead:
+   ```
+   ## Terminal Commands Required
+   Run autogenerate to produce the migration (the manually-written file is a draft):
+   1. poetry run alembic revision --autogenerate -m "<slug>"
+   2. Review generated file and remove the draft
+   3. poetry run alembic upgrade head
+   ```
+3. **Update the status.yaml manifest** at `/plans/<slug>/execution/status.yaml`:
+   - Find the step in the `steps:` array and update `status:` to `done` (or `blocked`/`needs-revision`)
+   - If `done`, add `completed_at: YYYY-MM-DD`
 - If the task cannot be completed, set status to `blocked` and explain why
 
 ## Companion Instruction File

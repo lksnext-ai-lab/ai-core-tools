@@ -16,8 +16,12 @@ from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_service import AgentService
 from services.file_management_service import FileManagementService, FileReference
+from services.marketplace_quota_service import MarketplaceQuotaService
+from services.system_settings_service import SystemSettingsService
+from utils.config import is_omniadmin
 from models.conversation import Conversation, ConversationSource
 from models.agent import Agent, MarketplaceVisibility
+from models.user import User
 from schemas.marketplace_schemas import (
     MARKETPLACE_CATEGORIES,
     MarketplaceCatalogResponseSchema,
@@ -45,6 +49,31 @@ def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
         "user_id": int(auth_context.identity.id),
         "email": auth_context.identity.email,
         "oauth": True,
+    }
+
+
+# ==================== QUOTA USAGE ====================
+
+
+@marketplace_router.get(
+    "/quota-usage",
+    summary="Get current user's marketplace quota usage",
+)
+async def get_marketplace_quota_usage(
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+) -> dict:
+    """Get current user's marketplace quota usage for the current UTC month."""
+    user_id = int(current_user.identity.id)
+    is_exempt = is_omniadmin(current_user.identity.email)
+    call_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+    settings_service = SystemSettingsService(db)
+    quota_value = settings_service.get_setting("marketplace_call_quota")
+    quota = int(quota_value) if quota_value is not None else 0
+    return {
+        "call_count": call_count,
+        "quota": quota,
+        "is_exempt": is_exempt,
     }
 
 
@@ -579,6 +608,19 @@ async def marketplace_chat(
     agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
     _validate_marketplace_agent(agent)
 
+    # Marketplace quota enforcement
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if user and not MarketplaceQuotaService.is_user_exempt(user):
+        settings_service = SystemSettingsService(db)
+        quota_value = settings_service.get_setting("marketplace_call_quota")
+        quota = int(quota_value) if quota_value else 0
+        if quota > 0 and MarketplaceQuotaService.check_quota_exceeded(user_id, db, quota):
+            current_usage = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC).",
+            )
+
     try:
         parsed_refs = _parse_file_references_json(file_references)
         jwt_token = _extract_jwt_token(request)
@@ -609,6 +651,13 @@ async def marketplace_chat(
             conversation_id=conversation_id,
             db=db,
         )
+
+        # Increment usage counter after successful execution
+        if user and not MarketplaceQuotaService.is_user_exempt(user):
+            try:
+                MarketplaceQuotaService.increment_usage(user_id, db)
+            except Exception as inc_err:
+                logger.error(f"Failed to increment marketplace usage for user {user_id}: {inc_err}")
 
         logger.info(
             f"Marketplace chat processed for agent {agent.agent_id}, "

@@ -36,6 +36,15 @@ export default function MarketplaceChatPage() {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Quota
+  const [quotaInfo, setQuotaInfo] = useState<{ call_count: number; quota: number; is_exempt: boolean } | null>(null);
+
+  const isQuotaExceeded =
+    quotaInfo !== null &&
+    quotaInfo.quota > 0 &&
+    !quotaInfo.is_exempt &&
+    quotaInfo.call_count >= quotaInfo.quota;
+
   // Persistent files (server-side, scoped to this conversation)
   const [persistentFiles, setPersistentFiles] = useState<any[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
@@ -52,6 +61,21 @@ export default function MarketplaceChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Fetch quota usage
+  const fetchQuotaInfo = useCallback(async () => {
+    try {
+      const data = await apiService.getMarketplaceQuotaUsage();
+      setQuotaInfo(data);
+    } catch {
+      // Non-critical — quota display stays hidden
+    }
+  }, []);
+
+  // Load quota on mount
+  useEffect(() => {
+    fetchQuotaInfo();
+  }, [fetchQuotaInfo]);
 
   // Load conversation history
   useEffect(() => {
@@ -134,6 +158,7 @@ export default function MarketplaceChatPage() {
     const trimmed = inputMessage.trim();
     if (!trimmed && persistentFiles.length === 0) return;
     if (isSending) return;
+    if (isQuotaExceeded) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -174,6 +199,9 @@ export default function MarketplaceChatPage() {
       };
       setMessages((prev) => [...prev, agentMsg]);
 
+      // Refresh quota after successful send
+      fetchQuotaInfo();
+
       // Refresh file list — agent may have generated new files
       try {
         const fileResponse = await apiService.listMarketplaceFiles(numericId);
@@ -182,18 +210,32 @@ export default function MarketplaceChatPage() {
         // Non-critical — panel stays as-is
       }
     } catch (err) {
+      const isQuotaError =
+        err instanceof Error &&
+        (err.message.toLowerCase().includes('quota') ||
+          err.message.toLowerCase().includes('429') ||
+          err.message.toLowerCase().includes('limit'));
+
+      let errorContent = 'Failed to send message. Please try again.';
+      if (isQuotaError) {
+        errorContent = 'Marketplace call quota exceeded. Your quota resets at the start of next month.';
+      } else if (err instanceof Error) {
+        errorContent = err.message;
+      }
+
       const errMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content:
-          err instanceof Error ? err.message : 'Failed to send message. Please try again.',
+        content: errorContent,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errMsg]);
+      // Refetch quota in case backend enforced it (e.g. 429)
+      fetchQuotaInfo();
     } finally {
       setIsSending(false);
     }
-  }, [inputMessage, persistentFiles, isSending, numericId]);
+  }, [inputMessage, persistentFiles, isSending, numericId, isQuotaExceeded, fetchQuotaInfo]);
 
   // Handle Enter key
   const handleKeyDown = useCallback(
@@ -324,6 +366,18 @@ export default function MarketplaceChatPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Quota usage badge */}
+          {quotaInfo && quotaInfo.quota > 0 && !quotaInfo.is_exempt && (
+            <span
+              className={`text-xs rounded-full px-3 py-1 ${
+                isQuotaExceeded
+                  ? 'bg-red-100 text-red-700 font-medium'
+                  : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {quotaInfo.call_count}/{quotaInfo.quota} Marketplace Usage
+            </span>
+          )}
           {agentId && (
             <button
               type="button"
@@ -374,13 +428,24 @@ export default function MarketplaceChatPage() {
 
       {/* Input area */}
       <div className="border-t bg-white px-4 py-3 flex-shrink-0">
+        {/* Quota exceeded alert */}
+        {isQuotaExceeded && quotaInfo && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 flex items-start gap-2">
+            <span className="text-red-500 flex-shrink-0" aria-hidden="true">⚠️</span>
+            <span className="text-red-600 text-sm font-medium">
+              You have reached your monthly marketplace call limit ({quotaInfo.call_count}/{quotaInfo.quota}).
+              Your quota will reset at the start of next month (UTC).
+            </span>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           {/* File upload button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 transition-colors"
-            title="Attach file"
+            disabled={isQuotaExceeded}
+            className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
           >
             📎
           </button>
@@ -407,7 +472,7 @@ export default function MarketplaceChatPage() {
           <button
             type="button"
             onClick={handleSend}
-            disabled={isSending || (!inputMessage.trim() && persistentFiles.length === 0)}
+            disabled={isSending || isQuotaExceeded || (!inputMessage.trim() && persistentFiles.length === 0)}
             className="flex-shrink-0 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Send

@@ -465,6 +465,43 @@ eventSource.onmessage = (event) => {
 };
 ```
 
+## Marketplace Quota Enforcement
+
+When a user sends a message to a **marketplace agent** via the internal API, the platform checks and enforces a monthly call quota before invoking the agent.
+
+### How It Works
+
+1. The chat route (`POST /internal/marketplace/conversations/{id}/chat`) calls `MarketplaceQuotaService.check_quota(user_id, db)` before executing the agent.
+2. The service reads `marketplace_call_quota` from the `system_settings` table.
+3. If the quota is `0`, calls are **unlimited** for all users.
+4. Users with the `omniadmin` role are **always exempt** regardless of the quota setting.
+5. If the user's `call_count` for the current month meets or exceeds the quota, a **HTTP 429** response is returned.
+6. On a successful call, `MarketplaceQuotaService.increment_usage(user_id, db)` upserts a row in `marketplace_usage` for the current (year, month).
+
+### HTTP 429 Response
+
+When the quota is exceeded, the endpoint returns:
+
+```json
+{
+  "detail": "Marketplace call quota exceeded"
+}
+```
+
+### MarketplaceQuotaService
+
+| Method | Description |
+|--------|-------------|
+| `check_quota(user_id, db)` | Raises `HTTP 429` if quota is exceeded; no-op for omniadmins or when quota is 0 |
+| `increment_usage(user_id, db)` | Upserts the current-month row in `marketplace_usage` |
+| `reset_usage(user_id, db)` | Resets `call_count` to 0 for the current month (OMNIADMIN only) |
+
+### Frontend Behaviour
+
+- **Marketplace chat**: Displays a usage badge (e.g. "12 / 50 calls") and an alert banner when the quota is reached. The send button is disabled once the quota is exhausted.
+- **User profile page**: Shows a "Marketplace Call Usage (Current Month)" section with current count and quota.
+- **Admin user list**: OMNIADMIN users see a "Reset Quota" action per user that calls the reset endpoint.
+
 ## Best Practices
 
 1. **System prompts**: Be specific about agent role, behavior, and constraints

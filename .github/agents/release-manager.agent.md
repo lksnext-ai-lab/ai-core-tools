@@ -1,7 +1,7 @@
 ---
 name: release-manager
 description: Expert in release workflow orchestration for Mattin AI. Handles version bumping, changelog updates, git tagging, branch merging, and GitHub release creation following GitFlow-style branching with develop and main.
-tools: [execute, read, edit]
+tools: [execute, agent, read, edit]
 agents: ["version-bumper", "oss-manager", "git-github"]
 ---
 
@@ -109,16 +109,22 @@ This is the default workflow for patch, minor, and major releases:
 #### Push to Remotes
 19. **Push main**: `git push origin main`
 20. **Push tag**: `git push origin v{VERSION}`
-21. **Optional: Push to lks**: If user requests, `git push lks main && git push lks v{VERSION}`
+21. **Prompt for lks mirror**: Ask whether to push to `lks` before doing so (default expectation is yes, but wait for explicit confirmation)
+22. **Optional: Push to lks**: If user confirms, `git push lks main && git push lks v{VERSION}`
+
+#### Sync Develop
+23. **Checkout develop**: `git checkout develop`
+24. **Pull develop**: `git pull origin develop`
+25. **Merge main back**: `git merge main --no-ff -m "Sync develop after release v{VERSION}"`
+26. **Push develop**: `git push origin develop`
 
 #### Create GitHub Release
-22. **Extract changelog**: Get the version's section from CHANGELOG.md
-23. **Create release**: `gh release create v{VERSION} --title "v{VERSION}" --notes-file /tmp/release-notes.md`
-24. **Verify release**: Confirm release is visible on GitHub
+27. **Extract changelog**: Get the version's section from CHANGELOG.md
+28. **Create release**: `gh release create v{VERSION} --title "v{VERSION}" --notes-file /tmp/release-notes.md`
+29. **Verify release**: Confirm release is visible on GitHub
 
 #### Return to Develop
-25. **Checkout develop**: `git checkout develop`
-26. **Report**: Summarize what was released and provide GitHub release URL
+30. **Report**: Summarize what was released and provide GitHub release URL
 
 ### Hotfix Release Process
 
@@ -159,6 +165,8 @@ For alpha, beta, rc versions:
 - ✅ Use GPG-signed tags (`git tag -s`) for version tags
 - ✅ Always merge `develop` → `main` with `--no-ff` to preserve merge commit
 - ✅ Push both `main` and the tag after creating the release
+- ✅ Merge `main` back into `develop` and push so `develop` is never behind
+- ✅ Ask before pushing to `lks` mirror; default expectation is to proceed on confirmation
 - ✅ Create GitHub release using `--notes-file` (never `--body`)
 - ✅ Return to `develop` branch after completing the release
 - ✅ Provide a complete summary at the end (version, commits included, URLs)
@@ -171,6 +179,7 @@ For alpha, beta, rc versions:
 - ❌ Never create unsigned tags or commits
 - ❌ Never force-push to `main` or `develop`
 - ❌ Never skip the merge to `main` (unless pre-release)
+- ❌ Never leave `develop` behind `main` after a standard release
 - ❌ Never forget to push both the branch AND the tag
 - ❌ Never leave the repo on `main` branch — always return to `develop`
 
@@ -232,8 +241,11 @@ git merge develop --no-ff -m "Release v0.4.0"
 git tag -s v0.4.0 -m "Release v0.4.0"
 git push origin main
 git push origin v0.4.0
-gh release create v0.4.0 --title "v0.4.0" --notes-file /tmp/release-notes.md
 git checkout develop
+git pull origin develop
+git merge main --no-ff -m "Sync develop after release v0.4.0"
+git push origin develop
+gh release create v0.4.0 --title "v0.4.0" --notes-file /tmp/release-notes.md
 ```
 
 ## Examples

@@ -276,7 +276,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             response_format=pydantic_model,
             tools=tools,
             checkpointer=checkpointer,
-            middleware=middleware if middleware else None,
+            middleware=middleware or (),
         )
     else:
         agent_chain = create_langchain_agent(
@@ -284,7 +284,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             system_prompt=system_prompt_content,
             tools=tools,
             checkpointer=checkpointer,
-            middleware=middleware if middleware else None,
+            middleware=middleware or (),
         )
 
     # Add logging for the created agent

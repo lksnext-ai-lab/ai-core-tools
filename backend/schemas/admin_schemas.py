@@ -31,3 +31,13 @@ class SystemStatsResponse(BaseModel):
     inactive_api_keys: int
     recent_users: List[dict]
     users_with_apps: int
+
+
+class MarketplaceQuotaResetResponse(BaseModel):
+    message: str
+    user_id: int
+    user_email: str
+    previous_count: int
+    new_count: int
+    reset_by: str
+    timestamp: str
