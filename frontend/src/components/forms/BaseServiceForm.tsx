@@ -9,6 +9,7 @@ export interface ServiceFormData {
   model_name: string;
   api_key: string;
   base_url: string;
+  supports_video?: boolean;
 }
 
 export interface ServiceData {
@@ -18,6 +19,7 @@ export interface ServiceData {
   model_name: string;
   api_key: string;
   base_url: string;
+  supports_video?: boolean;
   created_at: string;
 }
 
@@ -57,7 +59,8 @@ function BaseServiceForm({
     provider: '',
     model_name: '',
     api_key: '',
-    base_url: ''
+    base_url: '',
+    supports_video: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +77,8 @@ function BaseServiceForm({
         provider: service.provider || '',
         model_name: service.model_name || '',
         api_key: service.api_key || '',
-        base_url: service.base_url || ''
+        base_url: service.base_url || '',
+        supports_video: service.supports_video || false
       });
     }
   }, [service]);
@@ -89,12 +93,13 @@ function BaseServiceForm({
     // Auto-fill base URL when provider changes
     if (name === 'provider' && value) {
       const defaults = getProviderDefaults(value);
-      if (!formData.base_url || formData.base_url === '') {
-        setFormData(prev => ({
-          ...prev,
-          base_url: defaults.baseUrl
-        }));
-      }
+      const isGoogleProvider = value === 'Google' || value === 'GoogleCloud';
+      setFormData(prev => ({
+        ...prev,
+        base_url: prev.base_url || defaults.baseUrl,
+        // Clear video flag when switching to a non-Google provider
+        ...((!isGoogleProvider) && { supports_video: false }),
+      }));
     }
   };
 
@@ -155,7 +160,7 @@ function BaseServiceForm({
 
   const currentProviderDefaults = formData.provider ? getProviderDefaults(formData.provider) : null;
 
-  const isApiKeyRequired = formData.provider !== 'Custom' && formData.provider !== 'Ollama';
+  const isApiKeyRequired = formData.provider !== 'Custom' && formData.provider !== 'Ollama' && formData.provider !== 'GoogleCloud';
   const isValid = 
     formData.name.trim() !== '' && 
     formData.provider !== '' && 
@@ -237,10 +242,10 @@ function BaseServiceForm({
           )}
         </div>
 
-        {/* Base URL */}
+        {/* Base URL / Project ID */}
         <div>
           <label htmlFor="base_url" className="block text-sm font-medium text-gray-700 mb-2">
-            Base URL *
+            {formData.provider === 'GoogleCloud' ? 'GCP Project ID *' : 'Base URL *'}
           </label>
           <input
             type="text"
@@ -249,20 +254,24 @@ function BaseServiceForm({
             value={formData.base_url}
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="https://api.example.com/v1"
+            placeholder={formData.provider === 'GoogleCloud' ? 'my-gcp-project-id' : 'https://api.example.com/v1'}
             required
           />
-          {currentProviderDefaults && (
+          {formData.provider === 'GoogleCloud' ? (
+            <p className="mt-1 text-sm text-gray-500">
+              Your Google Cloud Project ID (e.g., my-project-123)
+            </p>
+          ) : currentProviderDefaults && currentProviderDefaults.baseUrl ? (
             <p className="mt-1 text-sm text-gray-500">
               Default: {currentProviderDefaults.baseUrl}
             </p>
-          )}
+          ) : null}
         </div>
 
         {/* API Key */}
         <div>
           <label htmlFor="api_key" className="block text-sm font-medium text-gray-700 mb-2">
-            API Key {formData.provider !== 'Custom' && formData.provider !== 'Ollama' && '*'}
+            API Key {formData.provider !== 'Custom' && formData.provider !== 'Ollama' && formData.provider !== 'GoogleCloud' && '*'}
           </label>
           <input
             type="password"
@@ -271,15 +280,56 @@ function BaseServiceForm({
             value={formData.api_key}
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="sk-..."
+            placeholder={formData.provider === 'GoogleCloud' ? '{"type":"service_account","project_id":...}' : 'sk-...'}
             required={formData.provider !== 'Custom' && formData.provider !== 'Ollama'}
           />
           <p className="mt-1 text-sm text-gray-500">
-            {formData.provider === 'Ollama' || formData.provider === 'Custom' 
+            {formData.provider === 'GoogleCloud'
+              ? 'Paste the full Service Account JSON key content'
+              : formData.provider === 'Ollama' || formData.provider === 'Custom' 
               ? 'Optional for local/custom providers' 
               : 'Required for cloud providers'}
           </p>
         </div>
+
+        {/* Google Cloud Vertex AI setup hint */}
+        {formData.provider === 'GoogleCloud' && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <p className="text-xs font-medium text-emerald-800 mb-1">Google Cloud (Vertex AI) Setup</p>
+            <ul className="text-xs text-emerald-700 space-y-1 list-disc list-inside">
+              <li><strong>GCP Project ID:</strong> Your Google Cloud project identifier</li>
+              <li><strong>Model:</strong> e.g., gemini-2.0-flash, gemini-1.5-pro</li>
+            </ul>
+            <p className="text-xs font-semibold text-emerald-800 mt-2 mb-1">Authentication:</p>
+            <ol className="text-xs text-emerald-700 space-y-1 list-decimal list-inside">
+              <li><strong>Service Account JSON:</strong> Paste the full JSON key content in the API Key field above</li>
+            </ol>
+            <p className="text-xs text-emerald-600 mt-1">
+              Region defaults to europe-west1.
+            </p>
+          </div>
+        )}
+
+        {/* Video Capabilities — only available for Google providers */}
+        {serviceType === 'AI' && (formData.provider === 'Google' || formData.provider === 'GoogleCloud') && (
+          <div className="flex items-center space-x-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <input
+              type="checkbox"
+              id="supports_video"
+              checked={formData.supports_video}
+              onChange={(e) => setFormData(prev => ({ ...prev, supports_video: e.target.checked }))}
+              className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+            />
+            <div>
+              <label htmlFor="supports_video" className="text-sm font-medium text-gray-700 cursor-pointer">
+                🎬 Video Analysis Capable
+              </label>
+              <p className="text-xs text-gray-500">
+                Enable if this model can analyze video content (e.g., Gemini Flash, Gemini Pro)
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Test Result */}
         {testResult && (

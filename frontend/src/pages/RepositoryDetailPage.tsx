@@ -36,6 +36,7 @@ interface RepositoryDetail {
   ai_services: Array<{
     service_id: number;
     name: string;
+    supports_video?: boolean;
   }>;
   media: Media[];
 }
@@ -48,6 +49,7 @@ interface RepositoryDetail {
     duration: number | null;
     language: string | null;
     status: string;
+    processing_mode: string | null;
     error_message: string | null;
     create_date: string;
     folder_id: number | null;
@@ -93,6 +95,8 @@ const RepositoryDetailPage: React.FC = () => {
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const pollingIntervalsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const [selectedTranscriptionServiceId, setSelectedTranscriptionServiceId] = useState<number | null>(null);
+  const [enableMultimodal, setEnableMultimodal] = useState(false);
+  const [selectedVideoServiceId, setSelectedVideoServiceId] = useState<number | null>(null);
   const [mediaConfig, setMediaConfig] = useState({
     forced_language: '',
     chunk_min_duration: 30,
@@ -240,7 +244,9 @@ const RepositoryDetailPage: React.FC = () => {
           mediaFiles,
           selectedFolderId || undefined,
           mediaConfig,
-          selectedTranscriptionServiceId || undefined
+          selectedTranscriptionServiceId || undefined,
+          enableMultimodal ? 'multimodal' : 'basic',
+          enableMultimodal ? selectedVideoServiceId || undefined : undefined
         );
         
         if (result.failed_files?.length > 0) {
@@ -256,13 +262,17 @@ const RepositoryDetailPage: React.FC = () => {
           youtubeUrl,
           selectedFolderId || undefined,
           mediaConfig,
-          selectedTranscriptionServiceId || undefined
+          selectedTranscriptionServiceId || undefined,
+          enableMultimodal ? 'multimodal' : 'basic',
+          enableMultimodal ? selectedVideoServiceId || undefined : undefined
         );
       }
       
       setShowMediaUploadModal(false);
       setMediaFiles([]);
       setYoutubeUrl('');
+      setEnableMultimodal(false);
+      setSelectedVideoServiceId(null);
       await loadRepository(false);
     } catch (err: any) {
       setError(err.message || 'Failed to upload media');
@@ -815,12 +825,17 @@ const RepositoryDetailPage: React.FC = () => {
                                 {media.duration
                                   ? `${media.duration.toFixed(1)}s`
                                   : 'processing...'}
+                                {media.processing_mode === 'multimodal' && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700" title="Indexed with multimodal video analysis">
+                                    Multimodal
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <StatusBadge status={media.status} />
+                            <StatusBadge status={media.status} processingMode={media.processing_mode} />
 
                             {canEdit && (
                               <>
@@ -1298,6 +1313,60 @@ const RepositoryDetailPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Multimodal Analysis */}
+          <div className="border-t pt-4">
+            <div className="flex items-center space-x-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <input
+                type="checkbox"
+                id="enable_multimodal"
+                checked={enableMultimodal}
+                onChange={(e) => {
+                  setEnableMultimodal(e.target.checked);
+                  if (!e.target.checked) setSelectedVideoServiceId(null);
+                }}
+                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+              />
+              <div>
+                <label htmlFor="enable_multimodal" className="text-sm font-medium text-gray-700 cursor-pointer">
+                  🎬 Enable Multimodal Analysis
+                </label>
+                <p className="text-xs text-gray-500">
+                  Analyze video content visually using a Video-LLM (additional processing time and cost)
+                </p>
+              </div>
+            </div>
+
+            {enableMultimodal && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Video Analysis Service *</label>
+                {(() => {
+                  const videoServices = repository?.ai_services?.filter((s: any) => s.supports_video) || [];
+                  if (videoServices.length === 0) {
+                    return (
+                      <div className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
+                        No video-capable AI services found. Mark an AI service as "Video Analysis Capable" in Settings.
+                      </div>
+                    );
+                  }
+                  return (
+                    <select
+                      value={selectedVideoServiceId || ''}
+                      onChange={(e) => setSelectedVideoServiceId(e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    >
+                      <option value="">-- Select a Video Service --</option>
+                      {videoServices.map((service: any) => (
+                        <option key={service.service_id} value={service.service_id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
@@ -1310,7 +1379,8 @@ const RepositoryDetailPage: React.FC = () => {
               onClick={handleMediaUpload}
               disabled={
                 selectedTranscriptionServiceId === null ||
-                (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl)
+                (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl) ||
+                (enableMultimodal && !selectedVideoServiceId)
               }
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
             >

@@ -687,7 +687,7 @@ class SiloService:
             "repository_id": media.repository_id,
             "media_id": media.media_id,
             "silo_id": media.repository.silo_id,
-            "content_type": "media_chunk",
+            "content_type": "media_chunk_multimodal" if chunk.get('visual_description') else "media_chunk",
             
             # Chunk-specific data
             "chunk_index": chunk.get('chunk_index'),
@@ -702,6 +702,7 @@ class SiloService:
             "language": media.language,
             "file_type": os.path.splitext(media.file_path)[1].lower() if media.file_path else None,
             "source": media.file_path,
+            "processing_mode": media.processing_mode or "basic",
             
             # Folder information
             "folder_id": media.folder_id,
@@ -728,8 +729,16 @@ class SiloService:
             metadata["folder_path"] = ""
 
         # Create Document and index
+        page_content = chunk.get('text', '')
+        visual_desc = chunk.get('visual_description', '')
+        
+        # If multimodal, enrich page_content with visual description
+        if visual_desc:
+            page_content = f"{page_content}\n\n[Visual context]: {visual_desc}"
+            metadata["visual_description"] = visual_desc
+        
         doc = Document(
-            page_content=chunk.get('text', ''),
+            page_content=page_content,
             metadata=metadata
         )
 

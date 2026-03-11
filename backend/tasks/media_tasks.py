@@ -2,6 +2,7 @@ from models.media import Media
 from db.database import SessionLocal
 from services.transcription_service import TranscriptionService
 from services.silo_service import SiloService
+from services.video_analysis_service import VideoAnalysisService
 from utils.logger import get_logger
 import os
 import yt_dlp
@@ -80,6 +81,33 @@ def process_media_task_sync(media_id: int):
 
         logger.info(f"Created {len(chunks_data)} chunks (in-memory) for media {media_id}")
         logger.info(f"First chunk sample: {chunks_data[0] if chunks_data else 'NO CHUNKS'}")
+
+        # Step 4b: Multimodal video analysis (if enabled)
+        if media.processing_mode == 'multimodal' and media.video_service_id:
+            try:
+                media.status = 'analyzing_video'
+                db.commit()
+                
+                logger.info(f"Starting chunk-aligned multimodal video analysis for media {media_id}")
+                visual_segments = VideoAnalysisService.analyze_video(
+                    video_path=media.file_path,
+                    ai_service_id=media.video_service_id,
+                    db=db,
+                    chunks=chunks_data
+                )
+                
+                logger.info(f"Video analysis returned {len(visual_segments)} visual segments for media {media_id}")
+                
+                # Enrich chunks with visual descriptions (chunk-aligned or fallback to timestamp overlap)
+                chunks_data = VideoAnalysisService.enrich_chunks_with_visual(
+                    chunks_data, visual_segments
+                )
+                
+                logger.info(f"Enriched {len(chunks_data)} chunks with visual descriptions for media {media_id}")
+                
+            except Exception as e:
+                logger.warning(f"Video analysis failed for media {media_id}, continuing with audio-only chunks: {str(e)}")
+                # Don't fail the entire pipeline — continue with audio-only chunks
 
         # Step 5: Index chunks directly without creating DB rows
         media.status = 'indexing'

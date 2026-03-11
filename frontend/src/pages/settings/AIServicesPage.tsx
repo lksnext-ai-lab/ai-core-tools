@@ -138,7 +138,6 @@ function AIServicesPage() {
                   label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
                   onClick: () => void handleTestConnection(service.service_id),
                   icon: testingServiceId === service.service_id ? '⏳' : '🔌',
-                  show: canEdit,
                   disabled: testingServiceId === service.service_id
                 },
                 { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' },

@@ -7,6 +7,7 @@ interface AIService {
   model_name: string;
   api_key: string;
   base_url: string;
+  supports_video: boolean;
   created_at: string;
   available_providers: Array<{value: string, name: string}>;
 }
@@ -23,7 +24,7 @@ const AI_PROVIDERS: ProviderConfig[] = [
   { value: 'Anthropic', name: 'Anthropic' },
   { value: 'Custom', name: 'Custom/Ollama' },
   { value: 'MistralAI', name: 'Mistral' },
-  { value: 'Google', name: 'Google' }
+  { value: 'GoogleCloud', name: 'Google Cloud (Vertex AI)' }
 ];
 
 const getAIProviderDefaults = (provider: string): ProviderDefaults => {
@@ -48,9 +49,9 @@ const getAIProviderDefaults = (provider: string): ProviderDefaults => {
       baseUrl: 'https://api.mistral.ai/v1',
       modelPlaceholder: 'mistral-large-latest, mistral-small-latest'
     },
-    'Google': {
-      baseUrl: 'https://generativelanguage.googleapis.com',
-      modelPlaceholder: 'gemini-2.0-flash'
+    'GoogleCloud': {
+      baseUrl: '',
+      modelPlaceholder: 'gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash'
     }
   };
   return defaults[provider] || { baseUrl: '', modelPlaceholder: '' };
@@ -65,6 +66,7 @@ function AIServiceForm({ aiService, onSubmit, onCancel }: Readonly<AIServiceForm
     model_name: aiService.model_name,
     api_key: aiService.api_key,
     base_url: aiService.base_url,
+    supports_video: aiService.supports_video || false,
     created_at: aiService.created_at
   } : null;
 

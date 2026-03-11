@@ -11,6 +11,7 @@ class AIServiceListItemSchema(BaseModel):
     name: str
     provider: Optional[str]
     model_name: str
+    supports_video: bool = False
     created_at: Optional[datetime]
     
     model_config = ConfigDict(from_attributes=True)
@@ -24,6 +25,7 @@ class AIServiceDetailSchema(BaseModel):
     model_name: str
     api_key: str
     base_url: str
+    supports_video: bool = False
     created_at: Optional[datetime]
     available_providers: List[Dict[str, Any]]
     
@@ -37,3 +39,4 @@ class CreateUpdateAIServiceSchema(BaseModel):
     model_name: str
     api_key: str
     base_url: Optional[str] = ""
+    supports_video: bool = False

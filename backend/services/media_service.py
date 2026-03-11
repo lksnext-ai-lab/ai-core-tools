@@ -29,7 +29,9 @@ class MediaService:
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
-        chunk_overlap: Optional[int] = None
+        chunk_overlap: Optional[int] = None,
+        processing_mode: Optional[str] = 'basic',
+        video_service_id: Optional[int] = None
     ) -> Tuple[List[Media], List[dict]]:
         """
         Upload multiple media files
@@ -56,7 +58,9 @@ class MediaService:
                     forced_language=forced_language,
                     chunk_min_duration=chunk_min_duration,
                     chunk_max_duration=chunk_max_duration,
-                    chunk_overlap=chunk_overlap
+                    chunk_overlap=chunk_overlap,
+                    processing_mode=processing_mode,
+                    video_service_id=video_service_id
                 )
                 created_media.append(media)
             except Exception as e:
@@ -228,7 +232,9 @@ class MediaService:
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
-        chunk_overlap: Optional[int] = None
+        chunk_overlap: Optional[int] = None,
+        processing_mode: Optional[str] = 'basic',
+        video_service_id: Optional[int] = None
     ) -> Media:
         """Create media from uploaded file"""
         file_extension = os.path.splitext(file.filename)[1].lower()
@@ -247,6 +253,8 @@ class MediaService:
             source_type='upload',
             status='pending',
             forced_language=forced_language,
+            processing_mode=processing_mode or 'basic',
+            video_service_id=video_service_id,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap
@@ -287,7 +295,9 @@ class MediaService:
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
-        chunk_overlap: Optional[int] = None
+        chunk_overlap: Optional[int] = None,
+        processing_mode: Optional[str] = 'basic',
+        video_service_id: Optional[int] = None
     ) -> Media:
         """Create media from YouTube URL"""
         import re
@@ -325,6 +335,8 @@ class MediaService:
             source_url=url,
             status='pending',
             forced_language=forced_language,
+            processing_mode=processing_mode or 'basic',
+            video_service_id=video_service_id,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap

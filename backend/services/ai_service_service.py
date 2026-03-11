@@ -26,6 +26,7 @@ class AIServiceService:
                 name=service.name,
                 provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
                 model_name=service.description or "",  # Use description as model info
+                supports_video=service.supports_video or False,
                 created_at=service.create_date
             ))
         
@@ -46,6 +47,7 @@ class AIServiceService:
                 model_name="",
                 api_key="",
                 base_url="",
+                supports_video=False,
                 created_at=None,
                 # Form data
                 available_providers=providers
@@ -67,6 +69,7 @@ class AIServiceService:
             model_name=service.description or "",
             api_key=service.api_key,
             base_url=service.endpoint or "",  # Use endpoint as base_url
+            supports_video=service.supports_video or False,
             created_at=service.create_date,
             available_providers=providers
         )
@@ -92,6 +95,7 @@ class AIServiceService:
         service.description = service_data.model_name  # Store model name in description
         service.api_key = service_data.api_key
         service.endpoint = service_data.base_url  # Store base_url in endpoint
+        service.supports_video = service_data.supports_video
         
         # Create or update the service
         if service_id == 0:
@@ -126,6 +130,7 @@ class AIServiceService:
             description=service.description,
             api_key=service.api_key,
             endpoint=service.endpoint,
+            supports_video=service.supports_video or False,
             create_date=datetime.now()
         )
         

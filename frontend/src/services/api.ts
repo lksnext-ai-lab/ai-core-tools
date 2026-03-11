@@ -513,7 +513,7 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }, transcriptionServiceId?: number) {
+  }, transcriptionServiceId?: number, processingMode?: string, videoServiceId?: number) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     
@@ -531,6 +531,8 @@ class ApiService {
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
     if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+    if (processingMode) formData.append('processing_mode', processingMode);
+    if (videoServiceId) formData.append('video_service_id', videoServiceId.toString());
 
     const token = this.getAuthToken();
     console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
@@ -556,7 +558,7 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }, transcriptionServiceId?: number) {
+  }, transcriptionServiceId?: number, processingMode?: string, videoServiceId?: number) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     const token = this.getAuthToken();
@@ -574,6 +576,8 @@ class ApiService {
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
     if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+    if (processingMode) formData.append('processing_mode', processingMode);
+    if (videoServiceId) formData.append('video_service_id', videoServiceId.toString());
         
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;

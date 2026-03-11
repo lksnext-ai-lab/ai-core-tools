@@ -12,6 +12,7 @@ class MediaResponse(BaseModel):
     duration: Optional[float]
     language: Optional[str]
     status: str
+    processing_mode: Optional[str] = 'basic'
     error_message: Optional[str]
     create_date: datetime
     processed_at: Optional[datetime]

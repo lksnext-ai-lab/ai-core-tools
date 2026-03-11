@@ -253,7 +253,6 @@ function MCPConfigsPage() {
                         label: testingConfigId === config.config_id ? 'Testing...' : 'Test Connection',
                         onClick: () => { void handleTestConnection(config.config_id); },
                         icon: testingConfigId === config.config_id ? '⏳' : '🔌',
-                        show: canEdit,
                         disabled: testingConfigId === config.config_id
                       },
                       {
