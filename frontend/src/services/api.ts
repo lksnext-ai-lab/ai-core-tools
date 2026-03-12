@@ -1,5 +1,6 @@
 // API Service - Think of this like your backend services!
 import { configService } from '../core/ConfigService';
+import type { StreamEvent } from '../types/streaming';
 import type {
   MarketplaceCatalogParams,
   MarketplaceCatalogResponse,
@@ -12,6 +13,8 @@ import type {
   UserRatingResponse,
   MarketplaceQuotaUsage,
 } from '../types/marketplace';
+
+type ConflictMode = 'fail' | 'rename' | 'override';
 
 class ApiService {
   private get baseURL(): string {
@@ -184,10 +187,7 @@ class ApiService {
   }
 
   async updateAgent(appId: number, agentId: number, data: any) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return this.createAgent(appId, agentId, data);
   }
 
   async deleteAgent(appId: number, agentId: number) {
@@ -264,7 +264,7 @@ class ApiService {
   async importAgent(
     appId: number,
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string,
     selectedAIServiceId?: number,
     selectedSiloId?: number,
@@ -381,7 +381,7 @@ class ApiService {
   async importAIService(
     appId: number,
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string
   ) {
     const formData = new FormData();
@@ -467,7 +467,7 @@ class ApiService {
   async importEmbeddingService(
     appId: number,
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string
   ) {
     const formData = new FormData();
@@ -566,7 +566,7 @@ class ApiService {
   async importMCPConfig(
     appId: number,
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string
   ) {
     const formData = new FormData();
@@ -759,7 +759,7 @@ class ApiService {
   async importOutputParser(
     appId: number,
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string
   ) {
     const formData = new FormData();
@@ -920,7 +920,7 @@ class ApiService {
   }
 
   async listMedia(appId: number, repositoryId: number, folderId?: number) {
-    const params = folderId !== undefined ? `?folder_id=${folderId}` : '';
+    const params = folderId === undefined ? '' : `?folder_id=${folderId}`;
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media${params}`);
   }
 
@@ -1001,7 +1001,7 @@ class ApiService {
   async importSilo(
     appId: number,
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string,
     selectedEmbeddingServiceId?: number
   ) {
@@ -1206,6 +1206,94 @@ class ApiService {
       method: 'POST',
       body: formData,
     });
+  }
+
+  private parseSSELines(lines: string[], onEvent: (event: StreamEvent) => void): void {
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed?.startsWith('data: ')) continue;
+      try {
+        const event = JSON.parse(trimmed.slice(6)) as StreamEvent;
+        onEvent(event);
+      } catch (parseError) {
+        console.warn('Failed to parse SSE event:', trimmed, parseError);
+      }
+    }
+  }
+
+  /**
+   * Chat with agent using Server-Sent Events streaming.
+   * Posts to /internal/apps/{appId}/agents/{agentId}/chat/stream
+   * and reads the SSE response via ReadableStream (needed because EventSource only supports GET).
+   */
+  async chatWithAgentStream(
+    appId: number,
+    agentId: number,
+    message: string,
+    options: {
+      files?: File[];
+      searchParams?: any;
+      conversationId?: number | null;
+      onEvent: (event: StreamEvent) => void;
+      signal?: AbortSignal;
+    }
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('message', message);
+
+    if (options.searchParams) {
+      formData.append('search_params', JSON.stringify(options.searchParams));
+    }
+    if (options.conversationId) {
+      formData.append('conversation_id', options.conversationId.toString());
+    }
+    if (options.files && options.files.length > 0) {
+      options.files.forEach((file) => formData.append('files', file));
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;
+    const headers: Record<string, string> = {};
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines: each event is "data: {json}\n\n"
+        const lines = buffer.split('\n\n');
+        // Keep the last incomplete chunk in the buffer
+        buffer = lines.pop() || '';
+
+        this.parseSSELines(lines, options.onEvent);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   // ==================== FILE MANAGEMENT API ====================
@@ -1628,7 +1716,7 @@ class ApiService {
 
   async importFullApp(
     file: File,
-    conflictMode: 'fail' | 'rename' | 'override',
+    conflictMode: ConflictMode,
     newName?: string
   ): Promise<any> {
     const formData = new FormData();

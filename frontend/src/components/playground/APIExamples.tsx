@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Bot, KeyRound, Lightbulb, ClipboardList, AlertTriangle, Check } from 'lucide-react';
 
 interface APIExamplesProps {
   appId: number;
@@ -16,75 +17,128 @@ interface CodeExample {
   code: string;
 }
 
-function APIExamples({ appId, agentId, agentName, agentType = 'agent', hasSilo = false, siloName }: APIExamplesProps) {
+function buildRequestBody(agentType: string, hasSilo: boolean) {
+  const baseBody = {
+    message: 'Your question here',
+    conversation_id: 'optional-conversation-id',
+  };
+
+  if (agentType === 'ocr_agent') {
+    return {
+      ...baseBody,
+      attachments: [{ file_reference: 'uploaded-file-reference', filename: 'document.pdf' }],
+    };
+  }
+
+  if (hasSilo) {
+    return {
+      ...baseBody,
+      search_params: { metadata_filter: { category: 'documents', department: 'engineering' } },
+    };
+  }
+
+  return baseBody;
+}
+
+function buildCapabilityComments(agentType: string, hasSilo: boolean, siloName?: string): string {
+  const comments: string[] = [];
+
+  if (agentType === 'ocr_agent') {
+    comments.push(
+      '# OCR Agent - supports file attachments',
+      '# Upload files first using the attach-file endpoint',
+    );
+  }
+
+  if (hasSilo) {
+    comments.push(
+      `# RAG-enabled agent with silo: ${siloName ?? 'Unknown'}`,
+      '# Supports metadata filtering for enhanced search',
+    );
+  }
+
+  if (!hasSilo && agentType === 'agent') {
+    comments.push('# Standard conversational agent');
+  }
+
+  return comments.join('\n');
+}
+
+interface AgentSnippetVars {
+  agentLabel: string;
+  pythonExtraParams: string;
+  pythonPayloadBlock: string;
+  pythonExampleUsage: string;
+  jsSearchParamsBlock: string;
+  jsAttachmentsBlock: string;
+  jsExampleUsage: string;
+}
+
+function buildAgentSnippetVars(agentType: string, hasSilo: boolean): AgentSnippetVars {
+  let agentLabel = '';
+  if (agentType === 'ocr_agent') {
+    agentLabel = ' (OCR Agent)';
+  } else if (hasSilo) {
+    agentLabel = ' (RAG-enabled)';
+  }
+
+  const pythonExtraParams = `${hasSilo ? ', search_params=None' : ''}${agentType === 'ocr_agent' ? ', attachments=None' : ''}`;
+
+  let pythonPayloadBlock = '';
+  if (hasSilo) {
+    pythonPayloadBlock = `    if search_params:\n        payload["search_params"] = search_params`;
+  } else if (agentType === 'ocr_agent') {
+    pythonPayloadBlock = `    if attachments:\n        payload["attachments"] = attachments`;
+  }
+
+  let pythonExampleUsage = `\n    result = call_agent("Your question here")`;
+  if (hasSilo) {
+    pythonExampleUsage = `\n    # Example with metadata filtering\n    search_params = {\n        "metadata_filter": {\n            "category": "documents",\n            "department": "engineering"\n        }\n    }\n    result = call_agent("Your question here", search_params=search_params)`;
+  } else if (agentType === 'ocr_agent') {
+    pythonExampleUsage = `\n    # Example with file attachment\n    attachments = [\n        {\n            "file_reference": "uploaded-file-reference",\n            "filename": "document.pdf"\n        }\n    ]\n    result = call_agent("Analyze this document", attachments=attachments)`;
+  }
+
+  const jsSearchParamsBlock = hasSilo
+    ? `\n  \n  if (options.searchParams) {\n    payload.search_params = options.searchParams;\n  }`
+    : '';
+  const jsAttachmentsBlock = agentType === 'ocr_agent'
+    ? `\n  \n  if (options.attachments) {\n    payload.attachments = options.attachments;\n  }`
+    : '';
+
+  let jsExampleUsage = `\n    const result = await callAgent('Your question here');`;
+  if (hasSilo) {
+    jsExampleUsage = `\n    // Example with metadata filtering\n    const result = await callAgent('Your question here', {\n      searchParams: {\n        metadata_filter: {\n          category: 'documents',\n          department: 'engineering'\n        }\n      }\n    });`;
+  } else if (agentType === 'ocr_agent') {
+    jsExampleUsage = `\n    // Example with file attachment\n    const result = await callAgent('Analyze this document', {\n      attachments: [\n        {\n          file_reference: 'uploaded-file-reference',\n          filename: 'document.pdf'\n        }\n      ]\n    });`;
+  }
+
+  return { agentLabel, pythonExtraParams, pythonPayloadBlock, pythonExampleUsage, jsSearchParamsBlock, jsAttachmentsBlock, jsExampleUsage };
+}
+
+function APIExamples({ appId, agentId, agentName, agentType = 'agent', hasSilo = false, siloName }: Readonly<APIExamplesProps>) {
   const [copied, setCopied] = useState<string | null>(null);
   const [selectedExample, setSelectedExample] = useState('curl');
 
-  const baseUrl = window.location.origin; // Use current domain
+  const baseUrl = globalThis.location.origin; // Use current domain
   const endpoint = `${baseUrl}/public/v1/app/${appId}/chat/${agentId}/call`;
 
-  // Generate request body based on agent capabilities
-  const getRequestBodyExample = () => {
-    const baseBody = {
-      message: "Your question here",
-      conversation_id: "optional-conversation-id"
-    };
-
-    if (agentType === 'ocr_agent') {
-      return {
-        ...baseBody,
-        attachments: [
-          {
-            file_reference: "uploaded-file-reference",
-            filename: "document.pdf"
-          }
-        ]
-      };
-    }
-
-    if (hasSilo) {
-      return {
-        ...baseBody,
-        search_params: {
-          metadata_filter: {
-            category: "documents",
-            department: "engineering"
-          }
-        }
-      };
-    }
-
-    return baseBody;
-  };
-
-  const requestBody = getRequestBodyExample();
+  const requestBody = buildRequestBody(agentType, hasSilo);
   const requestBodyJson = JSON.stringify(requestBody, null, 2);
+  const capabilityComments = buildCapabilityComments(agentType, hasSilo, siloName);
 
-  // Generate capability-specific comments
-  const getCapabilityComments = () => {
-    const comments = [];
-    
-    if (agentType === 'ocr_agent') {
-      comments.push('# OCR Agent - supports file attachments');
-      comments.push('# Upload files first using the attach-file endpoint');
-    }
-    
-    if (hasSilo) {
-      comments.push(`# RAG-enabled agent with silo: ${siloName || 'Unknown'}`);
-      comments.push('# Supports metadata filtering for enhanced search');
-    }
-    
-    if (!hasSilo && agentType === 'agent') {
-      comments.push('# Standard conversational agent');
-    }
-    
-    return comments.join('\n');
-  };
-
-  const capabilityComments = getCapabilityComments();
+  const {
+    agentLabel,
+    pythonExtraParams,
+    pythonPayloadBlock,
+    pythonExampleUsage,
+    jsSearchParamsBlock,
+    jsAttachmentsBlock,
+    jsExampleUsage,
+  } = buildAgentSnippetVars(agentType, hasSilo);
 
   // Generate Windows-compatible JSON (escape double quotes)
-  const requestBodyJsonWindows = requestBodyJson.replace(/"/g, '\\"');
+  const requestBodyJsonWindows = requestBodyJson.replaceAll('"', String.raw`\"`);
+
 
   const examples: CodeExample[] = [
     {
@@ -105,7 +159,7 @@ curl -X POST "${baseUrl}/public/v1/app/${appId}/chat/${agentId}/reset" \\
       id: 'curl-windows',
       title: 'cURL (Windows)',
       language: 'powershell',
-      code: `${capabilityComments.replace(/# /g, '# ')}
+      code: `${capabilityComments.replaceAll('# ', '# ')}
 # PowerShell requires curl.exe (not the curl alias)
 curl.exe -X POST "${endpoint}" ^
   -H "X-API-KEY: your-api-key" ^
@@ -145,8 +199,8 @@ BASE_URL = "${baseUrl}"
 APP_ID = ${appId}
 AGENT_ID = ${agentId}
 
-def call_agent(message, conversation_id=None${hasSilo ? ', search_params=None' : ''}${agentType === 'ocr_agent' ? ', attachments=None' : ''}):
-    """Call ${agentName}${agentType === 'ocr_agent' ? ' (OCR Agent)' : hasSilo ? ' (RAG-enabled)' : ''}"""
+def call_agent(message, conversation_id=None${pythonExtraParams}):
+    """Call ${agentName}${agentLabel}"""
     url = f"{BASE_URL}/public/v1/app/{APP_ID}/chat/{AGENT_ID}/call"
     
     headers = {
@@ -157,9 +211,7 @@ def call_agent(message, conversation_id=None${hasSilo ? ', search_params=None' :
     payload = {"message": message}
     if conversation_id:
         payload["conversation_id"] = conversation_id
-${hasSilo ? `    if search_params:
-        payload["search_params"] = search_params` : ''}${agentType === 'ocr_agent' ? `    if attachments:
-        payload["attachments"] = attachments` : ''}
+${pythonPayloadBlock}
     
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
@@ -179,24 +231,7 @@ def reset_conversation(conversation_id=None):
     return response.json()
 
 # Example usage
-try:${hasSilo ? `
-    # Example with metadata filtering
-    search_params = {
-        "metadata_filter": {
-            "category": "documents",
-            "department": "engineering"
-        }
-    }
-    result = call_agent("Your question here", search_params=search_params)` : agentType === 'ocr_agent' ? `
-    # Example with file attachment
-    attachments = [
-        {
-            "file_reference": "uploaded-file-reference",
-            "filename": "document.pdf"
-        }
-    ]
-    result = call_agent("Analyze this document", attachments=attachments)` : `
-    result = call_agent("Your question here")`}
+try:${pythonExampleUsage}
     print("Agent response:", result["response"])
     print("Conversation ID:", result["conversation_id"])
 except requests.exceptions.RequestException as e:
@@ -213,7 +248,7 @@ const APP_ID = ${appId};
 const AGENT_ID = ${agentId};
 
 /**
- * Call ${agentName}${agentType === 'ocr_agent' ? ' (OCR Agent)' : hasSilo ? ' (RAG-enabled)' : ''}
+ * Call ${agentName}${agentLabel}
  */
 async function callAgent(message, options = {}) {
   const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/chat/\${AGENT_ID}/call\`;
@@ -222,15 +257,7 @@ async function callAgent(message, options = {}) {
   
   if (options.conversationId) {
     payload.conversation_id = options.conversationId;
-  }${hasSilo ? `
-  
-  if (options.searchParams) {
-    payload.search_params = options.searchParams;
-  }` : ''}${agentType === 'ocr_agent' ? `
-  
-  if (options.attachments) {
-    payload.attachments = options.attachments;
-  }` : ''}
+  }${jsSearchParamsBlock}${jsAttachmentsBlock}
   
   try {
     const response = await fetch(url, {
@@ -280,26 +307,7 @@ async function resetConversation() {
 
 // Example usage
 (async () => {
-  try {${hasSilo ? `
-    // Example with metadata filtering
-    const result = await callAgent('Your question here', {
-      searchParams: {
-        metadata_filter: {
-          category: 'documents',
-          department: 'engineering'
-        }
-      }
-    });` : agentType === 'ocr_agent' ? `
-    // Example with file attachment
-    const result = await callAgent('Analyze this document', {
-      attachments: [
-        {
-          file_reference: 'uploaded-file-reference',
-          filename: 'document.pdf'
-        }
-      ]
-    });` : `
-    const result = await callAgent('Your question here');`}
+  try {${jsExampleUsage}
     console.log('Agent response:', result.response);
     console.log('Conversation ID:', result.conversation_id);
   } catch (error) {
@@ -320,7 +328,7 @@ const APP_ID = ${appId};
 const AGENT_ID = ${agentId};
 
 /**
- * Call ${agentName}${agentType === 'ocr_agent' ? ' (OCR Agent)' : hasSilo ? ' (RAG-enabled)' : ''}
+ * Call ${agentName}${agentLabel}
  */
 async function callAgent(message, options = {}) {
   const url = \`\${BASE_URL}/public/v1/app/\${APP_ID}/chat/\${AGENT_ID}/call\`;
@@ -329,15 +337,7 @@ async function callAgent(message, options = {}) {
   
   if (options.conversationId) {
     payload.conversation_id = options.conversationId;
-  }${hasSilo ? `
-  
-  if (options.searchParams) {
-    payload.search_params = options.searchParams;
-  }` : ''}${agentType === 'ocr_agent' ? `
-  
-  if (options.attachments) {
-    payload.attachments = options.attachments;
-  }` : ''}
+  }${jsSearchParamsBlock}${jsAttachmentsBlock}
   
   try {
     const response = await axios.post(url, payload, {
@@ -382,26 +382,7 @@ async function resetConversation(conversationId = null) {
 
 // Example usage
 (async () => {
-  try {${hasSilo ? `
-    // Example with metadata filtering
-    const result = await callAgent('Your question here', {
-      searchParams: {
-        metadata_filter: {
-          category: 'documents',
-          department: 'engineering'
-        }
-      }
-    });` : agentType === 'ocr_agent' ? `
-    // Example with file attachment
-    const result = await callAgent('Analyze this document', {
-      attachments: [
-        {
-          file_reference: 'uploaded-file-reference',
-          filename: 'document.pdf'
-        }
-      ]
-    });` : `
-    const result = await callAgent('Your question here');`}
+  try {${jsExampleUsage}
     console.log('Agent response:', result.response);
     console.log('Conversation ID:', result.conversation_id);
   } catch (error) {
@@ -428,7 +409,7 @@ async function resetConversation(conversationId = null) {
       {/* Header */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center">
-          <span className="text-blue-500 text-xl mr-3">🔗</span>
+          <Bot className="w-4 h-4 text-blue-500 mr-3 shrink-0" />
           <div>
             <h3 className="text-lg font-semibold text-blue-900">API Integration Examples</h3>
             <p className="text-blue-700 text-sm mt-1">
@@ -440,7 +421,7 @@ async function resetConversation(conversationId = null) {
 
       {/* Agent Capabilities Info */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-3">🤖 Agent Capabilities</h4>
+        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2"><Bot className="w-4 h-4" /> Agent Capabilities</h4>
         <div className="space-y-2 text-sm">
           <div className="flex items-center">
             <span className="w-20 text-gray-600">Type:</span>
@@ -449,13 +430,13 @@ async function resetConversation(conversationId = null) {
           {hasSilo && (
             <div className="flex items-center">
               <span className="w-20 text-gray-600">RAG:</span>
-              <span className="font-medium text-green-600">✓ Enabled ({siloName})</span>
+              <span className="font-medium text-green-600 flex items-center gap-1"><Check className="w-3 h-3" /> Enabled ({siloName})</span>
             </div>
           )}
           {agentType === 'ocr_agent' && (
             <div className="flex items-center">
               <span className="w-20 text-gray-600">Files:</span>
-              <span className="font-medium text-green-600">✓ Supports attachments</span>
+              <span className="font-medium text-green-600 flex items-center gap-1"><Check className="w-3 h-3" /> Supports attachments</span>
             </div>
           )}
         </div>
@@ -463,7 +444,7 @@ async function resetConversation(conversationId = null) {
 
       {/* API Info */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-3">🔑 API Information</h4>
+        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2"><KeyRound className="w-4 h-4" /> API Information</h4>
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-gray-600">Endpoint:</span>
@@ -479,14 +460,14 @@ async function resetConversation(conversationId = null) {
           </div>
         </div>
         <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-          <span className="mr-2">💡</span>
+          <Lightbulb className="w-4 h-4 mr-2 shrink-0" />
           Get your API key from the <strong>Settings → API Keys</strong> page
         </div>
       </div>
 
       {/* Request Body Schema */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-        <h4 className="font-medium text-indigo-900 mb-3">📋 Request Body for {agentName}</h4>
+        <h4 className="font-medium text-indigo-900 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Request Body for {agentName}</h4>
         <pre className="bg-white p-3 rounded border text-sm overflow-x-auto">
           <code>{requestBodyJson}</code>
         </pre>
@@ -522,7 +503,7 @@ async function resetConversation(conversationId = null) {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {copied === selectedExampleData.id ? '✓ Copied!' : '📋 Copy'}
+              {copied === selectedExampleData.id ? <span className="flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Copied!</span> : <span className="flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Copy</span>}
             </button>
           </div>
           <div className="relative">
@@ -535,7 +516,7 @@ async function resetConversation(conversationId = null) {
 
       {/* Response Format Info */}
       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <h4 className="font-medium text-green-900 mb-3">📄 Expected Response Format</h4>
+        <h4 className="font-medium text-green-900 mb-3">Expected Response Format</h4>
         <pre className="bg-white p-3 rounded border text-sm overflow-x-auto">
           <code>{`{
   "response": "Agent's response text",
@@ -552,7 +533,7 @@ async function resetConversation(conversationId = null) {
 
       {/* Error Handling Info */}
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <h4 className="font-medium text-red-900 mb-3">⚠️ Error Handling</h4>
+        <h4 className="font-medium text-red-900 mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Error Handling</h4>
         <div className="space-y-2 text-sm text-red-800">
           <div><strong>401 Unauthorized:</strong> Invalid or missing API key</div>
           <div><strong>404 Not Found:</strong> Agent not found or no access</div>
