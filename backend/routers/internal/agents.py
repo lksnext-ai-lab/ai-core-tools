@@ -14,6 +14,7 @@ from services.mcp_server_service import MCPServerService
 from services.marketplace_service import MarketplaceService
 from services.marketplace_quota_service import MarketplaceQuotaService
 from services.system_settings_service import SystemSettingsService
+from services.user_service import UserService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
@@ -33,8 +34,7 @@ from services.file_management_service import FileManagementService, FileReferenc
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
-from models.agent import Agent, MarketplaceVisibility
-from models.user import User
+from models.agent import MarketplaceVisibility
 
 from utils.logger import get_logger
 
@@ -50,6 +50,19 @@ INTERNAL_SERVER_ERROR = "Internal server error"
 def get_agent_service() -> AgentService:
     """Dependency to get AgentService instance"""
     return AgentService()
+
+
+def _get_agent_or_404(db: Session, agent_id: int):
+    """Get agent by ID or raise 404."""
+    agent = AgentService().get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND_ERROR)
+    return agent
+
+
+def _get_user_from_auth_context(db: Session, auth_context: AuthContext):
+    """Get user from auth context identity."""
+    return UserService.get_user_by_id(db, int(auth_context.identity.id))
 
 #AGENT MANAGEMENT
 
@@ -541,14 +554,12 @@ async def chat_with_agent(
     """
     try:
         # Fetch agent to check marketplace visibility
-        agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
-        if not agent:
-            raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND_ERROR)
+        agent = _get_agent_or_404(db, agent_id)
         
         # Check marketplace quota enforcement (only for public marketplace agents)
         if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
             # Get user from database
-            user = db.query(User).filter(User.user_id == int(auth_context.identity.id)).first()
+            user = _get_user_from_auth_context(db, auth_context)
             
             # Check if user is exempt (OMNIADMIN)
             if user and not MarketplaceQuotaService.is_user_exempt(user):
@@ -658,7 +669,7 @@ async def chat_with_agent(
         
         # Increment marketplace usage counter (if marketplace agent and not exempt)
         if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
-            user = db.query(User).filter(User.user_id == int(auth_context.identity.id)).first()
+            user = _get_user_from_auth_context(db, auth_context)
             if user and not MarketplaceQuotaService.is_user_exempt(user):
                 try:
                     MarketplaceQuotaService.increment_usage(user.user_id, db)
