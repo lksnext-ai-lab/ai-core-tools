@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import hashlib
@@ -11,6 +12,7 @@ from db.database import get_db
 
 # Import services
 from services.agent_execution_service import AgentExecutionService
+from services.agent_streaming_service import AgentStreamingService
 from services.file_management_service import FileManagementService, FileReference
 
 # Import logger
@@ -190,6 +192,126 @@ async def call_agent(
         raise
     except Exception as e:
         logger.error(f"Error in public chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Agent execution failed")
+
+
+@chat_router.post("/{agent_id}/call/stream",
+                  summary="Call agent (streaming)",
+                  tags=["Agent Chat"])
+async def call_agent_stream(
+    app_id: int,
+    agent_id: int,
+    message: str = Form(..., description="The user message to send to the agent"),
+    files: List[UploadFile] = File(None, description="Optional files to attach"),
+    file_references: Optional[str] = Form(None, description="JSON array of existing file_ids to include"),
+    search_params: Optional[str] = Form(None, description="JSON object with search parameters"),
+    conversation_id: Optional[int] = Form(None, description="Optional conversation ID to continue"),
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db)
+):
+    """
+    Call an agent with Server-Sent Events streaming response.
+
+    Returns a stream of SSE events (Content-Type: text/event-stream).
+    Each event is a JSON object with "type" and "data" fields:
+    - **metadata**: Emitted first with conversation_id and agent info
+    - **token**: Partial LLM text output
+    - **tool_start**: A tool invocation has started
+    - **tool_end**: A tool invocation has finished
+    - **thinking**: Human-readable status message
+    - **done**: Stream complete with full response and generated files
+    - **error**: An error occurred
+
+    Supports the same file handling and conversation features as the
+    non-streaming `/call` endpoint.
+    """
+    validate_api_key_for_app(app_id, api_key)
+
+    try:
+        parsed_search_params = None
+        if search_params:
+            try:
+                parsed_search_params = json.loads(search_params)
+            except json.JSONDecodeError:
+                logger.warning("Invalid search_params JSON, ignoring")
+
+        parsed_file_references = None
+        if file_references:
+            try:
+                parsed_file_references = json.loads(file_references)
+                if not isinstance(parsed_file_references, list):
+                    parsed_file_references = None
+            except json.JSONDecodeError:
+                logger.warning("Invalid file_references JSON, ignoring")
+
+        user_context = _create_api_key_user_context(app_id, api_key)
+
+        file_service = FileManagementService()
+        all_file_references = []
+        uploaded_file_ids = set()
+
+        if files:
+            for upload_file in files:
+                if upload_file.filename:
+                    try:
+                        file_ref = await file_service.upload_file(
+                            file=upload_file,
+                            agent_id=agent_id,
+                            user_context=user_context,
+                            conversation_id=conversation_id
+                        )
+                        all_file_references.append(file_ref)
+                        uploaded_file_ids.add(file_ref.file_id)
+                    except Exception as e:
+                        logger.error(f"Error uploading file {upload_file.filename}: {str(e)}")
+
+        existing_files = await file_service.list_attached_files(
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None
+        )
+
+        if parsed_file_references:
+            requested_file_ids = set(parsed_file_references)
+            existing_files = [f for f in existing_files if f['file_id'] in requested_file_ids]
+
+        for file_data in existing_files:
+            if file_data['file_id'] not in uploaded_file_ids:
+                file_ref = FileReference(
+                    file_id=file_data['file_id'],
+                    filename=file_data['filename'],
+                    file_type=file_data['file_type'],
+                    content=file_data['content'],
+                    file_path=file_data.get('file_path')
+                )
+                all_file_references.append(file_ref)
+
+        streaming_service = AgentStreamingService(db)
+        generator = streaming_service.stream_agent_chat(
+            agent_id=agent_id,
+            message=message,
+            file_references=all_file_references,
+            search_params=parsed_search_params,
+            user_context=user_context,
+            conversation_id=conversation_id,
+            db=db
+        )
+
+        logger.info(f"Public API streaming chat for agent {agent_id}")
+        return StreamingResponse(
+            generator,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in public streaming chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Agent execution failed")
 
 

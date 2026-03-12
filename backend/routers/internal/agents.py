@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from utils.security import generate_signature
 import os
 from typing import List, Optional
@@ -30,6 +30,7 @@ from schemas.marketplace_schemas import (
     MarketplaceProfileSchema,
 )
 from services.agent_execution_service import AgentExecutionService
+from services.agent_streaming_service import AgentStreamingService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
@@ -686,6 +687,131 @@ async def chat_with_agent(
         raise
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
+
+
+@agents_router.post("/{agent_id}/chat/stream",
+                  summary="Chat with agent (streaming)",
+                  tags=["Agents"])
+async def chat_with_agent_stream(
+    app_id: int,
+    agent_id: int,
+    request: Request,
+    message: str = Form(...),
+    files: List[UploadFile] = File(None),
+    file_references: Optional[str] = Form(None),
+    search_params: Optional[str] = Form(None),
+    conversation_id: Optional[int] = Form(None),
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    db: Session = Depends(get_db),
+    _: None = Depends(enforce_file_size_limit)
+):
+    """
+    Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)
+
+    Returns a stream of SSE events with types: metadata, token, tool_start, tool_end,
+    thinking, done, error.  The playground uses this endpoint for real-time responses.
+    """
+    try:
+        # Parse search params if provided
+        parsed_search_params = None
+        if search_params:
+            try:
+                parsed_search_params = json.loads(search_params)
+            except json.JSONDecodeError:
+                logger.warning("Invalid search_params JSON")
+
+        # Parse file_references if provided
+        parsed_file_references = None
+        if file_references:
+            try:
+                parsed_file_references = json.loads(file_references)
+                if not isinstance(parsed_file_references, list):
+                    parsed_file_references = None
+            except json.JSONDecodeError:
+                logger.warning("Invalid file_references JSON, ignoring")
+
+        # Extract JWT token for MCP authentication
+        auth_header = request.headers.get('Authorization', '')
+        jwt_token = None
+        if auth_header.startswith('Bearer '):
+            jwt_token = auth_header.split(' ')[1]
+
+        # Create user context
+        user_context = {
+            "user_id": int(auth_context.identity.id),
+            "email": auth_context.identity.email,
+            "oauth": True,
+            "app_id": app_id,
+            "token": jwt_token
+        }
+
+        # Process files using FileManagementService
+        file_service = FileManagementService()
+        all_file_references = []
+        uploaded_file_ids = set()
+
+        if files:
+            for upload_file in files:
+                if upload_file.filename:
+                    file_ref = await file_service.upload_file(
+                        file=upload_file,
+                        agent_id=agent_id,
+                        user_context=user_context,
+                        conversation_id=conversation_id
+                    )
+                    all_file_references.append(file_ref)
+                    uploaded_file_ids.add(file_ref.file_id)
+
+        # Get previously uploaded files
+        existing_files = await file_service.list_attached_files(
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None
+        )
+
+        if parsed_file_references:
+            requested_file_ids = set(parsed_file_references)
+            existing_files = [f for f in existing_files if f['file_id'] in requested_file_ids]
+
+        for file_data in existing_files:
+            if file_data['file_id'] not in uploaded_file_ids:
+                file_ref = FileReference(
+                    file_id=file_data['file_id'],
+                    filename=file_data['filename'],
+                    file_type=file_data['file_type'],
+                    content=file_data['content'],
+                    file_path=file_data.get('file_path')
+                )
+                all_file_references.append(file_ref)
+
+        # Use streaming service
+        streaming_service = AgentStreamingService(db)
+        generator = streaming_service.stream_agent_chat(
+            agent_id=agent_id,
+            message=message,
+            file_references=all_file_references,
+            search_params=parsed_search_params,
+            user_context=user_context,
+            conversation_id=conversation_id,
+            db=db
+        )
+
+        logger.info(f"Streaming chat request for agent {agent_id} by user {auth_context.identity.id}")
+        return StreamingResponse(
+            generator,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in streaming chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
