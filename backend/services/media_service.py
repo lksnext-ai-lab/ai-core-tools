@@ -16,6 +16,15 @@ class MediaService:
     # Supported file extensions
     SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.mpeg', '.mpg'}
     SUPPORTED_AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.wma'}
+
+    @staticmethod
+    def list_media(
+        repository_id: int,
+        folder_id: Optional[int],
+        db: Session,
+    ) -> List[Media]:
+        """List media for a repository with optional folder filtering."""
+        return MediaRepository.list_by_repository_and_folder(repository_id, folder_id, db)
     
     @staticmethod
     async def upload_media_files(
