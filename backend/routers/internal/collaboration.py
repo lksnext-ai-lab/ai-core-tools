@@ -9,6 +9,7 @@ from db.database import get_db
 # Import services
 from services.app_collaboration_service import AppCollaborationService
 from services.app_service import AppService
+from services.user_service import UserService
 
 # Import schemas and auth
 from schemas.apps_schemas import (
@@ -32,6 +33,37 @@ collaboration_router = APIRouter()
 def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     """Get app and collaboration services instances."""
     return AppService(db), AppCollaborationService(db)
+
+
+def _serialize_user_summary(user) -> Optional[dict]:
+    """Convert a user object into the nested schema shape."""
+    if not user:
+        return None
+
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "name": user.name,
+    }
+
+
+def _build_collaborator_detail_schema(db: Session, app_id: int, collaboration) -> CollaboratorDetailSchema:
+    """Build collaborator detail response using service-layer user lookups."""
+    user_data = UserService.get_user_by_id(db, collaboration.user_id)
+    inviter_data = UserService.get_user_by_id(db, collaboration.invited_by)
+
+    return CollaboratorDetailSchema(
+        id=collaboration.id,
+        app_id=app_id,
+        user_id=collaboration.user_id,
+        role=collaboration.role.value,
+        status=collaboration.status.value,
+        invited_by=collaboration.invited_by,
+        invited_at=collaboration.invited_at,
+        accepted_at=collaboration.accepted_at,
+        user=_serialize_user_summary(user_data),
+        inviter=_serialize_user_summary(inviter_data),
+    )
 
 
 # ==================== COLLABORATION MANAGEMENT ====================
@@ -126,31 +158,8 @@ async def invite_collaborator(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to send invitation"
             )
-        
-        from models.user import User
-        user_data = db.query(User).filter(User.user_id == collaboration.user_id).first()
-        inviter_data = db.query(User).filter(User.user_id == collaboration.invited_by).first()
-        
-        return CollaboratorDetailSchema(
-            id=collaboration.id,
-            app_id=app_id,
-            user_id=collaboration.user_id,
-            role=collaboration.role.value,
-            status=collaboration.status.value,
-            invited_by=collaboration.invited_by,
-            invited_at=collaboration.invited_at,
-            accepted_at=collaboration.accepted_at,
-            user={
-                "user_id": user_data.user_id,
-                "email": user_data.email,
-                "name": user_data.name
-            } if user_data else None,
-            inviter={
-                "user_id": inviter_data.user_id,
-                "email": inviter_data.email,
-                "name": inviter_data.name
-            } if inviter_data else None
-        )
+
+        return _build_collaborator_detail_schema(db, app_id, collaboration)
         
     except ValueError as e:
         raise HTTPException(
