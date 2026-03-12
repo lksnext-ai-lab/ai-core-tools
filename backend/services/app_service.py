@@ -23,6 +23,10 @@ class AppService:
         """Get apps where user is an accepted collaborator"""
         return self.app_repo.get_collaborated_apps(user_id)
 
+    def get_all_apps(self) -> List[App]:
+        """Get all apps."""
+        return self.app_repo.get_all()
+
     def get_apps(self, user_id: int) -> List[App]:
         """Get all apps for a specific user (owned + collaborated) ordered by creation date"""
         return self.collaboration_repo.get_user_accessible_apps(user_id)

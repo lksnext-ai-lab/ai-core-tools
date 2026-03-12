@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
-from models.app import App
 from db.database import get_db
+from services.app_service import AppService
 from services.rate_limit_service import rate_limit_service
 from utils.logger import get_logger
 
@@ -26,7 +26,7 @@ async def get_apps_usage_stats(db: Session = Depends(get_db)) -> List[Dict[str, 
     """
     try:
         # Get all apps with their rate limits
-        apps = db.query(App).all()
+        apps = AppService(db).get_all_apps()
         
         usage_stats = []
         
@@ -74,7 +74,7 @@ async def get_app_usage_stats(
     """
     try:
         # Get app
-        app = db.query(App).filter(App.app_id == app_id).first()
+        app = AppService(db).get_app(app_id)
         if not app:
             raise HTTPException(
                 status_code=404,
