@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_, desc
 from datetime import datetime
 
 from models.conversation import Conversation
+from repositories.conversation_repository import ConversationRepository
 from models.agent import Agent
 from schemas.conversation_schemas import ConversationCreate, ConversationUpdate
 from services.agent_cache_service import CheckpointerCacheService
@@ -154,6 +155,25 @@ class ConversationService:
             return None
         
         return conversation
+
+    @staticmethod
+    def get_marketplace_conversation(
+        db: Session,
+        conversation_id: int,
+        user_id: int,
+    ) -> Optional[Conversation]:
+        """
+        Get a marketplace conversation by ID that belongs to a specific user.
+
+        Args:
+            db: Database session
+            conversation_id: Conversation ID
+            user_id: Owner user ID
+
+        Returns:
+            Conversation object or None if not found
+        """
+        return ConversationRepository.get_marketplace_conversation(db, conversation_id, user_id)
     
     @staticmethod
     def list_conversations(
