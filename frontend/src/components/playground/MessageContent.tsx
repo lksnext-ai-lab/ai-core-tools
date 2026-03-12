@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import InlineFileImage from './InlineFileImage';
 import InlineFileDownload from './InlineFileDownload';
 
@@ -180,6 +181,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
         <div className="prose prose-sm max-w-none">
           <ReactMarkdown
             components={markdownComponents}
+            remarkPlugins={[remarkGfm]}
             urlTransform={(url) => url}
           >
             {stringContent}

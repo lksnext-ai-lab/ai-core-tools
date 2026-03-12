@@ -13,6 +13,7 @@ function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingUser, setDeletingUser] = useState<number | null>(null);
   const [activatingUser, setActivatingUser] = useState<number | null>(null);
+  const [resettingQuota, setResettingQuota] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -92,6 +93,25 @@ function UsersPage() {
       setError(error.message || 'Failed to deactivate user. Please try again.');
     } finally {
       setActivatingUser(null);
+    }
+  }
+
+  async function handleResetQuota(userId: number, userLabel: string) {
+    if (!confirm(`Are you sure you want to reset the marketplace call quota for ${userLabel}? Their current month counter will be set to 0, allowing them to make up to the full quota again.`)) {
+      return;
+    }
+
+    try {
+      setResettingQuota(userId);
+      setError(null);
+      setSuccess(null);
+      const response = await adminService.resetUserMarketplaceQuota(userId);
+      setSuccess(response.message || `Marketplace quota reset successfully for ${userLabel}`);
+    } catch (error: any) {
+      console.error('Failed to reset marketplace quota:', error);
+      setError(error.message || 'Failed to reset marketplace quota. Please try again.');
+    } finally {
+      setResettingQuota(null);
     }
   }
 
@@ -251,6 +271,13 @@ function UsersPage() {
                                 disabled: activatingUser === user.user_id
                               }
                             ]),
+                            {
+                              label: resettingQuota === user.user_id ? 'Resetting...' : 'Reset Quota',
+                              onClick: () => handleResetQuota(user.user_id, user.name || user.email),
+                              icon: '🔄',
+                              variant: 'warning' as const,
+                              disabled: resettingQuota === user.user_id
+                            },
                             {
                               label: deletingUser === user.user_id ? 'Deleting...' : 'Delete',
                               onClick: () => handleDeleteUser(user.user_id),

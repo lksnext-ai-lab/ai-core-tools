@@ -15,6 +15,10 @@ class AppRepository:
     def get_by_id(self, app_id: int) -> Optional[App]:
         """Get a specific app by ID"""
         return self.db.query(App).filter(App.app_id == app_id).first()
+
+    def get_all(self) -> List[App]:
+        """Get all apps."""
+        return self.db.query(App).all()
     
     def get_by_owner(self, user_id: int) -> List[App]:
         """Get apps owned by a specific user ordered by creation date"""

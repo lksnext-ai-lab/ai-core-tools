@@ -15,7 +15,11 @@ from services.marketplace_service import MarketplaceService
 from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_service import AgentService
+from services.user_service import UserService
 from services.file_management_service import FileManagementService, FileReference
+from services.marketplace_quota_service import MarketplaceQuotaService
+from services.system_settings_service import SystemSettingsService
+from utils.config import is_omniadmin
 from models.conversation import Conversation, ConversationSource
 from models.agent import Agent, MarketplaceVisibility
 from schemas.marketplace_schemas import (
@@ -45,6 +49,31 @@ def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
         "user_id": int(auth_context.identity.id),
         "email": auth_context.identity.email,
         "oauth": True,
+    }
+
+
+# ==================== QUOTA USAGE ====================
+
+
+@marketplace_router.get(
+    "/quota-usage",
+    summary="Get current user's marketplace quota usage",
+)
+async def get_marketplace_quota_usage(
+    db: Session = Depends(get_db),
+    current_user: AuthContext = Depends(get_current_user_oauth),
+) -> dict:
+    """Get current user's marketplace quota usage for the current UTC month."""
+    user_id = int(current_user.identity.id)
+    is_exempt = is_omniadmin(current_user.identity.email)
+    call_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+    settings_service = SystemSettingsService(db)
+    quota_value = settings_service.get_setting("marketplace_call_quota")
+    quota = int(quota_value) if quota_value is not None else 0
+    return {
+        "call_count": call_count,
+        "quota": quota,
+        "is_exempt": is_exempt,
     }
 
 
@@ -267,14 +296,23 @@ def _get_marketplace_conversation(
     db: Session,
 ) -> Conversation:
     """Load a marketplace conversation and verify it belongs to the user."""
-    conversation = db.query(Conversation).filter(
-        Conversation.conversation_id == conversation_id,
-        Conversation.user_id == user_id,
-        Conversation.source == ConversationSource.MARKETPLACE,
-    ).first()
+    conversation = ConversationService.get_marketplace_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    )
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CONVERSATION_NOT_FOUND)
     return conversation
+
+
+def _get_agent_or_404(db: Session, agent_id: int) -> Agent:
+    """Load agent via service layer and raise 404 when missing."""
+    agent_service = AgentService()
+    agent = agent_service.get_agent(db=db, agent_id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    return agent
 
 
 def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
@@ -299,9 +337,7 @@ async def upload_marketplace_file(
     """Upload and persist a file for a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -343,9 +379,7 @@ async def list_marketplace_files(
     """List files attached to a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -379,9 +413,7 @@ async def remove_marketplace_file(
     """Remove a file attached to a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -414,9 +446,7 @@ async def download_marketplace_file(
     """Download an uploaded or agent-generated file from a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -563,11 +593,11 @@ async def marketplace_chat(
     user_id = int(current_user.identity.id)
 
     # Load conversation and verify ownership + source
-    conversation = db.query(Conversation).filter(
-        Conversation.conversation_id == conversation_id,
-        Conversation.user_id == user_id,
-        Conversation.source == ConversationSource.MARKETPLACE,
-    ).first()
+    conversation = ConversationService.get_marketplace_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    )
 
     if not conversation:
         raise HTTPException(
@@ -576,8 +606,21 @@ async def marketplace_chat(
         )
 
     # Load and validate agent
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
+    agent = _get_agent_or_404(db, conversation.agent_id)
     _validate_marketplace_agent(agent)
+
+    # Marketplace quota enforcement
+    user = UserService.get_user_by_id(db, user_id)
+    if user and not MarketplaceQuotaService.is_user_exempt(user):
+        settings_service = SystemSettingsService(db)
+        quota_value = settings_service.get_setting("marketplace_call_quota")
+        quota = int(quota_value) if quota_value else 0
+        if quota > 0 and MarketplaceQuotaService.check_quota_exceeded(user_id, db, quota):
+            current_usage = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC).",
+            )
 
     try:
         parsed_refs = _parse_file_references_json(file_references)
@@ -609,6 +652,13 @@ async def marketplace_chat(
             conversation_id=conversation_id,
             db=db,
         )
+
+        # Increment usage counter after successful execution
+        if user and not MarketplaceQuotaService.is_user_exempt(user):
+            try:
+                MarketplaceQuotaService.increment_usage(user_id, db)
+            except Exception as inc_err:
+                logger.error(f"Failed to increment marketplace usage for user {user_id}: {inc_err}")
 
         logger.info(
             f"Marketplace chat processed for agent {agent.agent_id}, "

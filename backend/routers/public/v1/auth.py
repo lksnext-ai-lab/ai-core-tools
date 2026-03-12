@@ -2,15 +2,13 @@ from fastapi import HTTPException, Depends, status
 from fastapi.security.api_key import APIKeyHeader
 from typing import Optional, Callable
 from pydantic import BaseModel
-from datetime import datetime
 
-from models.api_key import APIKey
-from models.app import App
-from models.user import User
 from db.database import SessionLocal
+from services.public_auth_service import PublicAuthService
 
 # API Key authentication using header
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+public_auth_service = PublicAuthService()
 
 class APIKeyAuth(BaseModel):
     """API Key authentication result"""
@@ -44,36 +42,12 @@ def create_api_key_dependency(app_id: int) -> Callable:
         
         session = SessionLocal()
         try:
-            # Validate API key
-            api_key_obj = session.query(APIKey).filter(
-                APIKey.app_id == app_id,
-                APIKey.key == api_key,
-                APIKey.is_active == True
-            ).first()
-            
-            if not api_key_obj:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or inactive API key"
-                )
-            
-            # Check if the app owner is active
-            app = session.query(App).filter(App.app_id == app_id).first()
-            if app and app.owner:
-                if hasattr(app.owner, 'is_active') and not app.owner.is_active:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="This API key belongs to a deactivated account"
-                    )
-            
-            # Update last used timestamp
-            api_key_obj.last_used_at = datetime.now()
-            session.commit()
+            api_key_obj = public_auth_service.validate_api_key_for_app(session, app_id, api_key)
             
             return APIKeyAuth(
                 app_id=app_id,
                 api_key=api_key,
-                api_key_obj=api_key_obj
+                key_id=api_key_obj.key_id
             )
         
         finally:
@@ -110,31 +84,7 @@ def validate_api_key_for_app(app_id: int, api_key: str) -> APIKeyAuth:
     """
     session = SessionLocal()
     try:
-        # Validate API key
-        api_key_obj = session.query(APIKey).filter(
-            APIKey.app_id == app_id,
-            APIKey.key == api_key,
-            APIKey.is_active == True
-        ).first()
-        
-        if not api_key_obj:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or inactive API key for this app"
-            )
-        
-        # Check if the app owner is active
-        app = session.query(App).filter(App.app_id == app_id).first()
-        if app and app.owner:
-            if hasattr(app.owner, 'is_active') and not app.owner.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="This API key belongs to a deactivated account"
-                )
-        
-        # Update last used timestamp
-        api_key_obj.last_used_at = datetime.now()
-        session.commit()
+        api_key_obj = public_auth_service.validate_api_key_for_app(session, app_id, api_key)
         
         return APIKeyAuth(
             app_id=app_id,

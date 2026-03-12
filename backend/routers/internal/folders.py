@@ -50,15 +50,14 @@ async def get_root_folders(
     # TODO: Add app access validation
     
     try:
-        root_folders = FolderService.get_root_folders(repository_id, db)
+        root_folders_data = FolderService.get_root_folders_with_counts(repository_id, db)
         
         # Convert to schema format
         folder_items = []
-        for folder in root_folders:
-            # Get subfolder and resource counts
-            from repositories.folder_repository import FolderRepository
-            subfolder_count = len(FolderRepository.get_subfolders(db, folder.folder_id))
-            resource_count = len(folder.resources)
+        for item in root_folders_data:
+            folder = item["folder"]
+            subfolder_count = item["subfolder_count"]
+            resource_count = item["resource_count"]
             
             folder_item = FolderListItemSchema(
                 folder_id=folder.folder_id,

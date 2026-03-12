@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -366,7 +367,7 @@ function AgentDescription({ agent }: AgentDescriptionProps) {
   if (agent.long_description) {
     return (
       <div className="prose prose-sm max-w-none">
-        <ReactMarkdown>{agent.long_description}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{agent.long_description}</ReactMarkdown>
       </div>
     );
   }

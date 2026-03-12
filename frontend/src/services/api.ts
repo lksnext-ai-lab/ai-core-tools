@@ -10,6 +10,7 @@ import type {
   MarketplaceVisibility,
   AgentRatingResponse,
   UserRatingResponse,
+  MarketplaceQuotaUsage,
 } from '../types/marketplace';
 
 class ApiService {
@@ -1566,6 +1567,10 @@ class ApiService {
       { method: 'GET' },
     );
     return response.download_url as string;
+  }
+
+  async getMarketplaceQuotaUsage(): Promise<MarketplaceQuotaUsage> {
+    return this.request('/internal/marketplace/quota-usage');
   }
 
   // Agent marketplace management (EDITOR+)

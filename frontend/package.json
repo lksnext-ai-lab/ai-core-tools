@@ -50,7 +50,8 @@
     "@types/node": "^24.1.0",
     "axios": "^1.10.0",
     "oidc-client-ts": "^3.3.0",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
