@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
+import { Bot, Plug, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Loader2, Upload, CheckCircle2, XCircle, X, Lightbulb, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import AIServiceForm from '../../components/forms/AIServiceForm';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -75,7 +76,7 @@ function AIServicesPage() {
     
     try {
       const apiService = (await import('../../services/api')).apiService;
-      const result = await apiService.testAIServiceConnection(parseInt(appId), serviceId);
+      const result = await apiService.testAIServiceConnection(Number.parseInt(appId), serviceId);
       setTestResult(result);
     } catch (err) {
       setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
@@ -90,24 +91,24 @@ function AIServicesPage() {
     
     try {
       const apiService = (await import('../../services/api')).apiService;
-      const blob = await apiService.exportAIService(parseInt(appId), serviceId);
+      const blob = await apiService.exportAIService(Number.parseInt(appId), serviceId);
       
       // Find service name for filename
       const service = services.find(s => s.service_id === serviceId);
       const serviceName = service?.name || 'ai-service';
-      const sanitizedName = serviceName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const sanitizedName = serviceName.replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
       const timestamp = new Date().toISOString().split('T')[0];
       const filename = `ai-service-${sanitizedName}-${timestamp}.json`;
       
       // Create download link
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      globalThis.URL.revokeObjectURL(url);
+      a.remove();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to export service');
     } finally {
@@ -125,7 +126,7 @@ function AIServicesPage() {
     try {
       const apiService = (await import('../../services/api')).apiService;
       const result = await apiService.importAIService(
-        parseInt(appId),
+        Number.parseInt(appId),
         file,
         conflictMode,
         newName
@@ -185,7 +186,7 @@ function AIServicesPage() {
               onClick={() => setShowImportModal(true)}
               className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
             >
-              <span className="mr-2">📤</span>Import
+              <Upload className="w-4 h-4 mr-2" />Import
             </button>
             <button
               onClick={handleCreate}
@@ -223,8 +224,8 @@ function AIServicesPage() {
           )},
           { header: 'Status', render: (service: AIService) => (
             service.needs_api_key ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                ⚠ API Key Required
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <AlertTriangle className="w-3 h-3" /> API Key Required
               </span>
             ) : (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -239,26 +240,26 @@ function AIServicesPage() {
                 {
                   label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
                   onClick: () => void handleTestConnection(service.service_id),
-                  icon: testingServiceId === service.service_id ? '⏳' : '🔌',
+                  icon: testingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />,
                   disabled: testingServiceId === service.service_id
                 },
                 {
                   label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
                   onClick: () => void handleExport(service.service_id),
-                  icon: exportingServiceId === service.service_id ? '⏳' : '📥',
+                  icon: exportingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />,
                   variant: 'primary' as const,
                   disabled: exportingServiceId === service.service_id
                 },
-                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' as const },
-                { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: '📋', variant: 'primary' as const },
-                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: '🗑️', variant: 'danger' as const }
+                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
+                { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
+                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
               ]} size="sm" />
             ) : (
                <span className="text-gray-400 text-sm">View only</span>
             )
           ) }
         ]}
-        emptyIcon="🤖"
+        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
         emptyMessage="No AI Services"
         emptySubMessage="Add your first AI service to start using language models in your agents."
         loading={loading}
@@ -274,9 +275,9 @@ function AIServicesPage() {
         <div className={`mb-4 rounded-lg p-4 ${notification.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <span className={`text-xl ${notification.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                {notification.type === 'success' ? '✓' : '✗'}
-              </span>
+              {notification.type === 'success'
+                ? <CheckCircle2 className="w-5 h-5 text-green-400" />
+                : <XCircle className="w-5 h-5 text-red-400" />}
             </div>
             <div className="ml-3 flex-1">
               <p className={`text-sm font-medium ${notification.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
@@ -288,7 +289,7 @@ function AIServicesPage() {
               className={`ml-3 inline-flex rounded-md p-1.5 ${notification.type === 'success' ? 'text-green-500 hover:bg-green-100' : 'text-red-500 hover:bg-red-100'} focus:outline-none`}
             >
               <span className="sr-only">Dismiss</span>
-              <span className="text-lg">×</span>
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -296,7 +297,7 @@ function AIServicesPage() {
 
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
-          <div className="flex-shrink-0"><span className="text-blue-400 text-xl">💡</span></div>
+          <div className="flex-shrink-0"><Lightbulb className="w-5 h-5 text-blue-400" /></div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-blue-800">About AI Services</h3>
             <div className="mt-2 text-sm text-blue-700">

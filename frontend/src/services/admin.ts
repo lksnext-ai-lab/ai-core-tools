@@ -38,7 +38,7 @@ export interface SystemStats {
 }
 
 class AdminService {
-  private baseUrl = '/internal/admin';
+  private readonly baseUrl = '/internal/admin';
 
   async getUsers(page: number = 1, perPage: number = 10, search?: string): Promise<UserListResponse> {
     const params = new URLSearchParams({

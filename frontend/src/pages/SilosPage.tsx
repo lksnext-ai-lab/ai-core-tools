@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { AlertTriangle, Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
@@ -46,7 +47,7 @@ function SilosPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getSilos(parseInt(appId));
+      const response = await apiService.getSilos(Number.parseInt(appId));
       setSilos(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load silos');
@@ -57,14 +58,14 @@ function SilosPage() {
   }
 
   async function handleDelete(siloId: number) {
-    if (!confirm('Are you sure you want to delete this silo? This action cannot be undone.')) {
+    if (!globalThis.confirm('Are you sure you want to delete this silo? This action cannot be undone.')) {
       return;
     }
 
     if (!appId) return;
 
     try {
-      await apiService.deleteSilo(parseInt(appId), siloId);
+      await apiService.deleteSilo(Number.parseInt(appId), siloId);
       // Remove from local state
       setSilos(silos.filter(s => s.silo_id !== siloId));
     } catch (err) {
@@ -80,22 +81,22 @@ function SilosPage() {
       const silo = silos.find(s => s.silo_id === siloId);
       const siloName = silo?.name || 'silo';
       
-      const blob = await apiService.exportSilo(parseInt(appId), siloId);
+      const blob = await apiService.exportSilo(Number.parseInt(appId), siloId);
       
       // Generate filename
       const timestamp = new Date().toISOString().split('T')[0];
-      const sanitizedName = siloName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const sanitizedName = siloName.replaceAll(/[^a-z0-9]/gi, '_').toLowerCase();
       const filename = `silo-${sanitizedName}-${timestamp}.json`;
       
       // Download
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      globalThis.URL.revokeObjectURL(url);
+      a.remove();
 
       // Show warning notification (7 seconds)
       setNotification({
@@ -131,7 +132,7 @@ function SilosPage() {
         // Check if embedding service is needed but not bundled
         if (fileData.silo?.embedding_service_name && !fileData.embedding_service) {
           // Fetch available embedding services
-          const services = await apiService.getEmbeddingServices(parseInt(appId));
+          const services = await apiService.getEmbeddingServices(Number.parseInt(appId));
           setAvailableEmbeddingServices(
             services.map((svc: any) => ({ id: svc.service_id, name: svc.name }))
           );
@@ -146,7 +147,7 @@ function SilosPage() {
 
       // Perform import
       const result = await apiService.importSilo(
-        parseInt(appId),
+        Number.parseInt(appId),
         file,
         conflictMode,
         newName,
@@ -208,7 +209,7 @@ function SilosPage() {
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
             <div>
               <h3 className="text-sm font-medium text-red-800">Error Loading Silos</h3>
               <p className="text-sm text-red-600 mt-1">{error}</p>
@@ -239,7 +240,7 @@ function SilosPage() {
               onClick={() => setShowImportModal(true)}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
-              <span aria-hidden="true" className="mr-2">⬆️</span>
+              <Upload className="w-4 h-4 mr-2" />
               <span>Import Silo</span>
             </button>
           )}
@@ -269,7 +270,7 @@ function SilosPage() {
       {/* Silos List */}
       {silos.length === 0 ? (
         <div className="bg-white rounded-lg shadow-md border p-8 text-center">
-          <div className="text-6xl mb-4">🗄️</div>
+          <Database className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No Silos Yet</h3>
           <p className="text-gray-600 mb-4">
             Create your first silo to start storing and searching documents with vector embeddings.
@@ -295,7 +296,7 @@ function SilosPage() {
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
                     <div className="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center">
-                      <span className="text-yellow-600 text-lg">🗄️</span>
+                      <Database className="w-5 h-5 text-yellow-600" />
                     </div>
                   </div>
                   <div className="ml-4">
@@ -356,26 +357,26 @@ function SilosPage() {
                     {
                       label: 'Playground',
                       onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}/playground`),
-                      icon: '🎮',
+                      icon: <Gamepad2 className="w-4 h-4" />,
                       variant: 'warning'
                     },
                     {
                       label: 'Export',
                       onClick: () => { void handleExport(silo.silo_id); },
-                      icon: '⬇️',
+                      icon: <ArrowDownToLine className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     ...(canEdit ? [
                       {
                         label: 'Edit',
                         onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
-                        icon: '✏️',
+                        icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary' as const
                       },
                       {
                         label: 'Delete',
                         onClick: () => { void handleDelete(silo.silo_id); },
-                        icon: '🗑️',
+                        icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger' as const
                       }
                     ] : [])
@@ -385,7 +386,7 @@ function SilosPage() {
               )
             }
           ]}
-          emptyIcon="🗄️"
+          emptyIcon={<Database className="w-10 h-10 text-gray-300" />}
           emptyMessage="No Silos Yet"
           emptySubMessage="Create your first silo to start storing and searching documents with vector embeddings."
           loading={loading}

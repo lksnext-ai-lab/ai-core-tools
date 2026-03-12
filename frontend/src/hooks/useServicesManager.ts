@@ -40,7 +40,7 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
     try {
       setLoading(true);
       setError(null);
-      const response = await api.getAll(parseInt(appId));
+      const response = await api.getAll(Number.parseInt(appId));
       setServices(response || []);
       cache.set(appId, response || []);
     } catch (err) {
@@ -57,7 +57,7 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
     try {
       setLoading(true);
       setError(null);
-      const response = await api.getAll(parseInt(appId));
+      const response = await api.getAll(Number.parseInt(appId));
       setServices(response || []);
       cache.set(appId, response || []);
     } catch (err) {
@@ -73,7 +73,7 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
     if (!confirm('Are you sure you want to delete this item?')) return;
     if (!appId) return;
     try {
-      await api.delete(parseInt(appId), id);
+      await api.delete(Number.parseInt(appId), id);
       const newServices = services.filter((s: any) => s.service_id !== id);
       setServices(newServices);
       cache.set(appId, newServices);
@@ -87,7 +87,7 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
   async function handleEdit(id: number) {
     if (!appId || !api.getOne) return;
     try {
-      const item = await api.getOne(parseInt(appId), id);
+      const item = await api.getOne(Number.parseInt(appId), id);
       setEditingService(item);
       setIsModalOpen(true);
     } catch (err) {
@@ -100,7 +100,7 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
   async function handleCopy(id: number) {
     if (!appId || !api.copy) return;
     try {
-      await api.copy(parseInt(appId), id);
+      await api.copy(Number.parseInt(appId), id);
       cache.invalidate(appId);
       await forceReload();
     } catch (err) {
@@ -114,11 +114,11 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
     if (!appId) return;
     try {
       if (editingService && editingService.service_id !== 0 && api.update) {
-        await api.update(parseInt(appId), editingService.service_id, data);
+        await api.update(Number.parseInt(appId), editingService.service_id, data);
         cache.invalidate(appId);
         await forceReload();
       } else {
-        await api.create(parseInt(appId), data);
+        await api.create(Number.parseInt(appId), data);
         cache.invalidate(appId);
         await forceReload();
       }

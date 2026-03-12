@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { X } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -8,7 +9,7 @@ interface ModalProps {
   size?: 'small' | 'medium' | 'large' | 'xlarge';
 }
 
-function Modal({ isOpen, onClose, title, children, size = 'large' }: ModalProps) {
+function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<ModalProps>) {
   if (!isOpen) return null;
 
   // Define size classes
@@ -22,11 +23,12 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: ModalProps)
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        aria-hidden="true"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div className={`relative bg-white rounded-lg shadow-xl w-full overflow-hidden ${sizeClasses[size]}`}>
@@ -35,12 +37,12 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: ModalProps)
             <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl font-bold transition-colors"
+              className="text-gray-400 hover:text-gray-600 transition-colors"
             >
-              ×
+              <X className="w-5 h-5" />
             </button>
           </div>
-          
+
           {/* Content */}
           <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 88px)' }}>
             {children}
@@ -51,4 +53,4 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: ModalProps)
   );
 }
 
-export default Modal; 
+export default Modal;

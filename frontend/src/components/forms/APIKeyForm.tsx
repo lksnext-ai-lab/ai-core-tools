@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
+import { KeyRound } from 'lucide-react';
 import { useFormState } from '../../hooks/useFormState';
-import { FormField } from '../ui/FormField';
-import { FormCheckbox } from '../ui/FormField';
+import { FormField, FormCheckbox } from '../ui/FormField';
 import { FormError } from '../ui/FormError';
 import { FormActions } from '../ui/FormActions';
 
@@ -23,7 +23,6 @@ interface APIKeyFormProps {
   readonly apiKey?: APIKey | null;
   readonly onSubmit: (data: APIKeyFormData) => Promise<void>;
   readonly onCancel: () => void;
-  readonly loading?: boolean;
 }
 
 function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
@@ -40,7 +39,7 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
     if (apiKey) {
       updateFields({
         name: apiKey.name || '',
-        is_active: apiKey.is_active !== undefined ? apiKey.is_active : true
+        is_active: apiKey.is_active ?? true
       });
     }
   }, [apiKey]);
@@ -96,7 +95,7 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <div className="flex">
             <div className="flex-shrink-0">
-              <span className="text-blue-400 text-xl">🔑</span>
+              <KeyRound className="w-4 h-4 text-blue-400" />
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-blue-800">

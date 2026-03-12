@@ -17,7 +17,7 @@ function AgentStepResult({
   onClose,
   onViewAgent,
   onRetry,
-}: Props) {
+}: Readonly<Props>) {
   if (isImporting) {
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -94,8 +94,8 @@ function AgentStepResult({
                   </p>
                   <ul className="text-xs text-amber-600 space-y-0.5 list-disc list-inside">
                     {result.summary.warnings.map(
-                      (w, i) => (
-                        <li key={i}>{w}</li>
+                      (w) => (
+                        <li key={w}>{w}</li>
                       )
                     )}
                   </ul>
@@ -110,8 +110,8 @@ function AgentStepResult({
                   </p>
                   <ul className="text-xs text-blue-600 space-y-0.5 list-disc list-inside">
                     {result.summary.next_steps.map(
-                      (s, i) => (
-                        <li key={i}>{s}</li>
+                      (s) => (
+                        <li key={s}>{s}</li>
                       )
                     )}
                   </ul>

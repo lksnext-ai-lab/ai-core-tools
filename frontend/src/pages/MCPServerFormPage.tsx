@@ -3,6 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import type { MCPServer, ToolAgent } from '../core/types';
 
+function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
+  if (type === 'checkbox') return checked;
+  if (type === 'number') return Number.parseInt(value) || 0;
+  return value;
+}
+
 function MCPServerFormPage() {
   const { appId, serverId } = useParams();
   const navigate = useNavigate();
@@ -41,12 +47,12 @@ function MCPServerFormPage() {
       setError(null);
 
       // Load available tool agents
-      const agents = await apiService.getMCPServerToolAgents(parseInt(appId));
+      const agents = await apiService.getMCPServerToolAgents(Number.parseInt(appId));
       setToolAgents(agents);
 
       // Load existing server if editing
       if (isEditing && serverId) {
-        const server: MCPServer = await apiService.getMCPServer(parseInt(appId), parseInt(serverId));
+        const server: MCPServer = await apiService.getMCPServer(Number.parseInt(appId), Number.parseInt(serverId));
         setFormData({
           name: server.name || '',
           slug: server.slug || '',
@@ -70,7 +76,7 @@ function MCPServerFormPage() {
 
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : type === 'number' ? parseInt(value) || 0 : value,
+      [name]: resolveInputValue(type, value, checked),
     }));
   }
 
@@ -92,9 +98,9 @@ function MCPServerFormPage() {
       setError(null);
 
       if (isEditing && serverId) {
-        await apiService.updateMCPServer(parseInt(appId), parseInt(serverId), formData);
+        await apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), formData);
       } else {
-        await apiService.createMCPServer(parseInt(appId), formData);
+        await apiService.createMCPServer(Number.parseInt(appId), formData);
       }
 
       navigate(`/apps/${appId}/mcp-servers`);
@@ -109,6 +115,8 @@ function MCPServerFormPage() {
   function handleCancel() {
     navigate(`/apps/${appId}/mcp-servers`);
   }
+
+  const submitLabel = isEditing ? 'Update MCP Server' : 'Create MCP Server';
 
   if (loading) {
     return (
@@ -300,7 +308,7 @@ function MCPServerFormPage() {
           )}
 
           <div className="mt-4 text-sm text-gray-500">
-            {formData.agent_ids.length} agent{formData.agent_ids.length !== 1 ? 's' : ''} selected
+            {formData.agent_ids.length} agent{formData.agent_ids.length === 1 ? '' : 's'} selected
           </div>
         </div>
 
@@ -323,9 +331,7 @@ function MCPServerFormPage() {
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 Saving...
               </>
-            ) : (
-              isEditing ? 'Update MCP Server' : 'Create MCP Server'
-            )}
+            ) : submitLabel}
           </button>
         </div>
       </form>

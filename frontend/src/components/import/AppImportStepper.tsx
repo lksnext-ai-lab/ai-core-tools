@@ -40,7 +40,7 @@ function AppImportStepper({
   isOpen,
   onClose,
   onImportComplete,
-}: Props) {
+}: Readonly<Props>) {
   const navigate = useNavigate();
 
   // Step state
@@ -94,7 +94,7 @@ function AppImportStepper({
       setIsValidating(true);
 
       try {
-        const result =
+        const result: AppImportPreview =
           await apiService.previewAppImport(selectedFile);
         setPreview(result);
         setAppName(result.app_name);
@@ -146,9 +146,9 @@ function AppImportStepper({
           sel[makeKey(item.type, item.name)] = true;
         }
         setSelection(sel);
-      } catch (err: any) {
+      } catch (err: unknown) {
         setValidationError(
-          err?.message || 'Failed to validate export file'
+          err instanceof Error ? err.message : 'Failed to validate export file'
         );
       } finally {
         setIsValidating(false);
@@ -292,9 +292,9 @@ function AppImportStepper({
           result: 'error',
         }));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setImportError(
-        err?.message || 'Import failed unexpectedly'
+        err instanceof Error ? err.message : 'Import failed unexpectedly'
       );
       setStepStatuses((prev) => ({
         ...prev,
@@ -355,6 +355,7 @@ function AppImportStepper({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close"
               className="text-gray-400 hover:text-gray-600 text-xl leading-none"
             >
               &times;

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 // Define interfaces for each settings type
@@ -128,148 +128,113 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     collaborators: {},
   });
 
-  // AI Services methods
-  const getAIServices = (appId: string): AIService[] | null => {
-    return cache.aiServices[appId] || null;
-  };
-
-  const setAIServices = (appId: string, services: AIService[]) => {
+  // Setter methods — stable: only call setCache with functional updates (no cache read)
+  const setAIServices = useCallback((appId: string, services: AIService[]) => {
     setCache(prev => ({
       ...prev,
       aiServices: { ...prev.aiServices, [appId]: services }
     }));
-  };
+  }, []);
 
-  const invalidateAIServices = (appId: string) => {
+  const invalidateAIServices = useCallback((appId: string) => {
     setCache(prev => {
       const newAIServices = { ...prev.aiServices };
       delete newAIServices[appId];
       return { ...prev, aiServices: newAIServices };
     });
-  };
+  }, []);
 
-  // API Keys methods
-  const getAPIKeys = (appId: string): APIKey[] | null => {
-    return cache.apiKeys[appId] || null;
-  };
-
-  const setAPIKeys = (appId: string, keys: APIKey[]) => {
+  const setAPIKeys = useCallback((appId: string, keys: APIKey[]) => {
     setCache(prev => ({
       ...prev,
       apiKeys: { ...prev.apiKeys, [appId]: keys }
     }));
-  };
+  }, []);
 
-  const invalidateAPIKeys = (appId: string) => {
+  const invalidateAPIKeys = useCallback((appId: string) => {
     setCache(prev => {
       const newAPIKeys = { ...prev.apiKeys };
       delete newAPIKeys[appId];
       return { ...prev, apiKeys: newAPIKeys };
     });
-  };
+  }, []);
 
-  // Embedding Services methods
-  const getEmbeddingServices = (appId: string): EmbeddingService[] | null => {
-    return cache.embeddingServices[appId] || null;
-  };
-
-  const setEmbeddingServices = (appId: string, services: EmbeddingService[]) => {
+  const setEmbeddingServices = useCallback((appId: string, services: EmbeddingService[]) => {
     setCache(prev => ({
       ...prev,
       embeddingServices: { ...prev.embeddingServices, [appId]: services }
     }));
-  };
+  }, []);
 
-  const invalidateEmbeddingServices = (appId: string) => {
+  const invalidateEmbeddingServices = useCallback((appId: string) => {
     setCache(prev => {
       const newEmbeddingServices = { ...prev.embeddingServices };
       delete newEmbeddingServices[appId];
       return { ...prev, embeddingServices: newEmbeddingServices };
     });
-  };
+  }, []);
 
-  // MCP Configs methods
-  const getMCPConfigs = (appId: string): MCPConfig[] | null => {
-    return cache.mcpConfigs[appId] || null;
-  };
-
-  const setMCPConfigs = (appId: string, configs: MCPConfig[]) => {
+  const setMCPConfigs = useCallback((appId: string, configs: MCPConfig[]) => {
     setCache(prev => ({
       ...prev,
       mcpConfigs: { ...prev.mcpConfigs, [appId]: configs }
     }));
-  };
+  }, []);
 
-  const invalidateMCPConfigs = (appId: string) => {
+  const invalidateMCPConfigs = useCallback((appId: string) => {
     setCache(prev => {
       const newMCPConfigs = { ...prev.mcpConfigs };
       delete newMCPConfigs[appId];
       return { ...prev, mcpConfigs: newMCPConfigs };
     });
-  };
+  }, []);
 
-  // Skills methods
-  const getSkills = (appId: string): Skill[] | null => {
-    return cache.skills[appId] || null;
-  };
-
-  const setSkills = (appId: string, skills: Skill[]) => {
+  const setSkills = useCallback((appId: string, skills: Skill[]) => {
     setCache(prev => ({
       ...prev,
       skills: { ...prev.skills, [appId]: skills }
     }));
-  };
+  }, []);
 
-  const invalidateSkills = (appId: string) => {
+  const invalidateSkills = useCallback((appId: string) => {
     setCache(prev => {
       const newSkills = { ...prev.skills };
       delete newSkills[appId];
       return { ...prev, skills: newSkills };
     });
-  };
+  }, []);
 
-  // Data Structures methods
-  const getDataStructures = (appId: string): DataStructure[] | null => {
-    return cache.dataStructures[appId] || null;
-  };
-
-  const setDataStructures = (appId: string, structures: DataStructure[]) => {
+  const setDataStructures = useCallback((appId: string, structures: DataStructure[]) => {
     setCache(prev => ({
       ...prev,
       dataStructures: { ...prev.dataStructures, [appId]: structures }
     }));
-  };
+  }, []);
 
-  const invalidateDataStructures = (appId: string) => {
+  const invalidateDataStructures = useCallback((appId: string) => {
     setCache(prev => {
       const newDataStructures = { ...prev.dataStructures };
       delete newDataStructures[appId];
       return { ...prev, dataStructures: newDataStructures };
     });
-  };
+  }, []);
 
-  // Collaborators methods
-  const getCollaborators = (appId: string): Collaborator[] | null => {
-    return cache.collaborators[appId] || null;
-  };
-
-  const setCollaborators = (appId: string, collaborators: Collaborator[]) => {
+  const setCollaborators = useCallback((appId: string, collaborators: Collaborator[]) => {
     setCache(prev => ({
       ...prev,
       collaborators: { ...prev.collaborators, [appId]: collaborators }
     }));
-  };
+  }, []);
 
-  const invalidateCollaborators = (appId: string) => {
+  const invalidateCollaborators = useCallback((appId: string) => {
     setCache(prev => {
       const newCollaborators = { ...prev.collaborators };
       delete newCollaborators[appId];
       return { ...prev, collaborators: newCollaborators };
     });
-  };
+  }, []);
 
-  // Clear all cache for an app
-  const clearAppCache = (appId: string) => {
+  const clearAppCache = useCallback((appId: string) => {
     setCache(prev => {
       const newAIServices = { ...prev.aiServices };
       const newAPIKeys = { ...prev.apiKeys };
@@ -297,32 +262,45 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
         collaborators: newCollaborators,
       };
     });
-  };
+  }, []);
 
-  const value: SettingsCacheContextType = {
-    getAIServices,
+  // Context value — memoized so object reference only changes when cache or stable callbacks change
+  const value = useMemo<SettingsCacheContextType>(() => ({
+    // Getters inline to always reflect current cache state
+    getAIServices: (appId: string) => cache.aiServices[appId] || null,
+    getAPIKeys: (appId: string) => cache.apiKeys[appId] || null,
+    getEmbeddingServices: (appId: string) => cache.embeddingServices[appId] || null,
+    getMCPConfigs: (appId: string) => cache.mcpConfigs[appId] || null,
+    getSkills: (appId: string) => cache.skills[appId] || null,
+    getDataStructures: (appId: string) => cache.dataStructures[appId] || null,
+    getCollaborators: (appId: string) => cache.collaborators[appId] || null,
+    // Stable setter/invalidator references from useCallback
     setAIServices,
     invalidateAIServices,
-    getAPIKeys,
     setAPIKeys,
     invalidateAPIKeys,
-    getEmbeddingServices,
     setEmbeddingServices,
     invalidateEmbeddingServices,
-    getMCPConfigs,
     setMCPConfigs,
     invalidateMCPConfigs,
-    getSkills,
     setSkills,
     invalidateSkills,
-    getDataStructures,
     setDataStructures,
     invalidateDataStructures,
-    getCollaborators,
     setCollaborators,
     invalidateCollaborators,
     clearAppCache,
-  };
+  }), [
+    cache,
+    setAIServices, invalidateAIServices,
+    setAPIKeys, invalidateAPIKeys,
+    setEmbeddingServices, invalidateEmbeddingServices,
+    setMCPConfigs, invalidateMCPConfigs,
+    setSkills, invalidateSkills,
+    setDataStructures, invalidateDataStructures,
+    setCollaborators, invalidateCollaborators,
+    clearAppCache,
+  ]);
 
   return (
     <SettingsCacheContext.Provider value={value}>

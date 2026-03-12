@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { Upload, ArrowDownToLine, Loader2, Plug, Pencil, Trash2, CheckCircle2, XCircle, X, Lightbulb } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
@@ -48,7 +49,7 @@ function MCPConfigsPage() {
     setIsTestModalOpen(true);
     
     try {
-      const result = await apiService.testMCPConnection(parseInt(appId), configId);
+      const result = await apiService.testMCPConnection(Number.parseInt(appId), configId);
       setTestResult(result);
     } catch (err) {
       setTestResult({
@@ -75,7 +76,7 @@ function MCPConfigsPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getMCPConfigs(parseInt(appId));
+      const response = await apiService.getMCPConfigs(Number.parseInt(appId));
       setConfigs(response);
       // Cache the response
       settingsCache.setMCPConfigs(appId, response);
@@ -93,7 +94,7 @@ function MCPConfigsPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getMCPConfigs(parseInt(appId));
+      const response = await apiService.getMCPConfigs(Number.parseInt(appId));
       setConfigs(response);
       // Cache the response
       settingsCache.setMCPConfigs(appId, response);
@@ -113,7 +114,7 @@ function MCPConfigsPage() {
     if (!appId) return;
 
     try {
-      await apiService.deleteMCPConfig(parseInt(appId), configId);
+      await apiService.deleteMCPConfig(Number.parseInt(appId), configId);
       // Remove from local state
       const newConfigs = configs.filter(c => c.config_id !== configId);
       setConfigs(newConfigs);
@@ -134,7 +135,7 @@ function MCPConfigsPage() {
     if (!appId) return;
     
     try {
-      const config = await apiService.getMCPConfig(parseInt(appId), configId);
+      const config = await apiService.getMCPConfig(Number.parseInt(appId), configId);
       setEditingConfig(config);
       setIsModalOpen(true);
     } catch (err) {
@@ -149,11 +150,11 @@ function MCPConfigsPage() {
     try {
       if (editingConfig && editingConfig.config_id !== 0) {
         // Update existing config - no need to invalidate cache
-        await apiService.updateMCPConfig(parseInt(appId), editingConfig.config_id, data);
+        await apiService.updateMCPConfig(Number.parseInt(appId), editingConfig.config_id, data);
         await loadMCPConfigs();
       } else {
         // Create new config - invalidate cache and force reload
-        await apiService.createMCPConfig(parseInt(appId), data);
+        await apiService.createMCPConfig(Number.parseInt(appId), data);
         settingsCache.invalidateMCPConfigs(appId);
         await forceReloadMCPConfigs();
       }
@@ -176,25 +177,25 @@ function MCPConfigsPage() {
     
     try {
       const blob = await apiService.exportMCPConfig(
-        parseInt(appId), 
+        Number.parseInt(appId), 
         configId
       );
       
       // Find config name for filename
       const config = configs.find(c => c.config_id === configId);
       const configName = config?.name || 'mcp-config';
-      const sanitizedName = configName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const sanitizedName = configName.replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
       const timestamp = new Date().toISOString().split('T')[0];
       const filename = `mcp-config-${sanitizedName}-${timestamp}.json`;
       
       // Create download link
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      globalThis.URL.revokeObjectURL(url);
       a.remove();
       
       // Show security info about auth tokens
@@ -226,7 +227,7 @@ function MCPConfigsPage() {
     
     try {
       const result = await apiService.importMCPConfig(
-        parseInt(appId),
+        Number.parseInt(appId),
         file,
         conflictMode,
         newName
@@ -307,7 +308,7 @@ function MCPConfigsPage() {
                   "px-4 py-2 rounded-lg flex items-center"
                 }
               >
-                <span className="mr-2">📤</span>Import
+                <Upload className="w-4 h-4 mr-2" />Import
               </button>
               <button 
                 onClick={handleCreateConfig}
@@ -356,15 +357,9 @@ function MCPConfigsPage() {
           }>
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <span className={
-                  `text-xl ${
-                    notification.type === 'success' 
-                      ? 'text-green-400' 
-                      : 'text-red-400'
-                  }`
-                }>
-                  {notification.type === 'success' ? '✓' : '✗'}
-                </span>
+                {notification.type === 'success'
+                  ? <CheckCircle2 className="w-5 h-5 text-green-400" />
+                  : <XCircle className="w-5 h-5 text-red-400" />}
               </div>
               <div className="ml-3 flex-1">
                 <p className={
@@ -388,7 +383,7 @@ function MCPConfigsPage() {
                 }
               >
                 <span className="sr-only">Dismiss</span>
-                <span className="text-lg">×</span>
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -403,7 +398,7 @@ function MCPConfigsPage() {
               header: 'Name',
               render: (config) => (
                 <div className="flex items-center">
-                  <span className="text-purple-400 text-xl mr-3">🔌</span>
+                  <Plug className="w-5 h-5 text-purple-400 mr-3 shrink-0" />
                   {canEdit ? (
                     <button
                       type="button"
@@ -441,19 +436,20 @@ function MCPConfigsPage() {
                 canEdit ? (
                   <ActionDropdown
                     actions={[
-                      ...(canEdit ? [{
+                      {
                         label: (
                           exportingConfigId === config.config_id 
                             ? 'Exporting...' 
                             : 'Export'
                         ),
                         onClick: () => { void handleExport(config.config_id); },
-                        icon: (
-                          exportingConfigId === config.config_id ? '⏳' : '📥'
-                        ),
-                        disabled: exportingConfigId === config.config_id
-                      }] : []),
-                      ...(canEdit ? [{
+                        icon: exportingConfigId === config.config_id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <ArrowDownToLine className="w-4 h-4" />,
+                        disabled: exportingConfigId === config.config_id,
+                        variant: 'primary' as const
+                      },
+                      {
                         label: (
                           testingConfigId === config.config_id 
                             ? 'Testing...' 
@@ -462,23 +458,23 @@ function MCPConfigsPage() {
                         onClick: () => { 
                           void handleTestConnection(config.config_id); 
                         },
-                        icon: (
-                          testingConfigId === config.config_id ? '⏳' : '🔌'
-                        ),
+                        icon: testingConfigId === config.config_id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Plug className="w-4 h-4" />,
                         disabled: testingConfigId === config.config_id
-                      }] : []),
+                      },
                       {
                         label: 'Edit',
-                        onClick: () => { 
-                          void handleEditConfig(config.config_id); 
+                        onClick: () => {
+                          void handleEditConfig(config.config_id);
                         },
-                        icon: '✏️',
+                        icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary'
                       },
                       {
                         label: 'Delete',
                         onClick: () => { void handleDelete(config.config_id); },
-                        icon: '🗑️',
+                        icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
                     ]}
@@ -490,7 +486,7 @@ function MCPConfigsPage() {
               )
             }
           ]}
-          emptyIcon="🔌"
+          emptyIcon={<Plug className="w-10 h-10 text-gray-300" />}
           emptyMessage="No MCP Configs"
           emptySubMessage="Add your first MCP configuration to connect agents with external tools and data sources."
           loading={loading}
@@ -511,7 +507,7 @@ function MCPConfigsPage() {
         <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
           <div className="flex">
             <div className="flex-shrink-0">
-              <span className="text-purple-400 text-xl">💡</span>
+              <Lightbulb className="w-5 h-5 text-purple-400" />
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-purple-800">
@@ -582,8 +578,8 @@ function MCPConfigsPage() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {testResult.tools.map((tool: any, index: number) => (
-                            <tr key={index}>
+                          {testResult.tools.map((tool: any) => (
+                            <tr key={tool.name}>
                               <td className="px-4 py-2 text-sm font-medium text-gray-900">{tool.name}</td>
                               <td className="px-4 py-2 text-sm text-gray-500">{tool.description}</td>
                             </tr>
