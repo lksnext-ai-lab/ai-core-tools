@@ -517,17 +517,11 @@ async def list_media(
     auth_context: AuthContext = Depends(get_current_user_oauth)
 ):
     """List all media in repository"""
-    from models.media import Media
-    
-    query = db.query(Media).filter(Media.repository_id == repository_id)
-    
-    if folder_id is not None:
-        if folder_id == 0:
-            query = query.filter(Media.folder_id.is_(None))
-        else:
-            query = query.filter(Media.folder_id == folder_id)
-    
-    media_list = query.order_by(Media.create_date.desc()).all()
+    media_list = MediaService.list_media(
+        repository_id=repository_id,
+        folder_id=folder_id,
+        db=db,
+    )
     return [MediaResponse(**{k: v for k, v in m.__dict__.items() if not k.startswith('_')}) for m in media_list]
 
 @repositories_router.post("/{repository_id}/media/{media_id}/move",
