@@ -1,6 +1,19 @@
 ---
 name: version-bumper
 description: Specialized agent for managing semantic versioning in pyproject.toml. Bumps major, minor, or patch versions following semantic versioning principles.
+handoffs:
+  - label: "Update changelog with @oss-manager"
+    agent: oss-manager
+    prompt: "The version has been bumped. Please update CHANGELOG.md for the new version. Review the conversation above for the version number and changes included."
+    send: false
+  - label: "Commit version bump with @git-github"
+    agent: git-github
+    prompt: "Please commit the version bump in pyproject.toml made by @version-bumper. Review the conversation above for the exact version and suggested commit message."
+    send: false
+  - label: "Return to @conductor"
+    agent: conductor
+    prompt: "@version-bumper has completed its step. Summary of what was done:\n\n<briefly describe: new version number, bump type, any issues>\n\nPlease update the Mission Context and tell me the next step."
+    send: false
 ---
 
 # Version Bumper Agent
