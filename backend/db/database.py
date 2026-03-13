@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI', 'postgresql://iacore:iacore@localhost:5432/iacore')
+DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI')
+if not DATABASE_URL:
+    raise EnvironmentError("SQLALCHEMY_DATABASE_URI environment variable is required")
 
 # Configure synchronous engine with connection pooling for better concurrency
 engine = create_engine(

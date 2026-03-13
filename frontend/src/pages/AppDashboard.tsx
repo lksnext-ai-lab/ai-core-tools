@@ -39,6 +39,7 @@ interface App {
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
+  onboarding_dismissed: boolean;
 }
 
 interface UsageStats {
@@ -84,8 +85,6 @@ function AppDashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(true);
 
-  const [checklistDismissed, setChecklistDismissed] = useState(false);
-
   const loadAppData = useCallback(async () => {
     if (!appId) return;
     try {
@@ -128,35 +127,23 @@ function AppDashboard() {
     }
   }, [appId]);
 
-  const dismissChecklist = useCallback(() => {
-    if (!appId) return;
-    localStorage.setItem(`dashboard_checklist_dismissed_${appId}`, 'true');
-    setChecklistDismissed(true);
-  }, [appId]);
+  const dismissChecklist = useCallback(async () => {
+    if (!appId || !currentApp) return;
+    try {
+      await apiService.dismissOnboarding(Number.parseInt(appId));
+      setCurrentApp(prev => prev ? { ...prev, onboarding_dismissed: true } : prev);
+    } catch (error) {
+      console.error('Failed to dismiss checklist:', error);
+    }
+  }, [appId, currentApp]);
 
   useEffect(() => {
     if (appId) {
       void loadAppData();
       void loadUsageStats();
       void loadAgents();
-      const dismissed = localStorage.getItem(`dashboard_checklist_dismissed_${appId}`);
-      setChecklistDismissed(dismissed === 'true');
     }
   }, [appId, loadAppData, loadUsageStats, loadAgents]);
-
-  useEffect(() => {
-    if (!currentApp || checklistDismissed || !appId) return;
-    const stepsComplete = [
-      currentApp.agent_count > 0,
-      currentApp.repository_count > 0,
-      currentApp.silo_count > 0,
-      currentApp.domain_count > 0,
-      currentApp.collaborator_count > 1,
-    ].every(Boolean);
-    if (stepsComplete) {
-      localStorage.setItem(`dashboard_checklist_dismissed_${appId}`, 'true');
-    }
-  }, [currentApp, checklistDismissed, appId]);
 
   if (loading) {
     return (
@@ -307,7 +294,7 @@ function AppDashboard() {
 
   const completedCount = checklistSteps.filter((s) => s.done).length;
   const allComplete = completedCount === checklistSteps.length;
-  const showChecklist = !checklistDismissed && !allComplete;
+  const showChecklist = !currentApp.onboarding_dismissed && !allComplete;
 
   // --- Top agents leaderboard ---
   const topAgents = [...agents]
@@ -563,13 +550,15 @@ function AppDashboard() {
                 {completedCount} / {checklistSteps.length} steps
               </span>
             </div>
-            <button
-              onClick={dismissChecklist}
-              className="text-gray-300 hover:text-gray-500 transition-colors rounded p-0.5"
-              aria-label="Dismiss checklist"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => void dismissChecklist()}
+                className="text-gray-300 hover:text-gray-500 transition-colors rounded p-0.5"
+                aria-label="Dismiss checklist"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Progress bar */}

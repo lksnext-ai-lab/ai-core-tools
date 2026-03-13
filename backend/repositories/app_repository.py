@@ -83,6 +83,8 @@ class AppRepository:
             app.max_file_size_mb = data['max_file_size_mb']
         if 'agent_cors_origins' in data:
             app.agent_cors_origins = data['agent_cors_origins']
+        if 'onboarding_dismissed' in data:
+            app.onboarding_dismissed = data['onboarding_dismissed']
     
     # Methods to get related entities for cascade deletion
     

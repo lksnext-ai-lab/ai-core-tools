@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
-from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from utils.security import generate_signature
 import os
-from typing import List, Optional
+from typing import Annotated, Any, List, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 import json
@@ -65,6 +65,33 @@ def _get_user_from_auth_context(db: Session, auth_context: AuthContext):
     """Get user from auth context identity."""
     return UserService.get_user_by_id(db, int(auth_context.identity.id))
 
+
+class ImportOptions:
+    """Grouped import query parameters for the import endpoint."""
+
+    def __init__(
+        self,
+        conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+        new_name: Annotated[Optional[str], Query()] = None,
+        selected_ai_service_id: Annotated[Optional[int], Query()] = None,
+        selected_silo_id: Annotated[Optional[int], Query()] = None,
+        selected_output_parser_id: Annotated[Optional[int], Query()] = None,
+        import_bundled_silo: Annotated[bool, Query()] = True,
+        import_bundled_output_parser: Annotated[bool, Query()] = True,
+        import_bundled_mcp_configs: Annotated[bool, Query()] = True,
+        import_bundled_agent_tools: Annotated[bool, Query()] = True,
+    ):
+        self.conflict_mode = conflict_mode
+        self.new_name = new_name
+        self.selected_ai_service_id = selected_ai_service_id
+        self.selected_silo_id = selected_silo_id
+        self.selected_output_parser_id = selected_output_parser_id
+        self.import_bundled_silo = import_bundled_silo
+        self.import_bundled_output_parser = import_bundled_output_parser
+        self.import_bundled_mcp_configs = import_bundled_mcp_configs
+        self.import_bundled_agent_tools = import_bundled_agent_tools
+
+
 #AGENT MANAGEMENT
 
 @agents_router.post(
@@ -75,10 +102,10 @@ def _get_user_from_auth_context(db: Session, auth_context: AuthContext):
 )
 async def preview_import_agent(
     app_id: int,
-    file: UploadFile = File(...),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Preview agent import without importing.
 
@@ -92,7 +119,7 @@ async def preview_import_agent(
 
         import_service = AgentImportService(db)
         return import_service.preview_import(export_data, app_id)
-    except (json.JSONDecodeError, ValueError) as e:
+    except ValueError as e:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"Invalid export file: {e}",
@@ -114,19 +141,11 @@ async def preview_import_agent(
                    status_code=status.HTTP_201_CREATED)
 async def import_agent(
     app_id: int,
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
-    new_name: Optional[str] = Query(None),
-    selected_ai_service_id: Optional[int] = Query(None),
-    selected_silo_id: Optional[int] = Query(None),
-    selected_output_parser_id: Optional[int] = Query(None),
-    import_bundled_silo: bool = Query(True),
-    import_bundled_output_parser: bool = Query(True),
-    import_bundled_mcp_configs: bool = Query(True),
-    import_bundled_agent_tools: bool = Query(True),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    file: Annotated[UploadFile, File()],
+    import_options: Annotated[ImportOptions, Depends()],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Import Agent from JSON file.
     
@@ -145,7 +164,7 @@ async def import_agent(
         
         # Check if AI service selection is required but not provided
         if validation.requires_ai_service_selection:
-            if selected_ai_service_id is None:
+            if import_options.selected_ai_service_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
@@ -159,15 +178,15 @@ async def import_agent(
         summary = import_service.import_agent(
             export_data,
             app_id,
-            conflict_mode,
-            new_name,
-            selected_ai_service_id,
-            selected_silo_id,
-            selected_output_parser_id,
-            import_bundled_silo=import_bundled_silo,
-            import_bundled_output_parser=import_bundled_output_parser,
-            import_bundled_mcp_configs=import_bundled_mcp_configs,
-            import_bundled_agent_tools=import_bundled_agent_tools,
+            import_options.conflict_mode,
+            import_options.new_name,
+            import_options.selected_ai_service_id,
+            import_options.selected_silo_id,
+            import_options.selected_output_parser_id,
+            import_bundled_silo=import_options.import_bundled_silo,
+            import_bundled_output_parser=import_options.import_bundled_output_parser,
+            import_bundled_mcp_configs=import_options.import_bundled_mcp_configs,
+            import_bundled_agent_tools=import_options.import_bundled_agent_tools,
         )
         
         return ImportResponseSchema(
@@ -196,11 +215,11 @@ async def import_agent(
                   tags=["Agents"],
                   response_model=List[AgentListItemSchema])
 async def list_agents(
-    app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    app_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     List all agents for a specific app.
@@ -218,12 +237,12 @@ async def list_agents(
                   tags=["Agents"],
                   response_model=AgentDetailSchema)
 async def get_agent(
-    app_id: int, 
-    agent_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Get detailed information about a specific agent plus form data for editing.
@@ -249,14 +268,14 @@ async def get_agent(
 async def export_agent(
     app_id: int,
     agent_id: int,
-    include_ai_service: bool = Query(True, description="Bundle AI service in export"),
-    include_silo: bool = Query(True, description="Bundle silo in export"),
-    include_output_parser: bool = Query(True, description="Bundle output parser in export"),
-    include_mcp_configs: bool = Query(True, description="Bundle MCP configs in export"),
-    include_agent_tools: bool = Query(True, description="Bundle agent tools in export"),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    include_ai_service: Annotated[bool, Query(description="Bundle AI service in export")] = True,
+    include_silo: Annotated[bool, Query(description="Bundle silo in export")] = True,
+    include_output_parser: Annotated[bool, Query(description="Bundle output parser in export")] = True,
+    include_mcp_configs: Annotated[bool, Query(description="Bundle MCP configs in export")] = True,
+    include_agent_tools: Annotated[bool, Query(description="Bundle agent tools in export")] = True,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
 ):
     """Export Agent configuration (conversation history NOT included).
     
@@ -295,10 +314,10 @@ async def create_or_update_agent(
     app_id: int,
     agent_id: int,
     agent_data: CreateUpdateAgentSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Create a new agent or update an existing one.
@@ -351,10 +370,10 @@ async def create_or_update_agent(
 async def delete_agent(
     app_id: int,
     agent_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Delete an agent.
@@ -386,10 +405,10 @@ async def delete_agent(
 async def get_agent_mcp_usage(
     app_id: int,
     agent_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Get list of MCP servers that use this agent.
@@ -421,9 +440,9 @@ async def update_agent_prompt(
     app_id: int,
     agent_id: int,
     prompt_data: UpdatePromptSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Update agent system prompt or prompt template.
@@ -452,11 +471,11 @@ async def update_agent_prompt(
                   summary="Get agent playground",
                   tags=["Agents", "Playground"])
 async def agent_playground(
-    app_id: int, 
-    agent_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Get agent playground interface data.
@@ -478,11 +497,11 @@ async def agent_playground(
                   summary="Get agent analytics",
                   tags=["Agents", "Analytics"])
 async def agent_analytics(
-    app_id: int, 
-    agent_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Get agent analytics data (premium feature).
@@ -503,44 +522,117 @@ async def agent_analytics(
 
 # ==================== CHAT ENDPOINTS ====================
 
+
+def _parse_optional_json(value: Optional[str], param_name: str) -> Any:
+    """Parse a JSON-encoded optional string, logging a warning on decode failure."""
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid {param_name} JSON, ignoring")
+        return None
+
+
+def _extract_jwt_token(request: Request) -> Optional[str]:
+    """Extract the JWT bearer token from the Authorization header."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+    return None
+
+
+async def _resolve_chat_file_refs(
+    files: Optional[List[UploadFile]],
+    parsed_file_references: Optional[list],
+    agent_id: int,
+    user_context: dict,
+    conversation_id: Optional[int],
+) -> List[FileReference]:
+    """Collect and resolve file references for a chat request."""
+    file_service = FileManagementService()
+    all_refs: List[FileReference] = []
+    uploaded_ids: set = set()
+
+    if files:
+        for upload_file in files:
+            if upload_file.filename:
+                file_ref = await file_service.upload_file(
+                    file=upload_file,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=conversation_id,
+                )
+                all_refs.append(file_ref)
+                uploaded_ids.add(file_ref.file_id)
+
+    existing_files = await file_service.list_attached_files(
+        agent_id=agent_id,
+        user_context=user_context,
+        conversation_id=str(conversation_id) if conversation_id else None,
+    )
+
+    if parsed_file_references:
+        requested_ids = set(parsed_file_references)
+        existing_files = [f for f in existing_files if f["file_id"] in requested_ids]
+        logger.info(f"Filtered to {len(existing_files)} files based on file_references")
+
+    for file_data in existing_files:
+        if file_data["file_id"] not in uploaded_ids:
+            all_refs.append(
+                FileReference(
+                    file_id=file_data["file_id"],
+                    filename=file_data["filename"],
+                    file_type=file_data["file_type"],
+                    content=file_data["content"],
+                    file_path=file_data.get("file_path"),
+                )
+            )
+
+    return all_refs
+
+
 async def _save_uploaded_file(upload_file: UploadFile) -> str:
     """Save uploaded file to temporary location and return file path"""
+    import asyncio
     import tempfile
-    import os
-    
-    # Get TMP_BASE_FOLDER from config
+
     from utils.config import get_app_config
     app_config = get_app_config()
     tmp_base_folder = app_config['TMP_BASE_FOLDER']
     uploads_dir = os.path.join(tmp_base_folder, "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
-    
-    # Create temporary file in TMP_BASE_FOLDER/uploads
+
     suffix = os.path.splitext(upload_file.filename)[1] if upload_file.filename else ''
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=uploads_dir) as temp_file:
-        content = await upload_file.read()
-        temp_file.write(content)
-        temp_file_path = temp_file.name
-    
-    return temp_file_path
+    content = await upload_file.read()
+
+    def _write_temp(data: bytes) -> str:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=uploads_dir) as tf:
+            tf.write(data)
+            return tf.name
+
+    return await asyncio.get_event_loop().run_in_executor(None, _write_temp, content)
 
 
-@agents_router.post("/{agent_id}/chat",
-                  summary="Chat with agent",
-                  tags=["Agents"],
-                  response_model=ChatResponseSchema)
+@agents_router.post(
+    "/{agent_id}/chat",
+    summary="Chat with agent",
+    tags=["Agents"],
+    response_model=ChatResponseSchema,
+    responses={500: {"description": "Internal server error"}},
+)
 async def chat_with_agent(
     app_id: int,
     agent_id: int,
     request: Request,
-    message: str = Form(...),
-    files: List[UploadFile] = File(None),
-    file_references: Optional[str] = Form(None),
-    search_params: Optional[str] = Form(None),
-    conversation_id: Optional[int] = Form(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    _: None = Depends(enforce_file_size_limit)
+    message: Annotated[str, Form()],
+    files: Annotated[Optional[List[UploadFile]], File()] = None,
+    file_references: Annotated[Optional[str], Form()] = None,
+    search_params: Annotated[Optional[str], Form()] = None,
+    conversation_id: Annotated[Optional[int], Form()] = None,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+    _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
     """
     Internal API: Chat with agent for playground (OAuth authentication)
@@ -556,19 +648,13 @@ async def chat_with_agent(
     try:
         # Fetch agent to check marketplace visibility
         agent = _get_agent_or_404(db, agent_id)
-        
+
         # Check marketplace quota enforcement (only for public marketplace agents)
         if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
-            # Get user from database
             user = _get_user_from_auth_context(db, auth_context)
-            
-            # Check if user is exempt (OMNIADMIN)
             if user and not MarketplaceQuotaService.is_user_exempt(user):
-                # Fetch quota setting
                 settings_service = SystemSettingsService(db)
                 quota_value = settings_service.get_setting("marketplace_call_quota")
-                
-                # Enforce quota if quota > 0
                 if quota_value and int(quota_value) > 0:
                     quota = int(quota_value)
                     if MarketplaceQuotaService.check_quota_exceeded(user.user_id, db, quota):
@@ -577,86 +663,28 @@ async def chat_with_agent(
                             status_code=429,
                             detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC)."
                         )
-        
-        # Parse search params if provided
-        parsed_search_params = None
-        if search_params:
-            try:
-                parsed_search_params = json.loads(search_params)
-            except json.JSONDecodeError:
-                logger.warning("Invalid search_params JSON")
-        
-        # Parse file_references if provided (for filtering which files to include)
-        parsed_file_references = None
-        if file_references:
-            try:
-                parsed_file_references = json.loads(file_references)
-                if not isinstance(parsed_file_references, list):
-                    parsed_file_references = None
-            except json.JSONDecodeError:
-                logger.warning("Invalid file_references JSON, ignoring")
-        
-        # Extract JWT token from Authorization header for MCP authentication
-        auth_header = request.headers.get('Authorization', '')
-        jwt_token = None
-        if auth_header.startswith('Bearer '):
-            jwt_token = auth_header.split(' ')[1]
+
+        parsed_search_params = _parse_optional_json(search_params, "search_params")
+        parsed_file_references = _parse_optional_json(file_references, "file_references")
+        if not isinstance(parsed_file_references, list):
+            parsed_file_references = None
+
+        jwt_token = _extract_jwt_token(request)
+        if jwt_token:
             logger.debug(f"Extracted JWT token for MCP auth (length: {len(jwt_token)})")
-        
-        # Create user context for OAuth user
+
         user_context = {
             "user_id": int(auth_context.identity.id),
             "email": auth_context.identity.email,
             "oauth": True,
             "app_id": app_id,
-            "token": jwt_token  # Add JWT token for MCP authentication
+            "token": jwt_token,
         }
-        
-        # Process files using FileManagementService for persistence
-        file_service = FileManagementService()
-        all_file_references = []
-        uploaded_file_ids = set()  # Track newly uploaded files to avoid duplicates
-        
-        # Add any new files uploaded with this message
-        if files:
-            for upload_file in files:
-                if upload_file.filename:  # Skip empty file slots
-                    # Upload file to persistent storage
-                    file_ref = await file_service.upload_file(
-                        file=upload_file,
-                        agent_id=agent_id,
-                        user_context=user_context,
-                        conversation_id=conversation_id
-                    )
-                    all_file_references.append(file_ref)
-                    uploaded_file_ids.add(file_ref.file_id)
-        
-        # Get previously uploaded files for this session/conversation
-        existing_files = await file_service.list_attached_files(
-            agent_id=agent_id,
-            user_context=user_context,
-            conversation_id=str(conversation_id) if conversation_id else None
+
+        all_file_references = await _resolve_chat_file_refs(
+            files, parsed_file_references, agent_id, user_context, conversation_id
         )
-        
-        # Filter existing files if file_references was provided
-        if parsed_file_references:
-            requested_file_ids = set(parsed_file_references)
-            existing_files = [f for f in existing_files if f['file_id'] in requested_file_ids]
-            logger.info(f"Filtered to {len(existing_files)} files based on file_references")
-        
-        # Convert existing files to FileReference objects (avoiding duplicates)
-        for file_data in existing_files:
-            if file_data['file_id'] not in uploaded_file_ids:
-                file_ref = FileReference(
-                    file_id=file_data['file_id'],
-                    filename=file_data['filename'],
-                    file_type=file_data['file_type'],
-                    content=file_data['content'],
-                    file_path=file_data.get('file_path')
-                )
-                all_file_references.append(file_ref)
-        
-        # Use unified service layer with file references
+
         execution_service = AgentExecutionService(db)
         result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent_id,
@@ -665,24 +693,23 @@ async def chat_with_agent(
             search_params=parsed_search_params,
             user_context=user_context,
             conversation_id=conversation_id,
-            db=db
+            db=db,
         )
-        
+
         # Increment marketplace usage counter (if marketplace agent and not exempt)
         if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
             user = _get_user_from_auth_context(db, auth_context)
             if user and not MarketplaceQuotaService.is_user_exempt(user):
                 try:
                     MarketplaceQuotaService.increment_usage(user.user_id, db)
-                    # Note: increment_usage already commits internally
                     logger.debug(f"Incremented marketplace usage for user {user.user_id}")
                 except Exception as e:
                     logger.error(f"Failed to increment marketplace usage for user {user.user_id}: {e}")
-                    # Continue — don't fail the request if counter fails
-        
+
+
         logger.info(f"Chat request processed for agent {agent_id} by user {auth_context.identity.id}")
         return ChatResponseSchema(**result)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -690,21 +717,24 @@ async def chat_with_agent(
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
-@agents_router.post("/{agent_id}/chat/stream",
-                  summary="Chat with agent (streaming)",
-                  tags=["Agents"])
+@agents_router.post(
+    "/{agent_id}/chat/stream",
+    summary="Chat with agent (streaming)",
+    tags=["Agents"],
+    responses={500: {"description": "Internal server error"}},
+)
 async def chat_with_agent_stream(
     app_id: int,
     agent_id: int,
     request: Request,
-    message: str = Form(...),
-    files: List[UploadFile] = File(None),
-    file_references: Optional[str] = Form(None),
-    search_params: Optional[str] = Form(None),
-    conversation_id: Optional[int] = Form(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    _: None = Depends(enforce_file_size_limit)
+    message: Annotated[str, Form()],
+    files: Annotated[Optional[List[UploadFile]], File()] = None,
+    file_references: Annotated[Optional[str], Form()] = None,
+    search_params: Annotated[Optional[str], Form()] = None,
+    conversation_id: Annotated[Optional[int], Form()] = None,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+    _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
     """
     Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)
@@ -713,79 +743,25 @@ async def chat_with_agent_stream(
     thinking, done, error.  The playground uses this endpoint for real-time responses.
     """
     try:
-        # Parse search params if provided
-        parsed_search_params = None
-        if search_params:
-            try:
-                parsed_search_params = json.loads(search_params)
-            except json.JSONDecodeError:
-                logger.warning("Invalid search_params JSON")
+        parsed_search_params = _parse_optional_json(search_params, "search_params")
+        parsed_file_references = _parse_optional_json(file_references, "file_references")
+        if not isinstance(parsed_file_references, list):
+            parsed_file_references = None
 
-        # Parse file_references if provided
-        parsed_file_references = None
-        if file_references:
-            try:
-                parsed_file_references = json.loads(file_references)
-                if not isinstance(parsed_file_references, list):
-                    parsed_file_references = None
-            except json.JSONDecodeError:
-                logger.warning("Invalid file_references JSON, ignoring")
+        jwt_token = _extract_jwt_token(request)
 
-        # Extract JWT token for MCP authentication
-        auth_header = request.headers.get('Authorization', '')
-        jwt_token = None
-        if auth_header.startswith('Bearer '):
-            jwt_token = auth_header.split(' ')[1]
-
-        # Create user context
         user_context = {
             "user_id": int(auth_context.identity.id),
             "email": auth_context.identity.email,
             "oauth": True,
             "app_id": app_id,
-            "token": jwt_token
+            "token": jwt_token,
         }
 
-        # Process files using FileManagementService
-        file_service = FileManagementService()
-        all_file_references = []
-        uploaded_file_ids = set()
-
-        if files:
-            for upload_file in files:
-                if upload_file.filename:
-                    file_ref = await file_service.upload_file(
-                        file=upload_file,
-                        agent_id=agent_id,
-                        user_context=user_context,
-                        conversation_id=conversation_id
-                    )
-                    all_file_references.append(file_ref)
-                    uploaded_file_ids.add(file_ref.file_id)
-
-        # Get previously uploaded files
-        existing_files = await file_service.list_attached_files(
-            agent_id=agent_id,
-            user_context=user_context,
-            conversation_id=str(conversation_id) if conversation_id else None
+        all_file_references = await _resolve_chat_file_refs(
+            files, parsed_file_references, agent_id, user_context, conversation_id
         )
 
-        if parsed_file_references:
-            requested_file_ids = set(parsed_file_references)
-            existing_files = [f for f in existing_files if f['file_id'] in requested_file_ids]
-
-        for file_data in existing_files:
-            if file_data['file_id'] not in uploaded_file_ids:
-                file_ref = FileReference(
-                    file_id=file_data['file_id'],
-                    filename=file_data['filename'],
-                    file_type=file_data['file_type'],
-                    content=file_data['content'],
-                    file_path=file_data.get('file_path')
-                )
-                all_file_references.append(file_ref)
-
-        # Use streaming service
         streaming_service = AgentStreamingService(db)
         generator = streaming_service.stream_agent_chat(
             agent_id=agent_id,
@@ -794,7 +770,7 @@ async def chat_with_agent_stream(
             search_params=parsed_search_params,
             user_context=user_context,
             conversation_id=conversation_id,
-            db=db
+            db=db,
         )
 
         logger.info(f"Streaming chat request for agent {agent_id} by user {auth_context.identity.id}")
@@ -805,7 +781,7 @@ async def chat_with_agent_stream(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-            }
+            },
         )
 
     except HTTPException:
@@ -815,15 +791,18 @@ async def chat_with_agent_stream(
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
-@agents_router.post("/{agent_id}/reset",
-                  summary="Reset conversation",
-                  tags=["Agents"],
-                  response_model=ResetResponseSchema)
+@agents_router.post(
+    "/{agent_id}/reset",
+    summary="Reset conversation",
+    tags=["Agents"],
+    response_model=ResetResponseSchema,
+    responses={500: {"description": "Internal server error"}},
+)
 async def reset_conversation(
     app_id: int,
     agent_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Internal API: Reset conversation for playground (OAuth authentication)
@@ -857,16 +836,19 @@ async def reset_conversation(
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
-@agents_router.get("/{agent_id}/conversation-history",
-                  summary="Get conversation history",
-                  tags=["Agents"],
-                  response_model=ConversationHistorySchema)
+@agents_router.get(
+    "/{agent_id}/conversation-history",
+    summary="Get conversation history",
+    tags=["Agents"],
+    response_model=ConversationHistorySchema,
+    responses={404: {"description": "Agent not found"}, 500: {"description": "Internal server error"}},
+)
 async def get_conversation_history(
     app_id: int,
     agent_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    agent_service: AgentService = Depends(get_agent_service)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Internal API: Get conversation history for playground (OAuth authentication)
@@ -906,17 +888,20 @@ async def get_conversation_history(
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 
-@agents_router.post("/{agent_id}/upload-file",
-                  summary="Upload file for chat",
-                  tags=["Agents"])
+@agents_router.post(
+    "/{agent_id}/upload-file",
+    summary="Upload file for chat",
+    tags=["Agents"],
+    responses={500: {"description": "File upload failed"}},
+)
 async def upload_file_for_chat(
     app_id: int,
     agent_id: int,
-    file: UploadFile = File(...),
-    conversation_id: Optional[int] = Form(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    _: None = Depends(enforce_file_size_limit)
+    file: Annotated[UploadFile, File()],
+    conversation_id: Annotated[Optional[int], Form()] = None,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+    _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
     """
     Internal API: Upload file for chat (OAuth authentication)
@@ -964,15 +949,18 @@ async def upload_file_for_chat(
         raise HTTPException(status_code=500, detail="File upload failed")
 
 
-@agents_router.get("/{agent_id}/files",
-                 summary="List attached files",
-                 tags=["Agents"])
+@agents_router.get(
+    "/{agent_id}/files",
+    summary="List attached files",
+    tags=["Agents"],
+    responses={500: {"description": "Failed to list files"}},
+)
 async def list_attached_files(
     app_id: int,
     agent_id: int,
     conversation_id: Optional[int] = None,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
     Internal API: List attached files for chat (OAuth authentication)
@@ -1011,16 +999,19 @@ async def list_attached_files(
         raise HTTPException(status_code=500, detail="Failed to list files")
 
 
-@agents_router.delete("/{agent_id}/files/{file_id}",
-                    summary="Remove attached file",
-                    tags=["Agents"])
+@agents_router.delete(
+    "/{agent_id}/files/{file_id}",
+    summary="Remove attached file",
+    tags=["Agents"],
+    responses={500: {"description": "Failed to remove file"}},
+)
 async def remove_attached_file(
     app_id: int,
     agent_id: int,
     file_id: str,
     conversation_id: Optional[int] = None,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
     Internal API: Remove attached file (OAuth authentication)
@@ -1056,17 +1047,20 @@ async def remove_attached_file(
         raise HTTPException(status_code=500, detail="Failed to remove file") 
 
 
-@agents_router.get("/{agent_id}/files/{file_id}/download",
-                   summary="Download a file (uploaded or agent-generated)",
-                   tags=["Agents"])
+@agents_router.get(
+    "/{agent_id}/files/{file_id}/download",
+    summary="Download a file (uploaded or agent-generated)",
+    tags=["Agents"],
+    responses={404: {"description": "File not found"}, 500: {"description": "File download failed"}},
+)
 async def download_file(
     app_id: int,
     agent_id: int,
     file_id: str,
     request: Request,
     conversation_id: Optional[int] = None,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
     Internal API: Download an uploaded or agent-generated file.
@@ -1136,9 +1130,9 @@ async def update_marketplace_visibility(
     app_id: int,
     agent_id: int,
     data: MarketplaceVisibilityUpdateSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update an agent's marketplace visibility (unpublished/private/public)."""
     try:
@@ -1160,9 +1154,9 @@ async def update_marketplace_visibility(
 async def get_marketplace_profile(
     app_id: int,
     agent_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get the marketplace profile for an agent (EDITOR+ management view)."""
     profile = MarketplaceService.get_marketplace_profile(db, agent_id, app_id)
@@ -1182,9 +1176,9 @@ async def update_marketplace_profile(
     app_id: int,
     agent_id: int,
     profile_data: MarketplaceProfileCreateUpdateSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Create or update the marketplace profile for an agent."""
     try:

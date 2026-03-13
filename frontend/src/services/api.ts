@@ -138,6 +138,12 @@ class ApiService {
     });
   }
 
+  async dismissOnboarding(appId: number) {
+    return this.request(`/internal/apps/${appId}/onboarding-dismissed`, {
+      method: 'PATCH',
+    });
+  }
+
   async deleteApp(appId: number) {
     return this.request(`/internal/apps/${appId}`, {
       method: 'DELETE',

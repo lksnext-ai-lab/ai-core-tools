@@ -14,7 +14,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def enforce_file_size_limit(
+def enforce_file_size_limit(
     app_id: int,
     request: Request,
     db: Session = Depends(get_db)
@@ -84,7 +84,7 @@ async def enforce_file_size_limit(
         # Continue without validation on errors
 
 
-async def validate_files_size(
+def validate_files_size(
     files: List[UploadFile],
     max_size_mb: int,
     app_id: int

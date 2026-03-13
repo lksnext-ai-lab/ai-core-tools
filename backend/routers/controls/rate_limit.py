@@ -14,7 +14,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def enforce_app_rate_limit(
+def enforce_app_rate_limit(
     app_id: int,
     response: Response,
     db: Session = Depends(get_db)
