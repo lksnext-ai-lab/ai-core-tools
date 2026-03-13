@@ -52,6 +52,16 @@ export const PageTitle: React.FC<PageTitleProps> = ({ navigationConfig }) => {
 
   const pathname = location.pathname;
 
+  // Admin routes don't have :appId in the URL — handle them first
+  const adminPrefixes = ['/admin/users', '/admin/stats', '/admin/settings'];
+  const isAdminRoute = adminPrefixes.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  if (isAdminRoute) {
+    const parts: TitlePart[] = [{ label: 'Administration' }];
+    const label = buildPathLookup(navigationConfig, '').get(pathname);
+    if (label) parts.push({ label });
+    return renderTitle(parts);
+  }
+
   // No title for top-level pages or when outside an app
   if (!appId) return null;
   if (TOP_LEVEL_PATHS.has(pathname)) return null;
@@ -64,16 +74,6 @@ export const PageTitle: React.FC<PageTitleProps> = ({ navigationConfig }) => {
   const parts: TitlePart[] = [];
 
   const settingsBase = `/apps/${appId}/settings`;
-  const adminPrefixes = ['/admin/users', '/admin/stats', '/admin/settings'];
-
-  // Admin routes
-  const isAdminRoute = adminPrefixes.some((p) => pathname === p || pathname.startsWith(p + '/'));
-  if (isAdminRoute) {
-    parts.push({ label: 'Administration' });
-    const label = pathLookup.get(pathname);
-    if (label) parts.push({ label });
-    return renderTitle(parts);
-  }
 
   // Settings sub-routes
   if (pathname !== settingsBase && pathname.startsWith(settingsBase + '/')) {
