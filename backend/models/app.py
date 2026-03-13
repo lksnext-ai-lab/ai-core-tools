@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -35,7 +35,8 @@ class App(Base):
     ai_services = relationship('AIService', back_populates='app', lazy=True)
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
-    
+    onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')
+
     def get_user_role(self, user_id):
         """Get the role of a user in this app"""
         from services.app_collaboration_service import AppCollaborationService

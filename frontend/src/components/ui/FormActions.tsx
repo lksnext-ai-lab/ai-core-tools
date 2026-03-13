@@ -26,7 +26,7 @@ export function FormActions({
   containerClassName = '',
   showCancel = true,
   submitDisabled = false
-}: FormActionsProps) {
+}: Readonly<FormActionsProps>) {
   return (
     <div className={`flex justify-end space-x-3 pt-4 border-t border-gray-200 ${containerClassName}`}>
       {showCancel && (

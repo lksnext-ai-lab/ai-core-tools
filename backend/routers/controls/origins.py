@@ -13,7 +13,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def enforce_allowed_origins(
+def enforce_allowed_origins(
     app_id: int,
     request: Request,
     db: Session = Depends(get_db)

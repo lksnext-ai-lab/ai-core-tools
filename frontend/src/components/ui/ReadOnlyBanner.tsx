@@ -1,3 +1,5 @@
+import { Lock } from 'lucide-react';
+
 interface ReadOnlyBannerProps {
   userRole: string;
   minRole?: string;
@@ -17,7 +19,7 @@ function ReadOnlyBanner({ userRole, minRole = 'app owners' }: Readonly<ReadOnlyB
   return (
     <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
       <div className="flex items-center">
-        <span className="text-amber-500 text-lg mr-2">🔒</span>
+        <Lock className="w-4 h-4 text-amber-500 mr-2" />
         <p className="text-sm text-amber-700">
           <strong>Read-only mode:</strong> Only {roleDisplay} can modify these settings. You have {userRole} access.
         </p>

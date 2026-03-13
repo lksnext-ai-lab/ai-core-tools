@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import FormActions from './FormActions';
 import { apiService } from '../../services/api';
 import Alert from '../ui/Alert';
@@ -111,7 +112,7 @@ function BaseServiceForm({
     try {
       let result;
       if (serviceType === 'AI') {
-        result = await apiService.testAIServiceConnectionWithConfig(parseInt(appId), formData);
+        result = await apiService.testAIServiceConnectionWithConfig(Number.parseInt(appId), formData);
       } else {
         // Embedding service test not implemented yet
         result = { status: 'error', message: 'Testing not supported for this service type yet' };
@@ -298,7 +299,7 @@ function BaseServiceForm({
           <div className={`p-3 rounded-lg border ${testResult.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <span className="text-xl">{testResult.status === 'success' ? '✅' : '❌'}</span>
+                {testResult.status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
               </div>
               <div className="ml-3 w-full">
                 <h3 className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>

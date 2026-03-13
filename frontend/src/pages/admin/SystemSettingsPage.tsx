@@ -13,6 +13,27 @@ interface SystemSetting {
   source: 'env' | 'db' | 'default';
 }
 
+function validateValue(value: string, type: string): boolean {
+  if (type === 'integer') {
+    return /^-?\d+$/.test(value);
+  }
+  if (type === 'boolean') {
+    return ['true', 'false'].includes(value.toLowerCase());
+  }
+  return true;
+}
+
+function getSourceBadgeColor(source: 'env' | 'db' | 'default'): string {
+  switch (source) {
+    case 'env':
+      return 'bg-blue-100 text-blue-800';
+    case 'db':
+      return 'bg-green-100 text-green-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+}
+
 function SystemSettingsPage() {
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,32 +149,6 @@ function SystemSettingsPage() {
         newSet.delete(setting.key);
         return newSet;
       });
-    }
-  }
-
-  function validateValue(value: string, type: string): boolean {
-    if (type === 'integer') {
-      return /^-?\d+$/.test(value);
-    }
-    if (type === 'boolean') {
-      return ['true', 'false'].includes(value.toLowerCase());
-    }
-    if (type === 'string') {
-      return true;
-    }
-    return true;
-  }
-
-  function getSourceBadgeColor(source: 'env' | 'db' | 'default'): string {
-    switch (source) {
-      case 'env':
-        return 'bg-blue-100 text-blue-800';
-      case 'db':
-        return 'bg-green-100 text-green-800';
-      case 'default':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
     }
   }
 

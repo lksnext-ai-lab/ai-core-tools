@@ -14,7 +14,7 @@ function AppStepApiKeys({
   selection,
   apiKeys,
   onApiKeyChange,
-}: Props) {
+}: Readonly<Props>) {
   // Collect all selected services that need API keys
   const servicesNeedingKeys = [
     ...preview.ai_services,

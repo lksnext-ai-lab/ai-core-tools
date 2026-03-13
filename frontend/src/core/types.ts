@@ -1,3 +1,5 @@
+import React from 'react';
+
 export interface ClientConfig {
   clientId: string;
   name: string;
@@ -178,7 +180,7 @@ export interface ToolAgent {
 export interface NavigationItem {
   path: string;
   name: string;
-  icon?: string;
+  icon?: React.ReactNode;
   section?: string;
   protected?: boolean;
   adminOnly?: boolean;
@@ -187,6 +189,7 @@ export interface NavigationItem {
 export interface NavigationConfig {
   mainFeatures?: NavigationItem[];
   appNavigation?: NavigationItem[];
+  settingsNavigation?: NavigationItem[];
   settings?: NavigationItem[];
   admin?: NavigationItem[];
   custom?: NavigationItem[];
@@ -196,7 +199,7 @@ export interface NavigationConfig {
 export interface NavigationOverride {
   path: string;
   name?: string;
-  icon?: string;
+  icon?: React.ReactNode;
   section?: string;
   protected?: boolean;
   adminOnly?: boolean;
@@ -206,6 +209,7 @@ export interface NavigationOverride {
 export interface NavigationAdditions {
   mainFeatures?: NavigationItem[];
   appNavigation?: NavigationItem[];
+  settingsNavigation?: NavigationItem[];
   settings?: NavigationItem[];
   admin?: NavigationItem[];
   custom?: NavigationItem[];

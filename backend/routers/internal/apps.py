@@ -477,8 +477,37 @@ async def get_app(
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=app.agent_cors_origins,
+        onboarding_dismissed=app.onboarding_dismissed or False,
         **counts
     )
+
+
+@apps_router.patch("/{app_id}/onboarding-dismissed",
+                   summary="Dismiss getting started checklist",
+                   tags=["Apps"],
+                   status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_onboarding(
+    app_id: int,
+    auth_context: AuthContext = Depends(get_current_user_oauth),
+    role: AppRole = Depends(require_min_role("editor")),
+    db: Session = Depends(get_db)
+):
+    """
+    Mark the getting started checklist as dismissed for the app.
+    Requires editor role or above.
+    """
+    app_service, _ = get_services(db)
+
+    app = app_service.get_app(app_id)
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=APP_NOT_FOUND_MSG
+        )
+
+    from repositories.app_repository import AppRepository
+    repo = AppRepository(db)
+    repo.update(app, {'onboarding_dismissed': True})
 
 
 @apps_router.post("/",

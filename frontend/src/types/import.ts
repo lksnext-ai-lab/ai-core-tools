@@ -124,13 +124,13 @@ export const COMPONENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export const COMPONENT_TYPE_ICONS: Record<string, string> = {
-  ai_service: '🧠',
-  embedding_service: '📐',
-  output_parser: '📋',
-  mcp_config: '🔌',
-  silo: '🗄️',
-  repository: '📁',
-  domain: '🌐',
-  agent: '🤖',
-  app: '📦',
+  ai_service: 'AI',
+  embedding_service: 'Embed',
+  output_parser: 'Parser',
+  mcp_config: 'MCP',
+  silo: 'Silo',
+  repository: 'Repo',
+  domain: 'Domain',
+  agent: 'Agent',
+  app: 'App',
 };

@@ -29,11 +29,12 @@ class AppCollaborationRepository:
         
         collaborated_apps = [collab.app for collab in collaborations if collab.app]
         
-        # Combine and remove duplicates
-        all_apps = list({app.app_id: app for app in owned_apps + collaborated_apps}.values())
-        
-        # Sort by creation date, handling None values
-        return sorted(all_apps, key=lambda x: x.create_date or datetime.min, reverse=True)
+        # Combine, remove duplicates and sort by creation date (handling None values)
+        return sorted(
+            {app.app_id: app for app in owned_apps + collaborated_apps}.values(),
+            key=lambda x: x.create_date or datetime.min,
+            reverse=True
+        )
     
     def can_user_manage_app(self, user_id: int, app_id: int) -> bool:
         """Check if user can manage an app (owner only)"""

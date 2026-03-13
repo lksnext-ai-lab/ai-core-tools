@@ -5,7 +5,7 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
-function ProtectedRoute({ children }: ProtectedRouteProps) {
+function ProtectedRoute({ children }: Readonly<ProtectedRouteProps>) {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
 

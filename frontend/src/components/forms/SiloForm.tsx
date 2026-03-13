@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { AlertTriangle, Info } from 'lucide-react';
 import { apiService } from '../../services/api';
 
 interface VectorDbOption {
@@ -38,10 +39,9 @@ interface SiloFormProps {
   silo?: Silo;
   onSubmit: (data: SiloFormData) => Promise<void>;
   onCancel: () => void;
-  loading?: boolean;
 }
 
-function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
+function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
   const { appId } = useParams();
   const [formData, setFormData] = useState<SiloFormData>({
     name: '',
@@ -101,7 +101,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
       setLoadingFormData(true);
       setError(null);
       
-      const appIdNumber = parseInt(appId, 10);
+      const appIdNumber = Number.parseInt(appId, 10);
 
       // Load output parsers and embedding services in parallel
       const [parsersResponse, servicesResponse] = await Promise.all([
@@ -145,7 +145,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
     let parsedValue: string | number | undefined = value === '' ? undefined : value;
 
     if (name === 'embedding_service_id' || name === 'output_parser_id') {
-      parsedValue = value === '' ? undefined : parseInt(value, 10);
+      parsedValue = value === '' ? undefined : Number.parseInt(value, 10);
     } else if (name === 'vector_db_type' && typeof value === 'string') {
       parsedValue = value.toUpperCase();
     }
@@ -333,7 +333,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
           {error && (
             <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex">
-                <span className="text-red-400 text-xl mr-3">⚠️</span>
+                <AlertTriangle className="w-4 h-4 text-yellow-500 mr-3 shrink-0" />
                 <div>
                   <h3 className="text-sm font-medium text-red-800">Error</h3>
                   <p className="text-sm text-red-600 mt-1">{error}</p>
@@ -370,7 +370,7 @@ function SiloForm({ silo, onSubmit, onCancel}: SiloFormProps) {
       <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-blue-400 text-xl">ℹ️</span>
+            <Info className="w-4 h-4 text-blue-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-blue-800">

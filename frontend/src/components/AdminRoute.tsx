@@ -15,7 +15,7 @@ interface AdminRouteProps {
  * 
  * If not authenticated or not admin, redirects to home page
  */
-function AdminRoute({ children }: AdminRouteProps) {
+function AdminRoute({ children }: Readonly<AdminRouteProps>) {
   const { user, loading } = useUser();
 
   // Debug logging
@@ -33,7 +33,7 @@ function AdminRoute({ children }: AdminRouteProps) {
   }
 
   // If not authenticated or not admin, redirect to home
-  if (!user || !user.is_admin) {
+  if (!user?.is_admin) {
     console.log('AdminRoute - Access DENIED - Redirecting to home');
     return <Navigate to="/" replace />;
   }

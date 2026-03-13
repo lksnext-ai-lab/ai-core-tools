@@ -50,7 +50,7 @@ export function useSettingsData<T>(
     try {
       setLoading(true);
       setError(null);
-      const response = await apiMethod(parseInt(appId));
+      const response = await apiMethod(Number.parseInt(appId));
       setData(response);
       
       // Cache the response

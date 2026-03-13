@@ -16,99 +16,81 @@ interface Props {
   apiKeys: Record<string, string>;
 }
 
+type ReviewSelectedItem = {
+  icon: string;
+  type: string;
+  name: string;
+  apiKeyStatus?: string;
+};
+
+type ReviewSkippedItem = {
+  icon: string;
+  type: string;
+  name: string;
+};
+
+function getApiKeyStatus(
+  needsApiKey: boolean,
+  componentName: string,
+  apiKeys: Record<string, string>
+): string | undefined {
+  if (!needsApiKey) return undefined;
+  return apiKeys[componentName] ? 'Provided' : 'CHANGE_ME';
+}
+
+function buildReviewRows(
+  preview: AppImportPreview,
+  selection: Record<string, boolean>,
+  apiKeys: Record<string, string>
+): { selectedItems: ReviewSelectedItem[]; skippedItems: ReviewSkippedItem[] } {
+  const categories = [
+    { type: 'ai_service', items: preview.ai_services },
+    { type: 'embedding_service', items: preview.embedding_services },
+    { type: 'output_parser', items: preview.output_parsers },
+    { type: 'mcp_config', items: preview.mcp_configs },
+    { type: 'silo', items: preview.silos },
+    { type: 'repository', items: preview.repositories },
+    { type: 'domain', items: preview.domains },
+    { type: 'agent', items: preview.agents },
+  ];
+
+  const selectedItems: ReviewSelectedItem[] = [];
+  const skippedItems: ReviewSkippedItem[] = [];
+
+  for (const cat of categories) {
+    for (const item of cat.items) {
+      const key = `${cat.type}:${item.component_name}`;
+      const icon = COMPONENT_TYPE_ICONS[cat.type] || '';
+      const typeLabel = COMPONENT_TYPE_LABELS[cat.type] || cat.type;
+
+      if (selection[key]) {
+        const apiKeyStatus = getApiKeyStatus(
+          item.needs_api_key,
+          item.component_name,
+          apiKeys
+        );
+        selectedItems.push({ icon, type: typeLabel, name: item.component_name, apiKeyStatus });
+      } else {
+        skippedItems.push({ icon, type: typeLabel, name: item.component_name });
+      }
+    }
+  }
+
+  return { selectedItems, skippedItems };
+}
+
 function AppStepReview({
   preview,
   appName,
   conflictMode,
   selection,
   apiKeys,
-}: Props) {
-  // Build summary rows from selection
-  const categories = [
-    {
-      type: 'ai_service',
-      label: 'AI Services',
-      items: preview.ai_services,
-    },
-    {
-      type: 'embedding_service',
-      label: 'Embedding Services',
-      items: preview.embedding_services,
-    },
-    {
-      type: 'output_parser',
-      label: 'Output Parsers',
-      items: preview.output_parsers,
-    },
-    {
-      type: 'mcp_config',
-      label: 'MCP Configs',
-      items: preview.mcp_configs,
-    },
-    {
-      type: 'silo',
-      label: 'Silos',
-      items: preview.silos,
-    },
-    {
-      type: 'repository',
-      label: 'Repositories',
-      items: preview.repositories,
-    },
-    {
-      type: 'domain',
-      label: 'Domains',
-      items: preview.domains,
-    },
-    {
-      type: 'agent',
-      label: 'Agents',
-      items: preview.agents,
-    },
-  ];
-
-  const selectedItems: Array<{
-    icon: string;
-    type: string;
-    name: string;
-    apiKeyStatus?: string;
-  }> = [];
-  const skippedItems: Array<{
-    icon: string;
-    type: string;
-    name: string;
-  }> = [];
-
-  for (const cat of categories) {
-    for (const item of cat.items) {
-      const key = `${cat.type}:${item.component_name}`;
-      const icon =
-        COMPONENT_TYPE_ICONS[cat.type] || '';
-      const typeLabel =
-        COMPONENT_TYPE_LABELS[cat.type] || cat.type;
-
-      if (selection[key]) {
-        const apiKeyStatus =
-          item.needs_api_key
-            ? apiKeys[item.component_name]
-              ? 'Provided'
-              : 'CHANGE_ME'
-            : undefined;
-        selectedItems.push({
-          icon,
-          type: typeLabel,
-          name: item.component_name,
-          apiKeyStatus,
-        });
-      } else {
-        skippedItems.push({
-          icon,
-          type: typeLabel,
-          name: item.component_name,
-        });
-      }
-    }
-  }
+}: Readonly<Props>) {
+  const { selectedItems, skippedItems } = buildReviewRows(
+    preview,
+    selection,
+    apiKeys
+  );
 
   return (
     <div className="space-y-4">
@@ -209,8 +191,8 @@ function AppStepReview({
           title="Warnings"
           message={
             <ul className="list-disc list-inside space-y-1">
-              {preview.global_warnings.map((w, i) => (
-                <li key={i}>{w}</li>
+              {preview.global_warnings.map((w) => (
+                <li key={w}>{w}</li>
               ))}
             </ul>
           }

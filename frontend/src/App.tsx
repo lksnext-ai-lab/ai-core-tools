@@ -22,7 +22,7 @@ import type { LibraryConfig } from './core/types';
 
 // Get runtime configuration injected by container at startup
 // Falls back to build-time environment variables for local development
-const runtimeConfig = (window as any).__RUNTIME_CONFIG__;
+const runtimeConfig = (globalThis as unknown as { __RUNTIME_CONFIG__?: Record<string, string> }).__RUNTIME_CONFIG__;
 
 const getConfig = (key: string, fallback: string = ''): string => {
   return runtimeConfig?.[key] || import.meta.env[key] || fallback;

@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { Check } from 'lucide-react';
 
 export interface StepDefinition {
   id: string;
@@ -26,7 +27,7 @@ function StepperHeader({
   currentStep,
   stepStatuses = {},
   onStepClick,
-}: StepperHeaderProps) {
+}: Readonly<StepperHeaderProps>) {
   const getStatus = (index: number): StepStatus => {
     const step = steps[index];
     if (stepStatuses[step.id]) return stepStatuses[step.id];
@@ -71,7 +72,7 @@ function StepperHeader({
                     : 'cursor-default'
                 }`}
               >
-                {s === 'completed' ? '✓' : index + 1}
+                {s === 'completed' ? <Check className="w-4 h-4" /> : index + 1}
               </button>
               <span
                 className={`mt-1 text-xs text-center max-w-[80px] leading-tight ${
@@ -123,7 +124,7 @@ function StepperNavigation({
   isSubmitting = false,
   showBack = true,
   showNext = true,
-}: StepperNavigationProps) {
+}: Readonly<StepperNavigationProps>) {
   const isFinalStep = currentStep === totalSteps - 1;
   const defaultNextLabel = isFinalStep ? 'Confirm Import' : 'Next';
   const label = nextLabel || defaultNextLabel;
@@ -200,7 +201,7 @@ function StepperContainer({
   isSubmitting,
   showBack = true,
   showNext = true,
-}: StepperContainerProps) {
+}: Readonly<StepperContainerProps>) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <StepperHeader

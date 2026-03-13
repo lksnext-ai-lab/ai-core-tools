@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Mail, Handshake, Crown } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
@@ -228,7 +229,7 @@ const ProfilePage: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <span className="bg-yellow-100 text-yellow-600 p-2 rounded-lg mr-3">📩</span>Pending Invitations
+              <span className="bg-yellow-100 text-yellow-600 p-2 rounded-lg mr-3"><Mail className="w-5 h-5" /></span>Pending Invitations
             </h2>
             {invitations.length > 0 && (
               <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
@@ -302,7 +303,7 @@ const ProfilePage: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-3">🤝</span>Active Collaborations
+              <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-3"><Handshake className="w-5 h-5" /></span>Active Collaborations
             </h2>
             {collaborations.length > 0 && (
               <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
@@ -331,7 +332,7 @@ const ProfilePage: React.FC = () => {
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-gray-500 flex items-center">
-                          <span className="mr-1">👑</span>
+                          <Crown className="w-4 h-4 mr-1 inline-block" />
                           {app.owner_name || app.owner_email || 'Unknown'}
                         </p>
                       </div>

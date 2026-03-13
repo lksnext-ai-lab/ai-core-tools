@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Annotated, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -21,20 +21,24 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["admin"])
 
 
-def require_admin(auth_context: AuthContext = Depends(get_current_user_oauth)):
+def require_admin(auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)]):
     """Dependency to require admin access"""
     if not is_omniadmin(auth_context.identity.email):
         raise HTTPException(status_code=403, detail="Admin access required")
     return auth_context
 
 
-@router.get("/users", response_model=UserListResponse)
+@router.get(
+    "/users",
+    response_model=UserListResponse,
+    responses={500: {"description": "Internal server error"}},
+)
 async def list_users(
-    page: int = Query(1, ge=1, description="Page number"),
-    per_page: int = Query(10, ge=1, le=100, description="Users per page"),
-    search: Optional[str] = Query(None, description="Search query for name or email"),
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100, description="Users per page")] = 10,
+    search: Annotated[Optional[str], Query(description="Search query for name or email")] = None,
 ):
     """List all users with pagination and optional search"""
     try:
@@ -56,11 +60,18 @@ async def list_users(
         raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}")
 
 
-@router.get("/users/{user_id}", response_model=UserDetailResponse)
+@router.get(
+    "/users/{user_id}",
+    response_model=UserDetailResponse,
+    responses={
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def get_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get detailed user information"""
     try:
@@ -83,11 +94,17 @@ async def get_user(
         raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
 
 
-@router.delete("/users/{user_id}")
+@router.delete(
+    "/users/{user_id}",
+    responses={
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def delete_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete a user and all associated data"""
     try:
@@ -106,11 +123,17 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
 
-@router.post("/users/{user_id}/activate")
+@router.post(
+    "/users/{user_id}/activate",
+    responses={
+        400: {"description": "Bad request"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def activate_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Activate a user account"""
     try:
@@ -128,11 +151,17 @@ async def activate_user(
         raise HTTPException(status_code=500, detail=f"Error activating user: {str(e)}")
 
 
-@router.post("/users/{user_id}/deactivate")
+@router.post(
+    "/users/{user_id}/deactivate",
+    responses={
+        400: {"description": "Bad request"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def deactivate_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Deactivate a user account"""
     try:
@@ -213,10 +242,14 @@ async def reset_user_marketplace_quota(
         raise HTTPException(status_code=500, detail=f"Error resetting marketplace quota: {str(e)}")
 
 
-@router.get("/stats", response_model=SystemStatsResponse)
+@router.get(
+    "/stats",
+    response_model=SystemStatsResponse,
+    responses={500: {"description": "Internal server error"}},
+)
 async def get_system_stats(
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get system-wide statistics"""
     try:
@@ -248,10 +281,14 @@ async def get_system_stats(
         raise HTTPException(status_code=500, detail=f"Error retrieving system stats: {str(e)}")
 
 
-@router.get("/settings", response_model=list[SystemSettingRead])
+@router.get(
+    "/settings",
+    response_model=list[SystemSettingRead],
+    responses={500: {"description": "Internal server error"}},
+)
 async def list_settings(
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """List all system settings with resolved values and metadata"""
     try:
@@ -263,12 +300,20 @@ async def list_settings(
         raise HTTPException(status_code=500, detail=f"Error retrieving system settings: {str(e)}")
 
 
-@router.put("/settings/{key}", response_model=SystemSettingRead)
+@router.put(
+    "/settings/{key}",
+    response_model=SystemSettingRead,
+    responses={
+        404: {"description": "Setting not found"},
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def update_setting(
     key: str,
     update: SystemSettingUpdate,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update a system setting value"""
     try:
@@ -293,11 +338,17 @@ async def update_setting(
         raise HTTPException(status_code=500, detail=f"Error updating setting: {str(e)}")
 
 
-@router.delete("/settings/{key}")
+@router.delete(
+    "/settings/{key}",
+    responses={
+        404: {"description": "Setting not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def reset_setting(
     key: str,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Reset a system setting to its default value"""
     try:

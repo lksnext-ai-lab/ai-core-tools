@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Lightbulb } from 'lucide-react';
 import FormActions from './FormActions';
 
 interface SkillFormData {
@@ -166,7 +167,7 @@ When reviewing code, follow these steps...
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-blue-400 text-xl">💡</span>
+            <Lightbulb className="w-4 h-4 text-yellow-500" />
           </div>
           <div className="ml-3 text-sm text-blue-700">
             <p>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { KeyRound, Pencil, PauseCircle, PlayCircle, Trash2, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import APIKeyForm from '../../components/forms/APIKeyForm';
 import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
@@ -54,7 +55,7 @@ function APIKeysPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getAPIKeys(parseInt(appId));
+      const response = await apiService.getAPIKeys(Number.parseInt(appId));
       setApiKeys(response);
       // Cache the response
       settingsCache.setAPIKeys(appId, response);
@@ -72,7 +73,7 @@ function APIKeysPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getAPIKeys(parseInt(appId));
+      const response = await apiService.getAPIKeys(Number.parseInt(appId));
       setApiKeys(response);
       // Cache the response
       settingsCache.setAPIKeys(appId, response);
@@ -92,7 +93,7 @@ function APIKeysPage() {
     if (!appId) return;
 
     try {
-      await apiService.deleteAPIKey(parseInt(appId), keyId);
+      await apiService.deleteAPIKey(Number.parseInt(appId), keyId);
       // Remove from local state
       const newApiKeys = apiKeys.filter(k => k.key_id !== keyId);
       setApiKeys(newApiKeys);
@@ -108,7 +109,7 @@ function APIKeysPage() {
     if (!appId) return;
 
     try {
-      const response = await apiService.toggleAPIKey(parseInt(appId), keyId);
+      const response = await apiService.toggleAPIKey(Number.parseInt(appId), keyId);
       // Update local state
       const updatedApiKeys = apiKeys.map(key => 
         key.key_id === keyId 
@@ -133,7 +134,7 @@ function APIKeysPage() {
     if (!appId) return;
     
     try {
-      const key = await apiService.getAPIKey(parseInt(appId), keyId);
+      const key = await apiService.getAPIKey(Number.parseInt(appId), keyId);
       setEditingKey(key);
       setIsModalOpen(true);
     } catch (err) {
@@ -148,13 +149,13 @@ function APIKeysPage() {
     try {
       if (editingKey && editingKey.key_id !== 0) {
         // Update existing key - no need to invalidate cache
-        await apiService.updateAPIKey(parseInt(appId), editingKey.key_id, data);
+        await apiService.updateAPIKey(Number.parseInt(appId), editingKey.key_id, data);
         await loadAPIKeys(); // Reload the list
         setIsModalOpen(false);
         setEditingKey(null);
       } else {
         // Create new key - invalidate cache and force reload
-        const response = await apiService.createAPIKey(parseInt(appId), data);
+        const response = await apiService.createAPIKey(Number.parseInt(appId), data);
         
         // Show the API key value in a special modal
         setCreatedKey(response);
@@ -236,7 +237,7 @@ function APIKeysPage() {
               header: 'Name',
               render: (apiKey) => (
                 <div className="flex items-center">
-                  <span className="text-blue-400 text-xl mr-3">🔑</span>
+                  <KeyRound className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
                   {canEdit ? (
                     <button
                       type="button"
@@ -293,19 +294,19 @@ function APIKeysPage() {
                       {
                         label: 'Edit',
                         onClick: () => { void handleEditKey(apiKey.key_id); },
-                        icon: '✏️',
+                        icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary'
                       },
                       {
                         label: apiKey.is_active ? 'Deactivate' : 'Activate',
                         onClick: () => { void handleToggle(apiKey.key_id); },
-                        icon: apiKey.is_active ? '⏸️' : '▶️',
+                        icon: apiKey.is_active ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />,
                         variant: apiKey.is_active ? 'warning' : 'success'
                       },
                       {
                         label: 'Delete',
                         onClick: () => { void handleDelete(apiKey.key_id); },
-                        icon: '🗑️',
+                        icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
                     ]}
@@ -317,7 +318,7 @@ function APIKeysPage() {
               )
             }
           ]}
-          emptyIcon="🔑"
+          emptyIcon={<KeyRound className="w-10 h-10 text-gray-300" />}
           emptyMessage="No API Keys"
           emptySubMessage="Create your first API key to enable programmatic access to your application."
           loading={loading}
@@ -341,7 +342,7 @@ function APIKeysPage() {
         <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex">
             <div className="flex-shrink-0">
-              <span className="text-yellow-400 text-xl">⚠️</span>
+              <AlertTriangle className="w-5 h-5 text-yellow-400" />
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-yellow-800">

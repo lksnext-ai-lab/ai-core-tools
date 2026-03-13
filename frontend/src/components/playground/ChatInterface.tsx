@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { apiService } from '../../services/api';
+import { useStreamingChat } from '../../hooks/useStreamingChat';
 import MessageContent from './MessageContent';
+import StreamingMessage from './StreamingMessage';
 import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
@@ -12,6 +14,23 @@ interface Message {
   content: string;
   timestamp: Date;
   files?: string[];
+}
+
+/** Shape returned by the API for each history message. */
+interface RawHistoryMessage {
+  role: string;
+  content: string;
+}
+
+/** Shape returned by the API for each attached/persistent file. */
+interface RawAttachedFile {
+  file_id: string;
+  filename: string;
+  file_type?: string;
+  processing_status?: string;
+  file_size_display?: string;
+  has_extractable_content?: boolean;
+  content_preview?: string;
 }
 
 interface ChatInterfaceProps {
@@ -37,67 +56,110 @@ function ChatInterface({
 }: Readonly<ChatInterfaceProps>) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [persistentFiles, setPersistentFiles] = useState<any[]>([]);
+  const [persistentFiles, setPersistentFiles] = useState<RawAttachedFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
-  const [currentConversationId, setCurrentConversationId] = useState<number | null>(conversationId || null);
-  const [filterMetadata, setFilterMetadata] = useState<Record<string, unknown> | undefined>(undefined);
+  const [currentConversationId, setCurrentConversationId] = useState<number | null>(
+    conversationId || null
+  );
+  const [filterMetadata, setFilterMetadata] = useState<Record<string, unknown> | undefined>(
+    undefined
+  );
   const [filtersKey, setFiltersKey] = useState(0);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Tracks the ID of the message just committed from streaming — skips entrance animation */
+  const lastStreamedMsgIdRef = useRef<string | null>(null);
   const filterPanelId = `metadata-filters-${agentId}`;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
+    useStreamingChat(appId, agentId);
 
+  // Hold streaming content visible briefly after isStreaming flips to false,
+  // so the transition to the final committed message is seamless.
+  const [holdStreamingContent, setHoldStreamingContent] = useState(false);
+  const showStreaming = isStreaming || holdStreamingContent;
+
+  // ─── Scroll helpers ──────────────────────────────────────────────────────────
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Track whether the user is at the bottom of the message list
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
-  // Update current conversation ID when prop changes
+    const handleScroll = () => {
+      const threshold = 80;
+      const atBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      setIsAtBottom(atBottom);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll when new messages arrive (only if already at bottom)
+  useEffect(() => {
+    if (isAtBottom) {
+      scrollToBottom();
+    }
+  }, [messages, isAtBottom, scrollToBottom]);
+
+  // Auto-scroll while streaming
+  useEffect(() => {
+    if (isStreaming && isAtBottom) {
+      scrollToBottom('instant');
+    }
+  }, [streamingContent, isStreaming, isAtBottom, scrollToBottom]);
+
+  // ─── Conversation / file loading ─────────────────────────────────────────────
+
   useEffect(() => {
     setCurrentConversationId(conversationId || null);
   }, [conversationId]);
 
-  // Load conversation history and persistent files on mount or when conversation changes
   useEffect(() => {
     const loadConversationHistory = async () => {
       try {
         setIsLoadingHistory(true);
-        
-        // If we have a specific conversation ID, load from that conversation
+
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
-          
+
           if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map((msg: any, index: number) => ({
-              id: `history-${index}`,
-              type: msg.role === 'user' ? 'user' : 'agent',
-              content: msg.content,
-              timestamp: new Date(),
-            }));
-            
+            const loadedMessages: Message[] = response.messages.map(
+              (msg: RawHistoryMessage, index: number) => ({
+                id: `history-${index}`,
+                type: msg.role === 'user' ? 'user' : 'agent',
+                content: msg.content,
+                timestamp: new Date(),
+              })
+            );
             setMessages(loadedMessages);
-            console.log(`Loaded ${loadedMessages.length} messages from conversation ${currentConversationId}`);
           } else {
             setMessages([]);
           }
         } else {
-          // Fallback to old method for backward compatibility
           const response = await apiService.getConversationHistory(appId, agentId);
-          
+
           if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map((msg: any, index: number) => ({
-              id: `history-${index}`,
-              type: msg.role === 'user' ? 'user' : 'agent',
-              content: msg.content,
-              timestamp: new Date(),
-            }));
-            
+            const loadedMessages: Message[] = response.messages.map(
+              (msg: RawHistoryMessage, index: number) => ({
+                id: `history-${index}`,
+                type: msg.role === 'user' ? 'user' : 'agent',
+                content: msg.content,
+                timestamp: new Date(),
+              })
+            );
             setMessages(loadedMessages);
-            console.log(`Loaded ${loadedMessages.length} messages from conversation history`);
           } else {
             setMessages([]);
           }
@@ -112,11 +174,8 @@ function ChatInterface({
 
     const loadPersistentFiles = async () => {
       try {
-        // Load files for the specific conversation (if any)
         const response = await apiService.listAttachedFiles(appId, agentId, currentConversationId);
-        console.log('Persistent files response:', response);
         setPersistentFiles(response.files || []);
-        console.log(`Loaded ${response.files?.length || 0} persistent files for conversation ${currentConversationId}:`, response.files);
       } catch (error) {
         console.error('Error loading persistent files:', error);
         setPersistentFiles([]);
@@ -134,79 +193,77 @@ function ChatInterface({
     }
   }, [metadataFields, filterMetadata]);
 
+  // ─── Message sending ─────────────────────────────────────────────────────────
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && persistentFiles.length === 0) return;
 
-    const userMessage: Message = {
+    const userMsg: Message = {
       id: Date.now().toString(),
       type: 'user',
       content: inputMessage,
       timestamp: new Date(),
-      files: persistentFiles.map(f => f.filename)
+      files: persistentFiles.map((f) => f.filename),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMsg]);
+    const messageText = inputMessage;
     setInputMessage('');
-    setIsLoading(true);
+    // Force scroll to bottom so the user sees the streaming response
+    setIsAtBottom(true);
+    setTimeout(() => scrollToBottom('instant'), 50);
 
     try {
-      const hasFilters = filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
+      const hasFilters =
+        filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
       const searchParams = hasFilters ? filterMetadata : undefined;
 
-      // Send message (files are already attached and will be included automatically)
-      const response = await apiService.chatWithAgent(
-        appId,
-        agentId,
-        inputMessage,
-        [], // No new files with message - all files are pre-uploaded
-        searchParams,
-        currentConversationId
-      );
+      // Hold streaming content visible while we commit the final message
+      setHoldStreamingContent(true);
 
-      // Handle both string and JSON responses
-      let responseContent = response.response || 'No response received';
-      
-      // If response is an object, convert to formatted JSON string
-      if (typeof responseContent === 'object') {
-        responseContent = JSON.stringify(responseContent, null, 2);
-      }
-      
-      const agentMessage: Message = {
-        id: (Date.now() + 1).toString(),
+      const result = await sendMessage(messageText, {
+        conversationId: currentConversationId,
+        searchParams,
+      });
+
+      const rawResponse = result.response || '';
+      const responseContent: string =
+        typeof rawResponse === 'object'
+          ? JSON.stringify(rawResponse, null, 2)
+          : rawResponse;
+
+      const agentMsgId = (Date.now() + 1).toString();
+      lastStreamedMsgIdRef.current = agentMsgId;
+      const agentMsg: Message = {
+        id: agentMsgId,
         type: 'agent',
         content: responseContent,
-        timestamp: new Date()
+        timestamp: new Date(),
       };
+      // Commit the message and release the streaming hold in the same batch
+      setMessages((prev) => [...prev, agentMsg]);
+      setHoldStreamingContent(false);
 
-      setMessages(prev => [...prev, agentMessage]);
-      
-      // If backend returned a conversation_id and we don't have one yet, use it
-      if (response.conversation_id && !currentConversationId) {
-        setCurrentConversationId(response.conversation_id);
-        if (onConversationCreated) {
-          onConversationCreated(response.conversation_id);
-        }
+      if (result.conversationId && !currentConversationId) {
+        setCurrentConversationId(result.conversationId);
+        onConversationCreated?.(result.conversationId);
       }
-      
-      // Refresh file list to pick up any files generated by the agent (e.g. code interpreter output)
-      await refreshFileList(response.conversation_id || currentConversationId);
 
-      // Notify parent component that a message was sent (to reload conversation list)
-      if (onMessageSent) {
-        onMessageSent();
-      }
+      await refreshFileList(result.conversationId || currentConversationId);
+      onMessageSent?.();
     } catch (error) {
-      const errorMessage: Message = {
+      setHoldStreamingContent(false);
+      const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: 'error',
         content: error instanceof Error ? error.message : 'An error occurred',
-        timestamp: new Date()
+        timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+      setMessages((prev) => [...prev, errorMsg]);
     }
   };
+
+  // ─── Reset ───────────────────────────────────────────────────────────────────
 
   const handleResetConversation = async () => {
     try {
@@ -220,29 +277,22 @@ function ChatInterface({
     }
   };
 
+  // ─── File upload ─────────────────────────────────────────────────────────────
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    console.log('Uploading files:', files.map(f => f.name));
-    
     setIsLoadingFiles(true);
-    
-    // Ensure we have a conversation to attach files to
-    // This prevents files from being uploaded to a "global" session that gets lost
+
     let targetConversationId = currentConversationId;
-    
+
     if (!targetConversationId) {
       try {
-        // Create a conversation before uploading files
-        console.log('No conversation exists, creating one for file attachment...');
         const convResponse = await apiService.createConversation(agentId);
         targetConversationId = convResponse.conversation_id;
         setCurrentConversationId(targetConversationId);
-        
-        // Notify parent component about the new conversation
         if (onConversationCreated && targetConversationId) {
           onConversationCreated(targetConversationId);
         }
-        console.log(`Created conversation ${targetConversationId} for file attachment`);
       } catch (convError) {
         console.error('Error creating conversation for file upload:', convError);
         setIsLoadingFiles(false);
@@ -250,46 +300,47 @@ function ChatInterface({
         return;
       }
     }
-    
-    // Upload files to persistent storage, associated with the conversation
+
     for (const file of files) {
       try {
-        const uploadResponse = await apiService.uploadFileForChat(appId, agentId, file, targetConversationId);
-        console.log(`Uploaded file: ${file.name} for conversation ${targetConversationId}`, uploadResponse);
+        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId);
       } catch (error) {
         console.error(`Error uploading file ${file.name}:`, error);
       }
     }
-    
-    // Reload persistent files for current conversation
+
     try {
-      const response = await apiService.listAttachedFiles(appId, agentId, targetConversationId);
-      console.log('Reloaded persistent files:', response);
+      const response = await apiService.listAttachedFiles(
+        appId,
+        agentId,
+        targetConversationId
+      );
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error('Error reloading persistent files:', error);
     } finally {
       setIsLoadingFiles(false);
     }
-    
-    // Clear the file input
+
     event.target.value = '';
   };
 
-  const refreshFileList = async (conversationId: number | null) => {
-    if (!conversationId) return;
+  const refreshFileList = async (convId: number | null) => {
+    if (!convId) return;
     try {
-      const filesResponse = await apiService.listAttachedFiles(appId, agentId, conversationId);
+      const filesResponse = await apiService.listAttachedFiles(appId, agentId, convId);
       setPersistentFiles(filesResponse.files || []);
     } catch {
-      // Non-critical — file panel will still show previously uploaded files
+      // Non-critical
     }
   };
+
+  // ─── File helpers ─────────────────────────────────────────────────────────────
 
   const resolveFileUrl = useCallback(
     (fileId: string): Promise<string> =>
       apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId),
-    [appId, agentId, currentConversationId],
+    [appId, agentId, currentConversationId]
   );
 
   const handleDownloadFile = async (fileId: string) => {
@@ -304,19 +355,25 @@ function ChatInterface({
   const handleRemovePersistentFile = async (fileId: string) => {
     try {
       await apiService.removeAttachedFile(appId, agentId, fileId, currentConversationId);
-      console.log(`Removed persistent file: ${fileId} from conversation ${currentConversationId}`);
-      
-      // Reload persistent files for current conversation
-      const response = await apiService.listAttachedFiles(appId, agentId, currentConversationId);
+      const response = await apiService.listAttachedFiles(
+        appId,
+        agentId,
+        currentConversationId
+      );
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error(`Error removing file ${fileId}:`, error);
     }
   };
 
-  const handleFilterMetadataChange = useCallback((metadata: Record<string, unknown> | undefined) => {
-    setFilterMetadata(metadata);
-  }, []);
+  // ─── Misc handlers ────────────────────────────────────────────────────────────
+
+  const handleFilterMetadataChange = useCallback(
+    (metadata: Record<string, unknown> | undefined) => {
+      setFilterMetadata(metadata);
+    },
+    []
+  );
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -335,37 +392,68 @@ function ChatInterface({
     content_preview: f.content_preview,
   }));
 
+  const canSend = !isStreaming && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Metadata Filters Section */}
       {metadataFields && metadataFields.length > 0 && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="pg-glass rounded-xl overflow-hidden">
           <button
             type="button"
-            className="w-full p-4 border-b flex items-center justify-between text-left hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/30 dark:hover:bg-gray-700/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
             onClick={() => setIsFilterExpanded((prev) => !prev)}
             aria-expanded={isFilterExpanded}
             aria-controls={filterPanelId}
           >
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <span className="mr-2" aria-hidden="true">🔍</span>{' '}
+            <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <svg
+                className="w-4 h-4 text-indigo-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
+                />
+              </svg>
               Filter by Metadata
-            </h3>
+            </span>
             <svg
-              className={`w-5 h-5 text-gray-500 transform transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                isFilterExpanded ? 'rotate-180' : ''
+              }`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
-          <div id={filterPanelId} className={`p-4 bg-gray-50 ${isFilterExpanded ? '' : 'hidden'}`}>
+
+          <div
+            id={filterPanelId}
+            className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 ${
+              isFilterExpanded ? '' : 'hidden'
+            }`}
+          >
             <SearchFilters
               key={filtersKey}
               metadataFields={metadataFields}
               dbType={vectorDbType?.toUpperCase()}
-              disabled={isLoading}
+              disabled={isStreaming}
               onFilterMetadataChange={handleFilterMetadataChange}
             />
           </div>
@@ -374,137 +462,383 @@ function ChatInterface({
 
       {/* Chat Interface + File Panel */}
       <div className="flex gap-4 items-start">
-
-      {/* Chat card */}
-      <div className="flex-1 bg-white shadow rounded-lg">
-        <div className="p-4 border-b">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium text-gray-900">
-              <span className="mr-2">💬</span>
-              Chat with {agentName}
-            </h3>
+        {/* Chat card */}
+        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
+          {/* Reset button — subtle, top-right corner */}
+          <div className="flex justify-end px-4 pt-3 pb-1">
             <button
+              type="button"
               onClick={handleResetConversation}
-              className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                         text-gray-500 dark:text-gray-400
+                         hover:text-red-600 dark:hover:text-red-400
+                         hover:bg-red-50 dark:hover:bg-red-900/20
+                         border border-transparent hover:border-red-200 dark:hover:border-red-800/40
+                         transition-all duration-150"
             >
-              Reset Conversation
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              Reset
             </button>
           </div>
-        </div>
 
-        {/* Messages Container */}
-        <div className="h-96 overflow-y-auto p-4 space-y-4">
-          {isLoadingHistory ? (
-            <div className="flex justify-center items-center h-full">
-              <div className="text-gray-500">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 mx-auto mb-2"></div>
-                Loading conversation...
-              </div>
-            </div>
-          ) : (
-            <>
-              {messages.map((message) => {
-                const isUserMessage = message.type === 'user';
-                const isErrorMessage = message.type === 'error';
-                const alignmentClass = isUserMessage ? 'justify-end' : 'justify-start';
-
-                let bubbleClass = 'bg-gray-200 text-gray-900';
-                let senderLabel = agentName;
-
-                if (isUserMessage) {
-                  bubbleClass = 'bg-blue-600 text-white';
-                  senderLabel = 'You';
-                } else if (isErrorMessage) {
-                  bubbleClass = 'bg-red-600 text-white';
-                  senderLabel = 'Error';
-                }
-
-                return (
-                  <div key={message.id} className={`flex ${alignmentClass}`}>
-                    <div className={`w-full px-4 py-2 rounded-lg ${bubbleClass}`}>
-                      <div className="text-sm font-medium mb-1">{senderLabel}</div>
-                      <div>
-                        <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
-                      </div>
-                      {message.files && message.files.length > 0 && (
-                        <div className="mt-2 text-xs opacity-75">
-                          📎 {message.files.join(', ')}
-                        </div>
-                      )}
-                      <div className="text-xs opacity-75 mt-1">
-                        {message.timestamp.toLocaleTimeString()}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                      Thinking...
-                    </div>
-                  </div>
+          {/* Messages container */}
+          <div
+            ref={messagesContainerRef}
+            className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-3
+                       bg-gradient-to-b from-gray-50/50 to-white/30
+                       dark:from-gray-900/50 dark:to-gray-800/30
+                       scroll-smooth"
+          >
+            {isLoadingHistory ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-300 border-t-transparent" />
+                  <span className="text-sm">Loading conversation...</span>
                 </div>
-              )}
-            </>
+              </div>
+            ) : (
+              <>
+                {messages.length === 0 && !showStreaming && (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+                    <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                      <svg
+                        className="w-6 h-6 text-indigo-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                        Start a conversation with {agentName}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        Type a message below to begin
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {messages.map((message) => {
+                  const isUser = message.type === 'user';
+                  const isError = message.type === 'error';
+
+                  if (isUser) {
+                    return (
+                      <div
+                        key={message.id}
+                        className="flex justify-end animate-slide-in-right"
+                      >
+                        <div className="max-w-[85%] lg:max-w-[75%]">
+                          <div className="pg-bubble-user">
+                            <MessageContent
+                              content={message.content}
+                              resolveFileUrl={resolveFileUrl}
+                            />
+                            {message.files && message.files.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                                {message.files.map((filename) => (
+                                  <span
+                                    key={filename}
+                                    className="inline-flex items-center gap-1 text-xs bg-gray-200/60 dark:bg-gray-600/60 text-gray-600 dark:text-gray-300 rounded-full px-2 py-0.5"
+                                  >
+                                    <svg
+                                      className="w-3 h-3"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      aria-hidden="true"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                                      />
+                                    </svg>
+                                    {filename}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right mt-1">
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (isError) {
+                    return (
+                      <div
+                        key={message.id}
+                        className="flex justify-start animate-slide-in-left"
+                      >
+                        <div className="max-w-[85%] lg:max-w-[75%]">
+                          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 text-red-700 dark:text-red-300 rounded-2xl rounded-bl-sm px-4 py-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <svg
+                                className="w-4 h-4 shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                              <span className="text-xs font-semibold uppercase tracking-wide">
+                                Error
+                              </span>
+                            </div>
+                            <p className="text-sm">{message.content}</p>
+                          </div>
+                          <div className="mt-1">
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Agent message — skip entrance animation for the message just committed from streaming
+                  const wasStreamed = message.id === lastStreamedMsgIdRef.current;
+                  return (
+                    <div
+                      key={message.id}
+                      className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+                    >
+                      <div className="max-w-[90%] lg:max-w-[80%]">
+                        <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
+                          <MessageContent
+                            content={message.content}
+                            resolveFileUrl={resolveFileUrl}
+                          />
+                        </div>
+                        <div className="mt-1">
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            {message.timestamp.toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Streaming state — single component handles thinking + tools + content.
+                    showStreaming stays true briefly after isStreaming flips to false,
+                    keeping content visible until the final message is committed. */}
+                {showStreaming && (
+                  <StreamingMessage
+                    content={streamingContent}
+                    isStreaming={isStreaming}
+                    activeTools={activeTools}
+                    thinkingMessage={thinkingMessage}
+                  />
+                )}
+              </>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Scroll-to-bottom FAB */}
+          {!isAtBottom && (
+            <div className="relative h-0 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAtBottom(true);
+                  scrollToBottom();
+                }}
+                className="pg-scroll-fab pointer-events-auto"
+                aria-label="Scroll to bottom"
+              >
+                <svg
+                  className="w-4 h-4 text-gray-600 dark:text-gray-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+            </div>
           )}
-          <div ref={messagesEndRef} />
+
+          {/* Input area */}
+          <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
+            <div className="pg-glass rounded-xl px-3 py-2.5 flex items-end gap-2">
+              {/* File attach button */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="file-upload"
+                  accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isStreaming}
+                  className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
+                             hover:text-indigo-600 dark:hover:text-indigo-400
+                             hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                             disabled:opacity-40 disabled:cursor-not-allowed
+                             transition-all duration-150"
+                  title="Attach file"
+                  aria-label="Attach file"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Textarea */}
+              <textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={`Message ${agentName}...`}
+                disabled={isStreaming}
+                className="flex-1 bg-transparent border-none outline-none resize-none
+                           text-sm text-gray-800 dark:text-gray-100
+                           placeholder:text-gray-400 dark:placeholder:text-gray-500
+                           disabled:opacity-50
+                           max-h-40 input-login"
+                rows={1}
+                style={{ minHeight: '1.5rem' }}
+                onInput={(e) => {
+                  // Auto-resize textarea
+                  const target = e.target as HTMLTextAreaElement;
+                  target.style.height = 'auto';
+                  target.style.height = `${Math.min(target.scrollHeight, 160)}px`;
+                }}
+              />
+
+              {/* Send / Abort button */}
+              {isStreaming ? (
+                <button
+                  type="button"
+                  onClick={abortStream}
+                  className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
+                             hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
+                             active:scale-95 shrink-0"
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSendMessage}
+                  disabled={!canSend}
+                  className="pg-btn-send shrink-0 !p-2"
+                  aria-label="Send message"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Hint text */}
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">
+              Press Enter to send, Shift+Enter for new line
+            </p>
+          </div>
         </div>
 
-        {/* Input Area */}
-        <div className="p-4 border-t bg-gray-50">
-          {/* File Upload */}
-          <div className="mb-3">
-            <input
-              type="file"
-              multiple
-              onChange={handleFileUpload}
-              className="hidden"
-              id="file-upload"
-              accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
-            />
-            <label
-              htmlFor="file-upload"
-              className="cursor-pointer inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              📎 Attach File
-            </label>
-          </div>
-
-          {/* Message Input */}
-          <div className="flex space-x-2">
-            <textarea
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message here... (Enter to send, Shift+Enter for new line)"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              rows={3}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={isLoading || (!inputMessage.trim() && persistentFiles.length === 0)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Send
-            </button>
-          </div>
-        </div>
+        {/* Attached Files Panel */}
+        <AttachedFilesPanel
+          files={panelFiles}
+          isLoading={isLoadingFiles}
+          onRemoveFile={handleRemovePersistentFile}
+          onDownloadFile={handleDownloadFile}
+        />
       </div>
-
-      {/* Attached Files Panel */}
-      <AttachedFilesPanel
-        files={panelFiles}
-        isLoading={isLoadingFiles}
-        onRemoveFile={handleRemovePersistentFile}
-        onDownloadFile={handleDownloadFile}
-      />
-
-      </div> {/* end flex row */}
     </div>
   );
 }
 
-export default ChatInterface; 
+export default ChatInterface;
