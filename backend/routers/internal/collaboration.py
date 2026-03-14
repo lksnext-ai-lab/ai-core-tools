@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
@@ -74,9 +74,9 @@ def _build_collaborator_detail_schema(db: Session, app_id: int, collaboration) -
                            response_model=List[CollaboratorListItemSchema])
 async def list_collaborators(
     app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     List all collaborators for a specific app.
@@ -127,9 +127,9 @@ async def list_collaborators(
 async def invite_collaborator(
     app_id: int,
     invitation_data: InviteCollaboratorSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Invite a user to collaborate on an app.
@@ -183,9 +183,9 @@ async def update_collaborator_role(
     app_id: int,
     user_id: int,
     role_data: UpdateCollaboratorRoleSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Update a collaborator's role.
@@ -229,9 +229,9 @@ async def update_collaborator_role(
 async def remove_collaborator(
     app_id: int,
     user_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Remove a collaborator from an app.
@@ -276,8 +276,8 @@ async def remove_collaborator(
 async def respond_to_invitation(
     collaboration_id: int,
     response_data: InvitationResponseSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Accept or decline a collaboration invitation.
@@ -319,8 +319,8 @@ async def respond_to_invitation(
                          tags=["Collaboration"],
                          response_model=List[CollaboratorListItemSchema])
 async def get_my_invitations(
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Get all pending collaboration invitations for the current user.

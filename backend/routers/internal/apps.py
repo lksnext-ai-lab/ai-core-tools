@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, status, UploadFile, File, Query
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Annotated
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 import json
@@ -21,8 +21,6 @@ from schemas.common_schemas import MessageResponseSchema
 from schemas.export_schemas import AppExportFileSchema
 from schemas.import_schemas import (
     ConflictMode,
-    ImportTargetMode,
-    ComponentSelectionSchema,
     FullAppImportResponseSchema,
     AppImportPreviewSchema,
 )
@@ -67,9 +65,9 @@ APP_NOT_FOUND_MSG = "App not found"
     tags=["Apps", "Export/Import"],
 )
 async def preview_import_app(
-    file: UploadFile = File(...),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File(...)] = File(...),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """Preview full app import without importing.
 
@@ -111,21 +109,20 @@ async def preview_import_app(
 
 @apps_router.post(
     "/import",
-    response_model=FullAppImportResponseSchema,
     summary="Import complete app configuration",
     tags=["Apps", "Export/Import"],
     status_code=status.HTTP_201_CREATED,
 )
 async def import_full_app(
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(
+    file: Annotated[UploadFile, File(...)] = File(...),
+    conflict_mode: Annotated[ConflictMode, Query()] = Query(
         ConflictMode.FAIL,
         description="How to handle name conflicts (fail/rename/override)",
     ),
-    new_name: Optional[str] = Query(
+    new_name: Annotated[Optional[str], Query()] = Query(
         None, description="New app name (for rename mode)"
     ),
-    component_selection_json: Optional[str] = Form(
+    component_selection_json: Annotated[Optional[str], Form()] = Form(
         None,
         description=(
             "JSON object mapping singular component-type keys to lists of "
@@ -133,15 +130,15 @@ async def import_full_app(
             "Example: {\"ai_service\":[\"My Service\"]}"
         ),
     ),
-    api_keys_json: Optional[str] = Form(
+    api_keys_json: Annotated[Optional[str], Form()] = Form(
         None,
         description=(
             "JSON object mapping original service names to API keys. "
             "Example: {\"My Service\":\"sk-...\"}"
         ),
     ),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ) -> FullAppImportResponseSchema:
     """Import complete app configuration from JSON file.
 
@@ -369,8 +366,8 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
                 tags=["Apps"],
                 response_model=List[AppListItemSchema])
 async def list_apps(
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     List all apps that the current user owns or collaborates on.
@@ -429,9 +426,9 @@ async def list_apps(
                 response_model=AppDetailSchema)
 async def get_app(
     app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Get detailed information about a specific app.
@@ -488,9 +485,9 @@ async def get_app(
                    status_code=status.HTTP_204_NO_CONTENT)
 async def dismiss_onboarding(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Mark the getting started checklist as dismissed for the app.
@@ -517,8 +514,8 @@ async def dismiss_onboarding(
                  status_code=status.HTTP_201_CREATED)
 async def create_app(
     app_data: CreateAppSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Create a new app for the current user.
@@ -567,9 +564,9 @@ async def create_app(
 async def update_app(
     app_id: int,
     app_data: UpdateAppSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Update an existing app. Only owners can update apps.
@@ -630,9 +627,9 @@ async def update_app(
                    tags=["Apps"])
 async def delete_app(
     app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("owner")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("owner"))] = Depends(require_min_role("owner")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Delete an app. Only owners can delete apps.
@@ -672,9 +669,9 @@ async def delete_app(
                  response_model=MessageResponseSchema)
 async def validate_langsmith_key(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Validate the LangSmith API key configured for an app.
@@ -739,9 +736,9 @@ async def validate_langsmith_key(
                  response_model=MessageResponseSchema)
 async def leave_app(
     app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Leave an app collaboration (for editors only).
@@ -789,15 +786,14 @@ async def leave_app(
 
 @apps_router.post(
     "/{app_id}/export",
-    response_model=AppExportFileSchema,
     summary="Export complete app configuration",
     tags=["Apps", "Export/Import"],
 )
 async def export_full_app(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ) -> AppExportFileSchema:
     """Export complete app configuration to JSON.
 

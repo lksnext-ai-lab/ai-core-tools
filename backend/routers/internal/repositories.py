@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
-from typing import List, Optional
-import os
+from typing import List, Optional, Annotated
 import json
 import logging
 from lks_idprovider import AuthContext
@@ -46,13 +45,13 @@ logger.info("Repositories router loaded successfully")
 )
 async def import_repository(
     app_id: int,
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
-    new_name: Optional[str] = Query(None),
-    selected_embedding_service_id: Optional[int] = Query(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File(...)] = File(...),
+    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)] = Query(ConflictMode.FAIL),
+    new_name: Annotated[Optional[str], Query(None)] = Query(None),
+    selected_embedding_service_id: Annotated[Optional[int], Query(None)] = Query(None),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """Import Repository from JSON file.
 
@@ -111,9 +110,9 @@ async def import_repository(
                          response_model=List[RepositoryListItemSchema])
 async def list_repositories(
     app_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     """
     List all repositories for a specific app.
@@ -121,8 +120,6 @@ async def list_repositories(
     user_id = int(auth_context.identity.id)
     
     logger.info(f"List repositories called for app_id: {app_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     # Use RepositoryService for business logic
     return RepositoryService.get_repositories_list(app_id, db)
@@ -135,15 +132,13 @@ async def list_repositories(
 async def get_repository(
     app_id: int,
     repository_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     """
     Get detailed information about a specific repository including its resources.
     """
-    
-    # TODO: Add app access validation
     
     # Use RepositoryService for business logic
     return RepositoryService.get_repository_detail(app_id, repository_id, db)
@@ -157,15 +152,13 @@ async def create_or_update_repository(
     app_id: int,
     repository_id: int,
     repo_data: CreateUpdateRepositorySchema,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Create a new repository or update an existing one.
     """    
-    # TODO: Add app access validation
-    
     # Use RepositoryService for business logic
     repo = RepositoryService.create_or_update_repository_router(app_id, repository_id, repo_data, db)
     
@@ -179,15 +172,13 @@ async def create_or_update_repository(
 async def delete_repository(
     app_id: int,
     repository_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Delete a repository and all its resources.
     """
-    
-    # TODO: Add app access validation
     
     # Use RepositoryService for business logic
     RepositoryService.delete_repository_router(repository_id, db)
@@ -204,13 +195,13 @@ async def delete_repository(
 async def export_repository(
     app_id: int,
     repository_id: int,
-    include_dependencies: bool = Query(
+    include_dependencies: Annotated[bool, Query(True, description="Bundle silo and its dependencies")] = Query(
         True,
         description="Bundle silo and its dependencies",
     ),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """Export Repository configuration to JSON file.
 
@@ -267,11 +258,11 @@ async def export_repository(
 async def upload_resources(
     app_id: int,
     repository_id: int,
-    files: List[UploadFile] = File(...),
-    folder_id: Optional[int] = Form(default=None),
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    files: Annotated[List[UploadFile], File(...)] = File(...),
+    folder_id: Annotated[Optional[int], Form(default=None)] = Form(default=None),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Upload multiple resources to a repository.
@@ -280,8 +271,6 @@ async def upload_resources(
     user_id = int(auth_context.identity.id)
     
     logger.info(f"Upload resources endpoint called - app_id: {app_id}, repository_id: {repository_id}, files_count: {len(files)}, folder_id: {folder_id} (type: {type(folder_id)}), user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     # Use ResourceService to handle the business logic
     result = ResourceService.upload_resources_to_repository(
@@ -302,10 +291,10 @@ async def move_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    new_folder_id: Optional[int] = Form(default=None),
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    new_folder_id: Annotated[Optional[int], Form(default=None)] = Form(default=None),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Move a resource to a different folder within the same repository.
@@ -313,8 +302,6 @@ async def move_resource(
     user_id = int(auth_context.identity.id)
     
     logger.info(f"Move resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     # Use ResourceService to handle the business logic
     result = ResourceService.move_resource_to_folder(
@@ -334,9 +321,9 @@ async def delete_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Delete a specific resource from a repository.
@@ -344,8 +331,6 @@ async def delete_resource(
     user_id = int(auth_context.identity.id)
     
     logger.info(f"Delete resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     # Use ResourceService to handle the business logic
     result = ResourceService.delete_resource_from_repository(
@@ -365,9 +350,9 @@ async def download_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     """
     Download a specific resource from a repository.
@@ -375,8 +360,6 @@ async def download_resource(
     user_id = int(auth_context.identity.id)
     
     logger.info(f"Download resource endpoint called - app_id: {app_id}, repository_id: {repository_id}, resource_id: {resource_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     # Use ResourceService to handle the business logic
     file_path, filename = ResourceService.download_resource_from_repository(
@@ -397,20 +380,21 @@ async def download_resource(
 
 
 # ==================== MEDIA MANAGEMENT ====================
-@repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse)
+@repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse, responses={500: {"description": "Internal server error"}})
 async def upload_media(
     app_id: int,
     repository_id: int,
     background_tasks: BackgroundTasks,
-    files: List[UploadFile] = File(...),
-    folder_id: Optional[int] = Form(None),
-    transcription_service_id: int = Form(...),
-    forced_language: Optional[str] = Form(None),
-    chunk_min_duration: Optional[int] = Form(None),
-    chunk_max_duration: Optional[int] = Form(None),
-    chunk_overlap: Optional[int] = Form(None),
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
+    files: Annotated[List[UploadFile], File(...)] = File(...),
+    folder_id: Annotated[Optional[int], Form(None)] = Form(None),
+    transcription_service_id: Annotated[int, Form(...)] = Form(...),
+    forced_language: Annotated[Optional[str], Form(None)] = Form(None),
+    chunk_min_duration: Annotated[Optional[int], Form(None)] = Form(None),
+    chunk_max_duration: Annotated[Optional[int], Form(None)] = Form(None),
+    chunk_overlap: Annotated[Optional[int], Form(None)] = Form(None),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Upload video/audio files for transcription and indexing
@@ -452,20 +436,21 @@ async def upload_media(
         logger.error(f"Error uploading media: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@repositories_router.post("/{repository_id}/media/youtube", response_model=MediaResponse)
+@repositories_router.post("/{repository_id}/media/youtube", response_model=MediaResponse, responses={400: {"description": "Validation error"}, 500: {"description": "Internal server error"}})
 async def add_youtube_video(
     app_id: int,
     background_tasks: BackgroundTasks,
     repository_id: int,
-    url: str = Form(...),
-    folder_id: Optional[int] = Form(None),
-    transcription_service_id: int = Form(...),
-    forced_language: Optional[str] = Form(None),
-    chunk_min_duration: Optional[int] = Form(None),
-    chunk_max_duration: Optional[int] = Form(None),
-    chunk_overlap: Optional[int] = Form(None),
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    url: Annotated[str, Form(...)] = Form(...),
+    folder_id: Annotated[Optional[int], Form(None)] = Form(None),
+    transcription_service_id: Annotated[int, Form(...)] = Form(...),
+    forced_language: Annotated[Optional[str], Form(None)] = Form(None),
+    chunk_min_duration: Annotated[Optional[int], Form(None)] = Form(None),
+    chunk_max_duration: Annotated[Optional[int], Form(None)] = Form(None),
+    chunk_overlap: Annotated[Optional[int], Form(None)] = Form(None),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Add YouTube video for transcription and indexing
@@ -512,9 +497,10 @@ async def add_youtube_video(
 async def list_media(
     app_id: int,
     repository_id: int,
-    folder_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    folder_id: Annotated[Optional[int], Query(None)] = Query(None),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     """List all media in repository"""
     media_list = MediaService.list_media(
@@ -531,10 +517,10 @@ async def move_media(
     app_id: int,
     repository_id: int,
     media_id: int,
-    new_folder_id: Optional[int] = Form(default=None),
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    new_folder_id: Annotated[Optional[int], Form(None)] = Form(None),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Move a resource to a different folder within the same repository.
@@ -542,8 +528,6 @@ async def move_media(
     user_id = int(auth_context.identity.id)
     
     logger.info(f"Move media endpoint called - app_id: {app_id}, repository_id: {repository_id}, media_id: {media_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
 
     # Use MediaService to handle the business logic
     result = MediaService.move_media_to_folder(
@@ -556,12 +540,14 @@ async def move_media(
     
     return result
 
-@repositories_router.get("/{repository_id}/media/{media_id}", response_model=MediaResponse)
+@repositories_router.get("/{repository_id}/media/{media_id}", response_model=MediaResponse, responses={404: {"description": "Media not found"}})
 async def get_media_status(
     app_id: int,
     repository_id: int,
     media_id: int,
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     media = MediaRepository.get_by_id(media_id, db)
     if not media:
@@ -573,8 +559,9 @@ async def delete_media(
     app_id: int,
     repository_id: int,
     media_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
 ):
     """
     Delete a media file and all derived data (chunks, transcripts, embeddings).
@@ -601,8 +588,9 @@ async def search_repository_documents(
     app_id: int,
     repository_id: int,
     search_query: RepositorySearchSchema,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     """
     Search for documents in a repository using semantic search with optional metadata filtering.
@@ -612,8 +600,6 @@ async def search_repository_documents(
     
     logger.info(f"Repository search request - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
     logger.info(f"Search query: {search_query.query}, limit: {search_query.limit}, filter_metadata: {search_query.filter_metadata}")
-    
-    # TODO: Add app access validation
     
     try:
         # Use RepositoryService to handle the search
