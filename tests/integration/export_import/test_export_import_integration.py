@@ -21,10 +21,6 @@ from pathlib import Path
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-# Add parent directory to path
-backend_path = Path(__file__).parent.parent
-if str(backend_path) not in sys.path:
-    sys.path.insert(0, str(backend_path))
 
 from db.database import Base, get_db
 from models.ai_service import AIService

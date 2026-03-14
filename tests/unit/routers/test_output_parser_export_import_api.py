@@ -26,10 +26,6 @@ from io import BytesIO
 from unittest.mock import Mock, patch, MagicMock
 from fastapi.testclient import TestClient
 
-# Add parent directory to path
-backend_path = Path(__file__).parent.parent
-if str(backend_path) not in sys.path:
-    sys.path.insert(0, str(backend_path))
 
 from main import app
 from models.output_parser import OutputParser
