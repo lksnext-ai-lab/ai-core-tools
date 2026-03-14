@@ -68,6 +68,43 @@ class DetachFileResponseSchema(BaseModel):
     success: bool
     message: str
 
+# ==================== CONVERSATION SCHEMAS ====================
+
+class PublicConversationSchema(BaseModel):
+    """Public conversation metadata"""
+    model_config = ConfigDict(from_attributes=True)
+
+    conversation_id: int
+    agent_id: int
+    title: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class PublicConversationListResponseSchema(BaseModel):
+    """Paginated list of conversations"""
+    conversations: List[PublicConversationSchema]
+    total: int
+
+class PublicConversationWithHistorySchema(BaseModel):
+    """Conversation with message history"""
+    conversation_id: int
+    agent_id: int
+    title: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    messages: List[Dict[str, Any]] = []
+
+class CreateConversationRequestSchema(BaseModel):
+    """Request to create a new conversation"""
+    title: Optional[str] = None
+
+# ==================== FILE DOWNLOAD SCHEMAS ====================
+
+class FileDownloadResponseSchema(BaseModel):
+    """File download response with signed URL"""
+    download_url: str
+    filename: str
+
 # ==================== OCR SCHEMAS ====================
 
 class OCRResponseSchema(BaseModel):
@@ -119,16 +156,21 @@ class FileIndexResponseSchema(BaseModel):
 class RepositorySchema(BaseModel):
     """Repository schema"""
     model_config = ConfigDict(from_attributes=True)
-    
+
     repository_id: int
     name: str
     app_id: int
-    silo_id: Optional[int] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
     create_date: Optional[datetime] = None
 
 class CreateRepositoryRequestSchema(BaseModel):
     """Create repository request"""
     name: str
+
+class UpdateRepositoryRequestSchema(BaseModel):
+    """Update repository request"""
+    name: Optional[str] = None
 
 class RepositoryResponseSchema(BaseModel):
     """Single repository response"""
@@ -143,13 +185,15 @@ class RepositoriesResponseSchema(BaseModel):
 class ResourceSchema(BaseModel):
     """Resource schema"""
     model_config = ConfigDict(from_attributes=True)
-    
+
     resource_id: int
-    uri: str
+    name: Optional[str] = None
+    uri: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
     repository_id: int
+    folder_id: Optional[int] = None
     create_date: Optional[datetime] = None
-    size: Optional[int] = None
-    content_type: Optional[str] = None
 
 class ResourceListResponseSchema(BaseModel):
     """List of resources"""
@@ -158,7 +202,7 @@ class ResourceListResponseSchema(BaseModel):
 class MultipleResourceResponseSchema(BaseModel):
     """Multiple resource creation response"""
     message: str
-    created_resources: List[ResourceSchema]
+    created_resources: List[Dict[str, Any]]
     failed_files: List[str]
 
 # ==================== COMMON PATH SCHEMAS ====================
@@ -192,4 +236,46 @@ class DetachFilePathSchema(BaseModel):
     """Detach file path parameters"""
     app_id: int
     agent_id: int
-    file_reference: str 
+    file_reference: str
+
+# ==================== MEDIA SCHEMAS ====================
+
+class MediaSchema(BaseModel):
+    """Public media schema — excludes internal fields like file_path, error_message"""
+    model_config = ConfigDict(from_attributes=True)
+
+    media_id: int
+    name: str
+    source_type: str
+    source_url: Optional[str] = None
+    duration: Optional[float] = None
+    language: Optional[str] = None
+    status: str
+    create_date: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
+    folder_id: Optional[int] = None
+    repository_id: int
+
+class MediaListResponseSchema(BaseModel):
+    """List of media"""
+    media: List[MediaSchema]
+
+class MediaUploadResponseSchema(BaseModel):
+    """Media upload response"""
+    message: str
+    created_media: List[MediaSchema]
+    failed_files: List[Dict[str, Any]]
+
+class YouTubeRequestSchema(BaseModel):
+    """YouTube video add request"""
+    url: str
+    folder_id: Optional[int] = None
+    transcription_service_id: int
+    forced_language: Optional[str] = None
+    chunk_min_duration: Optional[int] = None
+    chunk_max_duration: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+
+class MediaResponseSchema(BaseModel):
+    """Single media response"""
+    media: MediaSchema

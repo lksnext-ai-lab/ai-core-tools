@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from models.agent import DEFAULT_AGENT_TEMPERATURE
 
@@ -148,7 +148,7 @@ class CreateAgentRequestSchema(BaseModel):
     """Schema for creating a new agent via public API"""
     name: str
     description: Optional[str] = ""
-    type: str = "agent"  # "agent" or "ocr_agent"
+    type: Literal["agent"] = "agent"
     is_tool: bool = False
     has_memory: bool = False
     memory_max_messages: Optional[int] = 20
