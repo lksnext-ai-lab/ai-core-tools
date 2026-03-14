@@ -18,14 +18,19 @@ from pathlib import Path
 
 @pytest.fixture(scope="session")
 def test_db_url():
-    """Create test database and return its URL."""
+    """Create test database and return its URL.
+
+    IMPORTANT: Uses TEST_DB_* env vars (matching docker-compose db_test service)
+    to guarantee tests never touch the dev/prod database.  The defaults point to
+    the dedicated test PostgreSQL on port 5433.
+    """
     import psycopg2
     from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-    host = os.getenv("DATABASE_HOST", "localhost")
-    port = os.getenv("DATABASE_PORT", "5432")
-    user = os.getenv("DATABASE_USER", "iacoretoolsdev")
-    password = os.getenv("DATABASE_PASSWORD", "iacoretoolsdev")
+    host = os.getenv("TEST_DB_HOST", "localhost")
+    port = os.getenv("TEST_DB_PORT", "5433")
+    user = os.getenv("TEST_DB_USER", "test_user")
+    password = os.getenv("TEST_DB_PASSWORD", "test_pass")
     test_db_name = "mattin_test_temp"
 
     conn = psycopg2.connect(

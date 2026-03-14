@@ -37,8 +37,11 @@ from fastapi.testclient import TestClient
 # Helpers
 # ---------------------------------------------------------------------------
 
+# IMPORTANT: Always use a dedicated test database, never the dev/prod one.
+# Use TEST_DATABASE_URL env var to override; SQLALCHEMY_DATABASE_URI is intentionally
+# ignored here to prevent tests from accidentally destroying the dev database.
 TEST_DATABASE_URL = os.environ.get(
-    "SQLALCHEMY_DATABASE_URI",
+    "TEST_DATABASE_URL",
     "postgresql://test_user:test_pass@localhost:5433/test_db",
 )
 
