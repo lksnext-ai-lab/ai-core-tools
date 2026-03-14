@@ -115,6 +115,44 @@ class OCRResponseSchema(BaseModel):
 
 # ==================== SILO SCHEMAS ====================
 
+class PublicSiloSchema(BaseModel):
+    """Public silo schema - excludes internal form data (output_parsers, embedding_services, etc.)"""
+    model_config = ConfigDict(from_attributes=True)
+
+    silo_id: int
+    name: str
+    description: Optional[str] = None
+    type: Optional[str] = None
+    created_at: Optional[datetime] = None
+    docs_count: int = 0
+    vector_db_type: Optional[str] = None
+    embedding_service_id: Optional[int] = None
+
+
+class PublicSiloResponseSchema(BaseModel):
+    """Single silo response wrapper"""
+    silo: PublicSiloSchema
+
+
+class PublicSilosResponseSchema(BaseModel):
+    """Multiple silos response wrapper"""
+    silos: List[PublicSiloSchema]
+
+
+class PublicSiloSearchResultSchema(BaseModel):
+    """Single search result from a silo"""
+    page_content: str
+    metadata: Dict[str, Any]
+    score: Optional[float] = None
+
+
+class PublicSiloSearchResponseSchema(BaseModel):
+    """Silo search response wrapper"""
+    query: str
+    results: List[PublicSiloSearchResultSchema]
+    total_results: int
+
+
 class SingleDocumentIndexSchema(BaseModel):
     """Schema for indexing a single document"""
     content: str

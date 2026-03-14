@@ -11,6 +11,7 @@ from services.public_auth_service import PublicAuthService
 from services.agent_service import AgentService
 from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
+from services.silo_service import SiloService
 from repositories.media_repository import MediaRepository
 
 # API Key authentication using header
@@ -202,3 +203,19 @@ def validate_media_ownership(db: Session, media_id: int, repo_id: int):
     if not media or media.repository_id != repo_id:
         raise HTTPException(status_code=404, detail="Media not found")
     return media
+
+
+def validate_silo_ownership(db: Session, silo_id: int, app_id: int):
+    """
+    Validate that a silo exists and belongs to the specified app.
+
+    Returns:
+        The silo object if valid
+
+    Raises:
+        HTTPException: 404 if silo not found or doesn't belong to app
+    """
+    silo = SiloService.get_silo(silo_id, db)
+    if not silo or silo.app_id != app_id:
+        raise HTTPException(status_code=404, detail="Silo not found")
+    return silo
