@@ -414,6 +414,71 @@ async def add_youtube_video(
         )
 
 
+@repositories_router.get(
+    "/{repo_id}/media/{media_id}",
+    summary="Get media status",
+    tags=["Media"],
+    response_model=MediaResponseSchema,
+)
+async def get_media_status(
+    app_id: int,
+    repo_id: int,
+    media_id: int,
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db),
+):
+    """Get status and details of a specific media item."""
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_repository_ownership(db, repo_id, app_id)
+    media = validate_media_ownership(db, media_id, repo_id)
+
+    return MediaResponseSchema(media=MediaSchema.model_validate(media))
+
+
+@repositories_router.post(
+    "/{repo_id}/media/{media_id}/move",
+    summary="Move media to folder",
+    tags=["Media"],
+    response_model=MessageResponseSchema,
+)
+async def move_media(
+    app_id: int,
+    repo_id: int,
+    media_id: int,
+    new_folder_id: Optional[int] = Form(default=None),
+    api_key: str = Depends(get_api_key_auth),
+    db: Session = Depends(get_db),
+):
+    """Move a media item to a different folder within the same repository."""
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_repository_ownership(db, repo_id, app_id)
+    validate_media_ownership(db, media_id, repo_id)
+
+    try:
+        MediaService.move_media_to_folder(
+            app_id=app_id,
+            media_id=media_id,
+            repository_id=repo_id,
+            new_folder_id=new_folder_id,
+            db=db,
+        )
+        logger.info(f"Media {media_id} moved via public API")
+        return MessageResponseSchema(message="Media moved successfully")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error moving media: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to move media",
+        )
+
+
 @repositories_router.delete(
     "/{repo_id}/media/{media_id}",
     summary="Delete media",

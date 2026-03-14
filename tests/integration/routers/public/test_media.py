@@ -389,6 +389,146 @@ class TestYouTubeMedia:
 
 
 # ---------------------------------------------------------------------------
+# Get media status
+# ---------------------------------------------------------------------------
+
+
+class TestGetMediaStatus:
+    def test_returns_200_with_detail(
+        self, client, fake_app, fake_repository, fake_media, fake_api_key, db
+    ):
+        resp = client.get(
+            media_url(
+                fake_app.app_id,
+                fake_repository.repository_id,
+                f"/{fake_media.media_id}",
+            ),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "media" in data
+        media = data["media"]
+        assert media["media_id"] == fake_media.media_id
+        assert media["name"] == fake_media.name
+        assert media["status"] == fake_media.status
+        assert "file_path" not in media
+        assert "error_message" not in media
+
+    def test_nonexistent_returns_404(
+        self, client, fake_app, fake_repository, fake_api_key, db
+    ):
+        resp = client.get(
+            media_url(fake_app.app_id, fake_repository.repository_id, "/999999"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 404
+
+    def test_idor_cross_repo_returns_404(
+        self, client, fake_app, fake_repository, fake_media, fake_api_key, db
+    ):
+        """Accessing media via wrong repo_id should return 404."""
+        from models.repository import Repository
+        from models.silo import Silo
+
+        silo2 = Silo(
+            name="Other Silo", description="Other", status="active",
+            silo_type="REPO", app_id=fake_app.app_id, vector_db_type="PGVECTOR",
+        )
+        db.add(silo2)
+        db.flush()
+
+        other_repo = Repository(
+            name="Other Repo", type="default", status="active",
+            app_id=fake_app.app_id, silo_id=silo2.silo_id, create_date=datetime.now(),
+        )
+        db.add(other_repo)
+        db.flush()
+
+        resp = client.get(
+            media_url(fake_app.app_id, other_repo.repository_id, f"/{fake_media.media_id}"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Move media
+# ---------------------------------------------------------------------------
+
+
+class TestMoveMedia:
+    def test_move_returns_200(
+        self, client, fake_app, fake_repository, fake_media, fake_api_key, db
+    ):
+        with patch(
+            "routers.public.v1.repositories.MediaService.move_media_to_folder"
+        ) as mock_move:
+            mock_move.return_value = {"success": True, "message": "Media moved successfully"}
+
+            resp = client.post(
+                media_url(
+                    fake_app.app_id,
+                    fake_repository.repository_id,
+                    f"/{fake_media.media_id}/move",
+                ),
+                data={"new_folder_id": "5"},
+                headers=api_headers(fake_api_key.key),
+            )
+            assert resp.status_code == 200
+            assert "moved" in resp.json()["message"].lower()
+
+    def test_move_nonexistent_returns_404(
+        self, client, fake_app, fake_repository, fake_api_key, db
+    ):
+        resp = client.post(
+            media_url(fake_app.app_id, fake_repository.repository_id, "/999999/move"),
+            data={"new_folder_id": "1"},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 404
+
+    def test_move_invalid_folder_returns_400(
+        self, client, fake_app, fake_repository, fake_media, fake_api_key, db
+    ):
+        with patch(
+            "routers.public.v1.repositories.MediaService.move_media_to_folder",
+            side_effect=ValueError("Folder 999 does not belong to repository"),
+        ):
+            resp = client.post(
+                media_url(
+                    fake_app.app_id,
+                    fake_repository.repository_id,
+                    f"/{fake_media.media_id}/move",
+                ),
+                data={"new_folder_id": "999"},
+                headers=api_headers(fake_api_key.key),
+            )
+            assert resp.status_code == 400
+
+    def test_move_error_does_not_leak_details(
+        self, client, fake_app, fake_repository, fake_media, fake_api_key, db
+    ):
+        with patch(
+            "routers.public.v1.repositories.MediaService.move_media_to_folder",
+            side_effect=RuntimeError("shutil.move: permission denied /mnt/data"),
+        ):
+            resp = client.post(
+                media_url(
+                    fake_app.app_id,
+                    fake_repository.repository_id,
+                    f"/{fake_media.media_id}/move",
+                ),
+                data={"new_folder_id": "1"},
+                headers=api_headers(fake_api_key.key),
+            )
+            assert resp.status_code == 500
+            detail = resp.json()["detail"]
+            assert "shutil" not in detail
+            assert "permission denied" not in detail
+
+
+# ---------------------------------------------------------------------------
 # Delete media
 # ---------------------------------------------------------------------------
 
