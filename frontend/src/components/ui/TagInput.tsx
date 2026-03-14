@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { X } from 'lucide-react';
 
 interface TagInputProps {
   readonly id?: string;
@@ -69,7 +70,7 @@ export function TagInput({
               className="ml-0.5 text-blue-600 hover:text-blue-900 font-medium"
               aria-label={`Remove tag ${tag}`}
             >
-              ×
+              <X className="w-3 h-3" />
             </button>
           </span>
         ))}

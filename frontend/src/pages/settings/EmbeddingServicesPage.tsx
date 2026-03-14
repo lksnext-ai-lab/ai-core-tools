@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
+import { Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import EmbeddingServiceForm from '../../components/forms/EmbeddingServiceForm';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -166,7 +167,7 @@ function EmbeddingServicesPage() {
               onClick={() => setShowImportModal(true)}
               className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
             >
-              <span className="mr-2">📤</span>Import
+              <Upload className="w-4 h-4 mr-2" />Import
             </button>
             <button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
               <span className="mr-2">+</span>Add Embedding Service
@@ -181,9 +182,9 @@ function EmbeddingServicesPage() {
         <div className={`mb-4 rounded-lg p-4 ${notification.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <span className={`text-xl ${notification.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                {notification.type === 'success' ? '✓' : '✗'}
-              </span>
+              {notification.type === 'success'
+                ? <CheckCircle2 className="w-5 h-5 text-green-400" />
+                : <XCircle className="w-5 h-5 text-red-400" />}
             </div>
             <div className="ml-3 flex-1">
               <p className={`text-sm font-medium ${notification.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
@@ -195,7 +196,7 @@ function EmbeddingServicesPage() {
               className={`ml-3 inline-flex rounded-md p-1.5 ${notification.type === 'success' ? 'text-green-500 hover:bg-green-100' : 'text-red-500 hover:bg-red-100'} focus:outline-none`}
             >
               <span className="sr-only">Dismiss</span>
-              <span className="text-lg">×</span>
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -218,8 +219,8 @@ function EmbeddingServicesPage() {
           ) },
           { header: 'Status', render: (service: EmbeddingService) => (
             service.needs_api_key ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                ⚠ API Key Required
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <AlertTriangle className="w-3 h-3" /> API Key Required
               </span>
             ) : (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -234,19 +235,19 @@ function EmbeddingServicesPage() {
                 {
                   label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
                   onClick: () => void handleExport(service.service_id),
-                  icon: exportingServiceId === service.service_id ? '⏳' : '📥',
+                  icon: exportingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />,
                   variant: 'primary' as const,
                   disabled: exportingServiceId === service.service_id
                 },
-                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: '✏️', variant: 'primary' },
-                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: '🗑️', variant: 'danger' }
+                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' },
+                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' }
               ]} size="sm" />
             ) : (
               <span className="text-gray-400 text-sm">View only</span>
             )
           ) }
         ]}
-        emptyIcon="📊"
+        emptyIcon={<BarChart2 className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Embedding Services"
         emptySubMessage="Add your first embedding service to enable vector search and document processing."
         loading={loading}

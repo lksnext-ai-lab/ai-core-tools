@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -107,7 +108,7 @@ export default function MarketplacePage() {
     return (
       <>
         <p className="text-sm text-gray-500">
-          Showing {agents.length} of {total} agent{total !== 1 ? 's' : ''}
+          Showing {agents.length} of {total} agent{total === 1 ? '' : 's'}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {agents.map((agent) => (
@@ -140,7 +141,7 @@ export default function MarketplacePage() {
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 pointer-events-none">
-            🔍
+            <Search className="w-4 h-4" />
           </span>
           <input
             type="text"
@@ -209,9 +210,7 @@ function EmptyState({ search, category }: EmptyStateProps) {
   const hasFilters = Boolean(search || category);
   return (
     <div className="text-center py-16">
-      <span className="text-5xl" aria-hidden="true">
-        🔎
-      </span>
+      <Search className="w-12 h-12 text-gray-300 mx-auto" aria-hidden="true" />
       <h3 className="mt-4 text-lg font-medium text-gray-900">No agents found</h3>
       <p className="mt-1 text-sm text-gray-500">
         {hasFilters

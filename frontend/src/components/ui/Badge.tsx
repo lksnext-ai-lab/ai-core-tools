@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check, X, AlertTriangle } from 'lucide-react';
 
 type BadgeVariant = 'success' | 'info' | 'warning' | 'error' | 'default' | 'primary' | 'secondary';
 
@@ -6,7 +7,7 @@ interface BadgeProps {
   readonly label: string;
   readonly variant?: BadgeVariant;
   readonly className?: string;
-  readonly icon?: string;
+  readonly icon?: React.ReactNode;
 }
 
 /**
@@ -83,13 +84,13 @@ interface StatusBadgeProps {
  * Badge component for status indicators
  */
 export function StatusBadge({ status, className = '', customLabel }: StatusBadgeProps) {
-  const statusConfig: Record<StatusType, { label: string; color: string; icon?: string }> = {
-    active: { label: 'Active', color: 'bg-green-100 text-green-800', icon: '●' },
-    inactive: { label: 'Inactive', color: 'bg-gray-100 text-gray-800', icon: '○' },
-    pending: { label: 'Pending', color: 'bg-yellow-100 text-yellow-800', icon: '◐' },
-    error: { label: 'Error', color: 'bg-red-100 text-red-800', icon: '✕' },
-    success: { label: 'Success', color: 'bg-green-100 text-green-800', icon: '✓' },
-    warning: { label: 'Warning', color: 'bg-orange-100 text-orange-800', icon: '⚠' }
+  const statusConfig: Record<StatusType, { label: string; color: string; icon?: React.ReactNode }> = {
+    active: { label: 'Active', color: 'bg-green-100 text-green-800', icon: <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> },
+    inactive: { label: 'Inactive', color: 'bg-gray-100 text-gray-800', icon: <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> },
+    pending: { label: 'Pending', color: 'bg-yellow-100 text-yellow-800', icon: <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> },
+    error: { label: 'Error', color: 'bg-red-100 text-red-800', icon: <X className="w-3 h-3" /> },
+    success: { label: 'Success', color: 'bg-green-100 text-green-800', icon: <Check className="w-3 h-3" /> },
+    warning: { label: 'Warning', color: 'bg-orange-100 text-orange-800', icon: <AlertTriangle className="w-3 h-3" /> }
   };
 
   const config = statusConfig[status];

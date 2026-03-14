@@ -45,7 +45,7 @@ export function Tabs({
   activeTab,
   onChange,
   className = ''
-}: TabsProps): React.ReactElement {
+}: Readonly<TabsProps>): React.ReactElement {
   const tabListRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 

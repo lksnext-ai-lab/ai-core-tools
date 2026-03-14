@@ -124,12 +124,11 @@ class RoleChecker:
                     detail="Insufficient permissions"
                 )
         
-        if self.allowed_roles:
-            if not has_any_role(role, self.allowed_roles):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Insufficient permissions"
-                )
+        if self.allowed_roles and not has_any_role(role, self.allowed_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
         
         return role
 

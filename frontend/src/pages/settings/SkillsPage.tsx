@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { Target, Pencil, Trash2, Lightbulb } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import SkillForm from '../../components/forms/SkillForm';
 import { apiService } from '../../services/api';
@@ -43,7 +44,7 @@ function SkillsPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getSkills(parseInt(appId));
+      const response = await apiService.getSkills(Number.parseInt(appId));
       setSkills(response);
       // Cache the response
       settingsCache.setSkills(appId, response);
@@ -61,7 +62,7 @@ function SkillsPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getSkills(parseInt(appId));
+      const response = await apiService.getSkills(Number.parseInt(appId));
       setSkills(response);
       // Cache the response
       settingsCache.setSkills(appId, response);
@@ -81,7 +82,7 @@ function SkillsPage() {
     if (!appId) return;
 
     try {
-      await apiService.deleteSkill(parseInt(appId), skillId);
+      await apiService.deleteSkill(Number.parseInt(appId), skillId);
       // Remove from local state
       const newSkills = skills.filter(s => s.skill_id !== skillId);
       setSkills(newSkills);
@@ -102,7 +103,7 @@ function SkillsPage() {
     if (!appId) return;
 
     try {
-      const skill = await apiService.getSkill(parseInt(appId), skillId);
+      const skill = await apiService.getSkill(Number.parseInt(appId), skillId);
       setEditingSkill(skill);
       setIsModalOpen(true);
     } catch (err) {
@@ -117,11 +118,11 @@ function SkillsPage() {
     try {
       if (editingSkill && editingSkill.skill_id !== 0) {
         // Update existing skill
-        await apiService.updateSkill(parseInt(appId), editingSkill.skill_id, data);
+        await apiService.updateSkill(Number.parseInt(appId), editingSkill.skill_id, data);
         await loadSkills();
       } else {
         // Create new skill - invalidate cache and force reload
-        await apiService.createSkill(parseInt(appId), data);
+        await apiService.createSkill(Number.parseInt(appId), data);
         settingsCache.invalidateSkills(appId);
         await forceReloadSkills();
       }
@@ -186,7 +187,7 @@ function SkillsPage() {
             header: 'Name',
             render: (skill) => (
               <div className="flex items-center">
-                <span className="text-purple-400 text-xl mr-3">🎯</span>
+                <Target className="w-5 h-5 text-purple-400 mr-3 shrink-0" />
                 {canEdit ? (
                   <button
                     type="button"
@@ -227,13 +228,13 @@ function SkillsPage() {
                     {
                       label: 'Edit',
                       onClick: () => { void handleEditSkill(skill.skill_id); },
-                      icon: '✏️',
+                      icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary'
                     },
                     {
                       label: 'Delete',
                       onClick: () => { void handleDelete(skill.skill_id); },
-                      icon: '🗑️',
+                      icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger'
                     }
                   ]}
@@ -245,7 +246,7 @@ function SkillsPage() {
             )
           }
         ]}
-        emptyIcon="🎯"
+        emptyIcon={<Target className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Skills"
         emptySubMessage="Add your first skill to create specialized behaviors for your agents."
         loading={loading}
@@ -266,7 +267,7 @@ function SkillsPage() {
       <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-purple-400 text-xl">💡</span>
+            <Lightbulb className="w-5 h-5 text-purple-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-purple-800">

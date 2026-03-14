@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AlertTriangle, Users, AppWindow, Bot, KeyRound } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { SystemStats } from '../../services/admin';
 
@@ -35,7 +36,7 @@ function StatsPage() {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
         <div className="flex">
-          <span className="text-red-400 text-xl mr-3">⚠️</span>
+          <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
           <div>
             <h3 className="text-sm font-medium text-red-800">Failed to Load Statistics</h3>
             <p className="text-sm text-red-600 mt-1">Unable to load system statistics.</p>
@@ -59,7 +60,7 @@ function StatsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">👥</span>
+              <Users className="w-6 h-6" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Users</p>
@@ -75,7 +76,7 @@ function StatsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">📱</span>
+              <AppWindow className="w-6 h-6" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Apps</p>
@@ -88,7 +89,7 @@ function StatsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🤖</span>
+              <Bot className="w-6 h-6" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Agents</p>
@@ -101,7 +102,7 @@ function StatsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🔑</span>
+              <KeyRound className="w-6 h-6" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">API Keys</p>

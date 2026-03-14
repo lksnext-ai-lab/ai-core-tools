@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { Users, Handshake, Crown, Info, Lock, Lightbulb } from 'lucide-react';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
@@ -139,7 +140,7 @@ function CollaborationPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getCollaborators(parseInt(appId));
+      const response = await apiService.getCollaborators(Number.parseInt(appId));
       setCollaborators(response);
       
       // Also enrich owner info
@@ -161,7 +162,7 @@ function CollaborationPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getCollaborators(parseInt(appId));
+      const response = await apiService.getCollaborators(Number.parseInt(appId));
       setCollaborators(response);
       
       // Also enrich owner info
@@ -181,7 +182,7 @@ function CollaborationPage() {
     if (!appId) return;
 
     try {
-      await apiService.inviteCollaborator(parseInt(appId), email, role);
+      await apiService.inviteCollaborator(Number.parseInt(appId), email, role);
       // Invalidate cache and force reload collaborators list
       settingsCache.invalidateCollaborators(appId);
       await forceReloadCollaborators();
@@ -194,7 +195,7 @@ function CollaborationPage() {
     if (!appId) return;
 
     try {
-      await apiService.updateCollaboratorRole(parseInt(appId), userId, newRole);
+      await apiService.updateCollaboratorRole(Number.parseInt(appId), userId, newRole);
       // Invalidate cache and force reload collaborators list
       settingsCache.invalidateCollaborators(appId);
       await forceReloadCollaborators();
@@ -212,7 +213,7 @@ function CollaborationPage() {
     if (!appId) return;
 
     try {
-      await apiService.removeCollaborator(parseInt(appId), userId);
+      await apiService.removeCollaborator(Number.parseInt(appId), userId);
       // Remove from local state
       const newCollaborators = collaborators.filter(c => c.user_id !== userId);
       setCollaborators(newCollaborators);
@@ -278,7 +279,7 @@ function CollaborationPage() {
       <div className="bg-white shadow rounded-lg">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 flex items-center">
-            <span className="text-indigo-400 text-xl mr-2">👥</span>
+            <Users className="w-5 h-5 text-indigo-400 mr-2" />
             {' '}Invite Collaborator
           </h3>
           <p className="text-sm text-gray-500 mt-1">
@@ -295,7 +296,7 @@ function CollaborationPage() {
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-yellow-400 text-xl">ℹ️</span>
+            <Info className="w-5 h-5 text-yellow-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-yellow-800">
@@ -329,7 +330,7 @@ function CollaborationPage() {
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <span className="text-indigo-400 text-xl mr-2">🤝</span>
+              <Handshake className="w-5 h-5 text-indigo-400 mr-2" />
               Team Members ({allMembers.length})
             </h3>
             <p className="text-sm text-gray-500 mt-1">
@@ -375,8 +376,7 @@ function CollaborationPage() {
                 render: (member) => (
                   member.role === 'owner' ? (
                     <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
-                      <span className="mr-1">👑</span>
-                      {' '}Owner
+                      <Crown className="w-3 h-3 mr-1" /> Owner
                     </span>
                   ) : (
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
@@ -452,7 +452,7 @@ function CollaborationPage() {
               }] : [])
             ]}
             rowClassName={(member) => member.role === 'owner' ? "bg-blue-50" : "hover:bg-gray-50"}
-            emptyIcon="👥"
+            emptyIcon={<Users className="w-10 h-10 text-gray-300" />}
             emptyMessage="No Collaborators Yet"
             emptySubMessage={canManage 
               ? "This app doesn't have any collaborators. Invite users above to start sharing."
@@ -467,7 +467,7 @@ function CollaborationPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex">
               <div className="flex-shrink-0">
-                <span className="text-blue-400 text-xl">💡</span>
+                <Lightbulb className="w-5 h-5 text-blue-400" />
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-blue-800">
@@ -488,7 +488,7 @@ function CollaborationPage() {
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex">
               <div className="flex-shrink-0">
-                <span className="text-yellow-400 text-xl">🔒</span>
+                <Lock className="w-5 h-5 text-yellow-400" />
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-yellow-800">

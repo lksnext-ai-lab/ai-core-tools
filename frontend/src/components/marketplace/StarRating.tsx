@@ -57,7 +57,7 @@ export function StarRating({
             type="button"
             role="radio"
             aria-checked={value === starValue}
-            aria-label={`${starValue} star${starValue !== 1 ? 's' : ''}`}
+            aria-label={`${starValue} star${starValue === 1 ? '' : 's'}`}
             className={`${starSize} leading-none transition-colors cursor-pointer ${
               isFilled ? 'text-yellow-400' : 'text-gray-300'
             } hover:text-yellow-400`}

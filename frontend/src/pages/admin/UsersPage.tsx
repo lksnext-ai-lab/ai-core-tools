@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Crown, Check, X, Ban, Trash2 } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -219,7 +220,7 @@ function UsersPage() {
                           </span>
                           {user.is_omniadmin && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                              👑 Admin
+                              <Crown className="w-3 h-3 mr-1" /> Admin
                             </span>
                           )}
                         </div>
@@ -229,11 +230,11 @@ function UsersPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       {user.is_active ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✓ Active
+                          <Check className="w-3 h-3 mr-1" /> Active
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          ✗ Inactive
+                          <X className="w-3 h-3 mr-1" /> Inactive
                         </span>
                       )}
                     </td>
@@ -258,7 +259,7 @@ function UsersPage() {
                               {
                                 label: activatingUser === user.user_id ? 'Deactivating...' : 'Deactivate',
                                 onClick: () => handleDeactivateUser(user.user_id, user.name || user.email),
-                                icon: '🚫',
+                                icon: <Ban className="w-4 h-4" />,
                                 variant: 'warning' as const,
                                 disabled: activatingUser === user.user_id
                               }
@@ -266,7 +267,7 @@ function UsersPage() {
                               {
                                 label: activatingUser === user.user_id ? 'Activating...' : 'Activate',
                                 onClick: () => handleActivateUser(user.user_id),
-                                icon: '✓',
+                                icon: <Check className="w-4 h-4" />,
                                 variant: 'success' as const,
                                 disabled: activatingUser === user.user_id
                               }
@@ -280,8 +281,8 @@ function UsersPage() {
                             },
                             {
                               label: deletingUser === user.user_id ? 'Deleting...' : 'Delete',
-                              onClick: () => handleDeleteUser(user.user_id),
-                              icon: '🗑️',
+                              onClick: () => { void handleDeleteUser(user.user_id); },
+                              icon: <Trash2 className="w-4 h-4" />,
                               variant: 'danger' as const,
                               disabled: deletingUser === user.user_id
                             }

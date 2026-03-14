@@ -26,9 +26,6 @@ from unittest.mock import Mock, MagicMock, patch
 from typing import Optional
 
 # Add parent directory to path if needed
-backend_path = Path(__file__).parent.parent
-if str(backend_path) not in sys.path:
-    sys.path.insert(0, str(backend_path))
 
 # Import only what we need without triggering DB connection
 from schemas.export_schemas import (

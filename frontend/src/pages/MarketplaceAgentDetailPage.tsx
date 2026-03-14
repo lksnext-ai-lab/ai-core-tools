@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Bot} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiService } from '../services/api';
@@ -11,6 +12,42 @@ import type {
   MarketplaceAgentDetail,
   MarketplaceConversation,
 } from '../types/marketplace';
+
+/** Parses an agent-load error into a user-friendly message. */
+function getAgentLoadError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : 'Failed to load agent';
+  if (msg.includes('404') || msg.includes('not found')) {
+    return 'Agent not found or no longer available.';
+  }
+  return msg;
+}
+
+interface RatingSummaryProps {
+  readonly ratingAvg: number | null;
+  readonly ratingCount: number;
+  readonly conversationCount: number;
+}
+
+function RatingSummary({ ratingAvg, ratingCount, conversationCount }: RatingSummaryProps) {
+  return (
+    <div className="flex items-center gap-2 mt-1.5">
+      <StarRating value={ratingAvg ? Math.round(ratingAvg) : null} size="md" />
+      {ratingAvg === null ? (
+        <span className="text-sm text-gray-400">No ratings yet</span>
+      ) : (
+        <span className="text-sm text-gray-600">
+          {ratingAvg.toFixed(1)}{' '}
+          <span className="text-gray-400">({ratingCount} rating{ratingCount === 1 ? '' : 's'})</span>
+        </span>
+      )}
+      {conversationCount > 0 && (
+        <span className="text-sm text-gray-400">
+          · {conversationCount.toLocaleString()} conversations
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** Category → badge variant mapping (shared with MarketplaceAgentCard) */
 const CATEGORY_VARIANT: Record<
@@ -48,7 +85,7 @@ export default function MarketplaceAgentDetailPage() {
   const [ratingError, setRatingError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    if (!numericId || isNaN(numericId)) {
+    if (!numericId || Number.isNaN(numericId)) {
       setError('Invalid agent ID');
       setLoading(false);
       return;
@@ -67,12 +104,7 @@ export default function MarketplaceAgentDetailPage() {
       );
       setMyRating(ratingData.rating);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load agent';
-      if (msg.includes('404') || msg.includes('not found')) {
-        setError('Agent not found or no longer available.');
-      } else {
-        setError(msg);
-      }
+      setError(getAgentLoadError(err));
     } finally {
       setLoading(false);
     }
@@ -125,9 +157,9 @@ export default function MarketplaceAgentDetailPage() {
         <div className="text-center">
           <Link
             to="/marketplace"
-            className="text-sm text-blue-600 hover:text-blue-800 underline"
+            className="text-sm text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1"
           >
-            ← Back to Marketplace
+            <ArrowLeft className="w-4 h-4" /> Back to Marketplace
           </Link>
         </div>
       </div>
@@ -147,9 +179,9 @@ export default function MarketplaceAgentDetailPage() {
       {/* Back link */}
       <Link
         to="/marketplace"
-        className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
+        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
-        ← Back to Marketplace
+        <ArrowLeft className="w-4 h-4" /> Back to Marketplace
       </Link>
 
       {/* Cover image / gradient banner */}
@@ -176,7 +208,7 @@ export default function MarketplaceAgentDetailPage() {
               className="w-full h-full object-cover rounded-xl"
             />
           ) : (
-            <span className="text-4xl" aria-hidden="true">🤖</span>
+            <Bot className="w-10 h-10 text-blue-400" aria-hidden="true" />
           )}
         </div>
 
@@ -188,22 +220,11 @@ export default function MarketplaceAgentDetailPage() {
           <p className="text-sm text-gray-500 mt-0.5">by {agent.app_name}</p>
 
           {/* Rating summary */}
-          <div className="flex items-center gap-2 mt-1.5">
-            <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="md" />
-            {agent.rating_avg !== null ? (
-              <span className="text-sm text-gray-600">
-                {agent.rating_avg.toFixed(1)}{' '}
-                <span className="text-gray-400">({agent.rating_count} rating{agent.rating_count !== 1 ? 's' : ''})</span>
-              </span>
-            ) : (
-              <span className="text-sm text-gray-400">No ratings yet</span>
-            )}
-            {agent.conversation_count > 0 && (
-              <span className="text-sm text-gray-400">
-                · {agent.conversation_count.toLocaleString()} conversations
-              </span>
-            )}
-          </div>
+          <RatingSummary
+            ratingAvg={agent.rating_avg}
+            ratingCount={agent.rating_count}
+            conversationCount={agent.conversation_count}
+          />
 
           <div className="flex flex-wrap items-center gap-2 mt-2">
             {agent.category && (
@@ -291,7 +312,7 @@ export default function MarketplaceAgentDetailPage() {
                 )}
                 {myRating !== null && !ratingSubmitting && (
                   <p className="text-xs text-gray-500">
-                    Your rating: {myRating} star{myRating !== 1 ? 's' : ''}. Click to change.
+                    Your rating: {myRating} star{myRating === 1 ? '' : 's'}. Click to change.
                   </p>
                 )}
                 {ratingError && (
@@ -343,7 +364,7 @@ export default function MarketplaceAgentDetailPage() {
                       )}
                       <p className="text-xs text-gray-400 mt-1">
                         {new Date(conv.updated_at).toLocaleDateString()} ·{' '}
-                        {conv.message_count} message{conv.message_count !== 1 ? 's' : ''}
+                        {conv.message_count} message{conv.message_count === 1 ? '' : 's'}
                       </p>
                     </Link>
                   </li>

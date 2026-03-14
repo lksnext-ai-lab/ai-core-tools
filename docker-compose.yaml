@@ -54,31 +54,31 @@ services:
       DATABASE_USER: ${DATABASE_USER:-mattin}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-mattin_secure_2024}
       DATABASE_NAME: ${DATABASE_NAME:-mattin_ai}
-      
+
       # Autenticación
       AICT_LOGIN: ${AICT_LOGIN:-FAKE}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-24}
-      
+
       # Entra ID (solo si AICT_LOGIN=OIDC)
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
-      
+
       # URLs
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      
+
       # Claves API de IA
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
-      
+
       # Configuración de la aplicación
       AICT_MODE: ${AICT_MODE:-SELF-HOSTED}
       AICT_OMNIADMINS: ${AICT_OMNIADMINS:-admin@example.com}
       REPO_BASE_FOLDER: ${REPO_BASE_FOLDER:-./data/repositories}
-      
+
       # LangSmith (opcional, el tracing se gestiona por app)
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}

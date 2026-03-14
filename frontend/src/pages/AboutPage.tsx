@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Bot, Search, Database, Wrench, Zap, Sprout, Building2, Brain } from 'lucide-react';
 
 const AboutPage: React.FC = () => {
   return (
@@ -8,7 +9,7 @@ const AboutPage: React.FC = () => {
       <div className="text-center mb-12">
         <div className="flex justify-center mb-6">
           <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <span className="text-4xl">🤖</span>
+            <Bot className="w-12 h-12 text-white" />
           </div>
         </div>
         <h1 className="text-5xl font-bold text-gray-900 mb-4">
@@ -70,7 +71,7 @@ const AboutPage: React.FC = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
             <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mb-4">
-              <span className="text-2xl">🧠</span>
+              <Brain className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">LLM Integration</h3>
             <p className="text-gray-700">
@@ -81,7 +82,7 @@ const AboutPage: React.FC = () => {
 
           <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-6 border border-blue-200">
             <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mb-4">
-              <span className="text-2xl">🔍</span>
+              <Search className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">RAG Systems</h3>
             <p className="text-gray-700">
@@ -92,7 +93,7 @@ const AboutPage: React.FC = () => {
 
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
             <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center mb-4">
-              <span className="text-2xl">🗄️</span>
+              <Database className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">Vector Databases</h3>
             <p className="text-gray-700">
@@ -103,7 +104,7 @@ const AboutPage: React.FC = () => {
 
           <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg p-6 border border-orange-200">
             <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center mb-4">
-              <span className="text-2xl">🤖</span>
+              <Bot className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Agents</h3>
             <p className="text-gray-700">
@@ -114,7 +115,7 @@ const AboutPage: React.FC = () => {
 
           <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-6 border border-indigo-200">
             <div className="w-12 h-12 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
-              <span className="text-2xl">🔧</span>
+              <Wrench className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">Modular Architecture</h3>
             <p className="text-gray-700">
@@ -125,7 +126,7 @@ const AboutPage: React.FC = () => {
 
           <div className="bg-gradient-to-br from-teal-50 to-green-50 rounded-lg p-6 border border-teal-200">
             <div className="w-12 h-12 bg-teal-500 rounded-lg flex items-center justify-center mb-4">
-              <span className="text-2xl">⚡</span>
+              <Zap className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">High Performance</h3>
             <p className="text-gray-700">
@@ -231,7 +232,7 @@ const AboutPage: React.FC = () => {
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
             <div className="flex items-center mb-4">
               <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mr-4">
-                <span className="text-2xl">🌱</span>
+                <Sprout className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-gray-900">Open Source</h3>
             </div>
@@ -261,7 +262,7 @@ const AboutPage: React.FC = () => {
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
             <div className="flex items-center mb-4">
               <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
-                <span className="text-2xl">🏢</span>
+                <Building2 className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-gray-900">Commercial</h3>
             </div>
@@ -343,7 +344,7 @@ const AboutPage: React.FC = () => {
       <div className="text-center text-gray-500 text-sm">
         <p>© 2024 Mattin AI - Powered by LKS Next</p>
         <p className="mt-2">
-          Built with ❤️ using FastAPI, React, and PostgreSQL
+          Built with ♥ using FastAPI, React, and PostgreSQL
         </p>
       </div>
     </div>

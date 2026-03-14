@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 function AuthSuccessPage() {
@@ -39,7 +40,7 @@ function AuthSuccessPage() {
         <div className="max-w-md w-full space-y-8 p-8">
           <div className="text-center">
             <div className="mx-auto h-16 w-16 bg-red-500 rounded-full flex items-center justify-center mb-4">
-              <span className="text-white text-2xl">✗</span>
+              <X className="w-5 h-5 text-white" />
             </div>
             <h2 className="text-xl font-semibold text-gray-900">Sign in failed</h2>
             <p className="text-gray-600 mt-2">{error}</p>

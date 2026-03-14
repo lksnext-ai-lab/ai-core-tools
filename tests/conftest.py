@@ -20,17 +20,28 @@ Transaction isolation strategy:
 """
 
 import os
+import sys
+from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
+
+# Ensure backend/ is on sys.path so that imports like `from models.xxx` work
+# regardless of how pytest is invoked.
+_backend_dir = str(Path(__file__).resolve().parent.parent / "backend")
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+# IMPORTANT: Always use a dedicated test database, never the dev/prod one.
+# Use TEST_DATABASE_URL env var to override; SQLALCHEMY_DATABASE_URI is intentionally
+# ignored here to prevent tests from accidentally destroying the dev database.
 TEST_DATABASE_URL = os.environ.get(
-    "SQLALCHEMY_DATABASE_URI",
+    "TEST_DATABASE_URL",
     "postgresql://test_user:test_pass@localhost:5433/test_db",
 )
 

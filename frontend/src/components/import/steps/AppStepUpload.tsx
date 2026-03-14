@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent } from 'react';
+import { FolderOpen } from 'lucide-react';
 import Alert from '../../ui/Alert';
 import type { AppImportPreview } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
@@ -17,7 +18,7 @@ function AppStepUpload({
   preview,
   isValidating,
   validationError,
-}: Props) {
+}: Readonly<Props>) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -76,11 +77,15 @@ function AppStepUpload({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label
+          htmlFor="app-export-file-input"
+          className="block text-sm font-medium text-gray-700 mb-2"
+        >
           Select App Export File
         </label>
         <input
           ref={fileInputRef}
+          id="app-export-file-input"
           type="file"
           accept=".json,application/json"
           onChange={handleFileChange}
@@ -92,7 +97,7 @@ function AppStepUpload({
           disabled={isValidating}
           className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
         >
-          <span className="mr-2">📁</span>
+          <FolderOpen className="w-5 h-5 mr-2" />
           {file ? 'Change File' : 'Select JSON File'}
         </button>
         {file && (
@@ -160,8 +165,8 @@ function AppStepUpload({
               type="warning"
               message={
                 <ul className="list-disc list-inside space-y-1">
-                  {preview.global_warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
+                  {preview.global_warnings.map((w) => (
+                    <li key={w}>{w}</li>
                   ))}
                 </ul>
               }

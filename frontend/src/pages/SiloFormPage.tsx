@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import SiloForm from '../components/forms/SiloForm';
 
@@ -40,7 +41,7 @@ function SiloFormPage() {
       return;
     }
 
-    const currentSiloId = isEditing && siloId ? parseInt(siloId, 10) : 0;
+    const currentSiloId = isEditing && siloId ? Number.parseInt(siloId, 10) : 0;
     void loadSilo(currentSiloId);
   }, [appId, siloId, isEditing]);
 
@@ -53,7 +54,7 @@ function SiloFormPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getSilo(parseInt(appId, 10), targetSiloId);
+      const response = await apiService.getSilo(Number.parseInt(appId, 10), targetSiloId);
       setSilo(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load silo');
@@ -69,10 +70,10 @@ function SiloFormPage() {
     try {
       if (isEditing && siloId) {
         // Update existing silo
-        await apiService.updateSilo(parseInt(appId), parseInt(siloId), formData);
+        await apiService.updateSilo(Number.parseInt(appId), Number.parseInt(siloId), formData);
       } else {
         // Create new silo
-        await apiService.createSilo(parseInt(appId), formData);
+        await apiService.createSilo(Number.parseInt(appId), formData);
       }
       
       // Navigate back to silos list
@@ -122,7 +123,7 @@ function SiloFormPage() {
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
             <div>
               <h3 className="text-sm font-medium text-red-800">Error Loading Silo</h3>
               <p className="text-sm text-red-600 mt-1">{error}</p>
@@ -153,7 +154,7 @@ function SiloFormPage() {
           onClick={handleCancel}
           className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
         >
-          ← Back to Silos
+          <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
         </button>
       </div>
 
@@ -162,7 +163,6 @@ function SiloFormPage() {
         silo={silo || undefined}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
-        loading={loading}
       />
     </div>
   );

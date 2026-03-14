@@ -62,7 +62,8 @@ class AppDetailSchema(BaseModel):
     domain_count: int = 0
     silo_count: int = 0
     collaborator_count: int = 0
-    
+    onboarding_dismissed: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 

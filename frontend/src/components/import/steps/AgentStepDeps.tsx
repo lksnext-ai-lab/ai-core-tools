@@ -24,12 +24,12 @@ function DepCard({
   title,
   badge,
   children,
-}: {
+}: Readonly<{
   icon: string;
   title: string;
   badge: 'Required' | 'Optional';
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -69,7 +69,7 @@ function AgentStepDeps({
   onImportBundledMCPConfigsChange,
   importBundledAgentTools,
   onImportBundledAgentToolsChange,
-}: Props) {
+}: Readonly<Props>) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, BarChart2, Check } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -53,11 +54,11 @@ function AppsPage() {
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
-    loadApps();
+    void loadApps();
     
     // Auto-refresh only usage stats every 30 seconds (not full page)
     const interval = setInterval(() => {
-      loadUsageStats();
+      void loadUsageStats();
     }, 3000);
     
     return () => clearInterval(interval);
@@ -114,7 +115,7 @@ function AppsPage() {
       
       // Update only the usage stats, not the full apps data
       const stats: Record<number, UsageStats> = {};
-      response.forEach((stat: any) => {
+      response.forEach((stat: UsageStats & { app_id: number }) => {
         stats[stat.app_id] = {
           usage_percentage: stat.usage_percentage,
           stress_level: stat.stress_level,
@@ -138,14 +139,14 @@ function AppsPage() {
     setShowCreateModal(false);
     setSuccess(`App "${data.name}" created successfully!`);
     setError(null);
-    refreshApps(); // Refresh the list without loading spinner
+    void refreshApps(); // Refresh the list without loading spinner
     // Auto-dismiss notification after 5 seconds
     setTimeout(() => setSuccess(null), 5000);
   }
 
   // Function to leave an app (for editors only)
   async function handleLeaveApp(app: App) {
-    if (!window.confirm(`Are you sure you want to leave "${app.name}"?`)) {
+    if (!globalThis.confirm(`Are you sure you want to leave "${app.name}"?`)) {
       return;
     }
 
@@ -154,7 +155,7 @@ function AppsPage() {
       setSuccess(null);
       await apiService.leaveApp(app.app_id);
       setSuccess(`Successfully left "${app.name}"`);
-      refreshApps(); // Refresh the list without loading spinner
+      void refreshApps(); // Refresh the list without loading spinner
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to leave app');
     }
@@ -176,7 +177,7 @@ This action cannot be undone!
 
 Type the app name to confirm: "${app.name}"`;
 
-    const userInput = window.prompt(confirmMessage);
+    const userInput = globalThis.prompt(confirmMessage);
     
     if (userInput !== app.name) {
       if (userInput !== null) { // User didn't cancel
@@ -192,7 +193,7 @@ Type the app name to confirm: "${app.name}"`;
       setSuccess(null);
       await apiService.deleteApp(app.app_id);
       setSuccess(`App "${app.name}" has been successfully deleted.`);
-      refreshApps(); // Refresh the list without loading spinner
+      void refreshApps(); // Refresh the list without loading spinner
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete app');
     } finally {
@@ -208,15 +209,15 @@ Type the app name to confirm: "${app.name}"`;
       const blob = await apiService.exportFullApp(app.app_id);
       
       // Create download link
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const date = new Date().toISOString().split('T')[0];
-      a.download = `${app.name.replace(/\s+/g, '-')}-full-export-${date}.json`;
+      a.download = `${app.name.replaceAll(/\s+/g, '-')}-full-export-${date}.json`;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      a.remove();
+      globalThis.URL.revokeObjectURL(url);
       
       setSuccess(`Full app "${app.name}" exported successfully!`);
       setTimeout(() => setSuccess(null), 5000);
@@ -229,7 +230,7 @@ Type the app name to confirm: "${app.name}"`;
   function handleImportComplete() {
     setShowImportModal(false);
     setSuccess('App imported successfully!');
-    refreshApps();
+    void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
   }
 
@@ -271,7 +272,7 @@ Type the app name to confirm: "${app.name}"`;
             onClick={() => setShowImportModal(true)}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
           >
-            <span className="mr-2">📥</span>
+            <Download className="w-4 h-4 mr-2" />
             Import App
           </button>
           <button
@@ -306,7 +307,7 @@ Type the app name to confirm: "${app.name}"`;
               if (app.role === 'owner') {
                 return (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    <span className="mr-1">👑</span>
+                    <Crown className="w-3 h-3 mr-1" />
                     {' '}Owner
                   </span>
                 );
@@ -314,7 +315,7 @@ Type the app name to confirm: "${app.name}"`;
               if (app.role === 'administrator') {
                 return (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    <span className="mr-1">⚙️</span>
+                    <Shield className="w-3 h-3 mr-1" />
                     {' '}Administrator
                   </span>
                 );
@@ -333,10 +334,12 @@ Type the app name to confirm: "${app.name}"`;
                 </span>
                 );
               }
+              return null;
             }
           },
           {
-            header: '🤖 Agents',
+            header: 'Agents',
+            headerContent: <span className="flex items-center gap-1 justify-center"><Bot className="w-3 h-3" /> Agents</span>,
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
             render: (app) => (
@@ -346,7 +349,8 @@ Type the app name to confirm: "${app.name}"`;
             )
           },
           {
-            header: '📁 Repos',
+            header: 'Repos',
+            headerContent: <span className="flex items-center gap-1 justify-center"><FolderOpen className="w-3 h-3" /> Repos</span>,
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
             render: (app) => (
@@ -356,7 +360,8 @@ Type the app name to confirm: "${app.name}"`;
             )
           },
           {
-            header: '🌐 Domains',
+            header: 'Domains',
+            headerContent: <span className="flex items-center gap-1 justify-center"><Globe className="w-3 h-3" /> Domains</span>,
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
             render: (app) => (
@@ -366,7 +371,8 @@ Type the app name to confirm: "${app.name}"`;
             )
           },
           {
-            header: '🗄️ Silos',
+            header: 'Silos',
+            headerContent: <span className="flex items-center gap-1 justify-center"><Database className="w-3 h-3" /> Silos</span>,
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
             render: (app) => (
@@ -376,7 +382,8 @@ Type the app name to confirm: "${app.name}"`;
             )
           },
           {
-            header: '👥 Collabs',
+            header: 'Collabs',
+            headerContent: <span className="flex items-center gap-1 justify-center"><Users className="w-3 h-3" /> Collabs</span>,
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
             render: (app) => {
@@ -417,12 +424,13 @@ Type the app name to confirm: "${app.name}"`;
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-gray-100 text-gray-600'
               }`}>
-                {app.langsmith_configured ? '✓ Configured' : 'Not configured'}
+                {app.langsmith_configured ? <span className="flex items-center gap-1"><Check className="w-3 h-3" /> Configured</span> : 'Not configured'}
               </span>
             )
           },
           {
-            header: '📊 Usage',
+            header: 'Usage',
+            headerContent: <span className="flex items-center gap-1 justify-center"><BarChart2 className="w-3 h-3" /> Usage</span>,
             headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-4 py-4 whitespace-nowrap text-center',
             render: (app) => (
@@ -473,37 +481,37 @@ Type the app name to confirm: "${app.name}"`;
                   {
                     label: 'Open Dashboard',
                     onClick: () => { globalThis.location.href = `/apps/${app.app_id}`; },
-                    icon: '📊',
+                    icon: <LayoutDashboard className="w-4 h-4" />,
                     variant: 'primary'
                   },
                   {
                     label: 'Manage Agents',
                     onClick: () => { globalThis.location.href = `/apps/${app.app_id}/agents`; },
-                    icon: '🤖',
+                    icon: <Bot className="w-4 h-4" />,
                     variant: 'secondary'
                   },
                   {
                     label: 'App Settings',
                     onClick: () => { globalThis.location.href = `/apps/${app.app_id}/settings`; },
-                    icon: '⚙️',
+                    icon: <Settings className="w-4 h-4" />,
                     variant: 'secondary'
                   },
                   {
                     label: 'Export Full App',
-                    onClick: () => handleExportApp(app),
-                    icon: '📤',
+                    onClick: () => { void handleExportApp(app); },
+                    icon: <Upload className="w-4 h-4" />,
                     variant: 'secondary'
                   },
-                  ...(app.role !== 'owner' ? [{
+                  ...(app.role === 'owner' ? [] : [{
                     label: 'Leave App',
                     onClick: () => handleLeaveApp(app),
-                    icon: '🚪',
+                    icon: <LogOut className="w-4 h-4" />,
                     variant: 'danger' as const
-                  }] : []),
+                  }]),
                   ...(app.role === 'owner' ? [{
                     label: 'Delete App',
                     onClick: () => handleDeleteApp(app),
-                    icon: '🗑️',
+                    icon: <Trash2 className="w-4 h-4" />,
                     variant: 'danger' as const
                   }] : [])
                 ]}
@@ -512,7 +520,7 @@ Type the app name to confirm: "${app.name}"`;
             )
           }
         ]}
-        emptyIcon="🤖"
+        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
         emptyMessage="No apps yet"
         emptySubMessage="Create your first AI application to get started"
         loading={loading}

@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useMemo } from 'react';
 import type { AuthConfig } from '../core/types';
-import { UserManager, User, WebStorageStateStore } from 'oidc-client-ts';
+import { UserManager, User, WebStorageStateStore, type UserManagerSettings } from 'oidc-client-ts';
 import { authService } from '../services/auth';
 
 interface OIDCContextType {
@@ -11,6 +11,7 @@ interface OIDCContextType {
   loading: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const OIDCContext = createContext<OIDCContextType | undefined>(undefined);
 
 interface OIDCProviderProps {
@@ -30,7 +31,7 @@ export const OIDCProvider: React.FC<OIDCProviderProps> = ({ config, children }) 
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_expires');
 
-      const managerConfig: any = {
+      const managerConfig: UserManagerSettings = {
         authority: config.oidc.authority,
         client_id: config.oidc.clientId,
         redirect_uri: config.oidc.redirectUri,

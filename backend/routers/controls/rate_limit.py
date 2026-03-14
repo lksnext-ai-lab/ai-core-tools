@@ -2,6 +2,8 @@
 Rate limiting dependency for public API endpoints.
 Enforces per-app agent execution limits using in-memory counters.
 """
+import time
+
 from fastapi import HTTPException, Depends, Response, status
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -14,7 +16,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def enforce_app_rate_limit(
+def enforce_app_rate_limit(
     app_id: int,
     response: Response,
     db: Session = Depends(get_db)
@@ -82,7 +84,3 @@ async def enforce_app_rate_limit(
         # Log other errors but don't block the request
         logger.error(f"Error in rate limiting for app {app_id}: {str(e)}")
         # Continue without rate limiting on errors
-
-
-# Import time for the dependency
-import time
