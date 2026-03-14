@@ -6,7 +6,7 @@ This directory contains the configuration for GitHub-native tooling and a struct
 
 ```
 .github/
-├── agents/                      # Specialized Copilot agents (12)
+├── agents/                      # Specialized Copilot agents (13)
 ├── instructions/                # Scoped instruction files
 ├── skills/                      # Shared procedural definitions
 ├── workflows/                   # GitHub Actions CI/CD pipelines
@@ -23,6 +23,16 @@ Invoke any agent with `@<agent-name>` in GitHub Copilot Chat. Each agent has a t
 ### Agent map (delegation overview)
 
 ```
+Ad-hoc Orchestration:
+  @conductor ──► @backend-expert   ┐
+             ├──► @react-expert    │ dispatched one at a time
+             ├──► @alembic-expert  │ via user-clicked handoff buttons
+             ├──► @test-expert     │ (button labels match agent names)
+             ├──► @docs-manager    │
+             ├──► @oss-manager     │
+             ├──► @version-bumper  │
+             └──► @git-github      ┘
+
 Feature Lifecycle:
   @feature-planner ──► @plan-executor ──► @backend-expert  ┐
                             │          ├──► @react-expert   │ subagents
@@ -43,7 +53,52 @@ Direct invocation by the user (never subagents):
   @git-github   — full terminal access: branch, commit, push, PR, issues, releases
 ```
 
+> **`@conductor` vs `@plan-executor`**: Use `@conductor` for ad-hoc tasks (bug fixes, small features, one-off operations) where you want immediate guided execution without a pre-written spec. Use `@feature-planner` + `@plan-executor` for large, planned features that need a tracked `spec.md` and step-by-step execution files in `/plans/`.
+
 > **Why `@git-github` is not used as a subagent**: it requires terminal execution (`tools: [execute]`), which is unavailable in subagent context. Agents that need git operations either run commands directly via the `git-github.skill.md` skill (`@plan-executor`, `@release-manager`) or hand off to the user with a change summary for them to invoke `@git-github` directly (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`, `@docs-manager`).
+
+---
+
+### `@conductor`
+
+**Purpose**: Ad-hoc workflow orchestrator. Analyzes any task, determines the right sequence of specialist agents, maintains a Mission Context block that travels through every handoff, and guides the user step-by-step. Does not write code, run commands, or implement anything — only plans, sequences, and directs.
+
+**Key capabilities**:
+- Reads the codebase before sequencing to give sub-agents accurate file paths and patterns
+- Maintains a cumulative **Mission Context** block (task description, per-step status, locked-in decisions) at the top of every response
+- Dispatches to exactly one specialist agent at a time via VS Code native handoff buttons
+- Updates the Mission Context when a sub-agent returns (marks steps done, adds new constraints)
+- Redirects release tasks to `@release-manager` and formal feature specs to `@feature-planner` / `@plan-executor`
+- Handles blockers by surfacing 2–3 options for the user rather than auto-recovering
+
+**Standard sequences**:
+```
+Full-stack feature:  @backend-expert → @alembic-expert → @test-expert → @react-expert → @docs-manager → @git-github
+Backend-only:        @backend-expert → @alembic-expert (if models changed) → @test-expert → @git-github
+Frontend-only:       @react-expert → @git-github
+Bug fix:             @backend-expert or @react-expert → @test-expert → @git-github
+Docs update:         @docs-manager → @git-github
+```
+
+**Skip rules**: `@alembic-expert` if no model changes; `@test-expert` if user opts out; `@docs-manager` if change is internal only.
+
+**When to use**: Implementing features, fixing bugs, writing tests, updating docs — any multi-step ad-hoc task.
+
+**Do NOT use for**: Formal feature specs (use `@feature-planner` + `@plan-executor`) or releases (use `@release-manager`).
+
+**Dispatches to** (one at a time, via handoff buttons):
+- `@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`, `@docs-manager`, `@oss-manager`, `@version-bumper`, `@git-github`
+
+**Redirects to**:
+- `@release-manager` — for any release workflow
+- `@feature-planner` / `@plan-executor` — for tasks needing a formal spec in `/plans/`
+
+**Never does**:
+- ❌ Write application code, migrations, tests, or docs
+- ❌ Run git, shell, or CLI commands
+- ❌ Dispatch more than one agent at a time
+- ❌ Orchestrate releases
+- ❌ Execute pre-written plan files
 
 ---
 
