@@ -12,7 +12,7 @@ class AgentListItemSchema(BaseModel):
     description: Optional[str] = None
     type: str  # "agent", "ocr_agent", etc.
     is_tool: bool
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     request_count: int
     service_id: Optional[int] = None
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
@@ -43,7 +43,7 @@ class AgentDetailSchema(BaseModel):
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
     skill_ids: List[int] = []
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     request_count: int
     # OCR-specific fields
     vision_service_id: Optional[int] = None

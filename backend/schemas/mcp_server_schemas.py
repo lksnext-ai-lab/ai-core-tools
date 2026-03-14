@@ -72,7 +72,7 @@ class CreateMCPServerSchema(BaseModel):
     slug: Optional[str] = Field(None, max_length=100)  # Auto-generated if not provided
     description: Optional[str] = Field("", max_length=1000)
     is_active: bool = True
-    rate_limit: int = Field(0, ge=0)  # 0 = unlimited
+    rate_limit: int = Field(0, ge=0)
     agent_ids: List[int] = []
 
 

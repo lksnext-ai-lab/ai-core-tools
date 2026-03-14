@@ -22,7 +22,7 @@ class AppListItemSchema(BaseModel):
     app_id: int
     name: str
     role: str  # "owner", "admin", "member"
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     langsmith_configured: bool
     owner_id: int
     owner_name: Optional[str] = None
@@ -48,7 +48,7 @@ class AppDetailSchema(BaseModel):
     name: str
     langsmith_api_key: str
     user_role: str
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     owner_id: int
     owner_email: Optional[str] = None
     owner_name: Optional[str] = None
@@ -95,9 +95,9 @@ class CollaboratorListItemSchema(BaseModel):
     user_email: str
     role: str
     status: str
-    invited_at: Optional[datetime]
-    accepted_at: Optional[datetime]
-    invited_by_name: Optional[str]
+    invited_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    invited_by_name: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,8 +110,8 @@ class CollaboratorDetailSchema(BaseModel):
     role: str
     status: str
     invited_by: int
-    invited_at: Optional[datetime]
-    accepted_at: Optional[datetime]
+    invited_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
     user: Optional[Dict[str, Any]] = None
     inviter: Optional[Dict[str, Any]] = None
     
