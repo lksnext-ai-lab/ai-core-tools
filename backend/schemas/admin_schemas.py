@@ -13,7 +13,7 @@ class UserListResponse(BaseModel):
 class UserDetailResponse(BaseModel):
     user_id: int
     email: str
-    name: Optional[str]
+    name: Optional[str] = None
     created_at: str
     owned_apps_count: int
     api_keys_count: int

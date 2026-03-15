@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Annotated
 
 # Import services
 from services.api_key_service import APIKeyService
@@ -36,9 +36,9 @@ api_key_service = APIKeyService()
                     response_model=List[APIKeyListItemSchema])
 async def list_api_keys(
     app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     List all API keys for a specific app.
@@ -61,9 +61,9 @@ async def list_api_keys(
 async def get_api_key(
     app_id: int, 
     key_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Get detailed information about a specific API key.
@@ -98,9 +98,9 @@ async def create_or_update_api_key(
     app_id: int,
     key_id: int,
     api_key_data: CreateUpdateAPIKeySchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Create a new API key or update an existing one.
@@ -143,9 +143,9 @@ async def create_or_update_api_key(
 async def delete_api_key(
     app_id: int, 
     key_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Delete an API key.
@@ -177,9 +177,9 @@ async def delete_api_key(
 async def toggle_api_key(
     app_id: int, 
     key_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Toggle the active status of an API key.

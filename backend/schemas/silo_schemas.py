@@ -8,8 +8,8 @@ class SiloListItemSchema(BaseModel):
     silo_id: int
     name: str
     description: Optional[str] = None
-    type: Optional[str]
-    created_at: Optional[datetime]
+    type: Optional[str] = None
+    created_at: Optional[datetime] = None
     docs_count: int
     vector_db_type: Optional[str] = None
     
@@ -21,8 +21,8 @@ class SiloDetailSchema(BaseModel):
     silo_id: int
     name: str
     description: Optional[str] = None
-    type: Optional[str]
-    created_at: Optional[datetime]
+    type: Optional[str] = None
+    created_at: Optional[datetime] = None
     docs_count: int
     vector_db_type: Optional[str] = None
     # Current values for editing

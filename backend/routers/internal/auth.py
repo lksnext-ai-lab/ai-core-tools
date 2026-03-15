@@ -5,11 +5,10 @@ This router provides endpoints for development authentication that bypass OIDC.
 These endpoints are only available when AICT_LOGIN is set to FAKE mode.
 """
 
-import os
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from datetime import datetime
 from db.database import get_db
 from services.user_service import UserService
@@ -48,7 +47,7 @@ class PendingInvitationSchema(BaseModel):
     app_id: int
     app_name: str
     inviter_email: str
-    inviter_name: Optional[str]
+    inviter_name: Optional[str] = None
     invited_at: datetime
     role: str
 
@@ -60,8 +59,8 @@ class PendingInvitationSchema(BaseModel):
     description="Get all pending collaboration invitations for the current user",
 )
 async def get_pending_invitations(
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """Get pending invitations for the current user"""
     user_id = auth_context.identity.id
@@ -92,8 +91,8 @@ async def get_pending_invitations(
 async def respond_to_invitation(
     invitation_id: int,
     response: InvitationResponseSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """Respond to a collaboration invitation"""
     user_id = auth_context.identity.id
@@ -123,7 +122,7 @@ async def respond_to_invitation(
 )
 async def dev_login(
     request: DevLoginRequest,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """
     Development mode authentication endpoint.

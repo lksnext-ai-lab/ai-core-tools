@@ -9,8 +9,8 @@ class APIKeyListItemSchema(BaseModel):
     key_id: int
     name: str
     is_active: bool
-    created_at: Optional[datetime]
-    last_used_at: Optional[datetime]
+    created_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
     key_preview: str  # First 8 chars + "..."
     
     model_config = ConfigDict(from_attributes=True)
@@ -21,8 +21,8 @@ class APIKeyDetailSchema(BaseModel):
     key_id: int
     name: str
     is_active: bool
-    created_at: Optional[datetime]
-    last_used_at: Optional[datetime]
+    created_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
     key_preview: str
     
     model_config = ConfigDict(from_attributes=True)

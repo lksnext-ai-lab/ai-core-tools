@@ -66,6 +66,46 @@ def _get_user_from_auth_context(db: Session, auth_context: AuthContext):
     return UserService.get_user_by_id(db, int(auth_context.identity.id))
 
 
+def _check_marketplace_quota(agent, auth_context: AuthContext, db: Session) -> None:
+    """Check if user has exceeded the marketplace call quota for public agents.
+
+    Raises HTTPException 429 if quota is exceeded.
+    """
+    if agent.marketplace_visibility != MarketplaceVisibility.PUBLIC:
+        return
+    user = _get_user_from_auth_context(db, auth_context)
+    if not user or MarketplaceQuotaService.is_user_exempt(user):
+        return
+    settings_service = SystemSettingsService(db)
+    quota_value = settings_service.get_setting("marketplace_call_quota")
+    if quota_value and int(quota_value) > 0:
+        quota = int(quota_value)
+        if MarketplaceQuotaService.check_quota_exceeded(user.user_id, db, quota):
+            current_usage = MarketplaceQuotaService.get_current_month_usage(user.user_id, db)
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Marketplace call quota exceeded for this month. "
+                    f"Current usage: {current_usage}/{quota}. "
+                    "Quota resets at the start of next month (UTC)."
+                ),
+            )
+
+
+def _try_increment_marketplace_usage(agent, auth_context: AuthContext, db: Session) -> None:
+    """Increment marketplace usage counter for public agents when applicable."""
+    if agent.marketplace_visibility != MarketplaceVisibility.PUBLIC:
+        return
+    user = _get_user_from_auth_context(db, auth_context)
+    if not user or MarketplaceQuotaService.is_user_exempt(user):
+        return
+    try:
+        MarketplaceQuotaService.increment_usage(user.user_id, db)
+        logger.debug(f"Incremented marketplace usage for user {user.user_id}")
+    except Exception as e:
+        logger.error(f"Failed to increment marketplace usage for user {user.user_id}: {e}")
+
+
 class ImportOptions:
     """Grouped import query parameters for the import endpoint."""
 
@@ -619,7 +659,11 @@ async def _save_uploaded_file(upload_file: UploadFile) -> str:
     summary="Chat with agent",
     tags=["Agents"],
     response_model=ChatResponseSchema,
-    responses={500: {"description": "Internal server error"}},
+    responses={
+        404: {"description": "Agent not found"},
+        429: {"description": "Marketplace call quota exceeded"},
+        500: {"description": "Internal server error"},
+    },
 )
 async def chat_with_agent(
     app_id: int,
@@ -650,19 +694,7 @@ async def chat_with_agent(
         agent = _get_agent_or_404(db, agent_id)
 
         # Check marketplace quota enforcement (only for public marketplace agents)
-        if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
-            user = _get_user_from_auth_context(db, auth_context)
-            if user and not MarketplaceQuotaService.is_user_exempt(user):
-                settings_service = SystemSettingsService(db)
-                quota_value = settings_service.get_setting("marketplace_call_quota")
-                if quota_value and int(quota_value) > 0:
-                    quota = int(quota_value)
-                    if MarketplaceQuotaService.check_quota_exceeded(user.user_id, db, quota):
-                        current_usage = MarketplaceQuotaService.get_current_month_usage(user.user_id, db)
-                        raise HTTPException(
-                            status_code=429,
-                            detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC)."
-                        )
+        _check_marketplace_quota(agent, auth_context, db)
 
         parsed_search_params = _parse_optional_json(search_params, "search_params")
         parsed_file_references = _parse_optional_json(file_references, "file_references")
@@ -697,15 +729,7 @@ async def chat_with_agent(
         )
 
         # Increment marketplace usage counter (if marketplace agent and not exempt)
-        if agent.marketplace_visibility == MarketplaceVisibility.PUBLIC:
-            user = _get_user_from_auth_context(db, auth_context)
-            if user and not MarketplaceQuotaService.is_user_exempt(user):
-                try:
-                    MarketplaceQuotaService.increment_usage(user.user_id, db)
-                    logger.debug(f"Incremented marketplace usage for user {user.user_id}")
-                except Exception as e:
-                    logger.error(f"Failed to increment marketplace usage for user {user.user_id}: {e}")
-
+        _try_increment_marketplace_usage(agent, auth_context, db)
 
         logger.info(f"Chat request processed for agent {agent_id} by user {auth_context.identity.id}")
         return ChatResponseSchema(**result)

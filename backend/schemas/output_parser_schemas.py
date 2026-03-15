@@ -7,9 +7,9 @@ class OutputParserListItemSchema(BaseModel):
     """Schema for output parser list items"""
     parser_id: int
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     field_count: int  # Number of fields in the parser
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -28,9 +28,9 @@ class OutputParserDetailSchema(BaseModel):
     """Schema for detailed output parser information"""
     parser_id: int
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     fields: List[OutputParserFieldSchema]
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     available_parsers: List[Dict[str, Any]]  # Other parsers for references
     
     model_config = ConfigDict(from_attributes=True)

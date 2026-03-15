@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from typing import List, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
@@ -30,9 +30,9 @@ skills_router = APIRouter()
                    response_model=List[SkillListItemSchema])
 async def list_skills(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     List all skills for a specific app.
@@ -53,9 +53,9 @@ async def list_skills(
 async def get_skill(
     app_id: int,
     skill_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Get detailed information about a specific skill.
@@ -88,9 +88,9 @@ async def create_or_update_skill(
     app_id: int,
     skill_id: int,
     skill_data: CreateUpdateSkillSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Create a new skill or update an existing one.
@@ -122,9 +122,9 @@ async def create_or_update_skill(
 async def delete_skill(
     app_id: int,
     skill_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
+    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
     """
     Delete a skill.
