@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import FileResponse
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from sqlalchemy.orm import Session
 
 from services.resource_service import ResourceService
@@ -40,8 +40,8 @@ resources_router = APIRouter()
 async def get_all_resources(
     app_id: int,
     repo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get all resources in a repository."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -72,10 +72,10 @@ async def get_all_resources(
 async def create_multiple_resources(
     app_id: int,
     repo_id: int,
-    files: List[UploadFile] = File(...),
-    folder_id: Optional[int] = Form(None),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    files: Annotated[List[UploadFile], File(...)],
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    folder_id: Annotated[Optional[int], Form(None)] = None,
 ):
     """Upload multiple resources to a repository. Optionally specify folder_id to upload to a specific folder."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -115,8 +115,8 @@ async def delete_resource(
     app_id: int,
     repo_id: int,
     resource_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete a resource from a repository."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -151,8 +151,8 @@ async def download_resource(
     app_id: int,
     repo_id: int,
     resource_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Download a resource file from a repository."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -177,3 +177,4 @@ async def download_resource(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to download resource",
         )
+

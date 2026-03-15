@@ -22,6 +22,8 @@ from models.output_parser import OutputParser
 
 from utils.logger import get_logger
 
+from typing import Annotated
+
 logger = get_logger(__name__)
 
 agents_router = APIRouter()
@@ -82,8 +84,8 @@ def _validate_referenced_resources(db: Session, agent_dict: dict, app_id: int):
 )
 async def list_agents(
     app_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """List all agents available in the specified app."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -105,8 +107,8 @@ async def list_agents(
 async def get_agent(
     app_id: int,
     agent_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get a specific agent by ID."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -128,8 +130,8 @@ async def get_agent(
 async def create_agent(
     app_id: int,
     agent_data: CreateAgentRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Create a new agent in the specified app."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -169,8 +171,8 @@ async def create_agent(
 async def create_ocr_agent(
     app_id: int,
     agent_data: CreateOCRAgentRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Create a new OCR agent in the specified app."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -209,8 +211,8 @@ async def update_agent(
     app_id: int,
     agent_id: int,
     agent_data: UpdateAgentRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update an existing agent."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -248,13 +250,14 @@ async def update_agent(
     summary="Update an existing OCR agent",
     tags=["Agents"],
     response_model=PublicAgentResponseSchema,
+    responses={404: {"description": "OCR Agent not found"}},
 )
 async def update_ocr_agent(
     app_id: int,
     agent_id: int,
     agent_data: UpdateOCRAgentRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update an existing OCR agent."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -298,8 +301,8 @@ async def update_ocr_agent(
 async def delete_agent(
     app_id: int,
     agent_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete an agent from the specified app."""
     validate_api_key_for_app(app_id, api_key, db)

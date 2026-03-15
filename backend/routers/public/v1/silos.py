@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from typing import Optional
+﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from typing import Optional, Annotated
 from sqlalchemy.orm import Session
 import json
 import tempfile
@@ -49,8 +49,8 @@ silos_router = APIRouter()
 async def create_silo(
     app_id: int,
     silo_data: CreateUpdateSiloSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Create a new silo/collection."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -87,8 +87,8 @@ async def create_silo(
 )
 async def list_silos(
     app_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """List all silos for the app."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -117,8 +117,8 @@ async def list_silos(
 async def get_silo(
     app_id: int,
     silo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get silo details."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -154,8 +154,8 @@ async def update_silo(
     app_id: int,
     silo_id: int,
     silo_data: CreateUpdateSiloSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update silo properties."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -194,8 +194,8 @@ async def update_silo(
 async def delete_silo(
     app_id: int,
     silo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete silo and all contents."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -234,8 +234,8 @@ async def search_silo(
     app_id: int,
     silo_id: int,
     request: SiloSearchSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Search for documents in a silo using semantic search with optional metadata filtering."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -282,8 +282,8 @@ async def search_silo(
 async def count_docs_in_silo(
     app_id: int,
     silo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Count documents in a silo."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -312,8 +312,8 @@ async def index_single_document(
     app_id: int,
     silo_id: int,
     request: SingleDocumentIndexSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Index a single document in a silo."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -347,8 +347,8 @@ async def index_multiple_documents(
     app_id: int,
     silo_id: int,
     request: MultipleDocumentIndexSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Index multiple documents in a silo."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -380,8 +380,8 @@ async def delete_docs_in_collection(
     app_id: int,
     silo_id: int,
     request: DeleteDocsRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete documents in a silo collection by IDs."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -412,8 +412,8 @@ async def delete_docs_by_metadata(
     app_id: int,
     silo_id: int,
     request: DeleteByMetadataRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete documents by metadata filter (MongoDB-style operators)."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -454,8 +454,8 @@ async def delete_docs_by_metadata(
 async def delete_all_docs_in_collection(
     app_id: int,
     silo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete all documents in a silo collection."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -484,8 +484,8 @@ async def find_docs_in_collection(
     app_id: int,
     silo_id: int,
     request: SiloSearchSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Find documents in a silo collection."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -535,13 +535,13 @@ async def find_docs_in_collection(
     tags=["Silos"],
     response_model=FileIndexResponseSchema,
 )
-async def index_file_document(
+def index_file_document(
     app_id: int,
     silo_id: int,
-    file: UploadFile = File(...),
-    metadata: Optional[str] = Form(None),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File(...)],
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    metadata: Annotated[Optional[str], Form(None)] = None,
 ):
     """Index file content in a silo."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -573,7 +573,7 @@ async def index_file_document(
             delete=False, suffix=file_extension
         ) as temp_file:
             temp_file_path = temp_file.name
-            content = await file.read()
+            content = file.file.read()
             temp_file.write(content)
 
         docs = SiloService.extract_documents_from_file(
@@ -607,3 +607,4 @@ async def index_file_document(
                 os.unlink(temp_file_path)
             except Exception as e:
                 logger.warning(f"Failed to delete temp file {temp_file_path}: {str(e)}")
+

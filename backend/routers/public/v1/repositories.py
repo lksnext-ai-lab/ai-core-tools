@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query, status
+﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from datetime import datetime
 
 from .schemas import (
@@ -49,8 +49,8 @@ repositories_router = APIRouter()
 )
 async def get_all_repos(
     app_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get all repositories in the specified app."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -79,8 +79,8 @@ async def get_all_repos(
 async def get_repo_by_id(
     app_id: int,
     repo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get a specific repository by ID."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -101,8 +101,8 @@ async def get_repo_by_id(
 async def create_repo(
     app_id: int,
     request: CreateRepositoryRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Create a new repository."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -140,8 +140,8 @@ async def update_repo(
     app_id: int,
     repo_id: int,
     request: UpdateRepositoryRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update an existing repository."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -176,8 +176,8 @@ async def update_repo(
 async def delete_repo(
     app_id: int,
     repo_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete a repository and all its resources."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -206,8 +206,8 @@ async def find_docs_in_repository(
     app_id: int,
     repo_id: int,
     request: SiloSearchSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Find documents in a repository's silo collection."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -269,9 +269,9 @@ async def find_docs_in_repository(
 async def list_media(
     app_id: int,
     repo_id: int,
-    folder_id: Optional[int] = Query(None),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    folder_id: Annotated[Optional[int], Query(None)] = None,
 ):
     """List all media (video/audio) in a repository, optionally filtered by folder."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -307,15 +307,15 @@ async def upload_media(
     app_id: int,
     repo_id: int,
     background_tasks: BackgroundTasks,
-    files: List[UploadFile] = File(...),
-    folder_id: Optional[int] = Form(None),
-    transcription_service_id: int = Form(...),
-    forced_language: Optional[str] = Form(None),
-    chunk_min_duration: Optional[int] = Form(None),
-    chunk_max_duration: Optional[int] = Form(None),
-    chunk_overlap: Optional[int] = Form(None),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    files: Annotated[List[UploadFile], File(...)],
+    transcription_service_id: Annotated[int, Form(...)],
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    folder_id: Annotated[Optional[int], Form(None)] = None,
+    forced_language: Annotated[Optional[str], Form(None)] = None,
+    chunk_min_duration: Annotated[Optional[int], Form(None)] = None,
+    chunk_max_duration: Annotated[Optional[int], Form(None)] = None,
+    chunk_overlap: Annotated[Optional[int], Form(None)] = None,
 ):
     """
     Upload video/audio files for transcription and indexing.
@@ -373,8 +373,8 @@ async def add_youtube_video(
     repo_id: int,
     request: YouTubeRequestSchema,
     background_tasks: BackgroundTasks,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Add a YouTube video for transcription and indexing.
@@ -424,8 +424,8 @@ async def get_media_status(
     app_id: int,
     repo_id: int,
     media_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get status and details of a specific media item."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -445,9 +445,9 @@ async def move_media(
     app_id: int,
     repo_id: int,
     media_id: int,
-    new_folder_id: Optional[int] = Form(default=None),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    new_folder_id: Annotated[Optional[int], Form(default=None)] = None,
 ):
     """Move a media item to a different folder within the same repository."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -489,8 +489,8 @@ async def delete_media(
     app_id: int,
     repo_id: int,
     media_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete a media file and all derived data (chunks, transcripts, embeddings)."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -514,3 +514,4 @@ async def delete_media(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete media",
         )
+
