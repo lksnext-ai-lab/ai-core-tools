@@ -147,7 +147,7 @@ class TestListAgents:
         db.flush()
 
         # Get auth headers for the owner
-        from backend.routers.internal.auth_utils import create_jwt_token
+        from routers.internal.auth_utils import create_jwt_token
 
         headers = {"Authorization": f"Bearer {create_jwt_token(fake_app.owner_id)}"}
 
