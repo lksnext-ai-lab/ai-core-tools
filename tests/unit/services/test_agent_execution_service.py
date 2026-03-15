@@ -119,7 +119,7 @@ class TestSuccessfulExecution:
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="Agent reply")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="Agent reply"),
+            patch("tools.agentTools.parse_agent_response", return_value="Agent reply"),
         ):
             result = await svc.execute_agent_chat(
                 agent_id=1, message="hello", db=MagicMock()
@@ -139,7 +139,7 @@ class TestSuccessfulExecution:
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             result = await svc.execute_agent_chat(
                 agent_id=1, message="hello", db=MagicMock()
@@ -161,7 +161,7 @@ class TestSuccessfulExecution:
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             result = await svc.execute_agent_chat(
                 agent_id=1, message="hello", db=MagicMock()
@@ -186,7 +186,7 @@ class TestMemoryEnabledAgent:
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             await svc.execute_agent_chat(
                 agent_id=1,
@@ -207,7 +207,7 @@ class TestMemoryEnabledAgent:
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             await svc.execute_agent_chat(
                 agent_id=1, message="hello", db=MagicMock()
@@ -226,7 +226,7 @@ class TestMemoryEnabledAgent:
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             await svc.execute_agent_chat(
                 agent_id=1, message="hello", db=MagicMock()
@@ -262,7 +262,7 @@ class TestFileProcessing:
             ),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             result = await svc.execute_agent_chat(
                 agent_id=1, message="hello", files=mock_files, db=MagicMock()
@@ -288,7 +288,7 @@ class TestRequestCount:
             patch.object(svc, "_prepare_message_with_files", return_value=("hi", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count") as mock_update,
-            patch("services.agent_execution_service.parse_agent_response", return_value="ok"),
+            patch("tools.agentTools.parse_agent_response", return_value="ok"),
         ):
             await svc.execute_agent_chat(agent_id=1, message="hi", db=MagicMock())
 
