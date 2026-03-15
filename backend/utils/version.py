@@ -1,7 +1,6 @@
 import toml
 from pathlib import Path
-from typing import Dict, Optional
-import os
+from typing import Dict
 
 def get_project_root() -> Path:
     """Get the project root directory."""
@@ -14,7 +13,7 @@ def get_version() -> str:
         with open(pyproject_path, "r") as f:
             pyproject = toml.load(f)
             return pyproject["project"]["version"]
-    except Exception as e:
+    except Exception:
         return "unknown"
 
 def get_version_info() -> Dict[str, str]:

@@ -6,7 +6,7 @@ from utils.logger import get_logger
 import os
 import yt_dlp
 from pydub import AudioSegment
-from datetime import datetime
+from datetime import datetime, timezone
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
 logger = get_logger(__name__)
@@ -94,7 +94,7 @@ def process_media_task_sync(media_id: int):
         
         # Step 6: Mark as ready
         media.status = 'ready'
-        media.processed_at = datetime.utcnow()
+        media.processed_at = datetime.now(timezone.utc)
         db.commit()
         
         logger.info(f"✅ Media {media_id} processed successfully")

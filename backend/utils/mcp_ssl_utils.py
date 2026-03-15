@@ -17,7 +17,7 @@ def create_insecure_httpx_client(
     This factory follows the McpHttpClientFactory protocol from langchain_mcp_adapters.
     """
     return httpx.AsyncClient(
-        verify=False,
+        verify=False,  # NOSONAR - intentional for explicit insecure client factory
         headers=headers,
         timeout=timeout,
         auth=auth,

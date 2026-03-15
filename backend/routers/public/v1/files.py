@@ -2,7 +2,7 @@ import os
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, Query, Request
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Annotated
 
 from .schemas import (
     AttachFileResponseSchema,
@@ -37,14 +37,21 @@ files_router = APIRouter()
     summary="Attach file for chat",
     tags=["File Operations"],
     response_model=AttachFileResponseSchema,
+    responses={500: {"description": "Failed to attach file"}},
 )
 async def attach_file(
     app_id: int,
     agent_id: int,
-    file: UploadFile = File(...),
-    conversation_id: Optional[str] = Form(None, description="Optional conversation ID for memory-enabled agents. If not provided for a memory-enabled agent, a new conversation will be created."),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File(...)],
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    conversation_id: Annotated[
+        Optional[str],
+        Form(
+            None,
+            description="Optional conversation ID for memory-enabled agents. If not provided for a memory-enabled agent, a new conversation will be created.",
+        ),
+    ] = None,
 ):
     """
     Attach a file to an agent for chat context.
@@ -117,14 +124,18 @@ async def attach_file(
     summary="Remove attached file",
     tags=["File Operations"],
     response_model=DetachFileResponseSchema,
+    responses={500: {"description": "Failed to detach file"}},
 )
 async def detach_file(
     app_id: int,
     agent_id: int,
     file_id: str,
-    conversation_id: Optional[str] = Query(None, description="Optional conversation ID to scope file removal"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    conversation_id: Annotated[
+        Optional[str],
+        Query(None, description="Optional conversation ID to scope file removal"),
+    ] = None,
 ):
     """
     Remove an attached file from an agent's context.
@@ -173,13 +184,17 @@ async def detach_file(
     summary="List attached files",
     tags=["File Operations"],
     response_model=ListFilesResponseSchema,
+    responses={500: {"description": "Failed to list files"}},
 )
 async def list_attached_files(
     app_id: int,
     agent_id: int,
-    conversation_id: Optional[str] = Query(None, description="Optional conversation ID to filter files"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    conversation_id: Annotated[
+        Optional[str],
+        Query(None, description="Optional conversation ID to filter files"),
+    ] = None,
 ):
     """
     List all files attached to an agent for the current session.
@@ -241,15 +256,22 @@ async def list_attached_files(
     summary="Download a file",
     tags=["File Operations"],
     response_model=FileDownloadResponseSchema,
+    responses={
+        404: {"description": "File not found"},
+        500: {"description": "Failed to generate download URL"},
+    },
 )
 async def download_file(
     app_id: int,
     agent_id: int,
     file_id: str,
     request: Request,
-    conversation_id: Optional[str] = Query(None, description="Optional conversation ID to scope file lookup"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    conversation_id: Annotated[
+        Optional[str],
+        Query(None, description="Optional conversation ID to scope file lookup"),
+    ] = None,
 ):
     """
     Get a signed download URL for an attached file.

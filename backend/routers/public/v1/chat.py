@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Annotated
 
 from .schemas import (
     AgentResponseSchema,
@@ -108,17 +108,27 @@ async def _process_chat_files(
     summary="Call agent",
     tags=["Agent Chat"],
     response_model=AgentResponseSchema,
+    responses={
+        500: {
+            "description": "Agent execution failed",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Agent execution failed"}
+                }
+            },
+        },
+    },
 )
 async def call_agent(
     app_id: int,
     agent_id: int,
-    message: str = Form(..., description="The user message to send to the agent"),
-    files: List[UploadFile] = File(None, description="Optional files to attach (images, PDFs, text files)"),
-    file_references: Optional[str] = Form(None, description="JSON array of existing file_ids to include. If not provided, all files are included."),
-    search_params: Optional[str] = Form(None, description="JSON object with search parameters for silo-based agents"),
-    conversation_id: Optional[int] = Form(None, description="Optional conversation ID to continue existing conversation"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    message: Annotated[str, Form(..., description="The user message to send to the agent")],
+    files: Annotated[List[UploadFile], File(None, description="Optional files to attach (images, PDFs, text files)")],
+    file_references: Annotated[Optional[str], Form(None, description="JSON array of existing file_ids to include. If not provided, all files are included.")],
+    search_params: Annotated[Optional[str], Form(None, description="JSON object with search parameters for silo-based agents")],
+    conversation_id: Annotated[Optional[int], Form(None, description="Optional conversation ID to continue existing conversation")],
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Call an agent for chat completion.
@@ -191,17 +201,27 @@ async def call_agent(
     "/{agent_id}/call/stream",
     summary="Call agent (streaming)",
     tags=["Agent Chat"],
+    responses={
+        500: {
+            "description": "Agent execution failed",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Agent execution failed"}
+                }
+            },
+        },
+    },
 )
 async def call_agent_stream(
     app_id: int,
     agent_id: int,
-    message: str = Form(..., description="The user message to send to the agent"),
-    files: List[UploadFile] = File(None, description="Optional files to attach"),
-    file_references: Optional[str] = Form(None, description="JSON array of existing file_ids to include"),
-    search_params: Optional[str] = Form(None, description="JSON object with search parameters"),
-    conversation_id: Optional[int] = Form(None, description="Optional conversation ID to continue"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    message: Annotated[str, Form(..., description="The user message to send to the agent")],
+    files: Annotated[List[UploadFile], File(None, description="Optional files to attach")],
+    file_references: Annotated[Optional[str], Form(None, description="JSON array of existing file_ids to include")],
+    search_params: Annotated[Optional[str], Form(None, description="JSON object with search parameters")],
+    conversation_id: Annotated[Optional[int], Form(None, description="Optional conversation ID to continue")],
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Call an agent with Server-Sent Events streaming response.
@@ -266,13 +286,23 @@ async def call_agent_stream(
     summary="Reset conversation",
     tags=["Agent Chat"],
     response_model=MessageResponseSchema,
+    responses={
+        500: {
+            "description": "Failed to reset conversation",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to reset conversation"}
+                }
+            },
+        },
+    },
 )
 async def reset_conversation(
     app_id: int,
     agent_id: int,
-    conversation_id: Optional[int] = Query(None, description="Optional conversation ID to reset"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    conversation_id: Annotated[Optional[int], Query(None, description="Optional conversation ID to reset")] = None,
 ):
     """
     Reset the conversation state for an agent.
@@ -316,13 +346,23 @@ async def reset_conversation(
     tags=["Conversations"],
     response_model=PublicConversationSchema,
     status_code=201,
+    responses={
+        500: {
+            "description": "Failed to create conversation",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to create conversation"}
+                }
+            },
+        },
+    },
 )
 async def create_conversation(
     app_id: int,
     agent_id: int,
     body: CreateConversationRequestSchema,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Create a new conversation for an agent.
@@ -358,14 +398,24 @@ async def create_conversation(
     summary="List conversations",
     tags=["Conversations"],
     response_model=PublicConversationListResponseSchema,
+    responses={
+        500: {
+            "description": "Failed to list conversations",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to list conversations"}
+                }
+            },
+        },
+    },
 )
 async def list_conversations(
     app_id: int,
     agent_id: int,
-    limit: int = Query(50, ge=1, le=100, description="Maximum number of results"),
-    offset: int = Query(0, ge=0, description="Pagination offset"),
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(50, ge=1, le=100, description="Maximum number of results")] = 50,
+    offset: Annotated[int, Query(0, ge=0, description="Pagination offset")] = 0,
 ):
     """
     List all conversations for an agent.
@@ -403,13 +453,31 @@ async def list_conversations(
     summary="Get conversation with history",
     tags=["Conversations"],
     response_model=PublicConversationWithHistorySchema,
+    responses={
+        404: {
+            "description": "Conversation not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Conversation not found"}
+                }
+            },
+        },
+        500: {
+            "description": "Failed to get conversation",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to get conversation"}
+                }
+            },
+        },
+    },
 )
 async def get_conversation_with_history(
     app_id: int,
     agent_id: int,
     conversation_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Get a conversation with its complete message history.
@@ -459,13 +527,31 @@ async def get_conversation_with_history(
     summary="Delete a conversation",
     tags=["Conversations"],
     response_model=MessageResponseSchema,
+    responses={
+        404: {
+            "description": "Conversation not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Conversation not found"}
+                }
+            },
+        },
+        500: {
+            "description": "Failed to delete conversation",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to delete conversation"}
+                }
+            },
+        },
+    },
 )
 async def delete_conversation(
     app_id: int,
     agent_id: int,
     conversation_id: int,
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db),
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Delete a conversation and its associated chat history.
