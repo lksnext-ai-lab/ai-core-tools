@@ -45,6 +45,7 @@ jobs:
           AICT_OMNIADMINS: admin@test.com
           AICT_MODE: SELF-HOSTED
           FRONTEND_URL: http://localhost:5173
+          REPO_BASE_FOLDER: /tmp/test_repos
 
       - name: Upload unit test coverage
         uses: codecov/codecov-action@v4
@@ -117,6 +118,7 @@ jobs:
           AICT_OMNIADMINS: admin@test.com
           AICT_MODE: SELF-HOSTED
           FRONTEND_URL: http://localhost:5173
+          REPO_BASE_FOLDER: /tmp/test_repos
 
       - name: Upload integration test coverage
         uses: codecov/codecov-action@v4

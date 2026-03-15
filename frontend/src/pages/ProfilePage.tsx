@@ -3,7 +3,7 @@ import { Mail, Handshake, Crown } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
-import { MarketplaceQuotaUsage } from '../types/marketplace';
+import type { MarketplaceQuotaUsage } from '../types/marketplace';
 
 interface App {
   app_id: number;
