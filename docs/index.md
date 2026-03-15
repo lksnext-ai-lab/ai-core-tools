@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-03-09 (based on commit `91a003b`)
+> Last updated: 2026-03-14 (based on commit `91a003b` + marketplace feature)
 
 ## Table of Contents
 
@@ -45,6 +45,7 @@
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
 - [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
+- [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
 
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph
