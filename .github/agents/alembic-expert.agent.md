@@ -1,6 +1,15 @@
 ---
 name: alembic-expert
 description: Expert in Alembic database migrations, schema versioning, SQLAlchemy model evolution, and PostgreSQL schema management for the Mattin AI project.
+handoffs:
+  - label: "Commit migration with @git-github"
+    agent: git-github
+    prompt: "Please commit the Alembic migration file that @alembic-expert just created. Review the conversation above for the exact file path and suggested commit message."
+    send: false
+  - label: "Return to @conductor"
+    agent: conductor
+    prompt: "@alembic-expert has completed its step. Summary of what was done:\n\n<briefly describe: migration file created, table/column changes, any issues>\n\nPlease update the Mission Context and tell me the next step."
+    send: false
 ---
 
 # Alembic Expert Agent

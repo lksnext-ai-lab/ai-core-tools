@@ -78,7 +78,7 @@ IA-Core-Tools (AICT) is available under a dual licensing model:
 For commercial licensing inquiries, please contact:
 
 **LKS Next**
-- Email: agaldos@lksnext.com
+- Email: mattin-ai@lksnext.com
 - Website: https://www.lksnext.com
 - Phone: +34 637 61 50 87
 

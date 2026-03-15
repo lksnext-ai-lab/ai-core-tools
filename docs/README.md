@@ -56,6 +56,7 @@ The project aims to simplify the integration and use of AI technologies within L
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
 - [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
+- [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
 
 ### Testing
 - [Testing Overview](testing/README.md) — Test pyramid, quick start, running tests for the first time

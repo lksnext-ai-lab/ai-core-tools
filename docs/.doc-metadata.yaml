@@ -6,7 +6,7 @@
 # what commits need to be analyzed, then advances the baseline after updating.
 
 last_synced_commit: "91a003b1cc0ccc4dcb5843300e90e7bb8b438d75"
-last_synced_date: "2026-03-03T00:00:00+00:00"
+last_synced_date: "2026-03-14T00:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
@@ -15,10 +15,11 @@ last_sync_summary:
     - "docs/index.md"
     - "docs/README.md"
     - "docs/api/internal-api.md"
+    - "docs/ai/agent-system.md"
     - "docs/.doc-metadata.yaml"
   files_created:
-    - "docs/guides/app-export-import.md"
+    - "docs/guides/marketplace.md"
   files_deleted: []
   commits_covered: null
-  commit_range: "c11bee4..91a003b"
-  notes: "Documented app export/import endpoints, preview flow, and data inclusion/exclusion; added guide and index entries. Commit count not computed in this docs-only update."
+  commit_range: "91a003b..HEAD"
+  notes: "Documented Agent Marketplace feature: MarketplaceVisibility enum, AgentMarketplaceProfile model, marketplace catalog/rating/quota APIs, new agent fields (enable_code_interpreter, server_tools, marketplace_visibility). Updated agent-system.md config fields table and internal-api.md agent/marketplace endpoint tables."
