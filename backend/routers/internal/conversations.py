@@ -63,8 +63,8 @@ async def create_conversation(
 @router.get("", response_model=ConversationListResponse, responses={500: {"description": "Internal server error"}})
 async def list_conversations(
     agent_id: int,
-    limit: Annotated[int, Query(50, ge=1, le=100)] = Query(50, ge=1, le=100),
-    offset: Annotated[int, Query(0, ge=0)] = Query(0, ge=0),
+    limit: Annotated[int, Query(50, ge=1, le=100)],
+    offset: Annotated[int, Query(0, ge=0)],
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
 ):

@@ -65,7 +65,7 @@ APP_NOT_FOUND_MSG = "App not found"
     tags=["Apps", "Export/Import"],
 )
 async def preview_import_app(
-    file: Annotated[UploadFile, File(...)] = File(...),
+    file: Annotated[UploadFile, File(...)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
@@ -114,29 +114,29 @@ async def preview_import_app(
     status_code=status.HTTP_201_CREATED,
 )
 async def import_full_app(
-    file: Annotated[UploadFile, File(...)] = File(...),
-    conflict_mode: Annotated[ConflictMode, Query()] = Query(
+    file: Annotated[UploadFile, File(...)],
+    conflict_mode: Annotated[ConflictMode, Query(
         ConflictMode.FAIL,
         description="How to handle name conflicts (fail/rename/override)",
-    ),
-    new_name: Annotated[Optional[str], Query()] = Query(
+    )],
+    new_name: Annotated[Optional[str], Query(
         None, description="New app name (for rename mode)"
-    ),
-    component_selection_json: Annotated[Optional[str], Form()] = Form(
+    )],
+    component_selection_json: Annotated[Optional[str], Form(
         None,
         description=(
             "JSON object mapping singular component-type keys to lists of "
             "names to import. Omit to import all components. "
             "Example: {\"ai_service\":[\"My Service\"]}"
         ),
-    ),
-    api_keys_json: Annotated[Optional[str], Form()] = Form(
+    )],
+    api_keys_json: Annotated[Optional[str], Form(
         None,
         description=(
             "JSON object mapping original service names to API keys. "
             "Example: {\"My Service\":\"sk-...\"}"
         ),
-    ),
+    )],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ) -> FullAppImportResponseSchema:

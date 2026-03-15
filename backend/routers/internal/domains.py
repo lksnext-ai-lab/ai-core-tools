@@ -95,12 +95,10 @@ def background_reindex_domain(domain_id: int):
 )
 async def import_domain(
     app_id: int,
-    file: Annotated[UploadFile, File(...)] = File(...),
-    conflict_mode: Annotated[ConflictMode, Query()] = Query(ConflictMode.FAIL),
-    new_name: Annotated[Optional[str], Query(None)] = Query(None),
-    selected_embedding_service_id: Annotated[Optional[int], Query(None)] = Query(
-        None
-    ),
+    file: Annotated[UploadFile, File(...)],
+    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
+    new_name: Annotated[Optional[str], Query(None)],
+    selected_embedding_service_id: Annotated[Optional[int], Query(None)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(
         get_current_user_oauth
     ),

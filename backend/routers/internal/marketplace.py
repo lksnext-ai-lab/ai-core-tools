@@ -96,12 +96,12 @@ async def list_categories(
     response_model=MarketplaceCatalogResponseSchema,
 )
 async def marketplace_catalog(
+    page: Annotated[int, Query(1, ge=1)],
+    page_size: Annotated[int, Query(20, ge=1, le=100)],
+    sort_by: Annotated[str, Query("relevance")],
     search: Optional[str] = None,
     category: Optional[str] = None,
     my_apps_only: bool = False,
-    page: Annotated[int, Query(1, ge=1)] = Query(1, ge=1),
-    page_size: Annotated[int, Query(20, ge=1, le=100)] = Query(20, ge=1, le=100),
-    sort_by: Annotated[str, Query("relevance")] = Query("relevance"),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
 ):
@@ -229,8 +229,8 @@ async def start_marketplace_conversation(
     response_model=MarketplaceConversationListSchema,
 )
 async def list_marketplace_conversations(
-    limit: Annotated[int, Query(50, ge=1, le=100)] = Query(50, ge=1, le=100),
-    offset: Annotated[int, Query(0, ge=0)] = Query(0, ge=0),
+    limit: Annotated[int, Query(50, ge=1, le=100)],
+    offset: Annotated[int, Query(0, ge=0)],
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
 ):
@@ -329,7 +329,7 @@ def _build_file_user_context(auth_context: Annotated[AuthContext, Depends(get_cu
 )
 async def upload_marketplace_file(
     conversation_id: int,
-    file: Annotated[UploadFile, File(...)] = File(...),
+    file: Annotated[UploadFile, File(...)],
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
 ):
@@ -582,9 +582,9 @@ def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
 async def marketplace_chat(
     conversation_id: int,
     request: Request,
-    message: Annotated[str, Form(...)] = Form(...),
-    files: Annotated[List[UploadFile], File(None)] = File(None),
-    file_references: Annotated[Optional[str], Form(None)] = Form(None),
+    message: Annotated[str, Form(...)],
+    files: Annotated[List[UploadFile], File(None)],
+    file_references: Annotated[Optional[str], Form(None)],
     db: Annotated[Session, Depends(get_db)] = Depends(get_db),
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
 ):

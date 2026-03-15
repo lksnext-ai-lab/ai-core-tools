@@ -72,9 +72,9 @@ async def list_output_parsers(
 )
 async def import_output_parser(
     app_id: int,
-    file: Annotated[UploadFile, File(...)] = File(...),
-    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)] = Query(ConflictMode.FAIL),
-    new_name: Annotated[Optional[str], Query(None)] = Query(None),
+    file: Annotated[UploadFile, File(...)],
+    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
+    new_name: Annotated[Optional[str], Query(None)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db)

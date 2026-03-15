@@ -32,7 +32,7 @@ ocr_router = APIRouter(tags=["Internal OCR"])
 )
 async def process_ocr_internal(
     agent_id: int,
-    pdf_file: Annotated[UploadFile, File(...)] = File(...),
+    pdf_file: Annotated[UploadFile, File(...)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):

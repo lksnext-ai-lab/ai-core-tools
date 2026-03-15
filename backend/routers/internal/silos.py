@@ -64,10 +64,10 @@ def _validate_silo_app_ownership(silo_id: int, app_id: int, db: Session) -> Silo
 )
 async def import_silo(
     app_id: int,
-    file: Annotated[UploadFile, File(...)] = File(...),
-    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)] = Query(ConflictMode.FAIL),
-    new_name: Annotated[Optional[str], Query(None)] = Query(None),
-    selected_embedding_service_id: Annotated[Optional[int], Query(None)] = Query(None),
+    file: Annotated[UploadFile, File(...)],
+    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
+    new_name: Annotated[Optional[str], Query(None)],
+    selected_embedding_service_id: Annotated[Optional[int], Query(None)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db)
@@ -264,7 +264,7 @@ async def delete_silo(
 async def export_silo(
     app_id: int,
     silo_id: int,
-    include_dependencies: Annotated[bool, Query(True, description="Bundle dependencies (embedding service, output parser)")] = Query(True, description="Bundle dependencies (embedding service, output parser)"),
+    include_dependencies: Annotated[bool, Query(True, description="Bundle dependencies (embedding service, output parser)")],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db)
@@ -392,7 +392,7 @@ async def search_silo_documents(
 async def delete_silo_documents(
     app_id: int,
     silo_id: int,
-    document_ids: Annotated[List[str], Body(..., embed=True)] = Body(..., embed=True),
+    document_ids: Annotated[List[str], Body(..., embed=True)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
     db: Annotated[Session, Depends(get_db)] = Depends(get_db)
 ):
