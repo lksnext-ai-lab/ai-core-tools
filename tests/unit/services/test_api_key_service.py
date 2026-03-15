@@ -180,6 +180,7 @@ class TestCreateApiKey:
 
         def capture_create(db, api_key_obj):
             captured["key"] = api_key_obj.key
+            api_key_obj.key_id = 1
             return api_key_obj
 
         repo = mocker.MagicMock()
