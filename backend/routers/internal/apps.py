@@ -26,6 +26,7 @@ from schemas.import_schemas import (
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
+from utils.secret_utils import mask_api_key, is_masked_key
 
 # Import nested routers for app-specific resources
 from .agents import agents_router
@@ -402,7 +403,7 @@ async def list_apps(
             name=app.name,
             role=role,
             created_at=app.create_date,
-            langsmith_configured=bool(app.langsmith_api_key),
+            langsmith_configured=bool(app.langsmith_api_key and app.langsmith_api_key != "CHANGE_ME"),
             owner_id=app.owner_id,
             owner_name=owner_name,
             owner_email=owner_email,
@@ -462,7 +463,7 @@ async def get_app(
     return AppDetailSchema(
         app_id=app.app_id,
         name=app.name,
-        langsmith_api_key=app.langsmith_api_key or "",
+        langsmith_api_key=mask_api_key(app.langsmith_api_key),
         user_role=user_role,
         created_at=app.create_date,
         owner_id=app.owner_id,
@@ -542,7 +543,7 @@ async def create_app(
     return AppDetailSchema(
         app_id=app.app_id,
         name=app.name,
-        langsmith_api_key=app.langsmith_api_key or "",
+        langsmith_api_key=mask_api_key(app.langsmith_api_key),
         user_role="owner",
         created_at=app.create_date,
         owner_id=app.owner_id,
@@ -585,10 +586,15 @@ async def update_app(
             detail="Only app owners can update apps"
         )
     
+    # Preserve existing langsmith key if user sent back a masked value
+    langsmith_key = app_data.langsmith_api_key
+    if is_masked_key(langsmith_key):
+        langsmith_key = app.langsmith_api_key
+
     update_dict = {
         'app_id': app_id,
         'name': app_data.name,
-        'langsmith_api_key': app_data.langsmith_api_key,
+        'langsmith_api_key': langsmith_key,
         'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         'max_file_size_mb': app_data.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         'agent_cors_origins': app_data.agent_cors_origins
@@ -607,7 +613,7 @@ async def update_app(
     return AppDetailSchema(
         app_id=updated_app.app_id,
         name=updated_app.name,
-        langsmith_api_key=updated_app.langsmith_api_key or "",
+        langsmith_api_key=mask_api_key(updated_app.langsmith_api_key),
         user_role="owner",
         created_at=updated_app.create_date,
         owner_id=updated_app.owner_id,

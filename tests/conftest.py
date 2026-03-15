@@ -46,6 +46,30 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
+def _validate_test_db_url(url: str) -> None:
+    """Fail fast if TEST_DATABASE_URL points to a dev/prod database."""
+    _FORBIDDEN_PATTERNS = [("mattin_ai", "dev DB name"), ("iacore", "dev DB name")]
+    if ":5432/" in url and ":5433" not in url:
+        raise RuntimeError(
+            f"SAFETY: TEST_DATABASE_URL uses port 5432 (dev/prod). "
+            f"Expected test DB on port 5433.\n  TEST_DATABASE_URL = {url}"
+        )
+    for pattern, reason in _FORBIDDEN_PATTERNS:
+        if pattern in url:
+            raise RuntimeError(
+                f"SAFETY: TEST_DATABASE_URL contains '{pattern}' ({reason}). "
+                f"Refusing to run tests.\n  TEST_DATABASE_URL = {url}"
+            )
+
+
+_validate_test_db_url(TEST_DATABASE_URL)
+
+# SAFETY: Force SQLALCHEMY_DATABASE_URI to test DB BEFORE any backend import.
+# This prevents database.py's module-level engine from connecting to dev DB
+# when backend.main is imported by the test client fixture.
+os.environ["SQLALCHEMY_DATABASE_URI"] = TEST_DATABASE_URL
+
+
 # ---------------------------------------------------------------------------
 # Database fixtures
 # ---------------------------------------------------------------------------
@@ -69,6 +93,14 @@ def test_engine():
         pool_pre_ping=True,
         echo=False,
     )
+
+    # Runtime safety check: verify we connected to the test DB, not dev/prod.
+    with engine.connect() as conn:
+        db_name = conn.execute(text("SELECT current_database()")).scalar()
+        assert db_name in ("test_db", "mattin_test_temp"), (
+            f"SAFETY: test_engine connected to '{db_name}' instead of test database. "
+            f"Aborting to prevent data loss."
+        )
 
     Base.metadata.create_all(bind=engine)
     yield engine
@@ -271,3 +303,18 @@ def owner_headers(fake_user, fake_app, client, db):
     )
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+# ---------------------------------------------------------------------------
+# Auto-markers
+# ---------------------------------------------------------------------------
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-apply 'unit' / 'integration' markers based on test file location."""
+    for item in items:
+        path = str(item.fspath)
+        if "/integration/" in path or "\\integration\\" in path:
+            item.add_marker(pytest.mark.integration)
+        elif "/unit/" in path or "\\unit\\" in path:
+            item.add_marker(pytest.mark.unit)

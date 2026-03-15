@@ -35,6 +35,67 @@ pipeline {
             }
         }
         
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Start ephemeral test database (tmpfs — no persistent data)
+                    sh '''
+                        docker run -d --name mattin-test-db \
+                            -e POSTGRES_DB=test_db \
+                            -e POSTGRES_USER=test_user \
+                            -e POSTGRES_PASSWORD=test_pass \
+                            -e "POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C" \
+                            -p 5433:5432 \
+                            --tmpfs /var/lib/postgresql/data \
+                            pgvector/pgvector:pg17
+                    '''
+
+                    // Wait for database to be ready
+                    sh '''
+                        echo "Waiting for test database..."
+                        for i in $(seq 1 30); do
+                            docker exec mattin-test-db pg_isready -U test_user -d test_db && break
+                            sleep 2
+                        done
+                    '''
+
+                    // Build test runner image
+                    sh "docker build --no-cache -f backend/Dockerfile.test -t mattin-test-runner ."
+
+                    // Run tests with JUnit XML and coverage output
+                    sh '''
+                        mkdir -p test-results
+                        docker run --rm \
+                            --network host \
+                            -e TEST_DATABASE_URL=postgresql://test_user:test_pass@localhost:5433/test_db \
+                            -e SQLALCHEMY_DATABASE_URI=postgresql://test_user:test_pass@localhost:5433/test_db \
+                            -e AICT_LOGIN=FAKE \
+                            -e SECRET_KEY=test-secret-key-32chars-minimum-ok \
+                            -e AICT_OMNIADMINS=admin@test.com \
+                            -e AICT_MODE=SELF-HOSTED \
+                            -e FRONTEND_URL=http://localhost:5173 \
+                            -v "$(pwd)/test-results:/app/test-results" \
+                            mattin-test-runner \
+                            pytest -v \
+                                --junitxml=/app/test-results/junit.xml \
+                                --cov=backend \
+                                --cov-report=xml:/app/test-results/coverage.xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Collect test results for Jenkins UI
+                    junit allowEmptyResults: true, testResults: 'test-results/junit.xml'
+
+                    // Cleanup test infrastructure
+                    sh 'docker stop mattin-test-db || true'
+                    sh 'docker rm mattin-test-db || true'
+                    sh 'docker rmi mattin-test-runner || true'
+                }
+            }
+        }
+
         stage('Version Bump') {
             steps {
                 script {
@@ -128,7 +189,8 @@ pipeline {
                         -Dsonar.projectBaseDir=/app \
                         -Dsonar.sources=/app \
                         -Dsonar.branch.name=$SONAR_BRANCH \
-                        -Dsonar.python.version=3.12
+                        -Dsonar.python.version=3.12 \
+                        -Dsonar.python.coverage.reportPaths=test-results/coverage.xml
                     '''
                 }
             }

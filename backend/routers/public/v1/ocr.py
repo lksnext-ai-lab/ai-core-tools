@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Annotated
 
 from .schemas import OCRResponseSchema
-from .auth import get_api_key_auth, validate_api_key_for_app
+from .auth import get_api_key_auth, validate_api_key_for_app, validate_agent_ownership
 from db.database import get_db
 
 # Import logger
@@ -32,8 +32,11 @@ async def process_ocr(
 ):
     """Process OCR on a PDF file using the specified agent."""
     # Validate API key for this app
-    validate_api_key_for_app(app_id, api_key)
-    
+    validate_api_key_for_app(app_id, api_key, db)
+
+    # Validate agent belongs to this app
+    validate_agent_ownership(db, agent_id, app_id)
+
     # Validate file type
     if not pdf.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")

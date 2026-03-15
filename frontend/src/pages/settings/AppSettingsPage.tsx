@@ -23,6 +23,8 @@ function AppSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [langsmithKeyChanged, setLangsmithKeyChanged] = useState(false);
+  const [originalLangsmithKey, setOriginalLangsmithKey] = useState('');
 
   const [slugInput, setSlugInput] = useState('');
   const [savingSlug, setSavingSlug] = useState(false);
@@ -44,13 +46,16 @@ function AppSettingsPage() {
       setLoading(true);
       setError(null);
       const app = await apiService.getApp(Number.parseInt(appId));
+      const langsmithKey = app.langsmith_api_key || '';
       setFormData({
         name: app.name || '',
-        langsmith_api_key: app.langsmith_api_key || '',
+        langsmith_api_key: langsmithKey,
         agent_rate_limit: app.agent_rate_limit || 0,
         max_file_size_mb: app.max_file_size_mb || 0,
         agent_cors_origins: app.agent_cors_origins || ''
       });
+      setOriginalLangsmithKey(langsmithKey);
+      setLangsmithKeyChanged(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load app data');
       console.error('Error loading app data:', err);
@@ -100,7 +105,7 @@ function AppSettingsPage() {
     try {
       await apiService.updateApp(Number.parseInt(appId), {
         name: formData.name,
-        langsmith_api_key: formData.langsmith_api_key,
+        langsmith_api_key: langsmithKeyChanged ? formData.langsmith_api_key : originalLangsmithKey,
         agent_rate_limit: formData.agent_rate_limit,
         max_file_size_mb: formData.max_file_size_mb,
         agent_cors_origins: formData.agent_cors_origins
@@ -116,10 +121,14 @@ function AppSettingsPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb') 
-      ? Number.parseInt(e.target.value) || 0 
+    const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb')
+      ? Number.parseInt(e.target.value) || 0
       : e.target.value;
-    
+
+    if (e.target.name === 'langsmith_api_key') {
+      setLangsmithKeyChanged(true);
+    }
+
     setFormData(prev => ({
       ...prev,
       [e.target.name]: newValue
@@ -237,9 +246,18 @@ function AppSettingsPage() {
                     name="langsmith_api_key"
                     value={formData.langsmith_api_key}
                     onChange={handleChange}
+                    onFocus={() => {
+                      if (!langsmithKeyChanged && formData.langsmith_api_key.startsWith('****')) {
+                        setFormData(prev => ({ ...prev, langsmith_api_key: '' }));
+                        setLangsmithKeyChanged(true);
+                      }
+                    }}
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter Langsmith API key"
+                    placeholder={!langsmithKeyChanged && originalLangsmithKey ? 'Leave empty to keep current key' : 'Enter Langsmith API key'}
                   />
                   <p className="mt-1 text-sm text-gray-500">
                     Your Langsmith API key for monitoring and tracing

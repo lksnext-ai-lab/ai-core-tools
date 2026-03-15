@@ -306,10 +306,11 @@ async def export_silo(
                   summary="Get silo playground",
                   tags=["Silos", "Playground"])
 async def silo_playground(
-    app_id: int, 
-    silo_id: int, 
+    app_id: int,
+    silo_id: int,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get silo playground interface for testing document search.
@@ -344,7 +345,8 @@ async def search_silo_documents(
     silo_id: int,
     search_query: SiloSearchSchema,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Search for documents in a silo using semantic search with optional metadata filtering.
@@ -394,7 +396,8 @@ async def delete_silo_documents(
     silo_id: int,
     document_ids: Annotated[List[str], Body(..., embed=True)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete documents from a silo by their IDs.

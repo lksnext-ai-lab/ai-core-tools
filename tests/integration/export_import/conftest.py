@@ -33,6 +33,13 @@ def test_db_url():
     password = os.getenv("TEST_DB_PASSWORD", "test_pass")
     test_db_name = "mattin_test_temp"
 
+    # Safety guard: refuse to connect to dev/prod database port
+    if port == "5432":
+        raise RuntimeError(
+            "SAFETY: TEST_DB_PORT is 5432 (dev/prod). "
+            "Expected test DB on port 5433. Refusing to run."
+        )
+
     conn = psycopg2.connect(
         dbname="postgres", user=user, password=password, host=host, port=port
     )

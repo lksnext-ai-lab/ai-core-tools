@@ -53,10 +53,12 @@ def get_agent_service() -> AgentService:
     return AgentService()
 
 
-def _get_agent_or_404(db: Session, agent_id: int):
-    """Get agent by ID or raise 404."""
+def _get_agent_or_404(db: Session, agent_id: int, app_id: int = None):
+    """Get agent by ID or raise 404. If app_id is provided, also verifies the agent belongs to that app."""
     agent = AgentService().get_agent(db, agent_id)
     if not agent:
+        raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND_ERROR)
+    if app_id is not None and agent.app_id != app_id:
         raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND_ERROR)
     return agent
 
@@ -418,15 +420,8 @@ async def delete_agent(
     """
     Delete an agent.
     """
-    # App access validation would be implemented here
-
-    # Check if agent exists
-    agent = agent_service.get_agent(db, agent_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=AGENT_NOT_FOUND_ERROR
-        )
+    # Check if agent exists and belongs to this app
+    _get_agent_or_404(db, agent_id, app_id)
 
     # Delete agent
     success = agent_service.delete_agent(db, agent_id)
@@ -454,13 +449,8 @@ async def get_agent_mcp_usage(
     Get list of MCP servers that use this agent.
     Used to warn users before unmarking an agent as tool or deleting it.
     """
-    # Check if agent exists
-    agent = agent_service.get_agent(db, agent_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=AGENT_NOT_FOUND_ERROR
-        )
+    # Check if agent exists and belongs to this app
+    agent = _get_agent_or_404(db, agent_id, app_id)
 
     # Get MCP servers using this agent
     servers = MCPServerService.get_mcp_servers_using_agent(db, agent_id)
@@ -481,6 +471,7 @@ async def update_agent_prompt(
     agent_id: int,
     prompt_data: UpdatePromptSchema,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
     db: Annotated[Session, Depends(get_db)],
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
@@ -493,7 +484,10 @@ async def update_agent_prompt(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid prompt type. Must be 'system' or 'template'"
         )
-    
+
+    # Check if agent exists and belongs to this app
+    _get_agent_or_404(db, agent_id, app_id)
+
     # Update prompt using service
     success = agent_service.update_agent_prompt(db, agent_id, prompt_data.type, prompt_data.prompt)
     if not success:
@@ -514,14 +508,16 @@ async def agent_playground(
     app_id: int,
     agent_id: int,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Get agent playground interface data.
     """
-    # App access validation would be implemented here
-    
+    # Verify agent belongs to this app
+    _get_agent_or_404(db, agent_id, app_id)
+
     playground_data = agent_service.get_agent_playground_data(db, agent_id)
     
     if not playground_data:
@@ -540,15 +536,16 @@ async def agent_analytics(
     app_id: int,
     agent_id: int,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
     """
     Get agent analytics data (premium feature).
     """
-    # App access validation would be implemented here
-    # Premium feature check would be implemented here
-    
+    # Verify agent belongs to this app
+    _get_agent_or_404(db, agent_id, app_id)
+
     analytics_data = agent_service.get_agent_analytics(db, agent_id)
     
     if not analytics_data:
@@ -675,6 +672,7 @@ async def chat_with_agent(
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
     _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
@@ -690,8 +688,8 @@ async def chat_with_agent(
         conversation_id: Optional conversation ID to continue existing conversation
     """
     try:
-        # Fetch agent to check marketplace visibility
-        agent = _get_agent_or_404(db, agent_id)
+        # Fetch agent and verify it belongs to this app
+        agent = _get_agent_or_404(db, agent_id, app_id)
 
         # Check marketplace quota enforcement (only for public marketplace agents)
         _check_marketplace_quota(agent, auth_context, db)
@@ -757,6 +755,7 @@ async def chat_with_agent_stream(
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
     _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
@@ -767,6 +766,9 @@ async def chat_with_agent_stream(
     thinking, done, error.  The playground uses this endpoint for real-time responses.
     """
     try:
+        # Verify agent exists and belongs to this app
+        _get_agent_or_404(db, agent_id, app_id)
+
         parsed_search_params = _parse_optional_json(search_params, "search_params")
         parsed_file_references = _parse_optional_json(file_references, "file_references")
         if not isinstance(parsed_file_references, list):
@@ -826,19 +828,23 @@ async def reset_conversation(
     app_id: int,
     agent_id: int,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
 ):
     """
     Internal API: Reset conversation for playground (OAuth authentication)
     """
     try:
+        # Verify agent belongs to this app
+        _get_agent_or_404(db, agent_id, app_id)
+
         # Create user context for OAuth user
         user_context = {
             "user_id": int(auth_context.identity.id),
             "oauth": True,
             "app_id": app_id
         }
-        
+
         # Use unified service layer
         execution_service = AgentExecutionService(db)
         success = await execution_service.reset_agent_conversation(
@@ -871,6 +877,7 @@ async def get_conversation_history(
     app_id: int,
     agent_id: int,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ):
@@ -878,10 +885,8 @@ async def get_conversation_history(
     Internal API: Get conversation history for playground (OAuth authentication)
     """
     try:
-        # Get agent to check if it has memory
-        agent = agent_service.get_agent(db, agent_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
+        # Get agent and verify it belongs to this app
+        agent = _get_agent_or_404(db, agent_id, app_id)
         
         # Create user context for OAuth user
         user_context = {
@@ -924,24 +929,28 @@ async def upload_file_for_chat(
     file: Annotated[UploadFile, File()],
     conversation_id: Annotated[Optional[int], Form()] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
     _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
     """
     Internal API: Upload file for chat (OAuth authentication)
-    
+
     Args:
         conversation_id: Optional conversation ID to associate the file with.
                         If provided, file will be specific to that conversation.
     """
     try:
+        # Verify agent belongs to this app
+        _get_agent_or_404(db, agent_id, app_id)
+
         # Create user context for OAuth user
         user_context = {
             "user_id": int(auth_context.identity.id),
             "oauth": True,
             "app_id": app_id
         }
-        
+
         # Use unified service layer
         file_service = FileManagementService()
         file_ref = await file_service.upload_file(
@@ -984,23 +993,27 @@ async def list_attached_files(
     agent_id: int,
     conversation_id: Optional[int] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
     Internal API: List attached files for chat (OAuth authentication)
-    
+
     Args:
         conversation_id: Optional conversation ID to filter files.
                         If provided, only files for that conversation are returned.
     """
     try:
+        # Verify agent belongs to this app
+        _get_agent_or_404(db, agent_id, app_id)
+
         # Create user context for OAuth user
         user_context = {
             "user_id": int(auth_context.identity.id),
             "oauth": True,
             "app_id": app_id
         }
-        
+
         # Use unified service layer
         file_service = FileManagementService()
         files = await file_service.list_attached_files(
@@ -1035,22 +1048,26 @@ async def remove_attached_file(
     file_id: str,
     conversation_id: Optional[int] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
     Internal API: Remove attached file (OAuth authentication)
-    
+
     Args:
         conversation_id: Optional conversation ID for conversation-specific files.
     """
     try:
+        # Verify agent belongs to this app
+        _get_agent_or_404(db, agent_id, app_id)
+
         # Create user context for OAuth user
         user_context = {
             "user_id": int(auth_context.identity.id),
             "oauth": True,
             "app_id": app_id
         }
-        
+
         # Use unified service layer
         file_service = FileManagementService()
         success = await file_service.remove_file(
@@ -1084,6 +1101,7 @@ async def download_file(
     request: Request,
     conversation_id: Optional[int] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
@@ -1093,6 +1111,9 @@ async def download_file(
     returns a signed URL for the /static/ endpoint (no auth required).
     """
     try:
+        # Verify agent belongs to this app
+        _get_agent_or_404(db, agent_id, app_id)
+
         user_context = {
             "user_id": int(auth_context.identity.id),
             "oauth": True,

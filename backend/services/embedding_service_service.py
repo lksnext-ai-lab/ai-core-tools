@@ -7,6 +7,7 @@ from schemas.embedding_service_schemas import (
     CreateUpdateEmbeddingServiceSchema
 )
 from core.export_constants import PLACEHOLDER_API_KEY
+from utils.secret_utils import mask_api_key, is_masked_key
 from typing import List, Optional
 from datetime import datetime
 
@@ -70,7 +71,7 @@ class EmbeddingServiceService:
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",
-            api_key=service.api_key or "",
+            api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",
             created_at=service.create_date,
             available_providers=providers,
@@ -101,7 +102,9 @@ class EmbeddingServiceService:
         service.name = service_data.name
         service.provider = service_data.provider
         service.description = service_data.model_name
-        service.api_key = service_data.api_key
+        # Only update api_key if user provided a new (non-masked) value
+        if not is_masked_key(service_data.api_key):
+            service.api_key = service_data.api_key
         service.endpoint = service_data.base_url
         
         if service_id == 0:
