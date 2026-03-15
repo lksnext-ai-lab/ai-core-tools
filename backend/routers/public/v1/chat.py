@@ -123,12 +123,12 @@ async def call_agent(
     app_id: int,
     agent_id: int,
     message: Annotated[str, Form(..., description="The user message to send to the agent")],
-    files: Annotated[List[UploadFile], File(None, description="Optional files to attach (images, PDFs, text files)")],
-    file_references: Annotated[Optional[str], Form(None, description="JSON array of existing file_ids to include. If not provided, all files are included.")],
-    search_params: Annotated[Optional[str], Form(None, description="JSON object with search parameters for silo-based agents")],
-    conversation_id: Annotated[Optional[int], Form(None, description="Optional conversation ID to continue existing conversation")],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    files: Annotated[List[UploadFile], File(description="Optional files to attach (images, PDFs, text files)")] = None,
+    file_references: Annotated[Optional[str], Form(description="JSON array of existing file_ids to include. If not provided, all files are included.")] = None,
+    search_params: Annotated[Optional[str], Form(description="JSON object with search parameters for silo-based agents")] = None,
+    conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue existing conversation")] = None,
 ):
     """
     Call an agent for chat completion.
@@ -216,12 +216,12 @@ async def call_agent_stream(
     app_id: int,
     agent_id: int,
     message: Annotated[str, Form(..., description="The user message to send to the agent")],
-    files: Annotated[List[UploadFile], File(None, description="Optional files to attach")],
-    file_references: Annotated[Optional[str], Form(None, description="JSON array of existing file_ids to include")],
-    search_params: Annotated[Optional[str], Form(None, description="JSON object with search parameters")],
-    conversation_id: Annotated[Optional[int], Form(None, description="Optional conversation ID to continue")],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    files: Annotated[List[UploadFile], File(description="Optional files to attach")] = None,
+    file_references: Annotated[Optional[str], Form(description="JSON array of existing file_ids to include")] = None,
+    search_params: Annotated[Optional[str], Form(description="JSON object with search parameters")] = None,
+    conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue")] = None,
 ):
     """
     Call an agent with Server-Sent Events streaming response.
@@ -302,7 +302,7 @@ async def reset_conversation(
     agent_id: int,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    conversation_id: Annotated[Optional[int], Query(None, description="Optional conversation ID to reset")] = None,
+    conversation_id: Annotated[Optional[int], Query(description="Optional conversation ID to reset")] = None,
 ):
     """
     Reset the conversation state for an agent.
@@ -414,8 +414,8 @@ async def list_conversations(
     agent_id: int,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    limit: Annotated[int, Query(50, ge=1, le=100, description="Maximum number of results")] = 50,
-    offset: Annotated[int, Query(0, ge=0, description="Pagination offset")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Maximum number of results")] = 50,
+    offset: Annotated[int, Query(ge=0, description="Pagination offset")] = 0,
 ):
     """
     List all conversations for an agent.

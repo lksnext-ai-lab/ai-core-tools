@@ -35,9 +35,9 @@ folders_router = APIRouter()
 async def get_root_folders(
     app_id: int,
     repository_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get all root folders (parent_folder_id is None) for a repository.
@@ -86,9 +86,9 @@ async def get_root_folders(
 async def get_folder_tree(
     app_id: int,
     repository_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get the complete folder tree structure for a repository.
@@ -145,9 +145,9 @@ async def get_folder_details(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific folder.
@@ -196,9 +196,9 @@ async def create_folder(
     app_id: int,
     repository_id: int,
     folder_data: CreateFolderSchema,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Create a new folder in the repository.
@@ -248,9 +248,9 @@ async def update_folder(
     repository_id: int,
     folder_id: int,
     folder_data: UpdateFolderSchema,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Update a folder's name.
@@ -305,9 +305,9 @@ async def delete_folder(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a folder and all its contents (subfolders and resources).
@@ -348,9 +348,9 @@ async def move_folder(
     repository_id: int,
     folder_id: int,
     move_data: MoveFolderSchema,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Move a folder to a new parent folder.

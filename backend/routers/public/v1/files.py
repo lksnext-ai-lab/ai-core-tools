@@ -48,7 +48,6 @@ async def attach_file(
     conversation_id: Annotated[
         Optional[str],
         Form(
-            None,
             description="Optional conversation ID for memory-enabled agents. If not provided for a memory-enabled agent, a new conversation will be created.",
         ),
     ] = None,
@@ -134,7 +133,7 @@ async def detach_file(
     db: Annotated[Session, Depends(get_db)],
     conversation_id: Annotated[
         Optional[str],
-        Query(None, description="Optional conversation ID to scope file removal"),
+        Query(description="Optional conversation ID to scope file removal"),
     ] = None,
 ):
     """
@@ -193,7 +192,7 @@ async def list_attached_files(
     db: Annotated[Session, Depends(get_db)],
     conversation_id: Annotated[
         Optional[str],
-        Query(None, description="Optional conversation ID to filter files"),
+        Query(description="Optional conversation ID to filter files"),
     ] = None,
 ):
     """
@@ -270,7 +269,7 @@ async def download_file(
     db: Annotated[Session, Depends(get_db)],
     conversation_id: Annotated[
         Optional[str],
-        Query(None, description="Optional conversation ID to scope file lookup"),
+        Query(description="Optional conversation ID to scope file lookup"),
     ] = None,
 ):
     """

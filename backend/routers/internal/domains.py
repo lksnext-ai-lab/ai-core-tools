@@ -96,14 +96,12 @@ def background_reindex_domain(domain_id: int):
 async def import_domain(
     app_id: int,
     file: Annotated[UploadFile, File(...)],
-    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
-    new_name: Annotated[Optional[str], Query(None)],
-    selected_embedding_service_id: Annotated[Optional[int], Query(None)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(
-        get_current_user_oauth
-    ),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
+    selected_embedding_service_id: Annotated[Optional[int], Query()] = None,
 ):
     """Import Domain from JSON file.
 
@@ -163,9 +161,9 @@ async def import_domain(
 async def list_domains(
     app_id: int, 
     request: Request, 
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db), 
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)], 
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all domains for a specific app.
@@ -208,9 +206,9 @@ async def get_domain(
     app_id: int, 
     domain_id: int, 
     request: Request, 
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db), 
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)], 
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific domain.
@@ -258,9 +256,9 @@ async def create_or_update_domain(
     domain_id: int,
     domain_data: CreateUpdateDomainSchema,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Create a new domain or update an existing one.
@@ -301,9 +299,9 @@ async def delete_domain(
     app_id: int, 
     domain_id: int, 
     request: Request, 
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db), 
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)], 
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a domain and its associated silo and URLs.
@@ -337,13 +335,12 @@ async def delete_domain(
 async def export_domain(
     app_id: int,
     domain_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     include_dependencies: Annotated[bool, Query(
-        True,
         description="Bundle silo and its dependencies",
     )] = True,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
 ):
     """Export Domain configuration to JSON file.
 
@@ -403,11 +400,11 @@ async def list_domain_urls(
     app_id: int,
     domain_id: int,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     page: int = 1,
     per_page: int = 20,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
 ):
     """
     List URLs for a specific domain with pagination.
@@ -446,9 +443,9 @@ async def add_url_to_domain(
     url_data: CreateURLSchema,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Add a new URL to a domain and scrape its content.
@@ -496,9 +493,9 @@ async def delete_url_from_domain(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a URL from a domain and remove its indexed content.
@@ -531,9 +528,9 @@ async def reindex_url(
     url_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Re-index content for a specific URL.
@@ -587,9 +584,9 @@ async def unindex_url(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Remove URL content from index and mark as unindexed.
@@ -636,9 +633,9 @@ async def reject_url(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Mark URL as rejected (content not suitable for indexing).
@@ -684,9 +681,9 @@ async def reindex_domain(
     domain_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Re-index content for all URLs in a domain.
@@ -724,9 +721,9 @@ async def get_url_content(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get the scraped content for a specific URL.

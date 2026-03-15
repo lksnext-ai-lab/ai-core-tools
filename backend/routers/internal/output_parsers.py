@@ -41,10 +41,10 @@ output_parsers_router = APIRouter()
                            tags=["Output Parsers"],
                            response_model=List[OutputParserListItemSchema])
 async def list_output_parsers(
-    app_id: int, 
-    current_user: Annotated[dict, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    app_id: int,
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all output parsers (data structures) for a specific app.
@@ -73,11 +73,11 @@ async def list_output_parsers(
 async def import_output_parser(
     app_id: int,
     file: Annotated[UploadFile, File(...)],
-    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
-    new_name: Annotated[Optional[str], Query(None)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
 ):
     """Import Output Parser from JSON file."""
     try:
@@ -122,11 +122,11 @@ async def import_output_parser(
                            tags=["Output Parsers"],
                            response_model=OutputParserDetailSchema)
 async def get_output_parser(
-    app_id: int, 
-    parser_id: int, 
-    current_user: Annotated[dict, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    app_id: int,
+    parser_id: int,
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific output parser including its fields.
@@ -160,9 +160,9 @@ async def create_or_update_output_parser(
     app_id: int,
     parser_id: int,
     parser_data: CreateUpdateOutputParserSchema,
-    current_user: Annotated[dict, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Create a new output parser or update an existing one.
@@ -193,11 +193,11 @@ async def create_or_update_output_parser(
                               summary="Delete output parser",
                               tags=["Output Parsers"])
 async def delete_output_parser(
-    app_id: int, 
-    parser_id: int, 
-    current_user: Annotated[dict, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    app_id: int,
+    parser_id: int,
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Delete an output parser.
@@ -235,9 +235,9 @@ async def delete_output_parser(
 async def export_output_parser(
     app_id: int,
     parser_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """Export Output Parser configuration to JSON file."""
     try:

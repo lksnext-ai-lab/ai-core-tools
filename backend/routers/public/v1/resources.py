@@ -75,7 +75,7 @@ async def create_multiple_resources(
     files: Annotated[List[UploadFile], File(...)],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    folder_id: Annotated[Optional[int], Form(None)] = None,
+    folder_id: Annotated[Optional[int], Form()] = None,
 ):
     """Upload multiple resources to a repository. Optionally specify folder_id to upload to a specific folder."""
     validate_api_key_for_app(app_id, api_key, db)

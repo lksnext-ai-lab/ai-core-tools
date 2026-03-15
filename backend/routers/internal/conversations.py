@@ -34,9 +34,9 @@ def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
 @router.post("", response_model=ConversationResponse, responses={500: {"description": "Internal server error"}})
 async def create_conversation(
     agent_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     title: Optional[str] = None,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
 ):
     """
     Create a new conversation for an agent
@@ -63,10 +63,10 @@ async def create_conversation(
 @router.get("", response_model=ConversationListResponse, responses={500: {"description": "Internal server error"}})
 async def list_conversations(
     agent_id: int,
-    limit: Annotated[int, Query(50, ge=1, le=100)],
-    offset: Annotated[int, Query(0, ge=0)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """
     List all conversations for a user with a specific agent
@@ -98,8 +98,8 @@ async def list_conversations(
 @router.get("/{conversation_id}", response_model=ConversationResponse, responses={404: {"description": "Conversation not found"}})
 async def get_conversation(
     conversation_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)]
 ):
     """
     Get a specific conversation by ID
@@ -123,8 +123,8 @@ async def get_conversation(
 @router.get("/{conversation_id}/history", response_model=ConversationWithHistoryResponse, responses={404: {"description": "Conversation not found"}, 500: {"description": "Internal server error"}})
 async def get_conversation_with_history(
     conversation_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)]
 ):
     """
     Get a conversation with its complete message history
@@ -164,8 +164,8 @@ async def get_conversation_with_history(
 async def update_conversation(
     conversation_id: int,
     update_data: ConversationUpdate,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)]
 ):
     """
     Update a conversation (mainly for title updates)
@@ -191,8 +191,8 @@ async def update_conversation(
 @router.delete("/{conversation_id}", responses={404: {"description": "Conversation not found"}})
 async def delete_conversation(
     conversation_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)]
 ):
     """
     Delete a conversation and its associated chat history

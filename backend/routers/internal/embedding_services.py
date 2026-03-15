@@ -41,10 +41,10 @@ embedding_services_router = APIRouter()
                                tags=["Embedding Services"],
                                response_model=List[EmbeddingServiceListItemSchema])
 async def list_embedding_services(
-    app_id: int, 
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    app_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all embedding services for a specific app.
@@ -73,11 +73,11 @@ async def list_embedding_services(
 async def import_embedding_service(
     app_id: int,
     file: Annotated[UploadFile, File(...)],
-    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
-    new_name: Annotated[Optional[str], Query(None)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
 ):
     """Import Embedding Service from JSON file."""
     try:
@@ -122,11 +122,11 @@ async def import_embedding_service(
                                tags=["Embedding Services"],
                                response_model=EmbeddingServiceDetailSchema)
 async def get_embedding_service(
-    app_id: int, 
-    service_id: int, 
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    app_id: int,
+    service_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific embedding service.
@@ -160,9 +160,9 @@ async def create_or_update_embedding_service(
     app_id: int,
     service_id: int,
     service_data: CreateUpdateEmbeddingServiceSchema,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Create a new embedding service or update an existing one.
@@ -195,11 +195,11 @@ async def create_or_update_embedding_service(
                                   summary="Delete embedding service",
                                   tags=["Embedding Services"])
 async def delete_embedding_service(
-    app_id: int, 
-    service_id: int, 
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth)
+    app_id: int,
+    service_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Delete an embedding service.
@@ -237,9 +237,9 @@ async def delete_embedding_service(
 async def export_embedding_service(
     app_id: int,
     service_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """Export Embedding Service configuration to JSON file."""
     try:

@@ -46,12 +46,12 @@ logger.info("Repositories router loaded successfully")
 async def import_repository(
     app_id: int,
     file: Annotated[UploadFile, File(...)],
-    conflict_mode: Annotated[ConflictMode, Query(ConflictMode.FAIL)],
-    new_name: Annotated[Optional[str], Query(None)],
-    selected_embedding_service_id: Annotated[Optional[int], Query(None)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))] = Depends(require_min_role("administrator")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
+    selected_embedding_service_id: Annotated[Optional[int], Query()] = None,
 ):
     """Import Repository from JSON file.
 
@@ -110,9 +110,9 @@ async def import_repository(
                          response_model=List[RepositoryListItemSchema])
 async def list_repositories(
     app_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all repositories for a specific app.
@@ -132,9 +132,9 @@ async def list_repositories(
 async def get_repository(
     app_id: int,
     repository_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific repository including its resources.
@@ -152,9 +152,9 @@ async def create_or_update_repository(
     app_id: int,
     repository_id: int,
     repo_data: CreateUpdateRepositorySchema,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Create a new repository or update an existing one.
@@ -172,9 +172,9 @@ async def create_or_update_repository(
 async def delete_repository(
     app_id: int,
     repository_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a repository and all its resources.
@@ -195,10 +195,10 @@ async def delete_repository(
 async def export_repository(
     app_id: int,
     repository_id: int,
-    include_dependencies: Annotated[bool, Query(True, description="Bundle silo and its dependencies")],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer")),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    include_dependencies: Annotated[bool, Query(description="Bundle silo and its dependencies")] = True,
 ):
     """Export Repository configuration to JSON file.
 
@@ -256,10 +256,10 @@ async def upload_resources(
     app_id: int,
     repository_id: int,
     files: Annotated[List[UploadFile], File(...)],
-    folder_id: Annotated[Optional[int], Form(default=None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    folder_id: Annotated[Optional[int], Form()] = None,
 ):
     """
     Upload multiple resources to a repository.
@@ -288,10 +288,10 @@ async def move_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    new_folder_id: Annotated[Optional[int], Form(default=None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    new_folder_id: Annotated[Optional[int], Form()] = None,
 ):
     """
     Move a resource to a different folder within the same repository.
@@ -318,9 +318,9 @@ async def delete_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a specific resource from a repository.
@@ -347,9 +347,9 @@ async def download_resource(
     app_id: int,
     repository_id: int,
     resource_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Download a specific resource from a repository.
@@ -383,19 +383,19 @@ async def upload_media(
     repository_id: int,
     background_tasks: BackgroundTasks,
     files: Annotated[List[UploadFile], File(...)],
-    folder_id: Annotated[Optional[int], Form(None)],
     transcription_service_id: Annotated[int, Form(...)],
-    forced_language: Annotated[Optional[str], Form(None)],
-    chunk_min_duration: Annotated[Optional[int], Form(None)],
-    chunk_max_duration: Annotated[Optional[int], Form(None)],
-    chunk_overlap: Annotated[Optional[int], Form(None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    folder_id: Annotated[Optional[int], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
     Upload video/audio files for transcription and indexing
-    
+
     Supported formats:
     - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
     - Audio: mp3, wav, m4a, aac, ogg, flac, wma
@@ -439,19 +439,19 @@ async def add_youtube_video(
     background_tasks: BackgroundTasks,
     repository_id: int,
     url: Annotated[str, Form(...)],
-    folder_id: Annotated[Optional[int], Form(None)],
     transcription_service_id: Annotated[int, Form(...)],
-    forced_language: Annotated[Optional[str], Form(None)],
-    chunk_min_duration: Annotated[Optional[int], Form(None)],
-    chunk_max_duration: Annotated[Optional[int], Form(None)],
-    chunk_overlap: Annotated[Optional[int], Form(None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    folder_id: Annotated[Optional[int], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
     Add YouTube video for transcription and indexing
-    
+
     The video will be:
     1. Downloaded from YouTube
     2. Audio extracted and normalized
@@ -494,10 +494,10 @@ async def add_youtube_video(
 async def list_media(
     app_id: int,
     repository_id: int,
-    folder_id: Annotated[Optional[int], Query(None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    folder_id: Annotated[Optional[int], Query()] = None,
 ):
     """List all media in repository"""
     media_list = MediaService.list_media(
@@ -514,16 +514,16 @@ async def move_media(
     app_id: int,
     repository_id: int,
     media_id: int,
-    new_folder_id: Annotated[Optional[int], Form(None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    new_folder_id: Annotated[Optional[int], Form()] = None,
 ):
     """
     Move a resource to a different folder within the same repository.
     """
     user_id = int(auth_context.identity.id)
-    
+
     logger.info(f"Move media endpoint called - app_id: {app_id}, repository_id: {repository_id}, media_id: {media_id}, new_folder_id: {new_folder_id}, user_id: {user_id}")
 
     # Use MediaService to handle the business logic
@@ -542,9 +542,9 @@ async def get_media_status(
     app_id: int,
     repository_id: int,
     media_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     media = MediaRepository.get_by_id(media_id, db)
     if not media:
@@ -556,9 +556,9 @@ async def delete_media(
     app_id: int,
     repository_id: int,
     media_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("editor"))] = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a media file and all derived data (chunks, transcripts, embeddings).
@@ -585,9 +585,9 @@ async def search_repository_documents(
     app_id: int,
     repository_id: int,
     search_query: RepositorySearchSchema,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Search for documents in a repository using semantic search with optional metadata filtering.

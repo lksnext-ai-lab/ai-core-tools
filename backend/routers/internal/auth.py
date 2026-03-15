@@ -59,8 +59,8 @@ class PendingInvitationSchema(BaseModel):
     description="Get all pending collaboration invitations for the current user",
 )
 async def get_pending_invitations(
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get pending invitations for the current user"""
     user_id = auth_context.identity.id
@@ -91,8 +91,8 @@ async def get_pending_invitations(
 async def respond_to_invitation(
     invitation_id: int,
     response: InvitationResponseSchema,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Respond to a collaboration invitation"""
     user_id = auth_context.identity.id
@@ -122,7 +122,7 @@ async def respond_to_invitation(
 )
 async def dev_login(
     request: DevLoginRequest,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Development mode authentication endpoint.

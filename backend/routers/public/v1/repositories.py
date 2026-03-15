@@ -271,7 +271,7 @@ async def list_media(
     repo_id: int,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    folder_id: Annotated[Optional[int], Query(None)] = None,
+    folder_id: Annotated[Optional[int], Query()] = None,
 ):
     """List all media (video/audio) in a repository, optionally filtered by folder."""
     validate_api_key_for_app(app_id, api_key, db)
@@ -311,11 +311,11 @@ async def upload_media(
     transcription_service_id: Annotated[int, Form(...)],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    folder_id: Annotated[Optional[int], Form(None)] = None,
-    forced_language: Annotated[Optional[str], Form(None)] = None,
-    chunk_min_duration: Annotated[Optional[int], Form(None)] = None,
-    chunk_max_duration: Annotated[Optional[int], Form(None)] = None,
-    chunk_overlap: Annotated[Optional[int], Form(None)] = None,
+    folder_id: Annotated[Optional[int], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
     Upload video/audio files for transcription and indexing.
@@ -447,7 +447,7 @@ async def move_media(
     media_id: int,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    new_folder_id: Annotated[Optional[int], Form(default=None)] = None,
+    new_folder_id: Annotated[Optional[int], Form()] = None,
 ):
     """Move a media item to a different folder within the same repository."""
     validate_api_key_for_app(app_id, api_key, db)

@@ -541,7 +541,7 @@ def index_file_document(
     file: Annotated[UploadFile, File(...)],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
-    metadata: Annotated[Optional[str], Form(None)] = None,
+    metadata: Annotated[Optional[str], Form()] = None,
 ):
     """Index file content in a silo."""
     validate_api_key_for_app(app_id, api_key, db)

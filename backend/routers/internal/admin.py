@@ -191,8 +191,8 @@ async def deactivate_user(
 )
 async def reset_user_marketplace_quota(
     user_id: int,
-    auth_context: Annotated[AuthContext, Depends(require_admin)] = Depends(require_admin),
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Reset a user's current month marketplace quota to 0.

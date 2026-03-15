@@ -59,8 +59,8 @@ def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
     summary="Get current user's marketplace quota usage",
 )
 async def get_marketplace_quota_usage(
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ) -> dict:
     """Get current user's marketplace quota usage for the current UTC month."""
     user_id = int(current_user.identity.id)
@@ -84,7 +84,7 @@ async def get_marketplace_quota_usage(
     summary="List marketplace categories",
 )
 async def list_categories(
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Return the predefined list of marketplace categories."""
     return {"categories": MARKETPLACE_CATEGORIES}
@@ -96,14 +96,14 @@ async def list_categories(
     response_model=MarketplaceCatalogResponseSchema,
 )
 async def marketplace_catalog(
-    page: Annotated[int, Query(1, ge=1)],
-    page_size: Annotated[int, Query(20, ge=1, le=100)],
-    sort_by: Annotated[str, Query("relevance")],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    sort_by: Annotated[str, Query()] = "relevance",
     search: Optional[str] = None,
     category: Optional[str] = None,
     my_apps_only: bool = False,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
 ):
     """Browse published agents in the marketplace."""
     user_id = int(current_user.identity.id)
@@ -135,8 +135,8 @@ async def marketplace_catalog(
 )
 async def marketplace_agent_detail(
     agent_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Get full detail for a published marketplace agent."""
     user_id = int(current_user.identity.id)
@@ -161,8 +161,8 @@ async def marketplace_agent_detail(
 async def rate_marketplace_agent(
     agent_id: int,
     body: AgentRatingInputSchema,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """
     Submit or update a star rating (1–5) for a published marketplace agent.
@@ -184,8 +184,8 @@ async def rate_marketplace_agent(
 )
 async def get_my_rating(
     agent_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Return the authenticated user's current star rating for this agent (null if not rated)."""
     user_id = int(current_user.identity.id)
@@ -203,9 +203,9 @@ async def get_my_rating(
 )
 async def start_marketplace_conversation(
     agent_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     title: Optional[str] = None,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
 ):
     """Create a new conversation with a published marketplace agent."""
     user_id = int(current_user.identity.id)
@@ -229,10 +229,10 @@ async def start_marketplace_conversation(
     response_model=MarketplaceConversationListSchema,
 )
 async def list_marketplace_conversations(
-    limit: Annotated[int, Query(50, ge=1, le=100)],
-    offset: Annotated[int, Query(0, ge=0)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """List the current user's marketplace conversations."""
     user_id = int(current_user.identity.id)
@@ -253,8 +253,8 @@ async def list_marketplace_conversations(
 )
 async def get_marketplace_conversation(
     conversation_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Get a marketplace conversation with its message history."""
     user_context = _auth_context_to_dict(current_user)
@@ -330,8 +330,8 @@ def _build_file_user_context(auth_context: Annotated[AuthContext, Depends(get_cu
 async def upload_marketplace_file(
     conversation_id: int,
     file: Annotated[UploadFile, File(...)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Upload and persist a file for a marketplace conversation."""
     user_id = int(current_user.identity.id)
@@ -372,8 +372,8 @@ async def upload_marketplace_file(
 )
 async def list_marketplace_files(
     conversation_id: int,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """List files attached to a marketplace conversation."""
     user_id = int(current_user.identity.id)
@@ -406,8 +406,8 @@ async def list_marketplace_files(
 async def remove_marketplace_file(
     conversation_id: int,
     file_id: str,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Remove a file attached to a marketplace conversation."""
     user_id = int(current_user.identity.id)
@@ -439,8 +439,8 @@ async def download_marketplace_file(
     conversation_id: int,
     file_id: str,
     request: Request,
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Download an uploaded or agent-generated file from a marketplace conversation."""
     user_id = int(current_user.identity.id)
@@ -583,10 +583,10 @@ async def marketplace_chat(
     conversation_id: int,
     request: Request,
     message: Annotated[str, Form(...)],
-    files: Annotated[List[UploadFile], File(None)],
-    file_references: Annotated[Optional[str], Form(None)],
-    db: Annotated[Session, Depends(get_db)] = Depends(get_db),
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    files: Annotated[List[UploadFile], File()] = None,
+    file_references: Annotated[Optional[str], Form()] = None,
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
