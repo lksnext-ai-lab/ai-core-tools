@@ -144,7 +144,7 @@ def client(db):
     All HTTP requests made through this client will share the same test DB session,
     making test-inserted data visible to the app without committing to the real DB.
     """
-    from backend.main import app
+    from main import app
     from db.database import get_db
 
     def override_get_db():
