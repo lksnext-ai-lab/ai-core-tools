@@ -92,7 +92,7 @@ class TestListApps:
         other_app = AppFactory(owner=other_user)
         db.flush()
 
-        from backend.routers.internal.auth_utils import create_jwt_token
+        from routers.internal.auth_utils import create_jwt_token
 
         headers = {"Authorization": f"Bearer {create_jwt_token(fake_user.user_id)}"}
         response = client.get("/internal/apps", headers=headers)
@@ -180,7 +180,7 @@ class TestGetApp:
         db.flush()
 
         from tests.factories import UserFactory
-        from backend.routers.internal.auth_utils import create_jwt_token
+        from routers.internal.auth_utils import create_jwt_token
 
         another_user = UserFactory()
         db.flush()
