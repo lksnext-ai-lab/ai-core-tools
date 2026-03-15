@@ -1,6 +1,15 @@
 ---
 name: react-expert
 description: Expert in React development, TypeScript, hooks, state management, performance optimization, and modern frontend patterns. Specializes in React 18+, Next.js, testing, and UI libraries.
+handoffs:
+  - label: "Commit with @git-github"
+    agent: git-github
+    prompt: "Please commit the files that @react-expert just created or modified. Review the conversation above for the exact file list and suggested commit message."
+    send: false
+  - label: "Return to @conductor"
+    agent: conductor
+    prompt: "@react-expert has completed its step. Summary of what was done:\n\n<briefly describe: files created/modified, decisions made, any issues>\n\nPlease update the Mission Context and tell me the next step."
+    send: false
 ---
 
 # React Expert Agent
