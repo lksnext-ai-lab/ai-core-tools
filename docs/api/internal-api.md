@@ -148,8 +148,40 @@ See [App Export and Import](../guides/app-export-import.md) for details.
 | GET | `/{agent_id}` | Get agent details | viewer |
 | PUT | `/{agent_id}` | Update agent | editor |
 | DELETE | `/{agent_id}` | Delete agent | editor |
-| POST | `/{agent_id}/chat` | Execute agent chat | viewer |
+| POST | `/{agent_id}/chat` | Execute agent chat (sync) | viewer |
+| POST | `/{agent_id}/chat/stream` | Execute agent chat (SSE stream) | viewer |
 | POST | `/{agent_id}/reset` | Reset conversation | viewer |
+| GET | `/{agent_id}/conversation-history` | Get conversation history | viewer |
+| POST | `/{agent_id}/upload-file` | Upload file for chat | viewer |
+| GET | `/{agent_id}/files` | List attached files | viewer |
+| DELETE | `/{agent_id}/files/{file_id}` | Remove attached file | viewer |
+| GET | `/{agent_id}/files/{file_id}/download` | Download file | viewer |
+| GET | `/{agent_id}/mcp-usage` | List MCP servers using agent | viewer |
+| POST | `/{agent_id}/export` | Export agent configuration | viewer |
+| POST | `/preview-import` | Preview agent import | administrator |
+| POST | `/import` | Import agent from file | administrator |
+| PATCH | `/{agent_id}/marketplace-visibility` | Update marketplace visibility | editor |
+| GET | `/{agent_id}/marketplace-profile` | Get marketplace profile | viewer |
+| POST | `/{agent_id}/marketplace-profile` | Create/update marketplace profile | editor |
+
+### Marketplace
+
+**Base**: `/internal/marketplace`
+
+| Method | Endpoint | Purpose | Auth |
+|--------|----------|---------|------|
+| GET | `/agents` | Browse catalog | authenticated |
+| GET | `/agents/{agent_id}` | Agent detail | authenticated |
+| GET | `/categories` | List categories | authenticated |
+| POST | `/agents/{agent_id}/conversations` | Start conversation | authenticated |
+| GET | `/conversations` | List user conversations | authenticated |
+| GET | `/conversations/{id}` | Get conversation + history | authenticated |
+| POST | `/conversations/{id}/chat` | Send message | authenticated |
+| POST | `/agents/{agent_id}/rate` | Rate agent (1–5 stars) | authenticated |
+| GET | `/agents/{agent_id}/my-rating` | Get own rating | authenticated |
+| GET | `/quota-usage` | Monthly call quota status | authenticated |
+
+See [Agent Marketplace](../guides/marketplace.md) for the full workflow.
 
 **Example: Create Agent**
 

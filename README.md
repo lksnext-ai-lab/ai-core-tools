@@ -326,6 +326,14 @@ For more information, see:
 
 **Contact LKS Next for commercial licensing inquiries.**
 
+## Security
+
+We take security seriously. If you discover a vulnerability, please **do not open a public GitHub issue**.
+
+Report it privately via [GitHub Security Advisories](https://github.com/lksnext-ai-lab/ai-core-tools/security/advisories/new) or email **mattin-ai@lksnext.com**.
+
+See [SECURITY.md](SECURITY.md) for the full vulnerability disclosure policy, supported versions, and response SLAs.
+
 ## Support
 
 - Create an issue for bug reports or feature requests
