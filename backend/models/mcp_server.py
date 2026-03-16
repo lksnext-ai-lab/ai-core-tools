@@ -26,6 +26,7 @@ class MCPServer(Base):
     slug = Column(String(100), nullable=False)  # URL-safe identifier, unique within app
     description = Column(String(1000), nullable=True)
     is_active = Column(Boolean, default=True)
+    is_frozen = Column(Boolean, default=False, nullable=False)
     rate_limit = Column(Integer, default=0)  # Requests per minute, 0 = unlimited
 
     create_date = Column(DateTime, default=datetime.now)

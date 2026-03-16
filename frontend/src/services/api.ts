@@ -1939,6 +1939,89 @@ class ApiService {
     });
   }
 
+  // ==================== SAAS / SUBSCRIPTION METHODS ====================
+
+  async getSubscription() {
+    return this.request('/internal/subscription');
+  }
+
+  async createCheckoutSession(tier: string) {
+    return this.request('/internal/subscription/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  async createPortalSession() {
+    return this.request('/internal/subscription/portal', {
+      method: 'POST',
+    });
+  }
+
+  async getUsage() {
+    return this.request('/internal/usage');
+  }
+
+  // ==================== SAAS ADMIN METHODS ====================
+
+  async getAdminSaasUsers() {
+    return this.request('/internal/admin/saas/users');
+  }
+
+  async overrideUserTier(userId: number, tier: string) {
+    return this.request(`/internal/admin/saas/users/${userId}/tier`, {
+      method: 'PUT',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  async getTierConfig() {
+    return this.request('/internal/admin/saas/tier-config');
+  }
+
+  async updateTierConfig(data: { tier: string; resource_type: string; limit_value: number }) {
+    return this.request('/internal/admin/saas/tier-config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemAIServices() {
+    return this.request('/internal/admin/saas/system-ai-services');
+  }
+
+  async createSystemAIService(data: {
+    name: string;
+    provider: string;
+    model: string;
+    api_key_encrypted?: string;
+    is_active?: boolean;
+  }) {
+    return this.request('/internal/admin/saas/system-ai-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemAIService(serviceId: number, data: Partial<{
+    name: string;
+    provider: string;
+    model: string;
+    api_key_encrypted: string;
+    is_active: boolean;
+  }>) {
+    return this.request(`/internal/admin/saas/system-ai-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemAIService(serviceId: number) {
+    return this.request(`/internal/admin/saas/system-ai-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== UTILITY METHODS ====================
 }
 

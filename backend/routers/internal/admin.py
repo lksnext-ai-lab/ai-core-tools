@@ -360,4 +360,164 @@ async def reset_setting(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error resetting setting '{key}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error resetting setting: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error resetting setting: {str(e)}")
+
+
+# ==================== SAAS ADMIN ENDPOINTS ====================
+# These endpoints are always registered but guarded by OMNIADMIN requirement.
+# SaaS-specific functionality is a no-op / returns empty data in self-managed mode.
+
+from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
+from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
+from schemas.system_ai_service_schemas import SystemAIServiceCreate, SystemAIServiceRead, SystemAIServiceUpdate
+from typing import List
+
+
+@router.get("/saas/users", response_model=List[UserAdminRead])
+async def list_saas_users(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all users with tier, billing status, and usage stats (OMNIADMIN only)."""
+    from models.user import User
+    from repositories.subscription_repository import SubscriptionRepository
+    from repositories.usage_record_repository import UsageRecordRepository
+    from repositories.tier_config_repository import TierConfigRepository
+
+    users = db.query(User).order_by(User.create_date.desc()).all()
+    sub_repo = SubscriptionRepository(db)
+    usage_repo = UsageRecordRepository(db)
+    tier_repo = TierConfigRepository(db)
+    result = []
+    for user in users:
+        sub = sub_repo.get_by_user_id(user.user_id)
+        tier = "free"
+        billing_status = "none"
+        stripe_customer_id = None
+        if sub:
+            tier = sub.admin_override_tier or (sub.tier.value if sub.tier else "free")
+            billing_status = sub.billing_status.value if sub.billing_status else "none"
+            stripe_customer_id = sub.stripe_customer_id
+
+        usage = usage_repo.get_current(user.user_id)
+        call_count = usage.call_count if usage else 0
+        call_limit = tier_repo.get_limit(tier, "llm_calls")
+        owned_apps = db.query(App).filter(App.owner_id == user.user_id).count()
+
+        result.append(UserAdminRead(
+            user_id=user.user_id,
+            email=user.email or "",
+            name=user.name,
+            is_active=user.is_active,
+            auth_method=getattr(user, 'auth_method', 'oidc'),
+            email_verified=getattr(user, 'email_verified', True),
+            tier=tier,
+            billing_status=billing_status,
+            stripe_customer_id=stripe_customer_id,
+            call_count=call_count,
+            call_limit=call_limit,
+            owned_apps_count=owned_apps,
+        ))
+    return result
+
+
+@router.put("/saas/users/{user_id}/tier")
+async def override_user_tier(
+    user_id: int,
+    body: TierOverrideRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Manually override a user's subscription tier (OMNIADMIN only)."""
+    from repositories.subscription_repository import SubscriptionRepository
+    from services.freeze_service import FreezeService
+
+    sub_repo = SubscriptionRepository(db)
+    sub = sub_repo.get_by_user_id(user_id)
+    if not sub:
+        sub = sub_repo.create(user_id)
+
+    sub_repo.set_admin_override(user_id, body.tier)
+    db.commit()
+
+    # Recalculate freeze state based on new effective tier
+    try:
+        FreezeService.apply_freeze(db, user_id, body.tier)
+        db.commit()
+    except Exception as exc:
+        logger.error("FreezeService failed after tier override for user %s: %s", user_id, exc)
+
+    return {"message": f"Tier overridden to '{body.tier}' for user {user_id}"}
+
+
+@router.get("/saas/tier-config", response_model=List[TierConfigRead])
+async def get_tier_config(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Return all tier limit configuration entries (OMNIADMIN only)."""
+    from repositories.tier_config_repository import TierConfigRepository
+    repo = TierConfigRepository(db)
+    return repo.get_all()
+
+
+@router.put("/saas/tier-config")
+async def update_tier_config(
+    body: TierConfigUpdate,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create or update a tier limit configuration entry (OMNIADMIN only)."""
+    from repositories.tier_config_repository import TierConfigRepository
+    repo = TierConfigRepository(db)
+    row = repo.upsert(body.tier, body.resource_type, body.limit_value)
+    db.commit()
+    return {"id": row.id, "tier": row.tier, "resource_type": row.resource_type, "limit_value": row.limit_value}
+
+
+@router.get("/saas/system-ai-services", response_model=List[SystemAIServiceRead])
+async def list_system_ai_services(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all platform-level AI Services (OMNIADMIN only)."""
+    from services.system_ai_service_service import SystemAIServiceService
+    return SystemAIServiceService.get_all(db)
+
+
+@router.post("/saas/system-ai-services", response_model=SystemAIServiceRead, status_code=201)
+async def create_system_ai_service(
+    body: SystemAIServiceCreate,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create a new platform-level AI Service (OMNIADMIN only)."""
+    from services.system_ai_service_service import SystemAIServiceService
+    return SystemAIServiceService.create(
+        db, name=body.name, provider=body.provider, model=body.model,
+        api_key_encrypted=body.api_key_encrypted, is_active=body.is_active
+    )
+
+
+@router.put("/saas/system-ai-services/{service_id}", response_model=SystemAIServiceRead)
+async def update_system_ai_service(
+    service_id: int,
+    body: SystemAIServiceUpdate,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a platform-level AI Service (OMNIADMIN only)."""
+    from services.system_ai_service_service import SystemAIServiceService
+    updates = body.model_dump(exclude_none=True)
+    return SystemAIServiceService.update(db, service_id, **updates)
+
+
+@router.delete("/saas/system-ai-services/{service_id}", status_code=204)
+async def delete_system_ai_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a platform-level AI Service (OMNIADMIN only)."""
+    from services.system_ai_service_service import SystemAIServiceService
+    SystemAIServiceService.delete(db, service_id)

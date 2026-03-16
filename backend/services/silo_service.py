@@ -215,6 +215,12 @@ class SiloService:
                     raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
                 logger.info(f"Updating existing silo {silo_id}")
             else:
+                # Enforce per-app silo limit before creation (SaaS mode only)
+                app_id = silo_data.get('app_id')
+                if app_id:
+                    from services.tier_enforcement_service import TierEnforcementService
+                    TierEnforcementService.check_resource_limit(session, int(app_id), 'silos')
+
                 silo = Silo()
                 # Set default type to CUSTOM, but allow override from form data
                 silo.silo_type = SiloType.CUSTOM.value

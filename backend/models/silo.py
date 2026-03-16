@@ -26,6 +26,7 @@ class Silo(Base):
     embedding_service = relationship('EmbeddingService', uselist=False)
     vector_db_type = Column(String(45), default='PGVECTOR')
 
+    is_frozen = Column(Boolean, default=False, nullable=False)
     agents = relationship('Agent', lazy=True)
     repository = relationship('Repository', back_populates='silo')
     domain = relationship('Domain', back_populates='silo') 

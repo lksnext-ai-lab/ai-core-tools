@@ -38,7 +38,8 @@ class AppListItemSchema(BaseModel):
     collaborator_count: int = 0
     # Usage statistics for speedometer
     usage_stats: Optional[AppUsageStatsSchema] = None
-    
+    is_frozen: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -63,6 +64,7 @@ class AppDetailSchema(BaseModel):
     silo_count: int = 0
     collaborator_count: int = 0
     onboarding_dismissed: bool = False
+    is_frozen: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

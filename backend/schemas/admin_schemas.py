@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
 
@@ -41,3 +41,28 @@ class MarketplaceQuotaResetResponse(BaseModel):
     new_count: int
     reset_by: str
     timestamp: str
+
+
+# ==================== SAAS ADMIN SCHEMAS ====================
+
+class UserAdminRead(BaseModel):
+    """Extended user info for OMNIADMIN SaaS dashboard."""
+    user_id: int
+    email: str
+    name: Optional[str]
+    is_active: bool
+    auth_method: Optional[str] = 'oidc'
+    email_verified: bool = True
+    tier: Optional[str] = None
+    billing_status: Optional[str] = None
+    stripe_customer_id: Optional[str] = None
+    call_count: int = 0
+    call_limit: int = 0
+    owned_apps_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TierOverrideRequest(BaseModel):
+    """Request body for OMNIADMIN manual tier override."""
+    tier: str  # 'free', 'starter', or 'pro'
