@@ -17,7 +17,8 @@ class AgentListItemSchema(BaseModel):
     service_id: Optional[int] = None
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
     marketplace_visibility: Optional[str] = None
-    
+    is_frozen: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -62,6 +63,7 @@ class AgentDetailSchema(BaseModel):
     skills: List[Dict[str, Any]]
     marketplace_visibility: Optional[str] = None
     marketplace_profile: Optional[Dict[str, Any]] = None
+    is_frozen: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

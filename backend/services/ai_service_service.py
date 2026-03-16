@@ -91,6 +91,13 @@ class AIServiceService:
     def create_or_update_ai_service(db: Session, app_id: int, service_id: int, service_data: CreateUpdateAIServiceSchema) -> AIServiceDetailSchema:
         """Create a new AI service or update an existing one"""
         if service_id == 0:
+            # Enforce Free tier restriction (SaaS mode only — Free users cannot create own AI Services)
+            from models.app import App as _App
+            from services.tier_enforcement_service import TierEnforcementService
+            _app = db.query(_App).filter(_App.app_id == app_id).first()
+            if _app:
+                TierEnforcementService.check_ai_service_allowed(db, _app.owner_id)
+
             # Create new AI service
             service = AIService()
             service.app_id = app_id

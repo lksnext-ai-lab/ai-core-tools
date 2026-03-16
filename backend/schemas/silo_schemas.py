@@ -12,7 +12,8 @@ class SiloListItemSchema(BaseModel):
     created_at: Optional[datetime] = None
     docs_count: int
     vector_db_type: Optional[str] = None
-    
+    is_frozen: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -34,7 +35,8 @@ class SiloDetailSchema(BaseModel):
     vector_db_options: List[Dict[str, Any]] = []
     # Metadata definition fields for playground
     metadata_fields: Optional[List[Dict[str, Any]]] = None
-    
+    is_frozen: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -41,6 +41,7 @@ class MCPServerListSchema(BaseModel):
     slug: str
     description: Optional[str] = None
     is_active: bool
+    is_frozen: bool = False
     agent_count: int
     endpoint_url: str
     create_date: Optional[datetime] = None
@@ -55,6 +56,7 @@ class MCPServerDetailSchema(BaseModel):
     slug: str
     description: Optional[str] = None
     is_active: bool
+    is_frozen: bool = False
     rate_limit: int
     agents: List[MCPServerAgentSchema]
     endpoint_url: str

@@ -87,6 +87,10 @@ class AppCollaborationService:
                     }
                     return self.repo.update_collaboration(existing_collab, update_data)
             
+            # Enforce per-app collaborator limit before creating new invitation (SaaS mode only)
+            from services.tier_enforcement_service import TierEnforcementService
+            TierEnforcementService.check_resource_limit(self.db, app_id, 'collaborators')
+
             # Create new collaboration
             collaboration_data = {
                 'app_id': app_id,
@@ -95,7 +99,7 @@ class AppCollaborationService:
                 'invited_by': invited_by_user_id,
                 'status': CollaborationStatus.PENDING
             }
-            
+
             collaboration = self.repo.create_collaboration(collaboration_data)
             
             logger.info(f"Invited user {user_email} to app {app_id} with role {role}")
