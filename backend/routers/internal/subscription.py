@@ -28,7 +28,7 @@ async def get_subscription(
 ):
     """Return the current user's subscription info with usage and limits."""
     from services.user_service import UserService
-    user = UserService.get_or_create_user(db, auth)
+    user, _ = UserService.get_or_create_user(db, auth.identity.email, auth.identity.name)
     return SubscriptionService.get_subscription(db, user.user_id)
 
 
@@ -40,7 +40,7 @@ async def create_checkout_session(
 ):
     """Create a Stripe Checkout session for upgrading to a paid tier."""
     from services.user_service import UserService
-    user = UserService.get_or_create_user(db, auth)
+    user, _ = UserService.get_or_create_user(db, auth.identity.email, auth.identity.name)
     url = SubscriptionService.create_checkout_session(db, user.user_id, body.tier)
     return CheckoutSessionResponse(url=url)
 
@@ -52,7 +52,7 @@ async def create_portal_session(
 ):
     """Create a Stripe Customer Portal session for self-serve billing management."""
     from services.user_service import UserService
-    user = UserService.get_or_create_user(db, auth)
+    user, _ = UserService.get_or_create_user(db, auth.identity.email, auth.identity.name)
     url = SubscriptionService.create_portal_session(db, user.user_id)
     return PortalSessionResponse(url=url)
 
@@ -76,5 +76,5 @@ async def get_usage(
 ):
     """Return the current user's system LLM quota usage for the billing period."""
     from services.user_service import UserService
-    user = UserService.get_or_create_user(db, auth)
+    user, _ = UserService.get_or_create_user(db, auth.identity.email, auth.identity.name)
     return UsageTrackingService.get_usage(db, user.user_id)

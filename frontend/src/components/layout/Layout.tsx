@@ -3,6 +3,7 @@ import { Header } from '../header/Header';
 import { Sidebar } from '../sidebar/Sidebar';
 import { Footer } from '../footer/Footer';
 import { PageTitle } from '../header/PageTitle';
+import QuotaWarningBanner from '../QuotaWarningBanner';
 import type { NavigationConfig } from '../../core/types';
 
 interface LayoutProps {
@@ -65,6 +66,8 @@ export const Layout: React.FC<LayoutProps> = ({
           {headerProps?.children ?? <PageTitle navigationConfig={navigationConfig} />}
         </Header>
       )}
+
+      <QuotaWarningBanner />
 
       {/* Main Content Row */}
       <div className="flex-1 flex overflow-hidden">

@@ -15,6 +15,7 @@ import { baseTheme } from '../themes/baseTheme';
 
 // Import base pages
 import HomePage from '../pages/HomePage';
+import LandingPage from '../pages/LandingPage';
 import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
 import AgentsPage from '../pages/AgentsPage';
@@ -45,6 +46,15 @@ import SystemSettingsPage from '../pages/admin/SystemSettingsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
 import ProfilePage from '../pages/ProfilePage';
+import RegisterPage from '../pages/RegisterPage';
+import VerifyEmailPage from '../pages/VerifyEmailPage';
+import PasswordResetRequestPage from '../pages/PasswordResetRequestPage';
+import PasswordResetPage from '../pages/PasswordResetPage';
+import SubscriptionPage from '../pages/SubscriptionPage';
+import SaasUserListPage from '../pages/admin/SaasUserListPage';
+import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
+import TierConfigPage from '../pages/admin/TierConfigPage';
+import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
 import MCPServersPage from '../pages/MCPServersPage';
 import MCPServerFormPage from '../pages/MCPServerFormPage';
 import MCPServerDetailPage from '../pages/MCPServerDetailPage';
@@ -128,18 +138,19 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
       <AuthProvider config={config.authProps}>
         <UserProvider>
           <SettingsCacheProvider>
+            <DeploymentModeProvider>
             <Router>
               <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/auth/success" element={<AuthSuccessPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/verify-email" element={<VerifyEmailPage />} />
+                <Route path="/password-reset/request" element={<PasswordResetRequestPage />} />
+                <Route path="/password-reset" element={<PasswordResetPage />} />
 
-                {/* Protected routes with Layout */}
-                <Route path="/" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
-                      {config.homePage ? <config.homePage /> : <HomePage />}
-                  </ProtectedLayoutRoute>
-                } />
+                {/* Public landing page — handles its own redirect when not in SaaS mode */}
+                <Route path="/" element={<LandingPage />} />
 
                 <Route path="/apps" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
@@ -365,6 +376,30 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </AdminLayoutRoute>
                 } />
 
+                <Route path="/admin/saas-users" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SaasUserListPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-ai-services" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemAIServicesPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/tier-config" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <TierConfigPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/subscription" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SubscriptionPage />
+                  </ProtectedLayoutRoute>
+                } />
+
                 <Route path="/about" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AboutPage />
@@ -399,10 +434,11 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   );
                 })}
 
-                {/* Default redirect */}
-                <Route path="/" element={<Navigate to="/apps" replace />} />
+                {/* Default redirect for unmatched paths */}
+                <Route path="*" element={<Navigate to="/apps" replace />} />
               </Routes>
             </Router>
+            </DeploymentModeProvider>
           </SettingsCacheProvider>
         </UserProvider>
       </AuthProvider>

@@ -25,10 +25,10 @@ class Subscription(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('User.user_id', ondelete='CASCADE'), nullable=False, unique=True)
-    tier = Column(Enum(SubscriptionTier), nullable=False, default=SubscriptionTier.FREE)
+    tier = Column(Enum(SubscriptionTier, values_callable=lambda x: [e.value for e in x]), nullable=False, default=SubscriptionTier.FREE)
     stripe_customer_id = Column(String(255), nullable=True)
     stripe_subscription_id = Column(String(255), nullable=True)
-    billing_status = Column(Enum(BillingStatus), nullable=False, default=BillingStatus.NONE)
+    billing_status = Column(Enum(BillingStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=BillingStatus.NONE)
     trial_end = Column(DateTime, nullable=True)
     admin_override_tier = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
