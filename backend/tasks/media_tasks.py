@@ -98,12 +98,12 @@ def process_media_task_sync(media_id: int):
                 
                 logger.info(f"Video analysis returned {len(visual_segments)} visual segments for media {media_id}")
                 
-                # Enrich chunks with visual descriptions (chunk-aligned or fallback to timestamp overlap)
-                chunks_data = VideoAnalysisService.enrich_chunks_with_visual(
+                # Split into separate audio and visual chunks with matching time ranges
+                chunks_data = VideoAnalysisService.split_audio_visual_chunks(
                     chunks_data, visual_segments
                 )
                 
-                logger.info(f"Enriched {len(chunks_data)} chunks with visual descriptions for media {media_id}")
+                logger.info(f"Split into {len(chunks_data)} audio+visual chunks for media {media_id}")
                 
             except Exception as e:
                 logger.warning(f"Video analysis failed for media {media_id}, continuing with audio-only chunks: {str(e)}")

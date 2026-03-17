@@ -136,85 +136,80 @@ class VideoAnalysisService:
             return _analyze_with_vertex_ai(ai_service, video_path, prompt)
 
     @staticmethod
-    def enrich_chunks_with_visual(
+    def split_audio_visual_chunks(
         chunks: List[Dict],
         visual_segments: List[Dict]
     ) -> List[Dict]:
         """
-        Enrich transcript chunks with visual descriptions from chunk-aligned analysis.
-        
-        When chunk-aligned prompting is used, visual_segments come back with chunk_index
-        matching the chunk order. Falls back to timestamp overlap if chunk_index is missing.
-        
+        Split audio chunks and visual segments into separate chunks sharing the
+        same time ranges.  For each temporal window the method produces up to two
+        independent chunks:
+
+        1. An **audio** chunk  (``chunk_type='audio'``) with the transcript text.
+        2. A **visual** chunk (``chunk_type='visual'``) with the visual description.
+
+        Both chunks carry identical ``start_time`` / ``end_time`` so they can be
+        correlated later, but they are embedded independently in the vector store.
+
+        If no visual description is available for a given time range only the
+        audio chunk is emitted.
+
         Args:
-            chunks: List of transcript chunks with start_time, end_time, text
-            visual_segments: List of visual segments from analyze_video
-            
+            chunks: Transcript chunks with start_time, end_time, text.
+            visual_segments: Visual segments returned by ``analyze_video``.
+
         Returns:
-            Enriched chunks with visual_description field added
+            Flat list of chunks, each with an added ``chunk_type`` field
+            (``'audio'`` or ``'visual'``).
         """
-        if not visual_segments:
-            return chunks
-        
-        # Check if we have chunk_index (chunk-aligned response)
-        has_chunk_index = any('chunk_index' in vs for vs in visual_segments)
-        
-        if has_chunk_index:
-            # Direct mapping by chunk_index
-            visual_by_index = {}
+        # Build a lookup: chunk_index → visual description
+        has_chunk_index = any('chunk_index' in vs for vs in visual_segments) if visual_segments else False
+
+        visual_by_index: Dict[int, str] = {}
+        if visual_segments and has_chunk_index:
             for vs in visual_segments:
                 idx = vs.get('chunk_index')
                 if idx is not None:
-                    visual_by_index[int(idx)] = vs.get('visual_description', '')
-            
+                    desc = vs.get('visual_description', '')
+                    if desc:
+                        visual_by_index[int(idx)] = desc
+        elif visual_segments:
+            # Fallback: timestamp-overlap matching
             for i, chunk in enumerate(chunks):
-                chunk['visual_description'] = visual_by_index.get(i, '')
-        else:
-            # Fallback: timestamp overlap (old behavior)
-            chunks = VideoAnalysisService.merge_visual_descriptions(chunks, visual_segments)
-        
-        return chunks
+                c_start = chunk.get('start_time', 0)
+                c_end = chunk.get('end_time', 0)
+                descs = [
+                    vs.get('visual_description', '')
+                    for vs in visual_segments
+                    if vs.get('start_time', 0) < c_end and vs.get('end_time', 0) > c_start
+                    and vs.get('visual_description')
+                ]
+                if descs:
+                    visual_by_index[i] = ' | '.join(descs)
 
-    @staticmethod
-    def merge_visual_descriptions(
-        chunks: List[Dict],
-        visual_segments: List[Dict]
-    ) -> List[Dict]:
-        """
-        Merge visual descriptions into transcript chunks by timestamp alignment.
-        
-        For each chunk, find overlapping visual segments and append their descriptions.
-        
-        Args:
-            chunks: List of transcript chunks with start_time, end_time, text
-            visual_segments: List of visual segments with start_time, end_time, visual_description
-            
-        Returns:
-            Enriched chunks with visual_description field added
-        """
-        if not visual_segments:
-            return chunks
-        
-        for chunk in chunks:
-            chunk_start = chunk.get('start_time', 0)
-            chunk_end = chunk.get('end_time', 0)
-            
-            # Find visual segments that overlap with this chunk
-            overlapping_descriptions = []
-            for vs in visual_segments:
-                vs_start = vs.get('start_time', 0)
-                vs_end = vs.get('end_time', 0)
-                
-                # Check for time overlap
-                if vs_start < chunk_end and vs_end > chunk_start:
-                    overlapping_descriptions.append(vs.get('visual_description', ''))
-            
-            if overlapping_descriptions:
-                chunk['visual_description'] = ' | '.join(overlapping_descriptions)
-            else:
-                chunk['visual_description'] = ''
-        
-        return chunks
+        result: List[Dict] = []
+        for i, chunk in enumerate(chunks):
+            # Audio chunk — always emitted
+            audio_chunk = {
+                **chunk,
+                'chunk_type': 'audio',
+            }
+            # Remove any leftover visual_description from audio chunk
+            audio_chunk.pop('visual_description', None)
+            result.append(audio_chunk)
+
+            # Visual chunk — only if description exists
+            visual_desc = visual_by_index.get(i)
+            if visual_desc:
+                visual_chunk = {
+                    'start_time': chunk.get('start_time', 0),
+                    'end_time': chunk.get('end_time', 0),
+                    'text': visual_desc,
+                    'chunk_type': 'visual',
+                }
+                result.append(visual_chunk)
+
+        return result
 
 
 def _parse_llm_response(response_text: str) -> List[Dict[str, Any]]:
