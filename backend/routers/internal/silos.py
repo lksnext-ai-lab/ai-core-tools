@@ -157,17 +157,19 @@ async def list_silos(
                   tags=["Silos"],
                   response_model=SiloDetailSchema)
 async def get_silo(
-    app_id: int, 
-    silo_id: int, 
+    app_id: int,
+    silo_id: int,
     auth_context: AuthContext = Depends(get_current_user_oauth),
     role: AppRole = Depends(require_min_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Get detailed information about a specific silo including form data for editing.
-    """    
-    _validate_silo_app_ownership(silo_id, app_id, db)
-    
+    """
+    # Skip validation for silo_id == 0 (new silo creation)
+    if silo_id != 0:
+        _validate_silo_app_ownership(silo_id, app_id, db)
+
     try:
         result = SiloService.get_silo_detail(app_id, silo_id, db)
         if result is None and silo_id != 0:
