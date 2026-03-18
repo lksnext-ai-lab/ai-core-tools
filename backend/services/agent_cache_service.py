@@ -1,6 +1,7 @@
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
+from psycopg.errors import UniqueViolation
 import logging
 import os
 
@@ -82,7 +83,10 @@ class CheckpointerCacheService:
         await cls._pool.open(wait=True)
 
         cls._checkpointer = AsyncPostgresSaver(conn=cls._pool)
-        await cls._checkpointer.setup()
+        try:
+            await cls._checkpointer.setup()
+        except UniqueViolation:
+            logger.warning("Checkpointer migrations already applied, skipping setup")
         cls._is_setup_done = True
 
         logger.info("Checkpointer connection pool initialized successfully")

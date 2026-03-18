@@ -234,20 +234,19 @@ class TestPlaygroundCrossApp:
     """Verify user can't access playground of agent from another app via URL."""
 
     def test_playground_cross_app_returns_403(
-        self, client, unrelated_user_headers, setup_cross_app, db
+        self, client, fake_app, fake_agent, setup_cross_app, auth_headers, db
     ):
         """
-        User without role on other_app gets 403 when accessing
-        other_app's agent playground.
+        auth_headers user (fake_user) has no role on other_app,
+        so accessing other_app's agent playground should return 403.
         """
         other_app, other_agent, _ = setup_cross_app
         db.flush()
         response = client.get(
             f"/internal/apps/{other_app.app_id}/agents/{other_agent.agent_id}/playground",
-            headers=unrelated_user_headers,
+            headers=auth_headers,
         )
-        # unrelated_user_headers belong to other_user who IS the owner of other_app,
-        # so this should succeed (they own it). Let's test with the main user instead.
+        assert response.status_code == 403
 
     def test_playground_of_other_app_denied_for_non_collaborator(
         self, client, fake_app, fake_agent, setup_cross_app, auth_headers, db

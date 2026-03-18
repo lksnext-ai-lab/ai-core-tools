@@ -64,7 +64,7 @@ def _validate_referenced_resources(db: Session, agent_dict: dict, app_id: int):
     output_parser_id = agent_dict.get("output_parser_id")
     if output_parser_id:
         parser = db.query(OutputParser).filter(
-            OutputParser.output_parser_id == output_parser_id,
+            OutputParser.parser_id == output_parser_id,
             OutputParser.app_id == app_id,
         ).first()
         if not parser:

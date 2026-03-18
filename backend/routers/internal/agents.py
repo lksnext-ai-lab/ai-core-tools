@@ -667,14 +667,14 @@ async def chat_with_agent(
     agent_id: int,
     request: Request,
     message: Annotated[str, Form()],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[None, Depends(enforce_file_size_limit)],
     files: Annotated[Optional[List[UploadFile]], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
-    db: Annotated[Session, Depends(get_db)] = None,
-    _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
     """
     Internal API: Chat with agent for playground (OAuth authentication)
@@ -750,14 +750,14 @@ async def chat_with_agent_stream(
     agent_id: int,
     request: Request,
     message: Annotated[str, Form()],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[None, Depends(enforce_file_size_limit)],
     files: Annotated[Optional[List[UploadFile]], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
-    db: Annotated[Session, Depends(get_db)] = None,
-    _: Annotated[None, Depends(enforce_file_size_limit)] = None,
 ):
     """
     Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)

@@ -246,8 +246,8 @@ function AppSettingsPage() {
                     name="langsmith_api_key"
                     value={formData.langsmith_api_key}
                     onChange={handleChange}
-                    onFocus={() => {
-                      if (!langsmithKeyChanged && formData.langsmith_api_key.startsWith('****')) {
+                    onKeyDown={(e) => {
+                      if (!langsmithKeyChanged && formData.langsmith_api_key.startsWith('****') && e.key.length === 1) {
                         setFormData(prev => ({ ...prev, langsmith_api_key: '' }));
                         setLangsmithKeyChanged(true);
                       }

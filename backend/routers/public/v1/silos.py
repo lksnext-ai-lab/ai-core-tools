@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from typing import Optional, Annotated
 from sqlalchemy.orm import Session
 import json
@@ -535,7 +535,7 @@ async def find_docs_in_collection(
     tags=["Silos"],
     response_model=FileIndexResponseSchema,
 )
-def index_file_document(
+async def index_file_document(
     app_id: int,
     silo_id: int,
     file: Annotated[UploadFile, File(...)],
@@ -573,7 +573,7 @@ def index_file_document(
             delete=False, suffix=file_extension
         ) as temp_file:
             temp_file_path = temp_file.name
-            content = file.file.read()
+            content = await file.read()
             temp_file.write(content)
 
         docs = SiloService.extract_documents_from_file(

@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import FileResponse
 from typing import List, Optional, Annotated
 from sqlalchemy.orm import Session
@@ -143,7 +143,7 @@ async def delete_resource(
 
 
 @resources_router.get(
-    "/{repo_id}/resources/{resource_id}/download",
+    "/{repo_id}/{resource_id}/download",
     summary="Download resource",
     tags=["Resources"],
 )

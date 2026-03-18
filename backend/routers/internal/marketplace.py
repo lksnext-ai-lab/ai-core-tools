@@ -314,7 +314,7 @@ def _get_agent_or_404(db: Session, agent_id: int) -> Agent:
     return agent
 
 
-def _build_file_user_context(auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)], app_id: int) -> Dict:
+def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
     return {
         "user_id": int(auth_context.identity.id),
         "email": auth_context.identity.email,

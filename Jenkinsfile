@@ -53,10 +53,19 @@ pipeline {
                     // Wait for database to be ready
                     sh '''
                         echo "Waiting for test database..."
+                        ready=0
                         for i in $(seq 1 30); do
-                            docker exec mattin-test-db pg_isready -U test_user -d test_db && break
+                            if docker exec mattin-test-db pg_isready -U test_user -d test_db; then
+                                ready=1
+                                break
+                            fi
                             sleep 2
                         done
+                        if [ "$ready" -ne 1 ]; then
+                            echo "Test database did not become ready in time."
+                            exit 1
+                        fi
+                        echo "Test database is ready."
                     '''
 
                     // Build test runner image

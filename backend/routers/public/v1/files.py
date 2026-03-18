@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlencode, quote
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, Query, Request
 from sqlalchemy.orm import Session
@@ -311,11 +312,13 @@ async def download_file(
             aict_base_url = str(request.base_url).rstrip("/")
 
         sig = generate_signature(file_path, user_id)
-        download_url = (
-            f"{aict_base_url}/static/{file_path}"
-            f"?user={user_id}&sig={sig}"
-            f"&filename={filename}"
-        )
+        encoded_path = quote(f"static/{file_path}", safe="/")
+        query_params = urlencode({
+            "user": user_id,
+            "sig": sig,
+            "filename": filename,
+        })
+        download_url = f"{aict_base_url}/{encoded_path}?{query_params}"
 
         return FileDownloadResponseSchema(
             download_url=download_url,

@@ -86,7 +86,7 @@ class TestAttachFile:
         assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_agent_wrong_app_idor(self, mocker):
+    async def test_agent_wrong_app_id(self, mocker):
         mocker.patch.object(files_module, "validate_api_key_for_app")
         mocker.patch.object(
             files_module,

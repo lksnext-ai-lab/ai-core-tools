@@ -4,7 +4,7 @@
 #
 # Usage:
 #   ./scripts/test.sh                    # Run all tests
-#   ./scripts/test.sh -m unit            # Run only unit tests (no DB needed)
+#   ./scripts/test.sh -m unit            # Run only unit tests
 #   ./scripts/test.sh -m integration     # Run only integration tests
 #   ./scripts/test.sh -k test_agents     # Run tests matching a pattern
 #   ./scripts/test.sh --cov=backend      # Run with coverage

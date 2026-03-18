@@ -58,7 +58,7 @@ def enforce_app_rate_limit(
         response.headers["X-RateLimit-Reset"] = str(state.reset_epoch)
         
         # If rate limit exceeded, raise 429
-        if state.remaining == 0:
+        if state.exceeded:
             retry_after = state.reset_epoch - int(time.time())
             retry_after = max(1, retry_after)  # At least 1 second
             

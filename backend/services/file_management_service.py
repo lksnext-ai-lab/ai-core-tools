@@ -764,7 +764,7 @@ class FileManagementService:
             if not os.path.exists(working_dir):
                 return []
 
-            _exclude = exclude_filenames or set()
+            _exclude = exclude_filenames if exclude_filenames is not None else set()
 
             # When exclude_filenames is provided we already know which files
             # existed before the current execution turn, so we can skip the
@@ -772,8 +772,8 @@ class FileManagementService:
             # file into memory.  This avoids O(N) memory/IO overhead when the
             # persistent directory has accumulated thousands of files from
             # previous agent calls (e.g. vision agent via public API).
-            if not _exclude:
-                session_key = self._get_session_key(agent_id, user_context, conversation_id)
+            session_key = self._get_session_key(agent_id, user_context, conversation_id)
+            if exclude_filenames is None:
                 if session_key not in self._files:
                     self._load_session_files(session_key)
 
