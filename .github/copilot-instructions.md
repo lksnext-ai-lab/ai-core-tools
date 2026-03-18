@@ -194,6 +194,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Documentation Manager | `@docs-manager` | Documentation management, index/TOC, freshness tracking |
 | Open Source Manager | `@oss-manager` | Licensing, community files, changelog, release notes, OSS governance |
 | Release Manager | `@release-manager` | Complete release workflow — version bump, changelog, merge to main, tagging, GitHub releases |
+| Website Maintainer | `@website-maintainer` | Maintains `mattinai.github.io` landing site — syncs content, translations (ES/EN/EU), version references, and feature descriptions with the current project state |
 
 ## Architecture Conventions
 
