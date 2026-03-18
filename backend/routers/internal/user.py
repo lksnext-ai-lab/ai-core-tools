@@ -1,7 +1,7 @@
 """
 User endpoints for getting current user information.
 """
-
+from typing import Annotated
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -33,8 +33,8 @@ class CurrentUserResponse(BaseModel):
     description="Get information about the currently authenticated user, including admin status",
 )
 async def get_current_user(
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """
     Get current user information including admin privileges.

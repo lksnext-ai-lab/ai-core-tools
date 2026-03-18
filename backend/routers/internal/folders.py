@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Annotated
 
 # Import services and schemas
 from services.folder_service import FolderService
@@ -15,7 +15,6 @@ from schemas.common_schemas import MessageResponseSchema
 # Import auth and database
 from .auth_utils import get_current_user_oauth
 from db.database import get_db
-from fastapi import Request
 from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
@@ -36,18 +35,16 @@ folders_router = APIRouter()
 async def get_root_folders(
     app_id: int,
     repository_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get all root folders (parent_folder_id is None) for a repository.
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = current_user.identity.id
+    user_id = auth_context.identity.id
     
     logger.info(f"Get root folders - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         root_folders_data = FolderService.get_root_folders_with_counts(repository_id, db)
@@ -89,8 +86,9 @@ async def get_root_folders(
 async def get_folder_tree(
     app_id: int,
     repository_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get the complete folder tree structure for a repository.
@@ -98,8 +96,6 @@ async def get_folder_tree(
     user_id = auth_context.identity.id
     
     logger.info(f"Get folder tree - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         # Get all folders for the repository
@@ -149,8 +145,9 @@ async def get_folder_details(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific folder.
@@ -158,8 +155,6 @@ async def get_folder_details(
     user_id = auth_context.identity.id
     
     logger.info(f"Get folder details - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         folder_data = FolderService.get_folder_with_contents(folder_id, db)
@@ -201,9 +196,9 @@ async def create_folder(
     app_id: int,
     repository_id: int,
     folder_data: CreateFolderSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    role: AppRole = Depends(require_min_role("editor"))
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Create a new folder in the repository.
@@ -211,8 +206,6 @@ async def create_folder(
     user_id = auth_context.identity.id
     
     logger.info(f"Create folder - app_id: {app_id}, repository_id: {repository_id}, name: {folder_data.name}, parent: {folder_data.parent_folder_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         created_folder = FolderService.create_folder(
@@ -255,9 +248,9 @@ async def update_folder(
     repository_id: int,
     folder_id: int,
     folder_data: UpdateFolderSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db),
-    role: AppRole = Depends(require_min_role("editor"))
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Update a folder's name.
@@ -265,8 +258,6 @@ async def update_folder(
     user_id = auth_context.identity.id
     
     logger.info(f"Update folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, name: {folder_data.name}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         # Validate folder belongs to repository
@@ -314,9 +305,9 @@ async def delete_folder(
     app_id: int,
     repository_id: int,
     folder_id: int,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a folder and all its contents (subfolders and resources).
@@ -324,8 +315,6 @@ async def delete_folder(
     user_id = auth_context.identity.id
     
     logger.info(f"Delete folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         # Validate folder belongs to repository
@@ -359,9 +348,9 @@ async def move_folder(
     repository_id: int,
     folder_id: int,
     move_data: MoveFolderSchema,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Move a folder to a new parent folder.
@@ -369,8 +358,6 @@ async def move_folder(
     user_id = auth_context.identity.id
     
     logger.info(f"Move folder - app_id: {app_id}, repository_id: {repository_id}, folder_id: {folder_id}, new_parent: {move_data.new_parent_folder_id}, user_id: {user_id}")
-    
-    # TODO: Add app access validation
     
     try:
         # Validate folder belongs to repository

@@ -18,11 +18,6 @@ interface AdminRouteProps {
 function AdminRoute({ children }: Readonly<AdminRouteProps>) {
   const { user, loading } = useUser();
 
-  // Debug logging
-  console.log('AdminRoute - User:', user);
-  console.log('AdminRoute - Is Admin:', user?.is_admin);
-  console.log('AdminRoute - Loading:', loading);
-
   // Show nothing while loading
   if (loading) {
     return (
@@ -34,12 +29,10 @@ function AdminRoute({ children }: Readonly<AdminRouteProps>) {
 
   // If not authenticated or not admin, redirect to home
   if (!user?.is_admin) {
-    console.log('AdminRoute - Access DENIED - Redirecting to home');
     return <Navigate to="/" replace />;
   }
 
   // User is authenticated and is admin, render the protected content
-  console.log('AdminRoute - Access GRANTED - Rendering admin content');
   return <>{children}</>;
 }
 

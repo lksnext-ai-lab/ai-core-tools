@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from models.agent import DEFAULT_AGENT_TEMPERATURE
 
@@ -12,7 +12,7 @@ class AgentListItemSchema(BaseModel):
     description: Optional[str] = None
     type: str  # "agent", "ocr_agent", etc.
     is_tool: bool
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     request_count: int
     service_id: Optional[int] = None
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
@@ -43,7 +43,7 @@ class AgentDetailSchema(BaseModel):
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
     skill_ids: List[int] = []
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     request_count: int
     # OCR-specific fields
     vision_service_id: Optional[int] = None
@@ -148,7 +148,7 @@ class CreateAgentRequestSchema(BaseModel):
     """Schema for creating a new agent via public API"""
     name: str
     description: Optional[str] = ""
-    type: str = "agent"  # "agent" or "ocr_agent"
+    type: Literal["agent"] = "agent"
     is_tool: bool = False
     has_memory: bool = False
     memory_max_messages: Optional[int] = 20

@@ -187,6 +187,13 @@ class AgentExecutionService:
                 session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
                 working_dir = os.path.join(tmp_base, "persistent", session_key)
 
+            # Snapshot files in working_dir before execution so we only register
+            # truly new files afterwards (avoids picking up stale files from
+            # a previous conversation that reused the same directory).
+            pre_existing_files: set = set()
+            if working_dir and os.path.isdir(working_dir):
+                pre_existing_files = set(os.listdir(working_dir))
+
             # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
             response = await self._execute_agent_async(
                 fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files,
@@ -202,6 +209,7 @@ class AgentExecutionService:
                     agent_id=agent_id,
                     user_context=user_context,
                     conversation_id=str(effective_conv_id) if effective_conv_id else None,
+                    exclude_filenames=pre_existing_files,
                 )
                 if new_files:
                     response = _inject_file_markers(response, new_files)
@@ -262,6 +270,8 @@ class AgentExecutionService:
                 }
             }
             
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
@@ -347,10 +357,12 @@ class AgentExecutionService:
                 }
             }
             
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
-    
+
     async def execute_agent_ocr(
         self, 
         agent_id: int, 
@@ -1085,7 +1097,7 @@ class AgentExecutionService:
                     return structured
             
             # Extract the response from the result messages
-            if isinstance(result, dict) and "messages" in result:
+            if isinstance(result, dict) and "messages" in result and result["messages"] is not None:
                 # Get the last AI message
                 messages = result["messages"]
                 for msg in reversed(messages):

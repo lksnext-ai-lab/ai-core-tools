@@ -118,23 +118,29 @@ def get_mcp_connection_config(
     # Add authentication headers to HTTP-based MCP servers
     if auth_token:
         auth_headers = prepare_mcp_auth_headers(auth_token)
-        
-        # For each MCP server in the config, add authentication headers
+
         for server_name, server_config in enhanced_config.items():
-            if isinstance(server_config, dict):
-                # Check if this is an HTTP-based server (has 'url' key)
-                if 'url' in server_config:
-                    # Add or update headers in the server configuration
-                    if 'headers' not in server_config:
-                        server_config['headers'] = {}
-                    server_config['headers'].update(auth_headers)
-                    logger.info(f"Added authentication headers to MCP server: {server_name}")
-                else:
-                    # This is a stdio-based server (has 'command' key)
-                    # stdio servers inherit security from the local environment
-                    logger.debug(f"Skipping auth headers for stdio server: {server_name}")
+            _inject_auth_headers_for_server(server_name, server_config, auth_headers)
     
     return enhanced_config
+
+
+def _inject_auth_headers_for_server(
+    server_name: str,
+    server_config: Any,
+    auth_headers: Dict[str, str],
+) -> None:
+    if not isinstance(server_config, dict):
+        return
+
+    if 'url' not in server_config:
+        # stdio servers inherit security from the local environment
+        logger.debug(f"Skipping auth headers for stdio server: {server_name}")
+        return
+
+    headers = server_config.setdefault('headers', {})
+    headers.update(auth_headers)
+    logger.info(f"Added authentication headers to MCP server: {server_name}")
 
 
 def validate_mcp_auth_config(mcp_config: Dict[str, Any]) -> bool:

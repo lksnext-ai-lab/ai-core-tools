@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Request, Depends, Backgrou
 from fastapi.responses import JSONResponse
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Annotated
 import json
 
 # Import services
@@ -95,17 +95,13 @@ def background_reindex_domain(domain_id: int):
 )
 async def import_domain(
     app_id: int,
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
-    new_name: Optional[str] = Query(None),
-    selected_embedding_service_id: Optional[int] = Query(
-        None
-    ),
-    auth_context: AuthContext = Depends(
-        get_current_user_oauth
-    ),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File(...)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
+    selected_embedding_service_id: Annotated[Optional[int], Query()] = None,
 ):
     """Import Domain from JSON file.
 
@@ -165,15 +161,13 @@ async def import_domain(
 async def list_domains(
     app_id: int, 
     request: Request, 
-    db: Session = Depends(get_db), 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)], 
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all domains for a specific app.
     """
-    
-    # TODO: Add app access validation
     
     try:
         domains_with_counts = DomainService.get_domains_with_url_counts(app_id, db)
@@ -212,15 +206,13 @@ async def get_domain(
     app_id: int, 
     domain_id: int, 
     request: Request, 
-    db: Session = Depends(get_db), 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer"))
+    db: Annotated[Session, Depends(get_db)], 
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific domain.
     """
-    
-    # TODO: Add app access validation
     
     if domain_id == 0:
         # New domain - return empty template with embedding services
@@ -264,15 +256,13 @@ async def create_or_update_domain(
     domain_id: int,
     domain_data: CreateUpdateDomainSchema,
     request: Request,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Create a new domain or update an existing one.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Prepare domain data for service
@@ -309,15 +299,13 @@ async def delete_domain(
     app_id: int, 
     domain_id: int, 
     request: Request, 
-    db: Session = Depends(get_db), 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)], 
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a domain and its associated silo and URLs.
     """
-    
-    # TODO: Add app access validation
     
     try:
         domain = DomainService.get_domain(domain_id, db)
@@ -347,15 +335,12 @@ async def delete_domain(
 async def export_domain(
     app_id: int,
     domain_id: int,
-    include_dependencies: bool = Query(
-        True,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    include_dependencies: Annotated[bool, Query(
         description="Bundle silo and its dependencies",
-    ),
-    auth_context: AuthContext = Depends(
-        get_current_user_oauth
-    ),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db),
+    )] = True,
 ):
     """Export Domain configuration to JSON file.
 
@@ -415,20 +400,18 @@ async def list_domain_urls(
     app_id: int,
     domain_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     page: int = 1,
     per_page: int = 20,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer"))
 ):
     """
     List URLs for a specific domain with pagination.
     """
     
-    # TODO: Add app access validation
-    
     try:
-        domain, urls, pagination = DomainService.get_domain_with_urls(domain_id, db, page, per_page)
+        _, urls, _ = DomainService.get_domain_with_urls(domain_id, db, page, per_page)
         
         result = []
         for url in urls:
@@ -460,15 +443,13 @@ async def add_url_to_domain(
     url_data: CreateURLSchema,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Add a new URL to a domain and scrape its content.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Get domain info
@@ -512,15 +493,13 @@ async def delete_url_from_domain(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a URL from a domain and remove its indexed content.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Delete URL using service (this should also remove indexed content)
@@ -549,15 +528,13 @@ async def reindex_url(
     url_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor"))
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Re-index content for a specific URL.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Get domain and URL info
@@ -607,14 +584,13 @@ async def unindex_url(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Remove URL content from index and mark as unindexed.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Get domain and URL info
@@ -657,16 +633,13 @@ async def reject_url(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Mark URL as rejected (content not suitable for indexing).
     """
-    current_user = await get_current_user_oauth(request, db)
-    user_id = auth_context.identity.id
-    
-    # TODO: Add app access validation
     
     try:
         # Get domain and URL info
@@ -708,14 +681,13 @@ async def reindex_domain(
     domain_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Re-index content for all URLs in a domain.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Get domain info
@@ -749,14 +721,13 @@ async def get_url_content(
     domain_id: int,
     url_id: int,
     request: Request,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get the scraped content for a specific URL.
     """
-    
-    # TODO: Add app access validation
     
     try:
         # Get domain and URL info

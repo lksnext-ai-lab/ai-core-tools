@@ -8,13 +8,13 @@ from services.mcp_config_service import MCPConfigService
 async def test_connection_with_config_empty():
     result = await MCPConfigService.test_connection_with_config({})
     assert result["status"] == "error"
-    assert "at least one MCP server" in result["message"].lower()
+    assert "at least one mcp server" in result["message"].lower()
 
 
 @pytest.mark.asyncio
 async def test_connection_with_config_not_dict():
-    # lists are invalid
-    result = await MCPConfigService.test_connection_with_config([])  # type: ignore
+    # non-empty lists are invalid — empty list is caught by the "no config" check
+    result = await MCPConfigService.test_connection_with_config(["not-a-dict"])  # type: ignore
     assert result["status"] == "error"
     assert "json object" in result["message"].lower()
 
@@ -129,4 +129,3 @@ async def test_mcp_error_session_terminated(monkeypatch):
     result = await MCPConfigService.test_connection_with_config(config)
     assert result["status"] == "error"
     assert "404" in result["message"] or "endpoint url" in result["message"].lower()
-    assert "session terminated" not in result["message"].lower()

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from typing import List, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
@@ -37,9 +37,9 @@ mcp_servers_router = APIRouter()
                         response_model=List[MCPServerListSchema])
 async def list_mcp_servers(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all MCP servers for a specific app.
@@ -59,9 +59,9 @@ async def list_mcp_servers(
                         tags=["MCP Servers"])
 async def list_tool_agents(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all agents marked as tools that can be exposed via MCP servers.
@@ -85,9 +85,9 @@ async def list_tool_agents(
                         tags=["App Slug"])
 async def get_app_slug_info(
     app_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get the current slug configuration for the app.
@@ -120,9 +120,9 @@ async def get_app_slug_info(
 async def update_app_slug(
     app_id: int,
     slug_data: UpdateAppSlugSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Update the app's URL slug.
@@ -158,9 +158,9 @@ async def update_app_slug(
 async def get_mcp_server(
     app_id: int,
     server_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific MCP server.
@@ -194,9 +194,9 @@ async def get_mcp_server(
 async def create_mcp_server(
     app_id: int,
     server_data: CreateMCPServerSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Create a new MCP server.
@@ -230,9 +230,9 @@ async def update_mcp_server(
     app_id: int,
     server_id: int,
     server_data: UpdateMCPServerSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Update an existing MCP server.
@@ -264,9 +264,9 @@ async def update_mcp_server(
 async def delete_mcp_server(
     app_id: int,
     server_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Delete an MCP server.

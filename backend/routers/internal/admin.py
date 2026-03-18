@@ -20,6 +20,8 @@ logger = get_logger(__name__)
 
 router = APIRouter(tags=["admin"])
 
+USER_NOT_FOUND = "User not found"
+
 
 def require_admin(auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)]):
     """Dependency to require admin access"""
@@ -77,7 +79,7 @@ async def get_user(
     try:
         user = UserService.get_user_by_id_with_relations(db, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
         return UserDetailResponse(
             user_id=user.user_id,
@@ -110,7 +112,7 @@ async def delete_user(
     try:
         user = UserService.get_user_by_id(db, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
         success = UserService.delete_user(db, user_id)
         if not success:
@@ -179,11 +181,18 @@ async def deactivate_user(
         raise HTTPException(status_code=500, detail=f"Error deactivating user: {str(e)}")
 
 
-@router.post("/users/{user_id}/reset-marketplace-quota", response_model=MarketplaceQuotaResetResponse)
+@router.post(
+    "/users/{user_id}/reset-marketplace-quota",
+    response_model=MarketplaceQuotaResetResponse,
+    responses={
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def reset_user_marketplace_quota(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Reset a user's current month marketplace quota to 0.
@@ -199,7 +208,7 @@ async def reset_user_marketplace_quota(
         # Get the target user and validate exists
         user = UserService.get_user_by_id(db, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
         # Get current usage before reset
         previous_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)

@@ -8,7 +8,7 @@ SECURITY WARNING: Only use in development environments with OIDC_ENABLED=false
 """
 
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 from config import SECRET_KEY
 
@@ -42,7 +42,7 @@ def generate_dev_token(email: str, name: str = None) -> Dict[str, Any]:
         >>> result["access_token"]
         'eyJ0eXAiOiJKV1QiLCJhbGc...'
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expiration = now + timedelta(hours=JWT_EXPIRATION_HOURS)
     
     # Build JWT payload with minimal claims
@@ -61,7 +61,7 @@ def generate_dev_token(email: str, name: str = None) -> Dict[str, Any]:
     
     return {
         "access_token": token,
-        "expires_at": expiration.isoformat() + "Z",
+        "expires_at": expiration.replace(tzinfo=None).isoformat() + "Z",
         "token_type": "Bearer",
     }
 

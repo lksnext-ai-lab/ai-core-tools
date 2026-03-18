@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, File, Query
 from fastapi.responses import JSONResponse
-from typing import List, Dict, Any, Optional
+from typing import List, Annotated, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 import json
@@ -64,13 +64,13 @@ def _validate_silo_app_ownership(silo_id: int, app_id: int, db: Session) -> Silo
 )
 async def import_silo(
     app_id: int,
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
-    new_name: Optional[str] = Query(None),
-    selected_embedding_service_id: Optional[int] = Query(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    file: Annotated[UploadFile, File(...)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
+    selected_embedding_service_id: Annotated[Optional[int], Query()] = None,
 ):
     """Import Silo from JSON file.
     
@@ -133,10 +133,10 @@ async def import_silo(
                   tags=["Silos"],
                   response_model=List[SiloListItemSchema])
 async def list_silos(
-    app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    app_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all silos for a specific app.
@@ -159,9 +159,9 @@ async def list_silos(
 async def get_silo(
     app_id: int,
     silo_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific silo including form data for editing.
@@ -195,9 +195,9 @@ async def create_or_update_silo(
     app_id: int,
     silo_id: int,
     silo_data: CreateUpdateSiloSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Create a new silo or update an existing one.
@@ -227,11 +227,11 @@ async def create_or_update_silo(
                      summary="Delete silo",
                      tags=["Silos"])
 async def delete_silo(
-    app_id: int, 
-    silo_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("editor")),
-    db: Session = Depends(get_db)
+    app_id: int,
+    silo_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete a silo and all its documents.
@@ -266,10 +266,10 @@ async def delete_silo(
 async def export_silo(
     app_id: int,
     silo_id: int,
-    include_dependencies: bool = Query(True, description="Bundle dependencies (embedding service, output parser)"),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    include_dependencies: Annotated[bool, Query(description="Bundle dependencies (embedding service, output parser)")] = True,
 ):
     """Export Silo configuration to JSON file.
     
@@ -308,10 +308,11 @@ async def export_silo(
                   summary="Get silo playground",
                   tags=["Silos", "Playground"])
 async def silo_playground(
-    app_id: int, 
-    silo_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    app_id: int,
+    silo_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get silo playground interface for testing document search.
@@ -345,8 +346,9 @@ async def search_silo_documents(
     app_id: int,
     silo_id: int,
     search_query: SiloSearchSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Search for documents in a silo using semantic search with optional metadata filtering.
@@ -394,9 +396,10 @@ async def search_silo_documents(
 async def delete_silo_documents(
     app_id: int,
     silo_id: int,
-    document_ids: List[str] = Body(..., embed=True),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    document_ids: Annotated[List[str], Body(..., embed=True)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
     Delete documents from a silo by their IDs.
@@ -417,7 +420,7 @@ async def delete_silo_documents(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting silo documents: {str(e)}")
+        logger.error(f"Error deleting silo documents: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting documents: {str(e)}"

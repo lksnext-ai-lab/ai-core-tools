@@ -1,0 +1,46 @@
+# ============================================================================
+# MATTIN AI - Test Runner Dockerfile
+# ============================================================================
+# Lightweight image for running pytest in CI/CD (Jenkinsfile).
+# NOT used in production — only for test execution.
+# ============================================================================
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app/backend
+
+WORKDIR /app
+
+# Build dependencies needed for psycopg2, etc.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    libpq-dev \
+    pkg-config \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install --no-cache-dir "poetry>=2.2.0,<3.0.0"
+
+# Install all dependencies (main + test group)
+COPY pyproject.toml poetry.lock ./
+RUN poetry config virtualenvs.create false && \
+    poetry install --with test --no-interaction --no-ansi --no-cache
+
+# Copy source code and tests
+COPY backend/ /app/backend/
+COPY tests/ /app/tests/
+COPY pytest.ini /app/pytest.ini
+COPY alembic/ /app/alembic/
+COPY alembic.ini /app/alembic.ini
+
+# Create directories the app expects
+RUN mkdir -p /app/backend/data/repositories \
+             /app/backend/logs
+
+CMD ["pytest", "-v"]

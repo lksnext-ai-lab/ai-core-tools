@@ -3,7 +3,7 @@ from fastapi import (
     UploadFile, File, Query
 )
 from fastapi.responses import JSONResponse
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
@@ -47,12 +47,12 @@ mcp_configs_router = APIRouter()
 )
 async def import_mcp_config(
     app_id: int,
-    file: UploadFile = File(...),
-    conflict_mode: ConflictMode = Query(ConflictMode.FAIL),
-    new_name: Optional[str] = Query(None),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    file: Annotated[UploadFile, File(...)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    conflict_mode: Annotated[ConflictMode, Query()] = ConflictMode.FAIL,
+    new_name: Annotated[Optional[str], Query()] = None,
 ):
     """Import MCP Configuration from JSON file."""
     try:
@@ -104,10 +104,10 @@ async def import_mcp_config(
                         tags=["MCP Configs"],
                         response_model=List[MCPConfigListItemSchema])
 async def list_mcp_configs(
-    app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    app_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all MCP configs for a specific app.
@@ -128,11 +128,11 @@ async def list_mcp_configs(
                         tags=["MCP Configs"],
                         response_model=MCPConfigDetailSchema)
 async def get_mcp_config(
-    app_id: int, 
-    config_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    app_id: int,
+    config_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     Get detailed information about a specific MCP config.
@@ -164,9 +164,9 @@ async def get_mcp_config(
 async def test_mcp_connection_with_config(
     app_id: int,
     config_data: CreateUpdateMCPConfigSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Test connection to MCP server with provided config.
@@ -216,9 +216,9 @@ async def create_or_update_mcp_config(
     app_id: int,
     config_id: int,
     config_data: CreateUpdateMCPConfigSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Create a new MCP config or update an existing one.
@@ -249,11 +249,11 @@ async def create_or_update_mcp_config(
                            summary="Delete MCP config",
                            tags=["MCP Configs"])
 async def delete_mcp_config(
-    app_id: int, 
-    config_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    app_id: int,
+    config_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Delete an MCP config.
@@ -291,9 +291,9 @@ async def delete_mcp_config(
 async def export_mcp_config(
     app_id: int,
     config_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """Export MCP Configuration to JSON file (sanitized)."""
     try:
@@ -330,9 +330,9 @@ async def export_mcp_config(
 async def test_mcp_connection(
     app_id: int,
     config_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Test connection to MCP server and list tools.

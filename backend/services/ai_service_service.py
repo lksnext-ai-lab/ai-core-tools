@@ -7,6 +7,7 @@ from schemas.ai_service_schemas import (
     CreateUpdateAIServiceSchema,
 )
 from core.export_constants import PLACEHOLDER_API_KEY
+from utils.secret_utils import mask_api_key, is_masked_key
 from datetime import datetime
 from typing import List
 from tools.aiServiceTools import create_llm_from_service
@@ -79,7 +80,7 @@ class AIServiceService:
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",
-            api_key=service.api_key or "",
+            api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",  # Use endpoint as base_url
             created_at=service.create_date,
             available_providers=providers,
@@ -105,7 +106,9 @@ class AIServiceService:
         service.name = service_data.name
         service.provider = service_data.provider  # Store as string, not enum
         service.description = service_data.model_name  # Store model name in description
-        service.api_key = service_data.api_key
+        # Only update api_key if user provided a new (non-masked) value
+        if not is_masked_key(service_data.api_key):
+            service.api_key = service_data.api_key
         service.endpoint = service_data.base_url  # Store base_url in endpoint
         
         # Create or update the service
@@ -175,10 +178,11 @@ class AIServiceService:
             
             service = MockAIService(config)
             
-            # Guard: placeholder or missing API key
+            # Guard: placeholder, missing, or masked API key
             if (
                 not service.api_key
                 or service.api_key == PLACEHOLDER_API_KEY
+                or is_masked_key(service.api_key)
             ):
                 return {
                     "status": "error",
