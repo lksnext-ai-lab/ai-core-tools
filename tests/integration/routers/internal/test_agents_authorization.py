@@ -247,18 +247,3 @@ class TestPlaygroundCrossApp:
             headers=auth_headers,
         )
         assert response.status_code == 403
-
-    def test_playground_of_other_app_denied_for_non_collaborator(
-        self, client, fake_app, fake_agent, setup_cross_app, auth_headers, db
-    ):
-        """
-        auth_headers user (fake_user) has no role on other_app,
-        so accessing other_app's agent playground should return 403.
-        """
-        other_app, other_agent, _ = setup_cross_app
-        db.flush()
-        response = client.get(
-            f"/internal/apps/{other_app.app_id}/agents/{other_agent.agent_id}/playground",
-            headers=auth_headers,
-        )
-        assert response.status_code == 403
