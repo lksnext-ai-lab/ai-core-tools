@@ -12,7 +12,7 @@ import os
 import re
 import base64
 import mimetypes
-from typing import AsyncGenerator, Dict, List, Optional, Any
+from typing import AsyncGenerator, Dict, List, Any
 
 import langsmith as ls
 from langchain.messages import HumanMessage
