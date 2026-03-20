@@ -30,6 +30,7 @@ class AppListItemSchema(BaseModel):
     agent_rate_limit: int
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
+    enable_openai_api: bool = False
     # Entity counts for table display
     agent_count: int = 0
     repository_count: int = 0
@@ -55,6 +56,7 @@ class AppDetailSchema(BaseModel):
     agent_rate_limit: int
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
+    enable_openai_api: bool = False
     # Entity counts for dashboard display
      
     agent_count: int = 0
@@ -74,6 +76,7 @@ class CreateAppSchema(BaseModel):
     agent_rate_limit: Optional[int] = 0
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
+    enable_openai_api: bool = False
 
 
 class UpdateAppSchema(BaseModel):
@@ -83,6 +86,7 @@ class UpdateAppSchema(BaseModel):
     agent_rate_limit: Optional[int] = 0
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
+    enable_openai_api: bool = False
 
 
 # ==================== COLLABORATION SCHEMAS ====================

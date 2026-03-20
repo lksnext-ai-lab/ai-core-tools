@@ -36,6 +36,7 @@ class App(Base):
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')
+    enable_openai_api = Column(Boolean, default=False, nullable=False, server_default='false')
 
     def get_user_role(self, user_id):
         """Get the role of a user in this app"""
