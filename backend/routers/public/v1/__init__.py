@@ -23,4 +23,4 @@ public_v1_router.include_router(ocr_router, prefix="/app/{app_id}/ocr", dependen
 public_v1_router.include_router(repositories_router, prefix="/app/{app_id}/repositories", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(resources_router, prefix="/app/{app_id}/resources", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(silos_router, prefix="/app/{app_id}/silos", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
-public_v1_router.include_router(openai_router, prefix="/app/{app_identifier}/openai/v1")
+public_v1_router.include_router(openai_router, prefix="/app/{app_id}/openai/v1", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
