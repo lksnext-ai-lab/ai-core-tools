@@ -472,6 +472,7 @@ async def get_app(
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=app.agent_cors_origins,
+        enable_openai_api=app.enable_openai_api,
         onboarding_dismissed=app.onboarding_dismissed or False,
         **counts
     )
@@ -597,7 +598,8 @@ async def update_app(
         'langsmith_api_key': langsmith_key,
         'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         'max_file_size_mb': app_data.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
-        'agent_cors_origins': app_data.agent_cors_origins
+        'agent_cors_origins': app_data.agent_cors_origins,
+        'enable_openai_api': app_data.enable_openai_api
     }
     
     # Update app using service
@@ -621,7 +623,8 @@ async def update_app(
         owner_name=owner_name,
         agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=updated_app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
-        agent_cors_origins=updated_app.agent_cors_origins
+        agent_cors_origins=updated_app.agent_cors_origins,
+        enable_openai_api=updated_app.enable_openai_api
     )
 
 

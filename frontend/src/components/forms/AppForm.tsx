@@ -10,12 +10,11 @@ interface App {
   created_at: string;
   owner_id: number;
   agent_rate_limit: number;
-  enable_openai_api?: boolean;
 }
 
 interface AppFormProps {
   readonly app?: App | null; // null for create, App object for edit
-  readonly onSubmit: (data: { name: string; enable_openai_api: boolean }) => Promise<void>;
+  readonly onSubmit: (data: { name: string }) => Promise<void>;
   readonly onCancel: () => void;
 }
 
@@ -24,15 +23,13 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
   
   // Use shared form state hook
   const { formData, updateField, isSubmitting, error, setError, handleSubmit } = useFormState({
-    name: app?.name || '',
-    enable_openai_api: app?.enable_openai_api ?? false
+    name: app?.name || ''
   });
 
   // Update form when app prop changes
   useEffect(() => {
     if (app) {
       updateField('name', app.name);
-      updateField('enable_openai_api', app.enable_openai_api ?? false);
     }
   }, [app]);
 
@@ -51,8 +48,7 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
     
     await handleSubmit(e, async () => {
       await onSubmit({ 
-        name: formData.name.trim(),
-        enable_openai_api: formData.enable_openai_api
+        name: formData.name.trim()
       });
     }, 'Failed to save app');
   };
@@ -70,18 +66,6 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
         disabled={isSubmitting}
         required
       />
-
-      <label className="flex items-center space-x-2">
-        <input
-          type="checkbox"
-          id="enable-openai-api"
-          checked={formData.enable_openai_api}
-          onChange={(e) => updateField('enable_openai_api', e.target.checked)}
-          disabled={isSubmitting}
-          className="form-checkbox h-5 w-5 text-blue-600 rounded"
-        />
-        <span className="text-sm font-medium text-gray-700">Enable OpenAI-compatible API</span>
-      </label>
 
       {/* Error Message */}
       <FormError error={error} />
