@@ -78,9 +78,6 @@ class CreateAppSchema(BaseModel):
     agent_rate_limit: Optional[int] = 0
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
-    enable_openai_api: bool = False
-
-
 class UpdateAppSchema(BaseModel):
     """Schema for updating an app"""
     name: str
