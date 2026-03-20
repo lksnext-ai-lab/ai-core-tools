@@ -37,6 +37,7 @@ class App(Base):
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')
     is_frozen = Column(Boolean, default=False, nullable=False)
+    enable_openai_api = Column(Boolean, default=False, nullable=False, server_default='false')
 
     def get_user_role(self, user_id):
         """Get the role of a user in this app"""
