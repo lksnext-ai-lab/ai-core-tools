@@ -1,10 +1,17 @@
+import base64
+import httpx
+import ipaddress
+import mimetypes
+import socket
+import tempfile
 import time
 import uuid
 import json
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Annotated
+from urllib.parse import urlparse
 
 from db.database import get_db
 from models.app import App
@@ -27,6 +34,55 @@ from .schemas_openai import (
 
 logger = get_logger(__name__)
 openai_router = APIRouter()
+
+# Maximum bytes we will ever buffer from a remote image URL, regardless of
+# what the app's max_file_size_mb is configured to.  This acts as an absolute
+# hard ceiling so a misconfigured or unlimited app cannot be abused for a
+# large-download amplification attack.
+_MAX_IMAGE_DOWNLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+def _validate_image_url(url: str) -> None:
+    """Raise HTTPException(400) for URLs that could be used for SSRF.
+
+    Checks performed:
+    - Scheme must be http or https (blocks file://, ftp://, gopher://, etc.).
+    - Hostname must resolve and must not be a private, loopback, link-local,
+      multicast, or otherwise reserved address (RFC 1918 / RFC 4193 / etc.).
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image URL scheme '{parsed.scheme}' is not allowed. Only http/https URLs are accepted.",
+        )
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(status_code=400, detail="Image URL has no hostname.")
+
+    try:
+        # Resolve to an IP address (IPv4 or IPv6).
+        addr_str = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)[0][4][0]
+        addr = ipaddress.ip_address(addr_str)
+    except (socket.gaierror, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image URL hostname could not be resolved: {exc}",
+        )
+
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Image URL resolves to a private or reserved IP address and is not allowed.",
+        )
 
 def get_app_by_identifier(db: Session, app_identifier: str) -> App:
     if app_identifier.isdigit():
@@ -137,12 +193,6 @@ async def chat_completions(
     formatted_message = ""
     file_references = []
     file_service = FileManagementService()
-    
-    import base64
-    import httpx
-    import tempfile
-    import mimetypes
-    from fastapi import UploadFile
 
     # First, filter out system messages
     non_system_messages = [msg for msg in request.messages if msg.role != "system"]
@@ -170,6 +220,8 @@ async def chat_completions(
                     img_data = None
                     ext = ".jpg"
                     
+                    max_image_size_mb: int = getattr(app, 'max_file_size_mb', 0) or 0
+
                     if url.startswith("data:image/"):
                         try:
                             header, base64_data = url.split(",", 1)
@@ -181,17 +233,48 @@ async def chat_completions(
                             continue
                     elif url.startswith("http"):
                         try:
+                            _validate_image_url(url)
+                            byte_cap = (
+                                max_image_size_mb * 1024 * 1024
+                                if max_image_size_mb > 0
+                                else _MAX_IMAGE_DOWNLOAD_BYTES
+                            )
+                            chunks: list[bytes] = []
+                            total = 0
                             async with httpx.AsyncClient() as client:
-                                resp = await client.get(url, timeout=10.0)
-                                resp.raise_for_status()
-                                img_data = resp.content
-                                content_type = resp.headers.get("content-type", "image/jpeg")
-                                ext = mimetypes.guess_extension(content_type) or ".jpg"
+                                async with client.stream("GET", url, timeout=10.0) as resp:
+                                    resp.raise_for_status()
+                                    content_type = resp.headers.get("content-type", "image/jpeg")
+                                    ext = mimetypes.guess_extension(content_type) or ".jpg"
+                                    async for chunk in resp.aiter_bytes(chunk_size=65536):
+                                        total += len(chunk)
+                                        if total > byte_cap:
+                                            raise HTTPException(
+                                                status_code=413,
+                                                detail=(
+                                                    f"Remote image exceeds the maximum allowed size "
+                                                    f"({byte_cap // (1024 * 1024)}MB)."
+                                                ),
+                                            )
+                                        chunks.append(chunk)
+                            img_data = b"".join(chunks)
+                        except HTTPException:
+                            raise
                         except Exception as e:
                             logger.error(f"Failed to download image URL {url}: {e}")
                             continue
 
                     if img_data:
+                        if max_image_size_mb > 0:
+                            img_size_mb = len(img_data) / (1024 * 1024)
+                            if img_size_mb > max_image_size_mb:
+                                raise HTTPException(
+                                    status_code=413,
+                                    detail=(
+                                        f"Image size ({img_size_mb:.2f}MB) exceeds the maximum "
+                                        f"allowed ({max_image_size_mb}MB) for this app."
+                                    ),
+                                )
                         try:
                             temp_f = tempfile.SpooledTemporaryFile(max_size=1024*1024*10)
                             temp_f.write(img_data)
@@ -271,7 +354,11 @@ async def chat_completions(
                             }
                             yield f"data: {json.dumps(chunk)}\n\n"
                 except Exception as e:
-                    pass # Ignore parse errors for standard chunks
+                    logger.warning(
+                        "Skipping unparseable SSE event: %s — raw event: %.200r",
+                        e,
+                        event,
+                    )
                     
             yield "data: [DONE]\n\n"
             
