@@ -93,6 +93,23 @@ async def chat_completions(
 ):
     app = get_app_by_identifier(db, app_identifier)
     validate_api_key_for_app(app.app_id, api_key, db)
+
+    # Explicitly reject unsupported OpenAI knobs that would otherwise be silently ignored.
+    unsupported_params: List[str] = []
+    if getattr(request, "temperature", None) is not None:
+        unsupported_params.append("temperature")
+    if getattr(request, "max_tokens", None) is not None:
+        unsupported_params.append("max_tokens")
+    if unsupported_params:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported parameter(s) for this endpoint: "
+                + ", ".join(unsupported_params)
+                + ". This OpenAI-compatible endpoint currently uses the agent's "
+                "configured settings for these values."
+            ),
+        )
     
     try:
         agent_id = int(request.model)
