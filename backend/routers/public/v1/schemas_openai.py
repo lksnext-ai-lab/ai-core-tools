@@ -9,7 +9,7 @@ class OpenAIChatCompletionRequest(BaseModel):
     model: str
     messages: List[OpenAIMessage]
     stream: Optional[bool] = False
-    temperature: Optional[float] = 0.7
+    temperature: Optional[float] = None
     max_tokens: Optional[int] = None
 
 class OpenAIModel(BaseModel):
