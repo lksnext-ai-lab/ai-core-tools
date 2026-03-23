@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import httpx
 import ipaddress
 import mimetypes
@@ -34,6 +35,13 @@ from .schemas_openai import (
 
 logger = get_logger(__name__)
 openai_router = APIRouter()
+
+
+def _compute_system_fingerprint(agent_id: int, service_id) -> str:
+    """Return a deterministic fingerprint string based on agent + AI service IDs."""
+    raw = f"{agent_id}:{service_id or ''}"
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    return f"mtn-{digest[:12]}"
 
 # Maximum bytes we will ever buffer from a remote image URL, regardless of
 # what the app's max_file_size_mb is configured to.  This acts as an absolute
@@ -183,7 +191,11 @@ async def chat_completions(
             status_code=400, 
             detail="Agent has memory enabled. OpenAI API only supports memoryless agents."
         )
-        
+
+    system_fingerprint = _compute_system_fingerprint(
+        agent_id, getattr(agent, "service_id", None)
+    )
+
     user_context = create_api_key_user_context(app.app_id, api_key)
     
     if not request.messages:
@@ -211,16 +223,14 @@ async def chat_completions(
             msg_text = msg.content
         elif isinstance(msg.content, list):
             part_texts = []
+            max_image_size_mb: int = getattr(app, 'max_file_size_mb', 0) or 0
             for part in msg.content:
-                if part.get("type") == "text":
-                    part_texts.append(part.get("text", ""))
-                elif part.get("type") == "image_url":
-                    image_url_obj = part.get("image_url", {})
-                    url = image_url_obj.get("url", "")
+                if part.type == "text":
+                    part_texts.append(part.text)
+                elif part.type == "image_url":
+                    url = part.image_url.url
                     img_data = None
                     ext = ".jpg"
-                    
-                    max_image_size_mb: int = getattr(app, 'max_file_size_mb', 0) or 0
 
                     if url.startswith("data:image/"):
                         try:
@@ -288,7 +298,53 @@ async def chat_completions(
                             file_references.append(file_ref)
                         except Exception as e:
                             logger.error(f"Failed to process image payload: {e}")
-                            
+
+                elif part.type == "input_audio":
+                    audio_format = part.input_audio.format  # "wav" or "mp3"
+                    try:
+                        audio_bytes = base64.b64decode(part.input_audio.data)
+                        temp_f = tempfile.SpooledTemporaryFile(max_size=1024 * 1024 * 10)
+                        temp_f.write(audio_bytes)
+                        temp_f.seek(0)
+                        upload_file = UploadFile(
+                            file=temp_f,
+                            filename=f"audio_{uuid.uuid4().hex[:8]}.{audio_format}",
+                        )
+                        file_ref = await file_service.upload_file(
+                            file=upload_file,
+                            agent_id=agent_id,
+                            user_context=user_context,
+                        )
+                        file_references.append(file_ref)
+                    except Exception as e:
+                        logger.error(f"Failed to process audio payload: {e}")
+
+                elif part.type == "file":
+                    file_obj = part.file
+                    if file_obj.file_id:
+                        # Reference an already-uploaded file by its ID
+                        existing_ref = await file_service.get_file_reference(file_obj.file_id)
+                        if existing_ref:
+                            file_references.append(existing_ref)
+                        else:
+                            logger.warning(f"file_id '{file_obj.file_id}' not found in file service")
+                    elif file_obj.file_data:
+                        filename = file_obj.filename or f"file_{uuid.uuid4().hex[:8]}.bin"
+                        try:
+                            raw_bytes = base64.b64decode(file_obj.file_data)
+                            temp_f = tempfile.SpooledTemporaryFile(max_size=1024 * 1024 * 10)
+                            temp_f.write(raw_bytes)
+                            temp_f.seek(0)
+                            upload_file = UploadFile(file=temp_f, filename=filename)
+                            file_ref = await file_service.upload_file(
+                                file=upload_file,
+                                agent_id=agent_id,
+                                user_context=user_context,
+                            )
+                            file_references.append(file_ref)
+                        except Exception as e:
+                            logger.error(f"Failed to process file payload: {e}")
+
             msg_text = " ".join(part_texts)
             
         if is_last:
@@ -319,8 +375,8 @@ async def chat_completions(
         
         async def openai_sse_generator():
             completion_id = f"chatcmpl-{uuid.uuid4()}"
-            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': str(agent_id), 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
-            
+            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': str(agent_id), 'system_fingerprint': system_fingerprint, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
+
             async for event in generator:
                 try:
                     if event.startswith("data: "):
@@ -332,6 +388,7 @@ async def chat_completions(
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": str(agent_id),
+                                "system_fingerprint": system_fingerprint,
                                 "choices": [{"index": 0, "delta": {"content": event_data.get("data", {}).get("content", "")}, "finish_reason": None}]
                             }
                             yield f"data: {json.dumps(chunk)}\n\n"
@@ -341,6 +398,7 @@ async def chat_completions(
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": str(agent_id),
+                                "system_fingerprint": system_fingerprint,
                                 "choices": [{"index": 0, "delta": {"content": f"\\n\\n[Error: {event_data.get('data', {}).get('message', 'unknown error')}]"}, "finish_reason": "stop"}]
                             }
                             yield f"data: {json.dumps(chunk)}\n\n"
@@ -350,6 +408,7 @@ async def chat_completions(
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": str(agent_id),
+                                "system_fingerprint": system_fingerprint,
                                 "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
                             }
                             yield f"data: {json.dumps(chunk)}\n\n"
@@ -359,7 +418,7 @@ async def chat_completions(
                         e,
                         event,
                     )
-                    
+
             yield "data: [DONE]\n\n"
             
         return StreamingResponse(openai_sse_generator(), media_type="text/event-stream")
@@ -395,6 +454,7 @@ async def chat_completions(
             id=f"chatcmpl-{uuid.uuid4()}",
             created=int(time.time()),
             model=str(agent_id),
+            system_fingerprint=system_fingerprint,
             choices=[
                 OpenAIChoice(
                     index=0,
