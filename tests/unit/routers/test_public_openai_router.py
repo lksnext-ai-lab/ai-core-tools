@@ -80,7 +80,7 @@ class TestOpenAIRouter:
         )
         
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=req,
             api_key="key",
             db=MagicMock()
@@ -120,7 +120,7 @@ class TestOpenAIRouter:
         )
         
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=req,
             api_key="key",
             db=MagicMock()
@@ -186,7 +186,7 @@ class TestOpenAIRouter:
         )
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=req,
             api_key="key",
             db=MagicMock()
@@ -222,7 +222,7 @@ class TestOpenAIRouter:
         )
         
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=req,
             api_key="key",
             db=MagicMock()
@@ -295,7 +295,7 @@ class TestListModels:
         svc.get_agents.return_value = [memoryless, stateful]
 
         result = await openai_module.list_models(
-            app_identifier="1",
+            app_id="1",
             api_key="key",
             db=MagicMock(),
         )
@@ -318,7 +318,7 @@ class TestListModels:
         svc.get_agents.return_value = [stateful]
 
         result = await openai_module.list_models(
-            app_identifier="1",
+            app_id="1",
             api_key="key",
             db=MagicMock(),
         )
@@ -344,7 +344,7 @@ class TestStreamingChatCompletions:
         _mock_streaming_service(mocker, events=[])
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=self._base_request(stream=True),
             api_key="key",
             db=MagicMock(),
@@ -362,7 +362,7 @@ class TestStreamingChatCompletions:
         _mock_streaming_service(mocker, events=[])
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=self._base_request(stream=True),
             api_key="key",
             db=MagicMock(),
@@ -389,7 +389,7 @@ class TestStreamingChatCompletions:
         _mock_streaming_service(mocker, events=token_events)
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=self._base_request(stream=True),
             api_key="key",
             db=MagicMock(),
@@ -416,7 +416,7 @@ class TestStreamingChatCompletions:
         _mock_streaming_service(mocker, events=[done_event])
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=self._base_request(stream=True),
             api_key="key",
             db=MagicMock(),
@@ -440,7 +440,7 @@ class TestStreamingChatCompletions:
         _mock_streaming_service(mocker, events=[error_event])
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=self._base_request(stream=True),
             api_key="key",
             db=MagicMock(),
@@ -468,7 +468,7 @@ class TestStreamingChatCompletions:
         _mock_streaming_service(mocker, events=events)
 
         result = await openai_module.chat_completions(
-            app_identifier="1",
+            app_id="1",
             request=self._base_request(stream=True),
             api_key="key",
             db=MagicMock(),
@@ -489,7 +489,7 @@ class TestStreamingChatCompletions:
 
         with pytest.raises(HTTPException) as exc_info:
             await openai_module.chat_completions(
-                app_identifier="1",
+                app_id="1",
                 request=self._base_request(stream=True),
                 api_key="key",
                 db=MagicMock(),
