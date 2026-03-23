@@ -383,8 +383,8 @@ class TestStreamingChatCompletions:
         _mock_agent_service(mocker)
 
         token_events = [
-            'data: {"type": "token", "data": "Hello"}',
-            'data: {"type": "token", "data": " world"}',
+            'data: {"type": "token", "data": {"content": "Hello"}}',
+            'data: {"type": "token", "data": {"content": " world"}}',
         ]
         _mock_streaming_service(mocker, events=token_events)
 
@@ -436,7 +436,7 @@ class TestStreamingChatCompletions:
         _mock_app(mocker)
         _mock_agent_service(mocker)
 
-        error_event = 'data: {"type": "error", "data": "Something went wrong"}'
+        error_event = 'data: {"type": "error", "data": {"message": "Something went wrong"}}'
         _mock_streaming_service(mocker, events=[error_event])
 
         result = await openai_module.chat_completions(
@@ -462,7 +462,7 @@ class TestStreamingChatCompletions:
         _mock_agent_service(mocker)
 
         events = [
-            'data: {"type": "token", "data": "Hi"}',
+            'data: {"type": "token", "data": {"content": "Hi"}}',
             'data: {"type": "done", "data": ""}',
         ]
         _mock_streaming_service(mocker, events=events)
@@ -559,4 +559,240 @@ class TestSSRFValidation:
         with pytest.raises(HTTPException) as exc_info:
             openai_module._validate_image_url("http://nonexistent.invalid/img.jpg")
         assert exc_info.value.status_code == 400
+
+
+class TestNewContentPartTypes:
+    """Tests for input_audio and file content part types."""
+
+    @pytest.mark.asyncio
+    async def test_input_audio_wav_is_uploaded(self, mocker):
+        """input_audio part (WAV) should be decoded and uploaded as a file reference."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+        file_mock = _mock_file_management_service(mocker)
+
+        # Minimal valid WAV bytes (44-byte header filled with zeros is enough for the test)
+        raw_audio = b"\x00" * 64
+        audio_b64 = base64.b64encode(raw_audio).decode()
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "Transcribe this"},
+                        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "wav"}},
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+
+        result = await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        assert result.object == "chat.completion"
+        file_mock.upload_file.assert_called_once()
+        upload_call = file_mock.upload_file.call_args
+        uploaded_filename = upload_call.kwargs["file"].filename
+        assert uploaded_filename.startswith("audio_")
+        assert uploaded_filename.endswith(".wav")
+
+        exec_mock.execute_agent_chat_with_file_refs.assert_called_once()
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert len(kwargs["file_references"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_input_audio_mp3_is_uploaded(self, mocker):
+        """input_audio part (MP3) should produce a filename ending in .mp3."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        _mock_execution_service(mocker)
+        file_mock = _mock_file_management_service(mocker)
+
+        raw_audio = b"\xff\xfb" + b"\x00" * 62  # minimal MP3-like bytes
+        audio_b64 = base64.b64encode(raw_audio).decode()
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        file_mock.upload_file.assert_called_once()
+        uploaded_filename = file_mock.upload_file.call_args.kwargs["file"].filename
+        assert uploaded_filename.endswith(".mp3")
+
+    @pytest.mark.asyncio
+    async def test_file_part_with_file_data_is_uploaded(self, mocker):
+        """file part with base64 file_data should decode and upload correctly."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+        file_mock = _mock_file_management_service(mocker)
+
+        raw_bytes = b"Hello, this is a test document."
+        file_b64 = base64.b64encode(raw_bytes).decode()
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "Summarise this"},
+                        {
+                            "type": "file",
+                            "file": {"file_data": file_b64, "filename": "report.txt"},
+                        },
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+
+        result = await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        assert result.object == "chat.completion"
+        file_mock.upload_file.assert_called_once()
+        uploaded_filename = file_mock.upload_file.call_args.kwargs["file"].filename
+        assert uploaded_filename == "report.txt"
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert len(kwargs["file_references"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_file_part_with_file_id_uses_existing_reference(self, mocker):
+        """file part with file_id should fetch the existing FileReference (no upload)."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+        file_mock = _mock_file_management_service(mocker)
+
+        existing_ref = MagicMock()
+        existing_ref.file_id = "existing-file-123"
+        file_mock.get_file_reference = AsyncMock(return_value=existing_ref)
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "file", "file": {"file_id": "existing-file-123"}},
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        file_mock.upload_file.assert_not_called()
+        file_mock.get_file_reference.assert_called_once_with("existing-file-123")
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert len(kwargs["file_references"]) == 1
+        assert kwargs["file_references"][0].file_id == "existing-file-123"
+
+    @pytest.mark.asyncio
+    async def test_file_part_with_unknown_file_id_skips_reference(self, mocker):
+        """file part with unknown file_id should log a warning and not add a reference."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+        file_mock = _mock_file_management_service(mocker)
+
+        file_mock.get_file_reference = AsyncMock(return_value=None)
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "file", "file": {"file_id": "nonexistent-id"}},
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        file_mock.upload_file.assert_not_called()
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert len(kwargs["file_references"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_mixed_content_parts_text_audio_file(self, mocker):
+        """A message with text + input_audio + file parts should upload two files."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+        file_mock = _mock_file_management_service(mocker)
+        # Return unique mocks so we can count references
+        file_mock.upload_file = AsyncMock(side_effect=[
+            MagicMock(file_id="ref-audio"),
+            MagicMock(file_id="ref-file"),
+        ])
+
+        audio_b64 = base64.b64encode(b"\x00" * 32).decode()
+        file_b64 = base64.b64encode(b"data").decode()
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "Describe both"},
+                        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "wav"}},
+                        {"type": "file", "file": {"file_data": file_b64, "filename": "data.csv"}},
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+
+        result = await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        assert result.object == "chat.completion"
+        assert file_mock.upload_file.call_count == 2
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert len(kwargs["file_references"]) == 2
 
