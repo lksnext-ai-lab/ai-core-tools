@@ -104,11 +104,11 @@ def get_app_by_identifier(db: Session, app_identifier: str) -> App:
     description="Lists the currently available memoryless agents that can be used with the OpenAI-compatible chat completions endpoint."
 )
 async def list_models(
-    app_identifier: str,
+    app_id: str,
     api_key: Annotated[str, Depends(get_openai_api_key_auth)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    app = get_app_by_identifier(db, app_identifier)
+    app = get_app_by_identifier(db, app_id)
     validate_api_key_for_app(app.app_id, api_key, db)
     
     # We only return memoryless agents
@@ -142,12 +142,12 @@ async def list_models(
     }
 )
 async def chat_completions(
-    app_identifier: str,
+    app_id: str,
     request: OpenAIChatCompletionRequest,
     api_key: Annotated[str, Depends(get_openai_api_key_auth)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    app = get_app_by_identifier(db, app_identifier)
+    app = get_app_by_identifier(db, app_id)
     validate_api_key_for_app(app.app_id, api_key, db)
 
     # Explicitly reject unsupported OpenAI knobs that would otherwise be silently ignored.
@@ -332,7 +332,7 @@ async def chat_completions(
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": str(agent_id),
-                                "choices": [{"index": 0, "delta": {"content": event_data.get("data", "")}, "finish_reason": None}]
+                                "choices": [{"index": 0, "delta": {"content": event_data.get("data", {}).get("content", "")}, "finish_reason": None}]
                             }
                             yield f"data: {json.dumps(chunk)}\n\n"
                         elif event_data.get("type") == "error":
@@ -341,7 +341,7 @@ async def chat_completions(
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": str(agent_id),
-                                "choices": [{"index": 0, "delta": {"content": f"\\n\\n[Error: {event_data.get('data')}]"}, "finish_reason": "stop"}]
+                                "choices": [{"index": 0, "delta": {"content": f"\\n\\n[Error: {event_data.get('data', {}).get('message', 'unknown error')}]"}, "finish_reason": "stop"}]
                             }
                             yield f"data: {json.dumps(chunk)}\n\n"
                         elif event_data.get("type") == "done":
