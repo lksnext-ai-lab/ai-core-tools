@@ -43,6 +43,29 @@ def _compute_system_fingerprint(agent_id: int, service_id) -> str:
     digest = hashlib.sha256(raw.encode()).hexdigest()
     return f"mtn-{digest[:12]}"
 
+
+def _response_format_instruction(response_format: dict | None) -> str | None:
+    """Return a system-level instruction string implied by response_format, or None."""
+    if not response_format:
+        return None
+    fmt_type = response_format.get("type", "text")
+    if fmt_type == "text":
+        return None
+    if fmt_type == "json_object":
+        return (
+            "You must respond with valid, parseable JSON only. "
+            "Do not include any text, markdown, or explanation outside the JSON object."
+        )
+    if fmt_type == "json_schema":
+        schema = response_format.get("json_schema", {})
+        schema_str = json.dumps(schema, ensure_ascii=False)
+        return (
+            f"You must respond with valid JSON that strictly conforms to the following schema:\n"
+            f"{schema_str}\n"
+            "Do not include any text, markdown, or explanation outside the JSON object."
+        )
+    return None
+
 # Maximum bytes we will ever buffer from a remote image URL, regardless of
 # what the app's max_file_size_mb is configured to.  This acts as an absolute
 # hard ceiling so a misconfigured or unlimited app cannot be abused for a
@@ -195,6 +218,12 @@ async def chat_completions(
     system_fingerprint = _compute_system_fingerprint(
         agent_id, getattr(agent, "service_id", None)
     )
+
+    # If the agent enforces structured JSON output via an output parser, reflect this
+    # in the API response so callers know the content is a JSON string.
+    inferred_response_format: dict | None = None
+    if getattr(agent, "output_parser_id", None):
+        inferred_response_format = {"type": "json_object"}
 
     user_context = create_api_key_user_context(app.app_id, api_key)
     
@@ -360,7 +389,12 @@ async def chat_completions(
         formatted_message += "\n--- End of History ---\n\n"
         
     formatted_message += f"[Latest Input]\n{latest_role}: {latest_message_text}"
-        
+
+    # FR-8: response_format injection
+    rf_instruction = _response_format_instruction(request.response_format)
+    if rf_instruction:
+        formatted_message = f"[System Instruction]\n{rf_instruction}\n\n" + formatted_message
+
     if request.stream:
         streaming_service = AgentStreamingService(db)
         generator = streaming_service.stream_agent_chat(
@@ -436,7 +470,10 @@ async def chat_completions(
         )
         
         response_text = result.get("response", "")
-        if isinstance(response_text, list):
+        if isinstance(response_text, dict):
+            # Structured output from output_parser: must be valid JSON, not Python repr
+            response_text = json.dumps(response_text, ensure_ascii=False)
+        elif isinstance(response_text, list):
             # Complex response, extract text
             text_parts = []
             for item in response_text:
@@ -455,6 +492,7 @@ async def chat_completions(
             created=int(time.time()),
             model=str(agent_id),
             system_fingerprint=system_fingerprint,
+            response_format=inferred_response_format,
             choices=[
                 OpenAIChoice(
                     index=0,
