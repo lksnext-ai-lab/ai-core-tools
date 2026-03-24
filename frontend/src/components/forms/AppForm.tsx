@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useFormState } from '../../hooks/useFormState';
 import { FormField } from '../ui/FormField';
 import { FormError } from '../ui/FormError';
@@ -47,7 +47,9 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
     if (!validate()) return;
     
     await handleSubmit(e, async () => {
-      await onSubmit({ name: formData.name.trim() });
+      await onSubmit({ 
+        name: formData.name.trim()
+      });
     }, 'Failed to save app');
   };
 
