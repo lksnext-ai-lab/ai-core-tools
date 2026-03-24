@@ -103,5 +103,6 @@ class OpenAIChatCompletionResponse(BaseModel):
     created: int
     model: str
     system_fingerprint: Optional[str] = None
+    response_format: Optional[dict] = None
     choices: List[OpenAIChoice]
     usage: OpenAITokenUsage

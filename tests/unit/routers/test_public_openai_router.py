@@ -29,13 +29,14 @@ def _mock_app(mocker):
     return app
 
 
-def _mock_agent_service(mocker, has_memory=False, agent_id=1):
+def _mock_agent_service(mocker, has_memory=False, agent_id=1, output_parser_id=None):
     mock_cls = mocker.patch.object(openai_module, "AgentService")
     svc = mock_cls.return_value
     agent = MagicMock()
     agent.agent_id = agent_id
     agent.app_id = 1
     agent.has_memory = has_memory
+    agent.output_parser_id = output_parser_id
     agent.create_date = MagicMock()
     agent.create_date.timestamp.return_value = 1600000000
     svc.get_agent.return_value = agent
@@ -559,6 +560,177 @@ class TestSSRFValidation:
         with pytest.raises(HTTPException) as exc_info:
             openai_module._validate_image_url("http://nonexistent.invalid/img.jpg")
         assert exc_info.value.status_code == 400
+
+
+class TestResponseFormat:
+    """Unit tests for FR-8: response_format support (AC-10)."""
+
+    def _base_request(self, response_format=None):
+        return OpenAIChatCompletionRequest(
+            model="1",
+            messages=[OpenAIMessage(role="user", content="Hello")],
+            response_format=response_format,
+        )
+
+    @pytest.mark.asyncio
+    async def test_json_object_injects_json_instruction(self, mocker):
+        """response_format json_object must inject a JSON instruction into the message."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+
+        req = self._base_request(response_format={"type": "json_object"})
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert "[System Instruction]" in kwargs["message"]
+        assert "JSON" in kwargs["message"]
+
+    @pytest.mark.asyncio
+    async def test_json_schema_injects_schema_string(self, mocker):
+        """response_format json_schema must inject the schema JSON into the message."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+
+        schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+        req = self._base_request(response_format={"type": "json_schema", "json_schema": schema})
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert "[System Instruction]" in kwargs["message"]
+        assert '"answer"' in kwargs["message"]
+
+    @pytest.mark.asyncio
+    async def test_text_format_no_injection(self, mocker):
+        """response_format text must not inject any system instruction."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+
+        req = self._base_request(response_format={"type": "text"})
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert "[System Instruction]" not in kwargs["message"]
+
+    @pytest.mark.asyncio
+    async def test_omitted_response_format_no_injection(self, mocker):
+        """Omitting response_format must not inject any system instruction."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+
+        req = self._base_request(response_format=None)
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert "[System Instruction]" not in kwargs["message"]
+
+    @pytest.mark.asyncio
+    async def test_unknown_format_type_no_injection(self, mocker):
+        """Unknown response_format type must be silently ignored (no injection)."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        exec_mock = _mock_execution_service(mocker)
+
+        req = self._base_request(response_format={"type": "audio"})
+        await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        kwargs = exec_mock.execute_agent_chat_with_file_refs.call_args.kwargs
+        assert "[System Instruction]" not in kwargs["message"]
+
+
+class TestAgentOutputParserIntegration:
+    """Tests for agent output_parser_id → response_format reflection (agent-enforced JSON)."""
+
+    @pytest.mark.asyncio
+    async def test_dict_response_serialized_as_json_string(self, mocker):
+        """When agent has output_parser_id and response is a dict, content must be valid JSON."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker, output_parser_id=42)
+        _mock_execution_service(
+            mocker,
+            result={
+                "response": {"name": "Alice", "age": 30},
+                "conversation_id": None,
+                "metadata": {"usage": {"prompt_tokens": 5, "completion_tokens": 10}},
+            },
+        )
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[OpenAIMessage(role="user", content="Give me JSON")],
+        )
+        result = await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        content = result.choices[0].message.content
+        # Must be valid JSON (not Python repr like {'name': 'Alice'})
+        parsed = json.loads(content)
+        assert parsed == {"name": "Alice", "age": 30}
+        assert result.response_format == {"type": "json_object"}
+
+    @pytest.mark.asyncio
+    async def test_response_format_set_for_string_json_response(self, mocker):
+        """When agent has output_parser_id and response is already a JSON string, response_format is set."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker, output_parser_id=7)
+        _mock_execution_service(
+            mocker,
+            result={
+                "response": '{"status": "ok"}',
+                "conversation_id": None,
+                "metadata": {},
+            },
+        )
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[OpenAIMessage(role="user", content="Check")],
+        )
+        result = await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        assert result.response_format == {"type": "json_object"}
+        assert result.choices[0].message.content == '{"status": "ok"}'
+
+    @pytest.mark.asyncio
+    async def test_no_response_format_without_output_parser(self, mocker):
+        """When agent has no output_parser_id, response_format is None in the response."""
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker, output_parser_id=None)
+        _mock_execution_service(mocker)
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[OpenAIMessage(role="user", content="Hello")],
+        )
+        result = await openai_module.chat_completions(
+            app_id="1", request=req, api_key="key", db=MagicMock()
+        )
+
+        assert result.response_format is None
 
 
 class TestNewContentPartTypes:
