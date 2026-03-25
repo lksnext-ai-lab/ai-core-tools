@@ -1,13 +1,40 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from models.tier_config import TierConfig
 from datetime import datetime
 from utils.logger import get_logger
+import yaml
+import os
 
 logger = get_logger(__name__)
 
-# Hardcoded defaults used when no DB row exists for a given tier/resource_type
-_HARDCODED_DEFAULTS = {
+
+def _load_tier_defaults() -> Dict[tuple, int]:
+    """Load tier configuration defaults from system_defaults.yaml."""
+    defaults_file = os.path.join(os.path.dirname(__file__), '..', 'system_defaults.yaml')
+    try:
+        with open(defaults_file, 'r') as f:
+            config = yaml.safe_load(f) or {}
+        
+        tier_config = config.get('tier_config', {})
+        defaults = {}
+        
+        # Convert nested dict to tuple-based dict for backward compatibility
+        for tier, resources in tier_config.items():
+            for resource_type, limit_value in resources.items():
+                defaults[(tier, resource_type)] = limit_value
+        
+        return defaults
+    except Exception as e:
+        logger.warning(f"Failed to load tier defaults from YAML: {e}. Using fallback.")
+        return {}
+
+
+# Load defaults from system_defaults.yaml on module import
+_TIER_DEFAULTS = _load_tier_defaults()
+
+# Fallback defaults if YAML loading fails (for backward compatibility)
+_FALLBACK_DEFAULTS = {
     ('free', 'apps'): 1,
     ('free', 'agents'): 3,
     ('free', 'silos'): 2,
@@ -27,9 +54,12 @@ _HARDCODED_DEFAULTS = {
     ('pro', 'silos'): 20,
     ('pro', 'skills'): 10,
     ('pro', 'mcp_servers'): 5,
-    ('pro', 'collaborators'): -1,  # -1 = unlimited
-    ('pro', 'llm_calls'): -1,  # -1 = unlimited
+    ('pro', 'collaborators'): -1,
+    ('pro', 'llm_calls'): -1,
 }
+
+# Use loaded defaults if available, otherwise fallback
+_HARDCODED_DEFAULTS = _TIER_DEFAULTS if _TIER_DEFAULTS else _FALLBACK_DEFAULTS
 
 
 class TierConfigRepository:
