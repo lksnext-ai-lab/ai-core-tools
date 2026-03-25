@@ -378,7 +378,7 @@ async def reset_setting(
 
 from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
 from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
-from schemas.system_ai_service_schemas import SystemAIServiceCreate, SystemAIServiceRead, SystemAIServiceUpdate
+from schemas.ai_service_schemas import AIServiceListItemSchema, CreateUpdateAIServiceSchema
 from typing import List
 
 
@@ -484,49 +484,78 @@ async def update_tier_config(
     return {"id": row.id, "tier": row.tier, "resource_type": row.resource_type, "limit_value": row.limit_value}
 
 
-@router.get("/saas/system-ai-services", response_model=List[SystemAIServiceRead])
+@router.get("/system-ai-services", response_model=List[AIServiceListItemSchema])
 async def list_system_ai_services(
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """List all platform-level AI Services (OMNIADMIN only)."""
-    from services.system_ai_service_service import SystemAIServiceService
-    return SystemAIServiceService.get_all(db)
+    """List all platform-level AI Services (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceService
+    services = AIServiceRepository.get_system_services(db)
+    return [AIServiceService._to_list_item(svc, is_system=True) for svc in services]
 
 
-@router.post("/saas/system-ai-services", response_model=SystemAIServiceRead, status_code=201)
+@router.post("/system-ai-services", response_model=AIServiceListItemSchema, status_code=201)
 async def create_system_ai_service(
-    body: SystemAIServiceCreate,
+    body: CreateUpdateAIServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Create a new platform-level AI Service (OMNIADMIN only)."""
-    from services.system_ai_service_service import SystemAIServiceService
-    return SystemAIServiceService.create(
-        db, name=body.name, provider=body.provider, model=body.model,
-        api_key_encrypted=body.api_key_encrypted, is_active=body.is_active
-    )
+    """Create a new platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
+    from models.ai_service import AIService
+    from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceService
+    from datetime import datetime
+
+    svc = AIService()
+    svc.app_id = None  # NULL = system/platform service
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name  # model name stored in description
+    svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc.create_date = datetime.now()
+    svc = AIServiceRepository.create(db, svc)
+    return AIServiceService._to_list_item(svc, is_system=True)
 
 
-@router.put("/saas/system-ai-services/{service_id}", response_model=SystemAIServiceRead)
+@router.put("/system-ai-services/{service_id}", response_model=AIServiceListItemSchema)
 async def update_system_ai_service(
     service_id: int,
-    body: SystemAIServiceUpdate,
+    body: CreateUpdateAIServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Update a platform-level AI Service (OMNIADMIN only)."""
-    from services.system_ai_service_service import SystemAIServiceService
-    updates = body.model_dump(exclude_none=True)
-    return SystemAIServiceService.update(db, service_id, **updates)
+    """Update a platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceService
+    from utils.secret_utils import is_masked_key
+
+    svc = AIServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System AI service not found")
+
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name
+    if not is_masked_key(body.api_key):
+        svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc = AIServiceRepository.update(db, svc)
+    return AIServiceService._to_list_item(svc, is_system=True)
 
 
-@router.delete("/saas/system-ai-services/{service_id}", status_code=204)
+@router.delete("/system-ai-services/{service_id}", status_code=204)
 async def delete_system_ai_service(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Delete a platform-level AI Service (OMNIADMIN only)."""
-    from services.system_ai_service_service import SystemAIServiceService
-    SystemAIServiceService.delete(db, service_id)
+    """Delete a platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.ai_service_repository import AIServiceRepository
+
+    svc = AIServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System AI service not found")
+    AIServiceRepository.delete(db, svc)

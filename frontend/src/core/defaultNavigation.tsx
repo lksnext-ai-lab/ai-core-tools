@@ -178,7 +178,6 @@ export const defaultNavigation: NavigationConfig = {
       icon: <Cpu size={16} />,
       section: 'admin',
       adminOnly: true,
-      saasOnly: true
     },
     {
       path: '/admin/tier-config',

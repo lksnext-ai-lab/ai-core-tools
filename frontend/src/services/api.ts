@@ -1987,37 +1987,37 @@ class ApiService {
   }
 
   async getSystemAIServices() {
-    return this.request('/internal/admin/saas/system-ai-services');
+    return this.request('/internal/admin/system-ai-services');
   }
 
   async createSystemAIService(data: {
     name: string;
     provider: string;
-    model: string;
-    api_key_encrypted?: string;
-    is_active?: boolean;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
   }) {
-    return this.request('/internal/admin/saas/system-ai-services', {
+    return this.request('/internal/admin/system-ai-services', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSystemAIService(serviceId: number, data: Partial<{
+  async updateSystemAIService(serviceId: number, data: {
     name: string;
     provider: string;
-    model: string;
-    api_key_encrypted: string;
-    is_active: boolean;
-  }>) {
-    return this.request(`/internal/admin/saas/system-ai-services/${serviceId}`, {
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteSystemAIService(serviceId: number) {
-    return this.request(`/internal/admin/saas/system-ai-services/${serviceId}`, {
+    return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
       method: 'DELETE',
     });
   }
