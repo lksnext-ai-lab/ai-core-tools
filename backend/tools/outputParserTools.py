@@ -88,7 +88,8 @@ def get_type_from_string(type_str: str, list_item_type: str = None, list_item_pa
         'int': int,
         'float': float,
         'bool': bool,
-        'date': date
+        'date': date,
+        'dict': Dict[str, Any]
     }
     
     if type_str == 'parser':

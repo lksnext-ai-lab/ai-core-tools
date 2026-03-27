@@ -60,7 +60,7 @@ class ExportOutputParserFieldSchema(BaseModel):
     """Output Parser field export schema"""
 
     name: str
-    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'parser'
+    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'dict', 'parser'
     description: str
     parser_name: Optional[str] = None  # For type='parser' (name-based reference)
     list_item_type: Optional[str] = None  # For type='list'
