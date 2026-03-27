@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from schemas.embedding_service_schemas import EmbeddingServiceOptionSchema
 
 
 class SiloListItemSchema(BaseModel):
@@ -31,7 +32,7 @@ class SiloDetailSchema(BaseModel):
     embedding_service_id: Optional[int] = None
     # Form data
     output_parsers: List[Dict[str, Any]]
-    embedding_services: List[Dict[str, Any]]
+    embedding_services: List[EmbeddingServiceOptionSchema]
     vector_db_options: List[Dict[str, Any]] = []
     # Metadata definition fields for playground
     metadata_fields: Optional[List[Dict[str, Any]]] = None

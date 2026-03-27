@@ -24,3 +24,23 @@
 **Notes**: —
 
 ---
+
+### Step 03 — Add `is_system` field to `EmbeddingServiceListItemSchema` and new `EmbeddingServiceOptionSchema`
+**Started**: 2026-03-27T00:02:00
+**Completed**: 2026-03-27T00:03:00
+**Files changed**:
+- `backend/schemas/embedding_service_schemas.py` — added `is_system: bool = False` to `EmbeddingServiceListItemSchema`; added `EmbeddingServiceOptionSchema` class at bottom
+**Test result**: passed
+**Notes**: —
+
+---
+
+### Step 04 — Update `SiloDetailSchema` to use `EmbeddingServiceOptionSchema`
+**Started**: 2026-03-27T00:03:00
+**Completed**: 2026-03-27T00:04:00
+**Files changed**:
+- `backend/schemas/silo_schemas.py` — added import of `EmbeddingServiceOptionSchema`; changed `embedding_services` field type from `List[Dict[str, Any]]` to `List[EmbeddingServiceOptionSchema]`
+**Test result**: passed
+**Notes**: —
+
+---

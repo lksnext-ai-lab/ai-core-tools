@@ -71,7 +71,7 @@ The reference implementation to follow throughout is:
      ```
   `EmbeddingServiceOptionSchema` will be used in `SiloDetailSchema` to replace the current untyped `Dict[str, Any]` for the `embedding_services` list.
 - **Acceptance**: `python -c "from schemas.embedding_service_schemas import EmbeddingServiceListItemSchema, EmbeddingServiceOptionSchema; print(EmbeddingServiceListItemSchema.model_fields)"` shows `is_system` field.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -90,7 +90,7 @@ The reference implementation to follow throughout is:
   ```
   No other changes to this file.
 - **Acceptance**: `python -c "from schemas.silo_schemas import SiloDetailSchema; import inspect; print(SiloDetailSchema.model_fields['embedding_services'])"` shows `EmbeddingServiceOptionSchema` as the item type.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
