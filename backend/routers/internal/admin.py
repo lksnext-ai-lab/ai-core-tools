@@ -379,6 +379,11 @@ async def reset_setting(
 from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
 from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
 from schemas.ai_service_schemas import AIServiceListItemSchema, CreateUpdateAIServiceSchema
+from schemas.embedding_service_schemas import (
+    EmbeddingServiceListItemSchema,
+    CreateUpdateEmbeddingServiceSchema,
+    SystemEmbeddingServiceImpactSchema,
+)
 from typing import List
 
 
@@ -559,3 +564,126 @@ async def delete_system_ai_service(
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail="System AI service not found")
     AIServiceRepository.delete(db, svc)
+
+
+@router.get("/system-embedding-services", response_model=List[EmbeddingServiceListItemSchema])
+async def list_system_embedding_services(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all platform-level Embedding Services (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from services.embedding_service_service import EmbeddingServiceService
+    services = EmbeddingServiceRepository.get_system_services(db)
+    return [EmbeddingServiceService._to_list_item(svc, is_system=True) for svc in services]
+
+
+@router.post("/system-embedding-services", response_model=EmbeddingServiceListItemSchema, status_code=201)
+async def create_system_embedding_service(
+    body: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create a new platform-level Embedding Service (OMNIADMIN only)."""
+    from models.embedding_service import EmbeddingService
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from services.embedding_service_service import EmbeddingServiceService
+    from datetime import datetime
+
+    svc = EmbeddingService()
+    svc.app_id = None  # NULL = system/platform service
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name  # model name stored in description
+    svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc.create_date = datetime.now()
+    svc = EmbeddingServiceRepository.create(db, svc)
+    return EmbeddingServiceService._to_list_item(svc, is_system=True)
+
+
+@router.put("/system-embedding-services/{service_id}", response_model=EmbeddingServiceListItemSchema)
+async def update_system_embedding_service(
+    service_id: int,
+    body: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a platform-level Embedding Service (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from services.embedding_service_service import EmbeddingServiceService
+    from utils.secret_utils import is_masked_key
+
+    svc = EmbeddingServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System embedding service not found")
+
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name
+    if not is_masked_key(body.api_key):
+        svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc = EmbeddingServiceRepository.update(db, svc)
+    return EmbeddingServiceService._to_list_item(svc, is_system=True)
+
+
+@router.get("/system-embedding-services/{service_id}/impact", response_model=SystemEmbeddingServiceImpactSchema)
+async def get_system_embedding_service_impact(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get deletion impact for a platform-level Embedding Service (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from schemas.embedding_service_schemas import AffectedSiloSchema
+    from models.silo import Silo
+    from models.app import App
+
+    svc = EmbeddingServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System embedding service not found")
+
+    rows = db.query(Silo, App).join(App, Silo.app_id == App.app_id).filter(
+        Silo.embedding_service_id == service_id
+    ).all()
+
+    affected_silos = [
+        AffectedSiloSchema(
+            silo_id=silo.silo_id,
+            silo_name=silo.name,
+            app_id=app.app_id,
+            app_name=app.name,
+        )
+        for silo, app in rows
+    ]
+    affected_apps_count = len({s.app_id for s in affected_silos})
+
+    return SystemEmbeddingServiceImpactSchema(
+        service_id=svc.service_id,
+        service_name=svc.name,
+        affected_silos_count=len(affected_silos),
+        affected_apps_count=affected_apps_count,
+        affected_silos=affected_silos,
+    )
+
+
+@router.delete("/system-embedding-services/{service_id}", status_code=204)
+async def delete_system_embedding_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a platform-level Embedding Service (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from models.silo import Silo
+
+    svc = EmbeddingServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System embedding service not found")
+
+    # Nullify references in silos before deleting
+    db.query(Silo).filter(Silo.embedding_service_id == service_id).update(
+        {Silo.embedding_service_id: None}, synchronize_session='fetch'
+    )
+    EmbeddingServiceRepository.delete(db, svc)

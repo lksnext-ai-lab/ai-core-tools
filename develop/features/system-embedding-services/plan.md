@@ -230,7 +230,7 @@ The reference implementation to follow throughout is:
       affected_silos: List[AffectedSiloSchema]
   ```
 - **Acceptance**: The classes can be imported from `schemas.embedding_service_schemas` without error.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -290,7 +290,7 @@ The reference implementation to follow throughout is:
   ```
   Then `EmbeddingServiceRepository.delete(db, svc)`.
 - **Acceptance**: All 5 endpoints appear at `GET /internal/admin/system-embedding-services` (and sub-paths) in `http://localhost:8000/docs/internal`. Each returns the correct status code. A 404 is returned when trying to update/delete an app-scoped service via these endpoints.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 

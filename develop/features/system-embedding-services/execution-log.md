@@ -25,6 +25,26 @@
 
 ---
 
+### Step 09 — Add admin schemas for system embedding service impact response
+**Started**: 2026-03-27T00:08:00
+**Completed**: 2026-03-27T00:09:00
+**Files changed**:
+- `backend/schemas/embedding_service_schemas.py` — added `AffectedSiloSchema` and `SystemEmbeddingServiceImpactSchema`
+**Test result**: passed
+**Notes**: —
+
+---
+
+### Step 10 — Add system embedding service admin CRUD endpoints to `admin.py`
+**Started**: 2026-03-27T00:09:00
+**Completed**: 2026-03-27T00:10:00
+**Files changed**:
+- `backend/routers/internal/admin.py` — added imports for embedding service schemas; added 5 endpoints: list, create, update, impact, delete
+**Test result**: passed (router loads, 23 routes registered)
+**Notes**: `impact` endpoint uses GET before DELETE route to avoid FastAPI route ordering ambiguity with `{service_id}` path parameter. Imports added at the SaaS section alongside AI service schema imports.
+
+---
+
 ### Step 07 — Include system embedding services in silo form data
 **Started**: 2026-03-27T00:06:00
 **Completed**: 2026-03-27T00:07:00
