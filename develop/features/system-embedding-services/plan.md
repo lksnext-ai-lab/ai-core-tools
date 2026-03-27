@@ -313,7 +313,7 @@ The reference implementation to follow throughout is:
   - Setup: Create one app-scoped and one system (`app_id=None`) `EmbeddingService`. Flush.
   - Assert: `EmbeddingServiceRepository.get_by_app_id(db, fake_app.app_id)` returns exactly one service (the app-scoped one), and the system service is not in the result.
 - **Acceptance**: `pytest tests/integration/test_embedding_service_repository.py -v` passes (2/2 tests green).
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -342,7 +342,7 @@ The reference implementation to follow throughout is:
 
   **Test 8 — `test_silo_form_includes_system_embedding_services`**: Create a system embedding service and an app-scoped one. GET `/internal/apps/{fake_app.app_id}/silos/0` (new silo form) — note the silo detail endpoint for `silo_id=0` returns empty embedding_services (the form fetches them separately). Instead GET a real silo's detail. Create a silo with `app_id=fake_app.app_id`, then GET `/internal/apps/{fake_app.app_id}/silos/{silo_id}`. Assert `embedding_services` contains both, with correct `is_system` flags.
 - **Acceptance**: `pytest tests/integration/test_admin_system_embedding_services.py -v` passes (8/8 green).
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 

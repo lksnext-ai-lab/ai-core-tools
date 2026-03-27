@@ -25,6 +25,26 @@
 
 ---
 
+### Step 11 — Integration tests: EmbeddingServiceRepository.get_system_services
+**Started**: 2026-03-27T00:10:00
+**Completed**: 2026-03-27T00:11:00
+**Files changed**:
+- `tests/integration/test_embedding_service_repository.py` — created (2 tests)
+**Test result**: passed (2/2 green)
+**Notes**: Test DB runs on port 5434 (5433 occupied by fss_postgres). Tests pass with `TEST_DATABASE_URL` override.
+
+---
+
+### Step 12 — Integration tests: admin system embedding service endpoints
+**Started**: 2026-03-27T00:11:00
+**Completed**: 2026-03-27T00:12:00
+**Files changed**:
+- `tests/integration/test_admin_system_embedding_services.py` — created (8 tests)
+**Test result**: passed (8/8 green)
+**Notes**: `admin_headers` fixture uses `monkeypatch.setenv("AICT_OMNIADMINS", fake_user.email)` — works because `is_omniadmin` reads `os.getenv` at call time. `langchain_pg_collection` missing in test DB is expected (no pgvector extension tables) — silo service handles the error gracefully.
+
+---
+
 ### Step 09 — Add admin schemas for system embedding service impact response
 **Started**: 2026-03-27T00:08:00
 **Completed**: 2026-03-27T00:09:00
