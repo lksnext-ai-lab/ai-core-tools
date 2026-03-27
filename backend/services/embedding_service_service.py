@@ -14,26 +14,27 @@ from datetime import datetime
 class EmbeddingServiceService:
 
     @staticmethod
+    def _to_list_item(service: "EmbeddingService", is_system: bool = False) -> EmbeddingServiceListItemSchema:
+        """Convert an EmbeddingService ORM instance to a list item schema."""
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
+        return EmbeddingServiceListItemSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",
+            created_at=service.create_date,
+            needs_api_key=needs_api_key,
+            is_system=is_system,
+        )
+
+    @staticmethod
     def get_embedding_services_list(db: Session, app_id: int) -> List[EmbeddingServiceListItemSchema]:
         """Get list of embedding services for an app"""
         embedding_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-        
-        result = []
-        for service in embedding_services:
-            needs_api_key = (
-                not service.api_key
-                or service.api_key == PLACEHOLDER_API_KEY
-            )
-            result.append(EmbeddingServiceListItemSchema(
-                service_id=service.service_id,
-                name=service.name,
-                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                model_name=service.description or "",
-                created_at=service.create_date,
-                needs_api_key=needs_api_key,
-            ))
-        
-        return result
+        return [EmbeddingServiceService._to_list_item(svc, is_system=False) for svc in embedding_services]
 
     @staticmethod
     def get_embedding_service_detail(db: Session, app_id: int, service_id: int) -> Optional[EmbeddingServiceDetailSchema]:

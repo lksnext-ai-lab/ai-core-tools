@@ -25,6 +25,26 @@
 
 ---
 
+### Step 05 — Add `get_system_services` to `EmbeddingServiceRepository`
+**Started**: 2026-03-27T00:04:00
+**Completed**: 2026-03-27T00:05:00
+**Files changed**:
+- `backend/repositories/embedding_service_repository.py` — added `get_system_services` static method
+**Test result**: passed (method importable)
+**Notes**: —
+
+---
+
+### Step 06 — Add `_to_list_item` helper to `EmbeddingServiceService`
+**Started**: 2026-03-27T00:05:00
+**Completed**: 2026-03-27T00:06:00
+**Files changed**:
+- `backend/services/embedding_service_service.py` — added `_to_list_item` static method; refactored `get_embedding_services_list` to use it
+**Test result**: passed
+**Notes**: —
+
+---
+
 ### Step 03 — Add `is_system` field to `EmbeddingServiceListItemSchema` and new `EmbeddingServiceOptionSchema`
 **Started**: 2026-03-27T00:02:00
 **Completed**: 2026-03-27T00:03:00

@@ -108,7 +108,7 @@ The reference implementation to follow throughout is:
   ```
   No other changes to this file.
 - **Acceptance**: The method can be imported and called against the test DB without error.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -138,7 +138,7 @@ The reference implementation to follow throughout is:
   ```
   Also update `get_embedding_services_list` to use `_to_list_item` instead of the inline dict construction (refactor only — no behavior change for app-scoped services, `is_system=False`).
 - **Acceptance**: `EmbeddingServiceService._to_list_item` exists and the existing `get_embedding_services_list` still returns the same schema type.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
