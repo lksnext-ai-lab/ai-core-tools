@@ -22,6 +22,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
     { value: 'float', name: 'Float' },
     { value: 'bool', name: 'Boolean' },
     { value: 'date', name: 'Date' },
+    { value: 'dict', name: 'Dictionary (JSON Object)' },
     { value: 'list', name: 'List' },
     { value: 'parser', name: 'Parser Reference' }
   ];
@@ -79,6 +80,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
     { value: 'float', name: 'Float' },
     { value: 'bool', name: 'Boolean' },
     { value: 'date', name: 'Date' },
+    { value: 'dict', name: 'Dictionary (JSON Object)' },
     { value: 'parser', name: 'Parser Reference' }
   ];
 
