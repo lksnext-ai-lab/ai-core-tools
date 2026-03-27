@@ -97,9 +97,11 @@ class SiloRepository:
         output_parsers = SiloRepository.get_output_parsers_by_app_id(app_id, db)
         silo = SiloRepository.get_by_id(silo_id, db) if silo_id != 0 else None
         embedding_services = SiloRepository.get_embedding_services_by_app_id(app_id, db)
-        
+        system_embedding_services = EmbeddingServiceRepository.get_system_services(db)
+
         return {
             'output_parsers': output_parsers,
             'silo': silo,
-            'embedding_services': embedding_services
+            'embedding_services': embedding_services,
+            'system_embedding_services': system_embedding_services,
         }

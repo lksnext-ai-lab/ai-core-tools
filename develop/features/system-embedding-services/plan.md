@@ -180,7 +180,7 @@ The reference implementation to follow throughout is:
 
   **Note**: `EmbeddingServicesPage` calls `apiService.getEmbeddingServices(appId)` which hits the existing `GET /internal/apps/{app_id}/settings/embedding-services` endpoint. That endpoint calls `EmbeddingServiceService.get_embedding_services_list` which only returns app-scoped services. The `SiloForm` also calls `apiService.getEmbeddingServices`. These two paths must be kept consistent — both must include system services. The existing embedding services list endpoint must also be updated (see Step 08).
 - **Acceptance**: `GET /internal/apps/{app_id}/silos/{silo_id}` response's `embedding_services` array contains both app-scoped (no `is_system`) and system services (with `is_system: true`).
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -203,7 +203,7 @@ The reference implementation to follow throughout is:
   ```
   This is the method called by `GET /internal/apps/{app_id}/settings/embedding-services` (used by both `EmbeddingServicesPage` and `SiloForm.loadFormData()`). After this change, system services will appear in both places. The `EmbeddingServicesPage` must show system services as read-only (handled in Step 15).
 - **Acceptance**: `GET /internal/apps/{app_id}/settings/embedding-services` returns both app-scoped and system embedding services, each with an `is_system` flag.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 

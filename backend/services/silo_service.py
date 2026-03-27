@@ -1148,7 +1148,11 @@ class SiloService:
             logger.info(f"Getting form data for app_id: {app_id}")
             form_data = SiloRepository.get_form_data_for_silo(app_id, 0, db)  # We already have the silo
             output_parsers = [{"parser_id": p.parser_id, "name": p.name} for p in form_data['output_parsers']]
-            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in form_data['embedding_services']]
+            from schemas.embedding_service_schemas import EmbeddingServiceOptionSchema
+            embedding_services = (
+                [EmbeddingServiceOptionSchema(service_id=s.service_id, name=s.name, provider=s.provider.value if hasattr(s.provider, 'value') else s.provider, is_system=False) for s in form_data['embedding_services']]
+                + [EmbeddingServiceOptionSchema(service_id=s.service_id, name=s.name, provider=s.provider.value if hasattr(s.provider, 'value') else s.provider, is_system=True) for s in form_data.get('system_embedding_services', [])]
+            )
             logger.info(f"Found {len(output_parsers)} parsers and {len(embedding_services)} embedding services")
         except Exception as e:
             logger.error(f"Error getting form data: {str(e)}")

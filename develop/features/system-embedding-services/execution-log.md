@@ -25,6 +25,27 @@
 
 ---
 
+### Step 07 — Include system embedding services in silo form data
+**Started**: 2026-03-27T00:06:00
+**Completed**: 2026-03-27T00:07:00
+**Files changed**:
+- `backend/repositories/silo_repository.py` — added `system_embedding_services` fetch in `get_form_data_for_silo`, returned in dict
+- `backend/services/silo_service.py` — updated `get_silo_detail` to build `embedding_services` as `EmbeddingServiceOptionSchema` list combining app-scoped + system
+**Test result**: passed (imports clean)
+**Notes**: —
+
+---
+
+### Step 08 — Update `EmbeddingServiceService.get_embedding_services_list` to include system services
+**Started**: 2026-03-27T00:07:00
+**Completed**: 2026-03-27T00:08:00
+**Files changed**:
+- `backend/services/embedding_service_service.py` — updated `get_embedding_services_list` to fetch and append system services
+**Test result**: passed
+**Notes**: —
+
+---
+
 ### Step 05 — Add `get_system_services` to `EmbeddingServiceRepository`
 **Started**: 2026-03-27T00:04:00
 **Completed**: 2026-03-27T00:05:00

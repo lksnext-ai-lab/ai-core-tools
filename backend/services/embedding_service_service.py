@@ -32,9 +32,13 @@ class EmbeddingServiceService:
 
     @staticmethod
     def get_embedding_services_list(db: Session, app_id: int) -> List[EmbeddingServiceListItemSchema]:
-        """Get list of embedding services for an app"""
-        embedding_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-        return [EmbeddingServiceService._to_list_item(svc, is_system=False) for svc in embedding_services]
+        """Get list of embedding services for an app, plus platform-level system services."""
+        app_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+        system_services = EmbeddingServiceRepository.get_system_services(db)
+
+        result = [EmbeddingServiceService._to_list_item(svc, is_system=False) for svc in app_services]
+        result += [EmbeddingServiceService._to_list_item(svc, is_system=True) for svc in system_services]
+        return result
 
     @staticmethod
     def get_embedding_service_detail(db: Session, app_id: int, service_id: int) -> Optional[EmbeddingServiceDetailSchema]:
