@@ -99,9 +99,13 @@ class DomainService:
             List of embedding service dictionaries
         """
         try:
-            embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
-            
+            app_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+            system_services = EmbeddingServiceRepository.get_system_services(db)
+            embedding_services = (
+                [{"service_id": s.service_id, "name": s.name, "is_system": False} for s in app_services]
+                + [{"service_id": s.service_id, "name": s.name, "is_system": True} for s in system_services]
+            )
+
             logger.debug(f"Retrieved {len(embedding_services)} embedding services for app {app_id}")
             return embedding_services
         except Exception as e:
