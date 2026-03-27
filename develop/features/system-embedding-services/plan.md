@@ -395,7 +395,7 @@ The reference implementation to follow throughout is:
   ```
   Follow the exact parameter and return type style of the existing `getSystemAIServices` / `deleteSystemAIService` methods above them.
 - **Acceptance**: TypeScript compilation (`npm run build:lib`) succeeds without errors. The five methods are callable from other frontend files.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -421,7 +421,7 @@ The reference implementation to follow throughout is:
   - Page title: "System Embedding Services". Loading and empty state messages adapted accordingly.
   - The `EmbeddingServiceForm` expects `embeddingService` prop of type matching `EmbeddingService` in that file. For the system page, when creating, pass `null`; when editing, build a compatible object from the `SystemEmbeddingService` state (set `api_key: ""`, `base_url: ""`, `created_at: ""`, `available_providers: []`).
 - **Acceptance**: The page renders without TypeScript errors. `npm run build:lib` passes.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -437,7 +437,7 @@ The reference implementation to follow throughout is:
   4. The "Add Embedding Service" button and import functionality remain unchanged — they only create app-scoped services.
   No other changes to business logic or the `useServicesManager` hook.
 - **Acceptance**: System services appear in the list with the badge and without edit/delete actions. App-scoped services behave exactly as before.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -467,7 +467,7 @@ The reference implementation to follow throughout is:
 
   4. **Auto-select logic**: The current code auto-selects the only service if `servicesResponse.length === 1`. After this change, system services are included. If there is only one service total (even if system), auto-select it. No change needed to this logic.
 - **Acceptance**: In the silo form, system embedding services appear with `[System]` prefix in the dropdown. App-scoped services show without prefix. Selecting either type works normally.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -503,7 +503,7 @@ The reference implementation to follow throughout is:
   } />
   ```
 - **Acceptance**: `npm run build:lib` succeeds. Navigating to `/admin/system-embedding-services` renders the new page. The nav link appears in the admin section for OMNIADMIN users.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 

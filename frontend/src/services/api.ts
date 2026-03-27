@@ -2022,6 +2022,46 @@ class ApiService {
     });
   }
 
+  async getSystemEmbeddingServices() {
+    return this.request('/internal/admin/system-embedding-services');
+  }
+
+  async createSystemEmbeddingService(data: {
+    name: string;
+    provider: string;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request('/internal/admin/system-embedding-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemEmbeddingService(serviceId: number, data: {
+    name: string;
+    provider: string;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemEmbeddingServiceImpact(serviceId: number) {
+    return this.request(`/internal/admin/system-embedding-services/${serviceId}/impact`);
+  }
+
+  async deleteSystemEmbeddingService(serviceId: number) {
+    return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== UTILITY METHODS ====================
 }
 

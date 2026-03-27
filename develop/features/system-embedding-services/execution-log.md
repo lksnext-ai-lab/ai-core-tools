@@ -45,6 +45,57 @@
 
 ---
 
+### Step 13 — Add system embedding service API methods to `api.ts`
+**Started**: 2026-03-27T00:13:00
+**Completed**: 2026-03-27T00:14:00
+**Files changed**:
+- `frontend/src/services/api.ts` — added 5 methods: getSystemEmbeddingServices, createSystemEmbeddingService, updateSystemEmbeddingService, getSystemEmbeddingServiceImpact, deleteSystemEmbeddingService
+**Test result**: passed (Vite bundle builds successfully)
+**Notes**: —
+
+---
+
+### Step 14 — Create `SystemEmbeddingServicesPage.tsx`
+**Started**: 2026-03-27T00:14:00
+**Completed**: 2026-03-27T00:15:00
+**Files changed**:
+- `frontend/src/pages/admin/SystemEmbeddingServicesPage.tsx` — created
+**Test result**: passed (bundle builds, no new TS errors)
+**Notes**: Pre-existing TS error in `SystemAIServicesPage.tsx` (`aiService={editingService}` missing `created_at`/`available_providers`) exists in baseline commit a1c56af — not introduced by this feature.
+
+---
+
+### Step 15 — Update `EmbeddingServicesPage.tsx` to show system services as read-only
+**Started**: 2026-03-27T00:15:00
+**Completed**: 2026-03-27T00:16:00
+**Files changed**:
+- `frontend/src/pages/settings/EmbeddingServicesPage.tsx` — added `is_system?: boolean` to interface; Name column shows System badge; Actions column renders read-only indicator for system services
+**Test result**: passed
+**Notes**: —
+
+---
+
+### Step 16 — Update `SiloForm.tsx` to show system services with visual distinction
+**Started**: 2026-03-27T00:16:00
+**Completed**: 2026-03-27T00:17:00
+**Files changed**:
+- `frontend/src/components/forms/SiloForm.tsx` — added `is_system?: boolean` to Silo interface; dropdown option shows `[System]` prefix for system services
+**Test result**: passed
+**Notes**: —
+
+---
+
+### Step 17 — Wire `SystemEmbeddingServicesPage` into navigation and routes
+**Started**: 2026-03-27T00:17:00
+**Completed**: 2026-03-27T00:18:00
+**Files changed**:
+- `frontend/src/core/defaultNavigation.tsx` — added `/admin/system-embedding-services` nav entry after system-ai-services
+- `frontend/src/core/ExtensibleBaseApp.tsx` — added import + route for SystemEmbeddingServicesPage
+**Test result**: passed (Vite bundle builds)
+**Notes**: —
+
+---
+
 ### Step 09 — Add admin schemas for system embedding service impact response
 **Started**: 2026-03-27T00:08:00
 **Completed**: 2026-03-27T00:09:00

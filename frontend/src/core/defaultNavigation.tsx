@@ -180,6 +180,13 @@ export const defaultNavigation: NavigationConfig = {
       adminOnly: true,
     },
     {
+      path: '/admin/system-embedding-services',
+      name: 'System Embedding Services',
+      icon: <Brain size={16} />,
+      section: 'admin',
+      adminOnly: true,
+    },
+    {
       path: '/admin/tier-config',
       name: 'Tier Config',
       icon: <Sliders size={16} />,

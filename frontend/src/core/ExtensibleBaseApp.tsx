@@ -53,6 +53,7 @@ import PasswordResetPage from '../pages/PasswordResetPage';
 import SubscriptionPage from '../pages/SubscriptionPage';
 import SaasUserListPage from '../pages/admin/SaasUserListPage';
 import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
+import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
 import MCPServersPage from '../pages/MCPServersPage';
@@ -385,6 +386,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/system-ai-services" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemAIServicesPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-embedding-services" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemEmbeddingServicesPage />
                   </AdminLayoutRoute>
                 } />
 
