@@ -47,7 +47,7 @@ The reference implementation to follow throughout is:
   ```
   No other changes to this file.
 - **Acceptance**: `python -c "from models.embedding_service import EmbeddingService; print(EmbeddingService.__table__.c.app_id.nullable)"` prints `True`.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 

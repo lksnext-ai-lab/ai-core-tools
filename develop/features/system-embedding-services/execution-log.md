@@ -14,3 +14,13 @@
 **Notes**: Downgrade safety check uses Python-level Exception (not DB assertion), consistent with saas002 pattern.
 
 ---
+
+### Step 02 — Make `EmbeddingService.app_id` nullable in the SQLAlchemy model
+**Started**: 2026-03-27T00:00:00
+**Completed**: 2026-03-27T00:01:00
+**Files changed**:
+- `backend/models/embedding_service.py` — changed `nullable=False` to `nullable=True`, added inline comment
+**Test result**: passed (`EmbeddingService.__table__.c.app_id.nullable` prints `True`)
+**Notes**: —
+
+---

@@ -14,5 +14,5 @@ class EmbeddingService(BaseService):
     __tablename__ = 'embedding_service'
     
     provider = Column(String(45), nullable=False)
-    app_id = Column(Integer, ForeignKey('App.app_id'), nullable=False)
+    app_id = Column(Integer, ForeignKey('App.app_id'), nullable=True)  # NULL = system/platform service
     app = relationship('App', back_populates='embedding_services') 
