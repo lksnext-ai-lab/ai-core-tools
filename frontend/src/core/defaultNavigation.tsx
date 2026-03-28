@@ -16,7 +16,10 @@ import {
   BarChart2,
   Info,
   KeyRound,
-  FileText
+  FileText,
+  CreditCard,
+  Sliders,
+  Cpu
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -160,6 +163,36 @@ export const defaultNavigation: NavigationConfig = {
       icon: <Settings size={16} />,
       section: 'admin',
       adminOnly: true
+    },
+    {
+      path: '/admin/saas-users',
+      name: 'SaaS Users',
+      icon: <CreditCard size={16} />,
+      section: 'admin',
+      adminOnly: true,
+      saasOnly: true
+    },
+    {
+      path: '/admin/system-ai-services',
+      name: 'System AI Services',
+      icon: <Cpu size={16} />,
+      section: 'admin',
+      adminOnly: true,
+    },
+    {
+      path: '/admin/system-embedding-services',
+      name: 'System Embedding Services',
+      icon: <Brain size={16} />,
+      section: 'admin',
+      adminOnly: true,
+    },
+    {
+      path: '/admin/tier-config',
+      name: 'Tier Config',
+      icon: <Sliders size={16} />,
+      section: 'admin',
+      adminOnly: true,
+      saasOnly: true
     },
     {
       path: '/about',

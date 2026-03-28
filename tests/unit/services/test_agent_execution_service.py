@@ -25,6 +25,7 @@ def make_agent(
     has_memory: bool = False,
     agent_type: str = "agent",
     name: str = "Test Agent",
+    is_frozen: bool = False,
 ) -> MagicMock:
     """Create a minimal Agent mock."""
     agent = MagicMock()
@@ -35,6 +36,7 @@ def make_agent(
     agent.silo_id = None
     agent.output_parser_id = None
     agent.request_count = 0
+    agent.is_frozen = is_frozen  # SaaS mode: must be explicitly False to avoid MagicMock truthiness
     return agent
 
 

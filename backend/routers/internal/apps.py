@@ -531,7 +531,7 @@ async def create_app(
         'agent_cors_origins': app_data.agent_cors_origins
     }
     
-    app = app_service.create_or_update_app(app_dict)
+    app = app_service.create_or_update_app(app_dict, user_id=user_id)
     
     # Get owner information
     owner_email = None

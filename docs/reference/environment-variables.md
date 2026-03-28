@@ -166,6 +166,41 @@ REPO_BASE_FOLDER=./data/repositories
 TMP_BASE_FOLDER=./data/tmp
 ```
 
+### SaaS Mode
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_DEPLOYMENT_MODE` | No | `self_managed` | Deployment mode: `self_managed` or `saas` |
+| `STRIPE_API_KEY` | SaaS | — | Stripe secret key (`sk_test_...` for dev, `sk_live_...` for prod) |
+| `STRIPE_WEBHOOK_SECRET` | SaaS | — | Stripe webhook signing secret (`whsec_...`) |
+| `STRIPE_PRICE_ID_STARTER` | SaaS | — | Stripe Price ID for the Starter plan |
+| `STRIPE_PRICE_ID_PRO` | SaaS | — | Stripe Price ID for the Pro plan |
+| `EMAIL_FROM` | SaaS | — | Sender address for transactional emails |
+| `SMTP_HOST` | SaaS | `localhost` | SMTP server host |
+| `SMTP_PORT` | SaaS | `587` | SMTP server port |
+| `SMTP_USER` | No | — | SMTP username (optional) |
+| `SMTP_PASS` | No | — | SMTP password (optional) |
+
+> **Note**: Variables marked **SaaS** are required only when `AICT_DEPLOYMENT_MODE=saas`. The application will refuse to start if any are missing.
+
+**Example (local dev / SaaS test)**:
+```bash
+AICT_DEPLOYMENT_MODE=saas
+
+# Stripe test keys
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID_STARTER=price_starter_test
+STRIPE_PRICE_ID_PRO=price_pro_test
+
+# Email
+EMAIL_FROM=noreply@yourdomain.com
+SMTP_HOST=localhost
+SMTP_PORT=587
+```
+
+See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
+
 ### CORS Configuration
 
 | Variable | Required | Default | Description |

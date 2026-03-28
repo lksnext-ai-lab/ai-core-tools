@@ -20,7 +20,7 @@ interface Silo {
   metadata_definition_id?: number;
   embedding_service_id?: number;
   output_parsers?: { parser_id: number; name: string }[];
-  embedding_services?: { service_id: number; name: string; provider?: string }[];
+  embedding_services?: { service_id: number; name: string; provider?: string; is_system?: boolean }[];
   vector_db_options?: VectorDbOption[];
 }
 
@@ -287,7 +287,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 <option value="">Select an embedding service</option>
                 {embeddingServices.map((service) => (
                   <option key={service.service_id} value={service.service_id}>
-                    {service.name} ({service.provider})
+                    {service.is_system ? `[System] ${service.name}` : service.name}{service.provider ? ` (${service.provider})` : ''}
                   </option>
                 ))}
               </select>

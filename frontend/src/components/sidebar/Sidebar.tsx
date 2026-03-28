@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
+import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
 import { apiService } from '../../services/api';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
@@ -19,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const location = useLocation();
   const { appId } = useParams();
   const { user } = useUser();
+  const { isSaasMode } = useDeploymentMode();
   const [appName, setAppName] = useState<string | null>(null);
 
   const isInSettings = appId
@@ -72,6 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const renderItems = (items: NavigationItem[], section: string, useAppStyle = false) =>
     items
       .filter(item => !(item.adminOnly && !user?.is_admin))
+      .filter(item => !(item.saasOnly && !isSaasMode))
       .map((item, index) => {
         const path = appId ? item.path.replace(':appId', appId) : item.path;
         const cls = useAppStyle ? appItemClass : globalItemClass;

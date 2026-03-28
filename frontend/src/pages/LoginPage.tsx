@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { useUser } from '../contexts/UserContext';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../themes/ThemeContext';
+import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 import Particles from '../components/ui/Particles';
 import AIRobot3D from '../components/ui/AIRobot3D';
 
@@ -184,6 +185,7 @@ function LoginPage() {
   const auth = useAuth();
   const { theme } = useTheme();
 
+  const { isSaasMode } = useDeploymentMode();
   const runtimeConfig = (globalThis as unknown as Record<string, Record<string, string>>).__RUNTIME_CONFIG__;
   const oidcEnabled = runtimeConfig?.VITE_OIDC_ENABLED === undefined
     ? import.meta.env.VITE_OIDC_ENABLED === 'true'
@@ -413,6 +415,21 @@ function LoginPage() {
                 {loading ? 'Signing in...' : 'Sign in with Microsoft'}
               </button>
             )}
+          {isSaasMode && (
+            <div className="mt-4 text-center space-y-2">
+              <p className="text-sm text-slate-500">
+                Don't have an account?{' '}
+                <Link to="/register" className="font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
+                  Create one
+                </Link>
+              </p>
+              <p className="text-sm text-slate-500">
+                <Link to="/password-reset/request" className="hover:underline" style={{ color: 'var(--color-primary)' }}>
+                  Forgot your password?
+                </Link>
+              </p>
+            </div>
+          )}
           </div>
         </div>
 

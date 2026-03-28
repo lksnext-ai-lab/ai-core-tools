@@ -9,3 +9,31 @@ settings:
     type: "integer"
     category: "marketplace"
     description: "Maximum API calls per user per month to marketplace agents. 0 = unlimited."
+
+# Tier configuration defaults - used when no DB override exists
+# -1 means unlimited
+tier_config:
+  free:
+    apps: 1
+    agents: 3
+    silos: 2
+    skills: 1
+    mcp_servers: 0
+    collaborators: 1
+    llm_calls: 100
+  starter:
+    apps: 2
+    agents: 10
+    silos: 5
+    skills: 3
+    mcp_servers: 1
+    collaborators: 5
+    llm_calls: 1000
+  pro:
+    apps: 10
+    agents: 50
+    silos: 20
+    skills: 10
+    mcp_servers: 5
+    collaborators: -1
+    llm_calls: -1

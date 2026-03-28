@@ -303,10 +303,24 @@ class AgentExecutionService:
             agent = self.agent_service.get_agent(db, agent_id)
             if not agent:
                 raise HTTPException(status_code=404, detail="Agent not found")
-            
-            # Validate user has access to this agent
+
+            # Validate user has access to this agent before any SaaS checks
+            # (prevents leaking agent state to unauthorized callers)
             await self._validate_agent_access(agent, user_context)
-            
+
+            # Respect frozen state (SaaS mode: downgraded resources cannot be invoked)
+            if getattr(agent, 'is_frozen', False):
+                raise HTTPException(
+                    status_code=403,
+                    detail="This agent is frozen because your subscription tier has been downgraded. "
+                           "Please upgrade your plan or delete other resources to unfreeze it.",
+                )
+
+            # Enforce system LLM quota (SaaS mode only, no-op in self-managed)
+            if db and user_context and user_context.get('user_id'):
+                from services.tier_enforcement_service import TierEnforcementService
+                TierEnforcementService.check_system_llm_quota(db, user_context['user_id'])
+
             # Process files if provided
             processed_files = []
             if files:
@@ -1088,7 +1102,15 @@ class AgentExecutionService:
                     logger.warning(f"Error flushing LangSmith traces: {flush_err}")
             else:
                 result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
-            
+
+            # Track system LLM usage (SaaS mode only, no-op in self-managed)
+            if self.db and user_context and user_context.get('user_id'):
+                try:
+                    from services.usage_tracking_service import UsageTrackingService
+                    UsageTrackingService.record_system_llm_call(self.db, user_context['user_id'])
+                except Exception as _usage_exc:
+                    logger.warning("Failed to record system LLM usage: %s", _usage_exc)
+
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model
             if isinstance(result, dict) and "structured_response" in result:

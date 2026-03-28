@@ -182,17 +182,23 @@ class AgentService:
         """Get agent by ID and type"""
         return AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type)
     
-    def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str) -> int:
+    def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str, user_id: int = None) -> int:
         """Create or update agent"""
         agent_id = agent_data.get('agent_id')
-        
+
         # If agent_id is 0, treat it as a new agent
         if agent_id == 0:
             agent_id = None
-        
+
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
-        
+
         if not agent:
+            # Enforce per-app agent limit before creation (SaaS mode only)
+            app_id = agent_data.get('app_id')
+            if app_id:
+                from services.tier_enforcement_service import TierEnforcementService
+                TierEnforcementService.check_resource_limit(db, app_id, 'agents')
+
             # Create the appropriate agent instance based on type
             if agent_type == 'ocr_agent':
                 agent = OCRAgent()

@@ -184,6 +184,7 @@ export interface NavigationItem {
   section?: string;
   protected?: boolean;
   adminOnly?: boolean;
+  saasOnly?: boolean;  // Only shown when deployment_mode === 'saas'
 }
 
 export interface NavigationConfig {
