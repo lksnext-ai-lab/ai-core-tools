@@ -1103,13 +1103,21 @@ class AgentExecutionService:
             else:
                 result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
 
-            # Track system LLM usage (SaaS mode only, no-op in self-managed)
-            if self.db and user_context and user_context.get('user_id'):
+            # Track system LLM usage only when the agent uses a system AI service
+            # (app_id=NULL). Own-key services are not counted against the quota.
+            ai_svc = fresh_agent.ai_service
+            if (
+                ai_svc is not None
+                and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
+                and self.db
+                and user_context
+                and user_context.get('user_id')
+            ):
                 try:
                     from services.usage_tracking_service import UsageTrackingService
                     UsageTrackingService.record_system_llm_call(self.db, user_context['user_id'])
                 except Exception as _usage_exc:
-                    logger.warning("Failed to record system LLM usage: %s", _usage_exc)
+                    logger.warning("Failed to record system LLM usage: %s", _usage_exc, exc_info=True)
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

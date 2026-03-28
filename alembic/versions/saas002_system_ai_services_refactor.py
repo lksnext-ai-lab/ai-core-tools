@@ -43,7 +43,22 @@ def downgrade() -> None:
         sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.text('NOW()')),
     )
 
-    # Restore NOT NULL on app_id (will fail if NULL rows exist — acceptable per plan)
+    # Migrate system AI services (app_id IS NULL) back to system_ai_services table
+    conn = op.get_bind()
+    conn.execute(sa.text("""
+        INSERT INTO system_ai_services (name, provider, model, api_key_encrypted, is_active, created_at, updated_at)
+        SELECT name, provider, model, api_key_encrypted,
+               COALESCE(is_active, true),
+               COALESCE(created_at, NOW()),
+               COALESCE(updated_at, NOW())
+        FROM "AIService"
+        WHERE app_id IS NULL
+    """))
+
+    # Delete system services from AIService now that they are migrated back
+    conn.execute(sa.text('DELETE FROM "AIService" WHERE app_id IS NULL'))
+
+    # Restore NOT NULL on app_id (safe — no NULL rows remain)
     op.alter_column(
         'AIService',
         'app_id',

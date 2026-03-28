@@ -381,6 +381,7 @@ from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
 from schemas.ai_service_schemas import AIServiceListItemSchema, CreateUpdateAIServiceSchema
 from schemas.embedding_service_schemas import (
     EmbeddingServiceListItemSchema,
+    EmbeddingServiceDetailSchema,
     CreateUpdateEmbeddingServiceSchema,
     SystemEmbeddingServiceImpactSchema,
 )
@@ -566,16 +567,27 @@ async def delete_system_ai_service(
     AIServiceRepository.delete(db, svc)
 
 
-@router.get("/system-embedding-services", response_model=List[EmbeddingServiceListItemSchema])
+@router.get("/system-embedding-services", response_model=List[EmbeddingServiceDetailSchema])
 async def list_system_embedding_services(
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
     """List all platform-level Embedding Services (OMNIADMIN only)."""
     from repositories.embedding_service_repository import EmbeddingServiceRepository
-    from services.embedding_service_service import EmbeddingServiceService
+    from utils.secret_utils import mask_api_key
     services = EmbeddingServiceRepository.get_system_services(db)
-    return [EmbeddingServiceService._to_list_item(svc, is_system=True) for svc in services]
+    return [
+        EmbeddingServiceDetailSchema(
+            service_id=svc.service_id,
+            name=svc.name,
+            provider=svc.provider,
+            model_name=svc.description or "",
+            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
+            base_url=svc.endpoint or "",
+            created_at=svc.create_date,
+        )
+        for svc in services
+    ]
 
 
 @router.post("/system-embedding-services", response_model=EmbeddingServiceListItemSchema, status_code=201)

@@ -178,6 +178,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [shakeError, setShakeError] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -211,6 +212,24 @@ function LoginPage() {
       setError(null);
       await auth.login();
     } catch (err) {
+      triggerError(err instanceof Error ? err.message : 'Login failed');
+      setLoading(false);
+    }
+  };
+
+  const handleLocalLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      triggerError('Please enter your email and password');
+      return;
+    }
+    try {
+      setLoading(true);
+      setError(null);
+      await authService.localLogin(email, password);
+      refreshUser();
+      navigate(from, { replace: true });
+    } catch (err: unknown) {
       triggerError(err instanceof Error ? err.message : 'Login failed');
       setLoading(false);
     }
@@ -347,47 +366,63 @@ function LoginPage() {
               </div>
             )}
 
-            {/* Fake Login Form */}
-            {!oidcEnabled && (
-              <form onSubmit={handleFakeLogin} className="space-y-4">
+            {/* SaaS LOCAL mode — email + password form */}
+            {!oidcEnabled && isSaasMode && (
+              <form onSubmit={handleLocalLogin} className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-700">
-                    Email Address
-                  </label>
+                  <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-700">Email Address</label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                       </svg>
                     </div>
-                    <input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com"
-                      disabled={loading}
-                      required
+                    <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com" disabled={loading} required
                       className="input-login w-full pl-11 pr-4 py-3 rounded-xl border bg-white border-slate-200 text-slate-900 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                     />
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={loading || !email}
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium mb-2 text-slate-700">Password</label>
+                  <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••" disabled={loading} required
+                    className="input-login w-full px-4 py-3 rounded-xl border bg-white border-slate-200 text-slate-900 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  />
+                </div>
+                <button type="submit" disabled={loading || !email || !password}
                   className="btn-login-gradient w-full flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
+                    <><svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Signing in...</>
+                  ) : 'Sign in'}
+                </button>
+              </form>
+            )}
+
+            {/* FAKE mode — email-only form (development) */}
+            {!oidcEnabled && !isSaasMode && (
+              <form onSubmit={handleFakeLogin} className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-700">Email Address</label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                       </svg>
-                      Signing in...
-                    </>
-                  ) : (
-                    'Sign in with Email'
-                  )}
+                    </div>
+                    <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com" disabled={loading} required
+                      className="input-login w-full pl-11 pr-4 py-3 rounded-xl border bg-white border-slate-200 text-slate-900 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    />
+                  </div>
+                </div>
+                <button type="submit" disabled={loading || !email}
+                  className="btn-login-gradient w-full flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <><svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Signing in...</>
+                  ) : 'Sign in with Email'}
                 </button>
               </form>
             )}

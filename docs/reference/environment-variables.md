@@ -44,7 +44,7 @@ DATABASE_HOST=postgres  # Service name in docker-compose
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC` or `FAKE` |
+| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC`, `FAKE`, or `LOCAL` |
 | `SECRET_KEY` | Yes | — | Session encryption key (256-bit) |
 | `AICT_OMNIADMINS` | No | — | Comma-separated emails of superusers |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
@@ -63,6 +63,13 @@ JWT_EXPIRATION_HOURS=24
 ```bash
 AICT_LOGIN=FAKE
 SECRET_KEY=dev-secret-key
+```
+
+**SaaS mode** (LOCAL — email+password):
+```bash
+AICT_LOGIN=LOCAL
+AICT_DEPLOYMENT_MODE=saas
+SECRET_KEY=your-256-bit-secret-key-here
 ```
 
 ### LLM API Keys

@@ -1,7 +1,8 @@
 """SaaS authentication endpoints: email+password registration, verification, login, password reset.
 
 These routes are conditionally registered only when AICT_DEPLOYMENT_MODE=saas.
-Rate limiting is applied via slowapi (or similar) on all public endpoints.
+NOTE: Rate limiting on these endpoints is not yet implemented and should be added
+before production use to prevent brute-force and enumeration attacks.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -48,10 +49,11 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Log in with email and password. Returns a session token."""
     user = LocalAuthService.login(db, email=request.email, password=request.password)
 
-    token = generate_local_auth_token(user.email, name=user.name)
+    token_data = generate_local_auth_token(user.email, name=user.name)
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "access_token": token_data["access_token"],
+        "token_type": token_data["token_type"],
+        "expires_at": token_data["expires_at"],
         "user": {
             "user_id": user.user_id,
             "email": user.email,

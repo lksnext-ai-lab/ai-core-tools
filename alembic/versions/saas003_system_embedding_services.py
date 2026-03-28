@@ -27,19 +27,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Safety check: refuse to downgrade if any system embedding services exist
+    # Delete system embedding services (app_id IS NULL) so NOT NULL can be restored.
+    # These have no app to migrate back to — deleting is the only safe reversal.
     conn = op.get_bind()
-    result = conn.execute(
-        sa.text("SELECT COUNT(*) FROM embedding_service WHERE app_id IS NULL")
-    )
-    count = result.scalar()
-    if count > 0:
-        raise Exception(
-            f"Cannot downgrade: {count} system embedding service(s) exist with app_id IS NULL. "
-            "Delete them first."
-        )
+    conn.execute(sa.text("DELETE FROM embedding_service WHERE app_id IS NULL"))
 
-    # Restore NOT NULL on app_id
+    # Restore NOT NULL on app_id (safe — no NULL rows remain)
     op.alter_column(
         'embedding_service',
         'app_id',

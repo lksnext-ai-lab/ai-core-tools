@@ -42,7 +42,7 @@ class EmailService:
             return
 
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        reset_url = f"{frontend_url}/auth/password-reset?token={token}"
+        reset_url = f"{frontend_url}/password-reset?token={token}"
         subject = "Reset your Mattin AI password"
         body_html = f"""
         <p>You requested a password reset for your Mattin AI account.</p>

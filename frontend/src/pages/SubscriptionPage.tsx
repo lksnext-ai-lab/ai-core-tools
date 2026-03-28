@@ -62,6 +62,10 @@ const SubscriptionPage: React.FC = () => {
   const currentTier = subscription?.tier ?? 'free';
   const pctUsed = usage?.pct_used ?? 0;
 
+  let usageBarColor = 'bg-blue-500';
+  if (pctUsed >= 1) usageBarColor = 'bg-red-500';
+  else if (pctUsed >= 0.8) usageBarColor = 'bg-yellow-500';
+
   return (
     <div className="max-w-4xl mx-auto p-8">
       <h1 className="text-2xl font-bold mb-6">Subscription</h1>
@@ -89,20 +93,29 @@ const SubscriptionPage: React.FC = () => {
 
         {/* Usage bar */}
         <div className="mt-4">
-          <div className="flex justify-between text-sm text-gray-600 mb-1">
-            <span>System LLM usage</span>
-            <span>{usage?.call_count ?? 0} / {usage?.call_limit ?? 0} calls</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all ${pctUsed >= 1 ? 'bg-red-500' : pctUsed >= 0.8 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-              style={{ width: `${Math.min(pctUsed * 100, 100)}%` }}
-            />
-          </div>
-          {pctUsed >= 0.8 && (
-            <p className="text-sm text-yellow-700 mt-1">
-              {pctUsed >= 1 ? 'Quota exhausted. Own API calls are unaffected.' : 'Approaching quota limit.'}
-            </p>
+          {usage?.call_limit === -1 ? (
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>System LLM usage</span>
+              <span>{usage?.call_count ?? 0} calls — Unlimited</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between text-sm text-gray-600 mb-1">
+                <span>System LLM usage</span>
+                <span>{usage?.call_count ?? 0} / {usage?.call_limit ?? 0} calls</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${usageBarColor}`}
+                  style={{ width: `${Math.min(pctUsed * 100, 100)}%` }}
+                />
+              </div>
+              {pctUsed >= 0.8 && (
+                <p className="text-sm text-yellow-700 mt-1">
+                  {pctUsed >= 1 ? 'Quota exhausted. Own API calls are unaffected.' : 'Approaching quota limit.'}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>

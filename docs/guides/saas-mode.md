@@ -177,7 +177,7 @@ To change defaults for all fresh installs, edit `system_defaults.yaml` and commi
 Via the admin API (requires `OMNIADMIN` role):
 
 ```http
-PATCH /internal/admin/users/{user_id}/subscription
+PUT /internal/admin/saas/users/{user_id}/tier
 Content-Type: application/json
 
 {
@@ -190,7 +190,7 @@ Setting `admin_override_tier` to `null` reverts to the Stripe-billed tier.
 ### Update Tier Config Limits
 
 ```http
-PUT /internal/admin/tier-configs
+PUT /internal/admin/saas/tier-config
 Content-Type: application/json
 
 {

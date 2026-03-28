@@ -184,7 +184,7 @@ cd ../clients/<client-name> && npm install
 
 ```env
 SQLALCHEMY_DATABASE_URI=postgresql://user:pass@localhost:5432/dbname
-AICT_LOGIN=FAKE                 # or OIDC for production
+AICT_LOGIN=FAKE                 # FAKE (dev) | LOCAL (SaaS email+password) | OIDC (production)
 SECRET_KEY=your-secret-key
 AICT_OMNIADMINS=admin@example.com
 

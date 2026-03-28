@@ -360,6 +360,23 @@ class AgentStreamingService:
                 await self.session_service.touch_session(session.id)
 
             # ----------------------------------------------------------------
+            # 13b. Track system LLM usage (SaaS mode, no-op in self-managed)
+            # ----------------------------------------------------------------
+            ai_svc = fresh_agent.ai_service
+            if (
+                ai_svc is not None
+                and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
+                and effective_db
+                and user_context
+                and user_context.get('user_id')
+            ):
+                try:
+                    from services.usage_tracking_service import UsageTrackingService
+                    UsageTrackingService.record_system_llm_call(effective_db, user_context['user_id'])
+                except Exception as _usage_exc:
+                    logger.warning("Failed to record system LLM usage: %s", _usage_exc, exc_info=True)
+
+            # ----------------------------------------------------------------
             # 14. Update conversation message count
             # ----------------------------------------------------------------
             if conversation:
