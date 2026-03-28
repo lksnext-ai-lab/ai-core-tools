@@ -176,6 +176,13 @@ class ApiService {
     });
   }
 
+  async register(email: string, password: string) {
+    return this.request('/internal/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
   // ==================== AGENTS API ====================
   async getAgents(appId: number) {
     return this.request(`/internal/apps/${appId}/agents/`);

@@ -304,6 +304,10 @@ class AgentExecutionService:
             if not agent:
                 raise HTTPException(status_code=404, detail="Agent not found")
 
+            # Validate user has access to this agent before any SaaS checks
+            # (prevents leaking agent state to unauthorized callers)
+            await self._validate_agent_access(agent, user_context)
+
             # Respect frozen state (SaaS mode: downgraded resources cannot be invoked)
             if getattr(agent, 'is_frozen', False):
                 raise HTTPException(
@@ -316,9 +320,6 @@ class AgentExecutionService:
             if db and user_context and user_context.get('user_id'):
                 from services.tier_enforcement_service import TierEnforcementService
                 TierEnforcementService.check_system_llm_quota(db, user_context['user_id'])
-
-            # Validate user has access to this agent
-            await self._validate_agent_access(agent, user_context)
 
             # Process files if provided
             processed_files = []

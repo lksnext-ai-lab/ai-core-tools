@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { configService } from '../core/ConfigService';
+import { Link } from 'react-router-dom';
+import { apiService } from '../services/api';
 
 const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -8,26 +8,16 @@ const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
     try {
-      const baseUrl = configService.getApiBaseUrl();
-      const response = await fetch(`${baseUrl}/internal/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Registration failed');
-      }
+      await apiService.register(email, password);
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message ?? 'Registration failed');
     } finally {
       setIsLoading(false);
     }

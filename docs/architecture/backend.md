@@ -175,10 +175,6 @@ async def create_agent(
 | **tier_enforcement_service** | Quota enforcement per subscription tier (SaaS) |
 | **usage_tracking_service** | Per-user LLM call and resource usage tracking (SaaS) |
 | **tier_config_seeder** | Seeds default tier limits from `system_defaults.yaml` into DB on startup (SaaS) |
-| **subscription_service** | Stripe billing, tier transitions, webhook handling (SaaS) |
-| **tier_enforcement_service** | Quota enforcement per subscription tier (SaaS) |
-| **usage_tracking_service** | Per-user LLM call and resource usage tracking (SaaS) |
-| **tier_config_seeder** | Seeds default tier limits from `system_defaults.yaml` into DB on startup (SaaS) |
 
 **Service pattern**:
 ```python

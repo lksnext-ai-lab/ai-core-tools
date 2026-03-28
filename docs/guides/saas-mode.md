@@ -1,6 +1,6 @@
 # SaaS Mode Guide
 
-> Part of [Mattin AI Documentation](../README.md)
+> Part of [Mattin AI Documentation](../index.md)
 
 ## Overview
 
@@ -109,18 +109,18 @@ stripe listen --forward-to localhost:8000/internal/subscription/webhook
 
 ## Quota Enforcement
 
-Resource quotas are enforced by `TierEnforcementService` on every resource-creation endpoint. When a user reaches their limit, the API returns **HTTP 402 Payment Required** with a structured error:
+Resource quotas are enforced by `TierEnforcementService` on every resource-creation endpoint. When a user reaches their limit, the API returns a plain string `detail` message:
+
+- **HTTP 403 Forbidden** — resource limit reached (apps, per-app agents/silos/etc., or attempt to create own AI service on Free tier). Example:
 
 ```json
-{
-  "detail": {
-    "code": "quota_exceeded",
-    "resource": "agents",
-    "limit": 3,
-    "current": 3,
-    "tier": "free"
-  }
-}
+{ "detail": "Agent limit reached for this app (3/3 on free tier)" }
+```
+
+- **HTTP 429 Too Many Requests** — monthly system LLM call quota exhausted. Example:
+
+```json
+{ "detail": "Monthly system LLM quota exhausted (100/100). Upgrade your plan for more calls." }
 ```
 
 ### LLM Call Tracking

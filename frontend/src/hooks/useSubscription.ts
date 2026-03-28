@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
+import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 
 export interface SubscriptionData {
   tier: string;
@@ -33,12 +34,17 @@ interface UseSubscriptionReturn {
 }
 
 export const useSubscription = (): UseSubscriptionReturn => {
+  const { isSaasMode } = useDeploymentMode();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!isSaasMode) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -53,7 +59,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isSaasMode]);
 
   useEffect(() => {
     fetchData();

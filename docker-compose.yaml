@@ -1,5 +1,5 @@
 # ============================================================================
-# MATTIN AI - Docker Compose with Nginx Reverse Proxy
+# MATTIN AI - Docker Compose
 # ============================================================================
 # Quick start:
 #   1. cp .env.example .env
@@ -7,9 +7,8 @@
 #   3. docker-compose up -d
 #
 # Services:
-#   - Nginx (proxy):      http://localhost (80)
-#   - Backend (FastAPI):  http://localhost:8000 (direct, for debugging)
-#   - Frontend (React):   http://localhost:3000 (direct, for debugging)
+#   - Backend (FastAPI):  http://localhost:8000
+#   - Frontend (React):   http://localhost:3000
 #   - PostgreSQL:         localhost:5432
 #   - Qdrant:             localhost:6333
 # ============================================================================
@@ -126,24 +125,6 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
-    networks:
-      - mattin-network
-    restart: unless-stopped
-
-  # --------------------------------------------------------------------------
-  # Nginx Reverse Proxy
-  # --------------------------------------------------------------------------
-  nginx:
-    image: nginx:latest
-    container_name: mattin-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - backend
-      - frontend
     networks:
       - mattin-network
     restart: unless-stopped

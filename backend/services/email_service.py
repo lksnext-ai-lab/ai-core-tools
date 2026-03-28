@@ -24,7 +24,7 @@ class EmailService:
             return
 
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        verify_url = f"{frontend_url}/auth/verify-email?token={token}"
+        verify_url = f"{frontend_url}/verify-email?token={token}"
         subject = "Verify your Mattin AI account"
         body_html = f"""
         <p>Welcome to Mattin AI!</p>

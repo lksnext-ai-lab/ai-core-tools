@@ -14,7 +14,7 @@ from schemas.saas_auth_schemas import (
     PasswordResetComplete,
 )
 from services.local_auth_service import LocalAuthService
-from utils.dev_auth import generate_dev_token
+from utils.dev_auth import generate_local_auth_token
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -48,8 +48,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Log in with email and password. Returns a session token."""
     user = LocalAuthService.login(db, email=request.email, password=request.password)
 
-    # Issue a dev-style token for session management (reuses existing token infrastructure)
-    token = generate_dev_token(user.email)
+    token = generate_local_auth_token(user.email, name=user.name)
     return {
         "access_token": token,
         "token_type": "bearer",

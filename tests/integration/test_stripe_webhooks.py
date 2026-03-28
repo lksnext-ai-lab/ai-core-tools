@@ -157,7 +157,7 @@ class TestInvoicePaymentFailed:
 class TestSubscriptionDeleted:
 
     def test_subscription_deleted_downgrades_to_free(self, db, webhook_user):
-        from models.subscription import Subscription, SubscriptionTier, BillingStatus, BillingStatus
+        from models.subscription import Subscription, SubscriptionTier, BillingStatus
 
         stripe_sub = make_stripe_sub_payload("cus_webhook_test", status="canceled")
         event = make_stripe_event("customer.subscription.deleted", stripe_sub, "evt_sub_del_1")
