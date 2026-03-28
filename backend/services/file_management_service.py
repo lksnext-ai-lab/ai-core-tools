@@ -819,6 +819,86 @@ class FileManagementService:
             logger.error("sync_output_files error: %s", e)
             return []
 
+    async def resolve_chat_files(
+        self,
+        files: Optional[List[UploadFile]],
+        file_reference_ids: Optional[List[str]],
+        agent_id: int,
+        user_context: Dict,
+        conversation_id: Optional[int],
+    ) -> List["FileReference"]:
+        """Upload new files and merge with the existing attached files for a chat turn.
+
+        This is the single canonical implementation that replaces the three
+        near-identical helpers previously scattered across the internal and
+        public-API routers.
+
+        Args:
+            files: New files uploaded with the current request (may be None or empty).
+            file_reference_ids: Optional list of file_id strings the caller wants to
+                include.  When None all currently attached files are included; when
+                an empty list is provided no pre-existing files are included.
+            agent_id: ID of the agent receiving the files.
+            user_context: Caller context dict (``user_id``, ``app_id``, …).
+            conversation_id: Optional conversation ID used to scope file storage.
+
+        Returns:
+            Ordered list of :class:`FileReference` objects ready to pass to
+            ``AgentExecutionService.execute_agent_chat_with_file_refs``.
+        """
+        all_refs: List[FileReference] = []
+        uploaded_ids: set = set()
+
+        # 1. Upload any newly-attached files
+        if files:
+            for upload_file in files:
+                if upload_file.filename:
+                    try:
+                        file_ref = await self.upload_file(
+                            file=upload_file,
+                            agent_id=agent_id,
+                            user_context=user_context,
+                            conversation_id=conversation_id,
+                        )
+                        all_refs.append(file_ref)
+                        uploaded_ids.add(file_ref.file_id)
+                    except Exception as exc:
+                        logger.error(
+                            "Error uploading file %s: %s", upload_file.filename, exc
+                        )
+
+        # 2. Fetch existing attached files (scoped to conversation when available)
+        existing_files = await self.list_attached_files(
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=str(conversation_id) if conversation_id else None,
+        )
+
+        # 3. Optionally filter to a specific subset
+        if file_reference_ids is not None:
+            requested_ids = set(file_reference_ids)
+            existing_files = [
+                f for f in existing_files if f["file_id"] in requested_ids
+            ]
+            logger.info(
+                "Filtered to %d file(s) based on file_reference_ids", len(existing_files)
+            )
+
+        # 4. Append existing files not already added via upload
+        for file_data in existing_files:
+            if file_data["file_id"] not in uploaded_ids:
+                all_refs.append(
+                    FileReference(
+                        file_id=file_data["file_id"],
+                        filename=file_data["filename"],
+                        file_type=file_data["file_type"],
+                        content=file_data["content"],
+                        file_path=file_data.get("file_path"),
+                    )
+                )
+
+        return all_refs
+
     def get_file_stats(self) -> Dict[str, Any]:
         """Get file management statistics"""
         try:

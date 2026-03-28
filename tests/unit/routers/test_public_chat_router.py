@@ -50,8 +50,10 @@ def _mock_streaming_service(mocker):
 
 
 def _mock_process_files(mocker):
-    return mocker.patch.object(
-        chat_module, "_process_chat_files", new_callable=AsyncMock, return_value=[]
+    return mocker.patch(
+        "services.file_management_service.FileManagementService.resolve_chat_files",
+        new_callable=AsyncMock,
+        return_value=[],
     )
 
 

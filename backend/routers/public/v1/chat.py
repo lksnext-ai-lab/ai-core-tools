@@ -24,7 +24,7 @@ from db.database import get_db
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from services.conversation_service import ConversationService
-from services.file_management_service import FileManagementService, FileReference
+from services.file_management_service import FileManagementService
 
 from utils.logger import get_logger
 
@@ -47,58 +47,6 @@ def _parse_json_param(value: Optional[str], param_name: str):
         return None
 
 
-async def _process_chat_files(
-    files: List[UploadFile],
-    parsed_file_references: Optional[list],
-    agent_id: int,
-    user_context: dict,
-    conversation_id: Optional[int],
-) -> List[FileReference]:
-    """
-    Process file uploads and merge with existing attached files.
-    Shared logic for call_agent and call_agent_stream.
-    """
-    file_service = FileManagementService()
-    all_file_references: List[FileReference] = []
-    uploaded_file_ids: set = set()
-
-    if files:
-        for upload_file in files:
-            if upload_file.filename:
-                try:
-                    file_ref = await file_service.upload_file(
-                        file=upload_file,
-                        agent_id=agent_id,
-                        user_context=user_context,
-                        conversation_id=conversation_id,
-                    )
-                    all_file_references.append(file_ref)
-                    uploaded_file_ids.add(file_ref.file_id)
-                except Exception as e:
-                    logger.error(f"Error uploading file {upload_file.filename}: {str(e)}")
-
-    existing_files = await file_service.list_attached_files(
-        agent_id=agent_id,
-        user_context=user_context,
-        conversation_id=str(conversation_id) if conversation_id else None,
-    )
-
-    if parsed_file_references:
-        requested_file_ids = set(parsed_file_references)
-        existing_files = [f for f in existing_files if f["file_id"] in requested_file_ids]
-
-    for file_data in existing_files:
-        if file_data["file_id"] not in uploaded_file_ids:
-            file_ref = FileReference(
-                file_id=file_data["file_id"],
-                filename=file_data["filename"],
-                file_type=file_data["file_type"],
-                content=file_data["content"],
-                file_path=file_data.get("file_path"),
-            )
-            all_file_references.append(file_ref)
-
-    return all_file_references
 
 
 # AGENT CHAT ENDPOINTS
@@ -166,11 +114,15 @@ async def call_agent(
 
         user_context = create_api_key_user_context(app_id, api_key)
 
-        all_file_references = await _process_chat_files(
-            files, parsed_file_references, agent_id, user_context, conversation_id
+        all_file_references = await FileManagementService().resolve_chat_files(
+            files=files,
+            file_reference_ids=parsed_file_references,
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=conversation_id,
         )
 
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent_id,
             message=message,
@@ -248,8 +200,12 @@ async def call_agent_stream(
 
         user_context = create_api_key_user_context(app_id, api_key)
 
-        all_file_references = await _process_chat_files(
-            files, parsed_file_references, agent_id, user_context, conversation_id
+        all_file_references = await FileManagementService().resolve_chat_files(
+            files=files,
+            file_reference_ids=parsed_file_references,
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=conversation_id,
         )
 
         streaming_service = AgentStreamingService(db)
@@ -318,7 +274,7 @@ async def reset_conversation(
         user_context["conversation_id"] = conversation_id
 
     try:
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         success = await execution_service.reset_agent_conversation(
             agent_id=agent_id,
             user_context=user_context,

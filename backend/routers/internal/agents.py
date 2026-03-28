@@ -579,54 +579,6 @@ def _extract_jwt_token(request: Request) -> Optional[str]:
     return None
 
 
-async def _resolve_chat_file_refs(
-    files: Optional[List[UploadFile]],
-    parsed_file_references: Optional[list],
-    agent_id: int,
-    user_context: dict,
-    conversation_id: Optional[int],
-) -> List[FileReference]:
-    """Collect and resolve file references for a chat request."""
-    file_service = FileManagementService()
-    all_refs: List[FileReference] = []
-    uploaded_ids: set = set()
-
-    if files:
-        for upload_file in files:
-            if upload_file.filename:
-                file_ref = await file_service.upload_file(
-                    file=upload_file,
-                    agent_id=agent_id,
-                    user_context=user_context,
-                    conversation_id=conversation_id,
-                )
-                all_refs.append(file_ref)
-                uploaded_ids.add(file_ref.file_id)
-
-    existing_files = await file_service.list_attached_files(
-        agent_id=agent_id,
-        user_context=user_context,
-        conversation_id=str(conversation_id) if conversation_id else None,
-    )
-
-    if parsed_file_references:
-        requested_ids = set(parsed_file_references)
-        existing_files = [f for f in existing_files if f["file_id"] in requested_ids]
-        logger.info(f"Filtered to {len(existing_files)} files based on file_references")
-
-    for file_data in existing_files:
-        if file_data["file_id"] not in uploaded_ids:
-            all_refs.append(
-                FileReference(
-                    file_id=file_data["file_id"],
-                    filename=file_data["filename"],
-                    file_type=file_data["file_type"],
-                    content=file_data["content"],
-                    file_path=file_data.get("file_path"),
-                )
-            )
-
-    return all_refs
 
 
 async def _save_uploaded_file(upload_file: UploadFile) -> str:
@@ -711,11 +663,15 @@ async def chat_with_agent(
             "token": jwt_token,
         }
 
-        all_file_references = await _resolve_chat_file_refs(
-            files, parsed_file_references, agent_id, user_context, conversation_id
+        all_file_references = await FileManagementService().resolve_chat_files(
+            files=files,
+            file_reference_ids=parsed_file_references,
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=conversation_id,
         )
 
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent_id,
             message=message,
@@ -784,8 +740,12 @@ async def chat_with_agent_stream(
             "token": jwt_token,
         }
 
-        all_file_references = await _resolve_chat_file_refs(
-            files, parsed_file_references, agent_id, user_context, conversation_id
+        all_file_references = await FileManagementService().resolve_chat_files(
+            files=files,
+            file_reference_ids=parsed_file_references,
+            agent_id=agent_id,
+            user_context=user_context,
+            conversation_id=conversation_id,
         )
 
         streaming_service = AgentStreamingService(db)
@@ -846,7 +806,7 @@ async def reset_conversation(
         }
 
         # Use unified service layer
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         success = await execution_service.reset_agent_conversation(
             agent_id=agent_id,
             user_context=user_context,
@@ -896,7 +856,7 @@ async def get_conversation_history(
         }
         
         # Use unified service layer
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         messages = await execution_service.get_conversation_history(
             agent_id=agent_id,
             user_context=user_context,
