@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
+from services.agent_execution_context import AgentExecutionContext
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
     convert_image_to_base64,
@@ -66,316 +67,330 @@ class AgentExecutionService:
     # Shared thread pool for blocking I/O operations (file processing, OCR, etc.)
     _executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="agent_exec")
     
-    def __init__(self, db: Session = None):
+    def __init__(self):
         self.agent_service = AgentService()
         self.session_service = SessionManagementService()
         self.agent_execution_repo = AgentExecutionRepository()
-        self.db = db
     
     async def execute_agent_chat_with_file_refs(
-        self, 
-        agent_id: int, 
-        message: str, 
+        self,
+        agent_id: int,
+        message: str,
         file_references: List = None,
         search_params: Dict = None,
         user_context: Dict = None,
         conversation_id: int = None,
-        db: Session = None
+        db: Session = None,
     ) -> Dict[str, Any]:
-        """
-        Execute agent chat with persistent file references
-        
-        Args:
-            agent_id: ID of the agent to execute
-            message: User message
-            file_references: List of FileReference objects from FileManagementService
-            search_params: Optional search parameters for silo-based agents
-            user_context: User context (api_key, user_id, etc.)
-            conversation_id: Optional conversation ID to continue existing conversation
-            
+        """Execute agent chat with persistent file references.
+
         Returns:
-            Dict containing agent response and metadata
+            Dict containing agent response and metadata.
         """
         try:
-            # Get agent
-            agent = self.agent_service.get_agent(db, agent_id)
-            if not agent:
-                raise HTTPException(status_code=404, detail="Agent not found")
-            
-            # Validate user has access to this agent
-            await self._validate_agent_access(agent, user_context)
-            
-            # Process file references to extract content
-            processed_files = []
-            if file_references:
-                for file_ref in file_references:
-                    processed_files.append({
-                        "filename": file_ref.filename,
-                        "content": file_ref.content,
-                        "type": file_ref.file_type,
-                        "file_id": file_ref.file_id,
-                        "file_path": file_ref.file_path
-                    })
-            
-            # Get or create conversation for memory-enabled agents
-            session = None
-            conversation = None
-            if agent.has_memory:
-                from services.conversation_service import ConversationService
-                
-                # If conversation_id provided, validate and use it
-                if conversation_id:
-                    conversation = ConversationService.get_conversation(
-                        db=db,
-                        conversation_id=conversation_id,
-                        user_context=user_context,
-                        agent_id=agent_id
-                    )
-                    if not conversation:
-                        raise HTTPException(status_code=404, detail="Conversation not found or access denied")
-                    
-                    # Extract session_id from conversation (without "conv_{agent_id}_" prefix)
-                    session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
-                    session = await self.session_service.get_user_session(
-                        agent_id=agent_id,
-                        user_context=user_context,
-                        conversation_id=session_suffix
-                    )
-                else:
-                    # Auto-create a conversation if none exists
-                    conversation = ConversationService.create_conversation(
-                        db=db,
-                        agent_id=agent_id,
-                        user_context=user_context,
-                        title=None  # Auto-generate title
-                    )
-                    logger.info(f"Auto-created conversation {conversation.conversation_id} for agent {agent_id}")
-                    
-                    # Extract session_id from conversation (without "conv_{agent_id}_" prefix)
-                    session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
-                    session = await self.session_service.get_user_session(
-                        agent_id=agent_id,
-                        user_context=user_context,
-                        conversation_id=session_suffix
-                    )
-
-            # Re-query agent with all relationships eagerly loaded
-            fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent_id)
-            if not fresh_agent:
-                raise HTTPException(status_code=404, detail="Agent not found in database")
-
-            # Build enhanced message with file contents
-            enhanced_message, image_files = self._prepare_message_with_files(message, processed_files)
-
-            # Determine session ID for checkpointer
-            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
-
-            # Use the actual conversation ID — the auto-created one if none was passed in.
-            # This ensures files are registered in the same bucket that the download API
-            # will look up later (keyed by conversation_id).
-            effective_conv_id = conversation_id or (conversation.conversation_id if conversation else None)
-
-            # Resolve working directory (always — used by download_url_to_workspace
-            # and, when enable_code_interpreter is on, by python_repl too)
-            app_config = get_app_config()
-            tmp_base = app_config['TMP_BASE_FOLDER']
-            if effective_conv_id:
-                working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
-            else:
-                user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
-                app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
-                session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
-                working_dir = os.path.join(tmp_base, "persistent", session_key)
-
-            # Snapshot files in working_dir before execution so we only register
-            # truly new files afterwards (avoids picking up stale files from
-            # a previous conversation that reused the same directory).
-            pre_existing_files: set = set()
-            if working_dir and os.path.isdir(working_dir):
-                pre_existing_files = set(os.listdir(working_dir))
-
-            # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
-            response = await self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files,
-                working_dir=working_dir
+            ctx = await self._prepare_turn(
+                agent_id=agent_id,
+                message=message,
+                file_references=file_references,
+                search_params=search_params,
+                user_context=user_context,
+                conversation_id=conversation_id,
+                db=db,
             )
 
-            # Auto-register any files written to the working dir during this turn
-            # (code interpreter output, downloaded URLs, etc.)
-            if working_dir:
-                file_service = FileManagementService()
-                new_files = await file_service.sync_output_files(
-                    working_dir=working_dir,
-                    agent_id=agent_id,
-                    user_context=user_context,
-                    conversation_id=str(effective_conv_id) if effective_conv_id else None,
-                    exclude_filenames=pre_existing_files,
-                )
-                if new_files:
-                    response = _inject_file_markers(response, new_files)
+            response = await self._execute_agent_async(
+                ctx.fresh_agent,
+                ctx.enhanced_message,
+                ctx.search_params,
+                ctx.session_id_for_cache,
+                ctx.user_context,
+                ctx.image_files,
+                working_dir=ctx.working_dir,
+            )
 
-            # Parse response based on agent's output parser
-            from tools.agentTools import parse_agent_response
-            parsed_response = parse_agent_response(response, agent)
+            return await self._finalize_turn(ctx, response, db)
 
-            # Update request count
-            self._update_request_count(agent, db)
-
-            # Update session timestamp to keep it alive
-            if session:
-                await self.session_service.touch_session(session.id)
-
-            # Update conversation message count if using a specific conversation
-            if conversation:
-                from services.conversation_service import ConversationService
-                # Get last message preview (truncate response if too long)
-                last_message_preview = parsed_response[:200] if isinstance(parsed_response, str) else str(parsed_response)[:200]
-
-                # Clean message for preview if it's a list (multimodal)
-                # This ensures the conversation list shows clean text instead of JSON structure
-                if isinstance(parsed_response, list):
-                    try:
-                        text_parts = []
-                        for item in parsed_response:
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                text_parts.append(item.get("text", ""))
-                        if text_parts:
-                            last_message_preview = " ".join(text_parts)[:200]
-                    except Exception:
-                        pass
-
-                # Strip file:// markers from preview — replace with human-readable placeholders
-                import re as _re
-                last_message_preview = _re.sub(r'!\[[^\]]*\]\(file://[^\)]*\)', '[imagen]', last_message_preview)
-                last_message_preview = _re.sub(r'\[📎[^\]]*\]\(file://[^\)]*\)', '[archivo]', last_message_preview)
-                last_message_preview = last_message_preview.strip() or '[imagen generada]'
-                
-                # Increment by 2 (user message + agent response)
-                ConversationService.increment_message_count(
-                    db=db,
-                    conversation_id=conversation.conversation_id,
-                    last_message=last_message_preview,
-                    increment_by=2
-                )
-            
-            return {
-                "response": parsed_response,
-                "agent_id": agent_id,
-                "conversation_id": conversation.conversation_id if conversation else None,
-                "metadata": {
-                    "agent_name": agent.name,
-                    "agent_type": agent.type,
-                    "files_processed": len(processed_files),
-                    "has_memory": agent.has_memory
-                }
-            }
-            
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
 
-    async def execute_agent_chat(
-        self, 
-        agent_id: int, 
-        message: str, 
-        files: List[UploadFile] = None,
+    async def _prepare_turn(
+        self,
+        agent_id: int,
+        message: str,
+        file_references: List = None,
         search_params: Dict = None,
         user_context: Dict = None,
-        db: Session = None
-    ) -> Dict[str, Any]:
-        """
-        Execute agent chat - used by both playground and public API
-        
-        Args:
-            agent_id: ID of the agent to execute
-            message: User message
-            files: Optional file attachments
-            search_params: Optional search parameters for silo-based agents
-            user_context: User context (api_key, user_id, etc.)
-            
+        conversation_id: int = None,
+        db: Session = None,
+    ) -> AgentExecutionContext:
+        """Run all setup steps for one agent chat turn.
+
+        Validates access, resolves the conversation / session, builds the
+        enhanced message, and resolves the working directory.  Does NOT invoke
+        the LangGraph chain — that is the caller's responsibility.
+
         Returns:
-            Dict containing agent response and metadata
+            A fully populated :class:`AgentExecutionContext`.
         """
-        try:
-            # Get agent
-            agent = self.agent_service.get_agent(db, agent_id)
-            if not agent:
-                raise HTTPException(status_code=404, detail="Agent not found")
+        # 1. Fetch agent (lightweight — no relationships)
+        agent = self.agent_service.get_agent(db, agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
 
-            # Validate user has access to this agent before any SaaS checks
-            # (prevents leaking agent state to unauthorized callers)
-            await self._validate_agent_access(agent, user_context)
+        # 2. Access validation
+        await self._validate_agent_access(agent, user_context)
 
-            # Respect frozen state (SaaS mode: downgraded resources cannot be invoked)
-            if getattr(agent, 'is_frozen', False):
-                raise HTTPException(
-                    status_code=403,
-                    detail="This agent is frozen because your subscription tier has been downgraded. "
-                           "Please upgrade your plan or delete other resources to unfreeze it.",
-                )
-
-            # Enforce system LLM quota (SaaS mode only, no-op in self-managed)
-            if db and user_context and user_context.get('user_id'):
-                from services.tier_enforcement_service import TierEnforcementService
-                TierEnforcementService.check_system_llm_quota(db, user_context['user_id'])
-
-            # Process files if provided
-            processed_files = []
-            if files:
-                processed_files = await self._process_files_for_agent(files, agent)
-            
-            # Get user session for memory-enabled agents
-            session = None
-            if agent.has_memory:
-                # Extract conversation_id from user_context to ensure correct session identification
-                conversation_id = user_context.get("conversation_id") if user_context else None
-                session = await self.session_service.get_user_session(agent_id, user_context, conversation_id)
-
-            # Re-query agent with all relationships eagerly loaded
-            fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent_id)
-            if not fresh_agent:
-                raise HTTPException(status_code=404, detail="Agent not found in database")
-
-            # Build enhanced message with file contents
-            enhanced_message, image_files = self._prepare_message_with_files(message, processed_files)
-
-            # Determine session ID for checkpointer
-            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
-
-            # Execute agent directly in FastAPI's event loop (shared checkpointer pool)
-            response = await self._execute_agent_async(
-                fresh_agent, enhanced_message, search_params, session_id_for_cache, user_context, image_files
+        # 3. Frozen-state guard (SaaS mode)
+        if getattr(agent, 'is_frozen', False):
+            raise HTTPException(
+                status_code=403,
+                detail="This agent is frozen because your subscription tier has been downgraded. "
+                       "Please upgrade your plan or delete other resources to unfreeze it.",
             )
 
-            # Parse response based on agent's output parser
-            from tools.agentTools import parse_agent_response
-            parsed_response = parse_agent_response(response, agent)
-            
-            # Update request count
-            self._update_request_count(agent, db)
-            
-            # Update session timestamp to keep it alive
-            if session:
-                await self.session_service.touch_session(session.id)
-            
-            return {
-                "response": parsed_response,
-                "agent_id": agent_id,
-                "metadata": {
-                    "agent_name": agent.name,
-                    "agent_type": agent.type,
-                    "files_processed": len(processed_files),
-                    "has_memory": agent.has_memory
-                }
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+        # 4. System LLM quota (SaaS mode, no-op in self-managed)
+        if db and user_context and user_context.get('user_id'):
+            from services.tier_enforcement_service import TierEnforcementService
+            TierEnforcementService.check_system_llm_quota(db, user_context['user_id'])
+
+        # 5. Convert FileReference objects to plain dicts
+        processed_files: List[Dict] = []
+        if file_references:
+            for file_ref in file_references:
+                processed_files.append({
+                    "filename": file_ref.filename,
+                    "content": file_ref.content,
+                    "type": file_ref.file_type,
+                    "file_id": file_ref.file_id,
+                    "file_path": file_ref.file_path,
+                })
+
+        # 6. Get / create conversation for memory-enabled agents
+        session = None
+        conversation = None
+        if agent.has_memory:
+            from services.conversation_service import ConversationService
+
+            if conversation_id:
+                conversation = ConversationService.get_conversation(
+                    db=db,
+                    conversation_id=conversation_id,
+                    user_context=user_context,
+                    agent_id=agent_id,
+                )
+                if not conversation:
+                    raise HTTPException(
+                        status_code=404, detail="Conversation not found or access denied"
+                    )
+                session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
+                session = await self.session_service.get_user_session(
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=session_suffix,
+                )
+            else:
+                conversation = ConversationService.create_conversation(
+                    db=db,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    title=None,
+                )
+                logger.info(
+                    "Auto-created conversation %s for agent %s",
+                    conversation.conversation_id,
+                    agent_id,
+                )
+                session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
+                session = await self.session_service.get_user_session(
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=session_suffix,
+                )
+
+        # 7. Re-query agent with all relationships eagerly loaded
+        fresh_agent = self.agent_execution_repo.get_agent_with_relationships(db, agent_id)
+        if not fresh_agent:
+            raise HTTPException(status_code=404, detail="Agent not found in database")
+
+        # 8. Build enhanced message + separate image files
+        enhanced_message, image_files = self._prepare_message_with_files(message, processed_files)
+
+        session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+        effective_conv_id = conversation_id or (
+            conversation.conversation_id if conversation else None
+        )
+
+        # 9. Resolve working directory
+        app_config = get_app_config()
+        tmp_base = app_config['TMP_BASE_FOLDER']
+        if effective_conv_id:
+            working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
+        else:
+            user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
+            app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
+            session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
+            working_dir = os.path.join(tmp_base, "persistent", session_key)
+
+        # 10. Snapshot working dir so finalize can exclude pre-existing files
+        pre_existing_files: set = set()
+        if working_dir and os.path.isdir(working_dir):
+            pre_existing_files = set(os.listdir(working_dir))
+
+        return AgentExecutionContext(
+            agent_id=agent_id,
+            agent=agent,
+            fresh_agent=fresh_agent,
+            enhanced_message=enhanced_message,
+            image_files=image_files,
+            session=session,
+            conversation=conversation,
+            effective_conv_id=effective_conv_id,
+            session_id_for_cache=session_id_for_cache,
+            working_dir=working_dir,
+            pre_existing_files=pre_existing_files,
+            processed_files=processed_files,
+            search_params=search_params,
+            user_context=user_context,
+        )
+
+    async def _finalize_turn(
+        self,
+        ctx: AgentExecutionContext,
+        raw_response: Any,
+        db: Session,
+    ) -> Dict[str, Any]:
+        """Run all post-processing steps for one agent chat turn.
+
+        1. Sync output files written to the working dir.
+        2. Inject file:// markers into the response text.
+        3. Parse the response with the agent's output parser.
+        4. Update the agent request count.
+        5. Touch the session to keep it alive.
+        6. Record system LLM usage (SaaS mode).
+        7. Increment the conversation message count.
+
+        Args:
+            ctx: The context produced by :meth:`_prepare_turn`.
+            raw_response: The raw string/dict returned by :meth:`_execute_agent_async`.
+            db: Active SQLAlchemy session.
+
+        Returns:
+            A dict with keys ``response``, ``agent_id``, ``conversation_id``,
+            ``metadata``, ``parsed_response``, ``effective_conv_id``, and
+            ``files_data`` (used by the streaming path to emit the ``done`` event).
+        """
+        import re as _re
+        from tools.agentTools import parse_agent_response
+
+        response = raw_response
+        files_data: List[Dict[str, Any]] = []
+
+        # 1 + 2. Sync output files and inject markers
+        if ctx.working_dir:
+            file_service = FileManagementService()
+            new_files = await file_service.sync_output_files(
+                working_dir=ctx.working_dir,
+                agent_id=ctx.agent_id,
+                user_context=ctx.user_context,
+                conversation_id=(
+                    str(ctx.effective_conv_id) if ctx.effective_conv_id else None
+                ),
+                exclude_filenames=ctx.pre_existing_files,
+            )
+            if new_files:
+                response = _inject_file_markers(response, new_files)
+                files_data = [
+                    {
+                        "file_id": f.file_id,
+                        "filename": f.filename,
+                        "file_type": f.file_type,
+                    }
+                    for f in new_files
+                ]
+
+        # 3. Parse response
+        parsed_response = parse_agent_response(response, ctx.agent)
+
+        # 4. Update request count
+        self._update_request_count(ctx.agent, db)
+
+        # 5. Touch session
+        if ctx.session:
+            await self.session_service.touch_session(ctx.session.id)
+
+        # 6. Record system LLM usage (SaaS mode — no-op for own-key services)
+        ai_svc = ctx.fresh_agent.ai_service
+        if (
+            ai_svc is not None
+            and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
+            and db
+            and ctx.user_context
+            and ctx.user_context.get('user_id')
+        ):
+            try:
+                from services.usage_tracking_service import UsageTrackingService
+                UsageTrackingService.record_system_llm_call(db, ctx.user_context['user_id'])
+            except Exception as _usage_exc:
+                logger.warning(
+                    "Failed to record system LLM usage: %s", _usage_exc, exc_info=True
+                )
+
+        # 7. Update conversation message count
+        if ctx.conversation:
+            from services.conversation_service import ConversationService
+
+            if isinstance(parsed_response, list):
+                try:
+                    text_parts = [
+                        item.get("text", "")
+                        for item in parsed_response
+                        if isinstance(item, dict) and item.get("type") == "text"
+                    ]
+                    last_message_preview = " ".join(text_parts)[:200]
+                except Exception:
+                    last_message_preview = str(parsed_response)[:200]
+            else:
+                last_message_preview = (
+                    parsed_response[:200]
+                    if isinstance(parsed_response, str)
+                    else str(parsed_response)[:200]
+                )
+
+            last_message_preview = _re.sub(
+                r'!\[[^\]]*\]\(file://[^\)]*\)', '[imagen]', last_message_preview
+            )
+            last_message_preview = _re.sub(
+                r'\[📎[^\]]*\]\(file://[^\)]*\)', '[archivo]', last_message_preview
+            )
+            last_message_preview = last_message_preview.strip() or '[imagen generada]'
+
+            ConversationService.increment_message_count(
+                db=db,
+                conversation_id=ctx.conversation.conversation_id,
+                last_message=last_message_preview,
+                increment_by=2,
+            )
+
+        return {
+            "response": parsed_response,
+            "agent_id": ctx.agent_id,
+            "conversation_id": (
+                ctx.conversation.conversation_id if ctx.conversation else None
+            ),
+            "metadata": {
+                "agent_name": ctx.agent.name,
+                "agent_type": ctx.agent.type,
+                "files_processed": len(ctx.processed_files),
+                "has_memory": ctx.agent.has_memory,
+            },
+            # Fields used by the streaming path to emit the done event
+            "parsed_response": parsed_response,
+            "effective_conv_id": ctx.effective_conv_id,
+            "files_data": files_data,
+        }
 
     async def execute_agent_ocr(
         self, 
@@ -984,97 +999,9 @@ class AgentExecutionService:
             # Add the question to config
             config["configurable"]["question"] = message
             
-            # Execute the agent in the SAME event loop as where MCP client was created
-            formatted_user_message = fresh_agent.prompt_template.format(question=message)
-            
-            # Construct message content
-            if image_files:
-                content = [{"type": "text", "text": formatted_user_message}]
-                
-                # Get TMP_BASE_FOLDER from config
-                app_config = get_app_config()
-                tmp_base_folder = app_config['TMP_BASE_FOLDER']
-                
-                # Check for aict_base_url environment variable (Production Mode)
-                aict_base_url = os.getenv('AICT_BASE_URL')
-                
-                for img in image_files:
-                    file_path = img.get('file_path', '')
-                    if not file_path:
-                        logger.warning(f"Image file has no file_path: {img}")
-                        continue
-                        
-                    # Ensure forward slashes
-                    file_path = file_path.replace('\\', '/')
-                    if file_path.startswith('/'):
-                        file_path = file_path[1:]
-                    
-                    # If aict_base_url is set, use it (Production Mode)
-                    if aict_base_url:
-                        # Remove trailing slash if present
-                        if aict_base_url.endswith('/'):
-                            aict_base_url = aict_base_url[:-1]
-                            
-                        # Generate signed URL
-                        user_email = user_context.get('email') if user_context else None
-                        if user_email:
-                            from utils.security import generate_signature
-                            sig = generate_signature(file_path, user_email)
-                            url = f"{aict_base_url}/static/{file_path}?user={user_email}&sig={sig}"
-                        else:
-                            # Fallback if no user context (should not happen in auth mode)
-                            url = f"{aict_base_url}/static/{file_path}"
-                            
-                        logger.info(f"Adding image to message using public URL: {url}")
-                        content.append({
-                            "type": "image_url",
-                            "image_url": {"url": url}
-                        })
-                    else:
-                        # Fallback to Base64 (Development Mode)
-                        # Use Base64 for local development to avoid localhost URL issues
-                        try:
-                            # Construct full path
-                            full_path = os.path.join(tmp_base_folder, file_path)
-                            
-                            if os.path.exists(full_path):
-                                import base64
-                                import mimetypes
-                                
-                                mime_type, _ = mimetypes.guess_type(full_path)
-                                if not mime_type:
-                                    mime_type = "image/jpeg"
-                                    
-                                with open(full_path, "rb") as image_file:
-                                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                                    
-                                data_url = f"data:{mime_type};base64,{encoded_string}"
-                                logger.info(f"Adding image to message as base64 (length: {len(encoded_string)})")
-                                
-                                content.append({
-                                    "type": "image_url",
-                                    "image_url": {"url": data_url}
-                                })
-                            else:
-                                # Fallback to URL if file not found locally (should not happen)
-                                url = f"http://localhost:8000/static/{file_path}"
-                                logger.warning(f"Image file not found at {full_path}, falling back to URL: {url}")
-                                content.append({
-                                    "type": "image_url",
-                                    "image_url": {"url": url}
-                                })
-                        except Exception as e:
-                            logger.error(f"Error processing image for base64: {e}")
-                            # Fallback to URL
-                            url = f"http://localhost:8000/static/{file_path}"
-                            content.append({
-                                "type": "image_url",
-                                "image_url": {"url": url}
-                            })
-                
-                message_payload = HumanMessage(content=content)
-            else:
-                message_payload = HumanMessage(content=formatted_user_message)
+            # Build the HumanMessage (handles text-only and multimodal images)
+            from tools.agentTools import build_human_message
+            message_payload = build_human_message(fresh_agent, message, image_files or [], user_context)
             
             if langsmith_config:
                 from langchain_core.tracers.langchain import LangChainTracer, wait_for_all_tracers
@@ -1102,22 +1029,6 @@ class AgentExecutionService:
                     logger.warning(f"Error flushing LangSmith traces: {flush_err}")
             else:
                 result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
-
-            # Track system LLM usage only when the agent uses a system AI service
-            # (app_id=NULL). Own-key services are not counted against the quota.
-            ai_svc = fresh_agent.ai_service
-            if (
-                ai_svc is not None
-                and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
-                and self.db
-                and user_context
-                and user_context.get('user_id')
-            ):
-                try:
-                    from services.usage_tracking_service import UsageTrackingService
-                    UsageTrackingService.record_system_llm_call(self.db, user_context['user_id'])
-                except Exception as _usage_exc:
-                    logger.warning("Failed to record system LLM usage: %s", _usage_exc, exc_info=True)
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

@@ -47,7 +47,7 @@ async def process_ocr_internal(
         }
         
         # Use unified service layer
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         result = await execution_service.execute_agent_ocr(
             agent_id=agent_id,
             pdf_file=pdf_file,

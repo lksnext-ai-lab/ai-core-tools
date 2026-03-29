@@ -510,53 +510,6 @@ def _extract_jwt_token(request: Request) -> Optional[str]:
     return None
 
 
-async def _collect_file_references(
-    files: Optional[List[UploadFile]],
-    parsed_file_references: Optional[list],
-    agent_id: int,
-    conversation_id: int,
-    user_context: Dict,
-) -> List[FileReference]:
-    """Upload new files and merge with existing file references."""
-    file_service = FileManagementService()
-    all_refs: List[FileReference] = []
-    uploaded_ids: set = set()
-
-    if files:
-        for upload_file in files:
-            if upload_file.filename:
-                ref = await file_service.upload_file(
-                    file=upload_file,
-                    agent_id=agent_id,
-                    user_context=user_context,
-                    conversation_id=conversation_id,
-                )
-                all_refs.append(ref)
-                uploaded_ids.add(ref.file_id)
-
-    existing_files = await file_service.list_attached_files(
-        agent_id=agent_id,
-        user_context=user_context,
-        conversation_id=str(conversation_id),
-    )
-
-    if parsed_file_references:
-        requested_ids = set(parsed_file_references)
-        existing_files = [f for f in existing_files if f["file_id"] in requested_ids]
-
-    for file_data in existing_files:
-        if file_data["file_id"] not in uploaded_ids:
-            all_refs.append(
-                FileReference(
-                    file_id=file_data["file_id"],
-                    filename=file_data["filename"],
-                    file_type=file_data["file_type"],
-                    content=file_data["content"],
-                    file_path=file_data.get("file_path"),
-                )
-            )
-
-    return all_refs
 
 
 def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
@@ -633,15 +586,15 @@ async def marketplace_chat(
             "token": jwt_token,
         }
 
-        all_file_references = await _collect_file_references(
+        all_file_references = await FileManagementService().resolve_chat_files(
             files=files,
-            parsed_file_references=parsed_refs,
+            file_reference_ids=parsed_refs,
             agent_id=agent.agent_id,
-            conversation_id=conversation_id,
             user_context=user_context,
+            conversation_id=conversation_id,
         )
 
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent.agent_id,
             message=message,
