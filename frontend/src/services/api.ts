@@ -2070,6 +2070,78 @@ class ApiService {
     });
   }
 
+  // ==================== PLATFORM CHATBOT API ====================
+
+  async getPlatformChatbotConfig(): Promise<{
+    enabled: boolean;
+    agent_name: string | null;
+    agent_description: string | null;
+  }> {
+    return this.request('/internal/platform-chatbot/config');
+  }
+
+  async sendPlatformChatbotMessage(
+    message: string,
+    sessionId: string
+  ): Promise<{ response: string | Record<string, unknown>; agent_id: number; conversation_id: number | null; metadata: Record<string, unknown> }> {
+    return this.request('/internal/platform-chatbot/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, session_id: sessionId }),
+    });
+  }
+
+  async streamPlatformChatbotMessage(
+    message: string,
+    sessionId: string,
+    options: { onEvent: (event: StreamEvent) => void; signal?: AbortSignal }
+  ): Promise<void> {
+    const url = `${this.baseURL}/internal/platform-chatbot/chat/stream`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ message, session_id: sessionId }),
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines: each event is "data: {json}\n\n"
+        const lines = buffer.split('\n\n');
+        // Keep the last incomplete chunk in the buffer
+        buffer = lines.pop() || '';
+
+        this.parseSSELines(lines, options.onEvent);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   // ==================== UTILITY METHODS ====================
 }
 
