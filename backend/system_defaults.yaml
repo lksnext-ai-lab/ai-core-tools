@@ -10,6 +10,12 @@ settings:
     category: "marketplace"
     description: "Maximum API calls per user per month to marketplace agents. 0 = unlimited."
 
+  platform_chatbot_agent_id:
+    value: "-1"
+    type: "integer"
+    category: "platform"
+    description: "Agent ID for the platform-wide chatbot widget. -1 = disabled."
+
 # Tier configuration defaults - used when no DB override exists
 # -1 means unlimited
 tier_config:
