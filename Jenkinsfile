@@ -11,7 +11,6 @@ pipeline {
         KUBE_NAMESPACE = "test"
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
         INTERNAL_LKS_DOCKER_REGISTRY_URL = "172.20.133.198:8086"
 
         //Sonar Related
@@ -20,7 +19,7 @@ pipeline {
         SONAR_BRANCH = "develop"
         IMAGE_SONARSCANNER = 'registry.lksnext.com/devsecops/custom-sonarscanner-cli:1.0'
         IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
-        GIT_CREDENTIAL = credentials('814b38ca-a572-4188-9c47-ee75ca443903')
+        
     }
     
     stages {
@@ -101,40 +100,6 @@ pipeline {
                     sh 'docker stop mattin-test-db || true'
                     sh 'docker rm mattin-test-db || true'
                     sh 'docker rmi mattin-test-runner || true'
-                }
-            }
-        }
-
-        stage('Version Bump') {
-            steps {
-                script {
-                    echo "Debugging credentials..."
-                    echo "GIT_CREDENTIAL exists: ${GIT_CREDENTIAL != null}"
-                    echo "GIT_CREDENTIAL length: ${GIT_CREDENTIAL.length()}"
-                    echo "GIT_CREDENTIAL type: ${GIT_CREDENTIAL.getClass().getName()}"
-                    
-                    // Split credentials and check parts
-                    def credParts = GIT_CREDENTIAL.split(':')
-                    echo "Number of credential parts: ${credParts.length}"
-                    if (credParts.length >= 2) {
-                        echo "Username part exists: ${credParts[0] != null}"
-                        echo "Username length: ${credParts[0].length()}"
-                        echo "Password part exists: ${credParts[1] != null}"
-                        echo "Password length: ${credParts[1].length()}"
-
-                    }
-                    
-                    def username = credParts[0]
-                    def password = credParts[1]
-                    
-                    sh """
-                        docker run --rm \
-                        -v "\$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER=${username} \
-                        -e GITLAB_CREDENTIAL_PASSWORD=${password} \
-                        -e TEST=testAAAABC \
-                        $IMAGE_VERSION_BUMP
-                    """
                 }
             }
         }
@@ -469,16 +434,4 @@ pipeline {
             deleteDir()
         }
     }
-}
-
-def incrementVersion(String version, String type) {
-    def parts = version.split("\\.")
-    if (type == "major") {
-        return "${parts[0].toInteger() + 1}.0.0"
-    } else if (type == "minor") {
-        return "${parts[0]}.${parts[1].toInteger() + 1}.0"
-    } else if (type == "patch") {
-        return "${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
-    }
-    return version
 }
