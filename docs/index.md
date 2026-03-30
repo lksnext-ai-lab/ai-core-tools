@@ -47,6 +47,7 @@
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
 - [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
 - [SaaS Mode](guides/saas-mode.md) — SaaS deployment: Stripe billing, subscription tiers, quota enforcement, and `system_defaults.yaml` configuration
+- [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent
 
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph

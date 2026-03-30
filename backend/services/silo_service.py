@@ -420,7 +420,7 @@ class SiloService:
             loader = PyPDFLoader(file_path, extract_images=False)
         elif file_extension == '.docx':
             loader = Docx2txtLoader(file_path)
-        elif file_extension == '.txt':
+        elif file_extension in ('.txt', '.md'):
             loader = TextLoader(file_path, encoding='utf-8')
         else:
             logger.error(f"Unsupported file type: {file_extension}")

@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 class ResourceService:
 
     # Supported file extensions
-    SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
+    SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.md'}
 
 
     @staticmethod
