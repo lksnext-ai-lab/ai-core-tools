@@ -17,6 +17,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  follow_ups?: string[];
 }
 
 interface PlatformChatbotContextType {

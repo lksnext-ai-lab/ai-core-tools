@@ -56,6 +56,8 @@ import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
+import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
+import PlatformChatbotWidget from '../components/platform-chatbot/PlatformChatbotWidget';
 import MCPServersPage from '../pages/MCPServersPage';
 import MCPServerFormPage from '../pages/MCPServerFormPage';
 import MCPServerDetailPage from '../pages/MCPServerDetailPage';
@@ -140,6 +142,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         <UserProvider>
           <SettingsCacheProvider>
             <DeploymentModeProvider>
+            <PlatformChatbotProvider>
             <Router>
               <Routes>
                 {/* Public routes */}
@@ -444,7 +447,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 {/* Default redirect for unmatched paths */}
                 <Route path="*" element={<Navigate to="/apps" replace />} />
               </Routes>
+              <PlatformChatbotWidget />
             </Router>
+            </PlatformChatbotProvider>
             </DeploymentModeProvider>
           </SettingsCacheProvider>
         </UserProvider>

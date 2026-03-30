@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { X, RotateCcw, Send } from 'lucide-react';
 import { usePlatformChatbot } from '../../contexts/PlatformChatbotContext';
 import { apiService } from '../../services/api';
@@ -11,6 +11,81 @@ interface PlatformChatbotPanelProps {
   onClose: () => void;
   onNewConversation: () => void;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * LLMs often emit literal newlines/tabs inside JSON strings instead of \n/\t,
+ * which breaks JSON.parse. Walk the text and escape bare control characters
+ * that appear inside string values.
+ */
+function sanitizeJsonControlChars(text: string): string {
+  let inString = false;
+  let escaped = false;
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && inString) { escaped = true; out += ch; continue; }
+    if (ch === '"') { inString = !inString; out += ch; continue; }
+    if (inString) {
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { out += '\\r'; continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function parseAgentResponse(text: string): { content: string; follow_ups: string[] } {
+  const idx = text.search(/\{\s*"/);
+  if (idx === -1) return { content: text, follow_ups: [] };
+
+  const jsonPart = text.slice(idx);
+
+  // First attempt: JSON.parse with sanitization (handles literal newlines in strings)
+  try {
+    const parsed = JSON.parse(sanitizeJsonControlChars(jsonPart));
+    if (parsed && typeof parsed.content === 'string') {
+      return {
+        content: parsed.content,
+        follow_ups: Array.isArray(parsed.follow_ups)
+          ? parsed.follow_ups.filter((s: unknown) => typeof s === 'string')
+          : [],
+      };
+    }
+  } catch { /* fall through to regex */ }
+
+  // Regex fallback: extract content and follow_ups without JSON.parse.
+  // Pattern matches a JSON string value, handling escape sequences correctly.
+  const contentMatch = jsonPart.match(/"content"\s*:\s*"((?:[^"\\]|\\[\s\S])*)"/);
+  if (!contentMatch) return { content: text, follow_ups: [] };
+
+  const content = contentMatch[1]
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+
+  const follow_ups: string[] = [];
+  const fuMatch = jsonPart.match(/"follow_ups"\s*:\s*\[([\s\S]*?)\]/);
+  if (fuMatch) {
+    const fuItems = [...fuMatch[1].matchAll(/"((?:[^"\\]|\\[\s\S])*)"/g)];
+    follow_ups.push(...fuItems.map(m => m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')));
+  }
+
+  return { content, follow_ups };
+}
+
+// ---------------------------------------------------------------------------
 
 const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   agentName,
@@ -25,18 +100,41 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const displayStreamingContent = useMemo(() => {
+    const unescape = (s: string) => s
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\r/g, '\r')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+
+    // Case 1: closing quote already received — extract complete content value
+    const complete = streamingContent.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (complete) return unescape(complete[1]);
+
+    // Case 2: still streaming the content value — show what's arrived so far
+    const partial = streamingContent.match(/"content"\s*:\s*"([\s\S]*)/);
+    if (partial) return unescape(partial[1]);
+
+    // Case 3: JSON response but content key not yet arrived — show nothing
+    if (streamingContent.trimStart().startsWith('{')) return '';
+
+    // Case 4: plain text response — show as-is
+    return streamingContent;
+  }, [streamingContent]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
 
-  const handleSend = async () => {
-    const text = inputText.trim();
+  const handleSend = async (overrideText?: string) => {
+    const text = (overrideText ?? inputText).trim();
     if (!text || isSending) return;
 
     // Append user message
     addMessage({ role: 'user', content: text, timestamp: Date.now() });
-    setInputText('');
+    if (!overrideText) setInputText('');
     setIsSending(true);
     setStreamingContent('');
     setIsStreaming(true);
@@ -53,11 +151,25 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
             accumulated += token;
             setStreamingContent(accumulated);
           } else if (event.type === 'done') {
-            const response = (event.data as { response?: string }).response;
-            const finalContent = response || accumulated;
+            const rawResponse = event.data.response;
+            let content: string;
+            let follow_ups: string[] = [];
+
+            if (rawResponse && typeof rawResponse === 'object' && !Array.isArray(rawResponse)) {
+              // Backend already parsed the JSON (e.g. when OutputParser is active)
+              const r = rawResponse as Record<string, unknown>;
+              content = typeof r.content === 'string' ? r.content : JSON.stringify(r, null, 2);
+              follow_ups = Array.isArray(r.follow_ups)
+                ? r.follow_ups.filter((s): s is string => typeof s === 'string')
+                : [];
+            } else {
+              const finalText = (typeof rawResponse === 'string' ? rawResponse : null) || accumulated;
+              ({ content, follow_ups } = parseAgentResponse(finalText));
+            }
+
             setIsStreaming(false);
             setStreamingContent('');
-            addMessage({ role: 'assistant', content: finalContent, timestamp: Date.now() });
+            addMessage({ role: 'assistant', content, follow_ups, timestamp: Date.now() });
           } else if (event.type === 'error') {
             const errMsg = (event.data as { message?: string }).message || 'Something went wrong.';
             setIsStreaming(false);
@@ -90,8 +202,12 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSend(undefined);
     }
+  };
+
+  const handleFollowUp = (text: string) => {
+    if (!isSending) handleSend(text);
   };
 
   const handleNewConversation = () => {
@@ -104,7 +220,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   };
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 w-96 h-[600px] flex flex-col rounded-xl shadow-2xl border bg-background overflow-hidden transition-all duration-300">
+    <div className="fixed bottom-20 right-4 z-50 w-96 h-[600px] flex flex-col rounded-xl shadow-2xl border bg-white dark:bg-zinc-900 overflow-hidden transition-all duration-300">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
         <span className="font-semibold text-sm truncate">
@@ -140,7 +256,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
               className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
@@ -155,12 +271,26 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
                 <span className="whitespace-pre-wrap">{msg.content}</span>
               )}
             </div>
+            {msg.role === 'assistant' && msg.follow_ups && msg.follow_ups.length > 0 && (
+              <div className="flex flex-col items-start gap-1 mt-1 max-w-[85%]">
+                {msg.follow_ups.map((fu, fi) => (
+                  <button
+                    key={fi}
+                    onClick={() => handleFollowUp(fu)}
+                    disabled={isSending}
+                    className="text-xs px-3 py-1.5 rounded-full border border-primary/40 text-primary hover:bg-primary/10 transition-colors text-left disabled:opacity-40"
+                  >
+                    {fu}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 
         {isStreaming && (
           <StreamingMessage
-            content={streamingContent}
+            content={displayStreamingContent}
             isStreaming={isStreaming}
           />
         )}
@@ -177,7 +307,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
           placeholder="Type a message..."
           rows={1}
           disabled={isSending}
-          className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+          className="flex-1 resize-none rounded-md border bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
           style={{ minHeight: '38px', maxHeight: '120px' }}
         />
         <button
