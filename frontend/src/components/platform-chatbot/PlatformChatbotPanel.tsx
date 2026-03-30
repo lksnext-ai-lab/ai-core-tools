@@ -44,6 +44,15 @@ function sanitizeJsonControlChars(text: string): string {
   return out;
 }
 
+function unescapeJsonString(s: string): string {
+  return s
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
 function parseAgentResponse(text: string): { content: string; follow_ups: string[] } {
   const idx = text.search(/\{\s*"/);
   if (idx === -1) return { content: text, follow_ups: [] };
@@ -68,21 +77,14 @@ function parseAgentResponse(text: string): { content: string; follow_ups: string
   const contentMatch = jsonPart.match(/"content"\s*:\s*"((?:[^"\\]|\\[\s\S])*)"/);
   if (!contentMatch) return { content: text, follow_ups: [] };
 
-  const content = contentMatch[1]
-    .replace(/\\n/g, '\n')
-    .replace(/\\t/g, '\t')
-    .replace(/\\r/g, '\r')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\');
-
   const follow_ups: string[] = [];
   const fuMatch = jsonPart.match(/"follow_ups"\s*:\s*\[([\s\S]*?)\]/);
   if (fuMatch) {
     const fuItems = [...fuMatch[1].matchAll(/"((?:[^"\\]|\\[\s\S])*)"/g)];
-    follow_ups.push(...fuItems.map(m => m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')));
+    follow_ups.push(...fuItems.map(m => unescapeJsonString(m[1])));
   }
 
-  return { content, follow_ups };
+  return { content: unescapeJsonString(contentMatch[1]), follow_ups };
 }
 
 // ---------------------------------------------------------------------------
@@ -101,20 +103,13 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const displayStreamingContent = useMemo(() => {
-    const unescape = (s: string) => s
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\r/g, '\r')
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\');
-
     // Case 1: closing quote already received — extract complete content value
     const complete = streamingContent.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (complete) return unescape(complete[1]);
+    if (complete) return unescapeJsonString(complete[1]);
 
     // Case 2: still streaming the content value — show what's arrived so far
     const partial = streamingContent.match(/"content"\s*:\s*"([\s\S]*)/);
-    if (partial) return unescape(partial[1]);
+    if (partial) return unescapeJsonString(partial[1]);
 
     // Case 3: JSON response but content key not yet arrived — show nothing
     if (streamingContent.trimStart().startsWith('{')) return '';
@@ -122,6 +117,11 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
     // Case 4: plain text response — show as-is
     return streamingContent;
   }, [streamingContent]);
+
+  // Abort any in-flight stream on unmount
+  useEffect(() => {
+    return () => { abortControllerRef.current?.abort(); };
+  }, []);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -167,12 +167,10 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
               ({ content, follow_ups } = parseAgentResponse(finalText));
             }
 
-            setIsStreaming(false);
             setStreamingContent('');
             addMessage({ role: 'assistant', content, follow_ups, timestamp: Date.now() });
           } else if (event.type === 'error') {
             const errMsg = (event.data as { message?: string }).message || 'Something went wrong.';
-            setIsStreaming(false);
             setStreamingContent('');
             addMessage({
               role: 'assistant',
@@ -183,7 +181,6 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
         },
       });
     } catch (err: unknown) {
-      setIsStreaming(false);
       setStreamingContent('');
       // Don't add error message if the request was aborted intentionally
       if (err instanceof Error && err.name !== 'AbortError') {
@@ -202,12 +199,8 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend(undefined);
+      handleSend();
     }
-  };
-
-  const handleFollowUp = (text: string) => {
-    if (!isSending) handleSend(text);
   };
 
   const handleNewConversation = () => {
@@ -276,7 +269,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
                 {msg.follow_ups.map((fu, fi) => (
                   <button
                     key={fi}
-                    onClick={() => handleFollowUp(fu)}
+                    onClick={() => handleSend(fu)}
                     disabled={isSending}
                     className="text-xs px-3 py-1.5 rounded-full border border-primary/40 text-primary hover:bg-primary/10 transition-colors text-left disabled:opacity-40"
                   >
@@ -291,7 +284,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
         {isStreaming && (
           <StreamingMessage
             content={displayStreamingContent}
-            isStreaming={isStreaming}
+            isStreaming={true}
           />
         )}
 
