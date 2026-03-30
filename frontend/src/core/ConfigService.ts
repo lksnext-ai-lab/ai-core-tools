@@ -34,7 +34,7 @@ class ConfigService {
 
   private getDefaultApiConfig(): ApiConfig {
     // Try to get runtime configuration first (injected at container startup)
-    const runtimeConfig = (window as any).__RUNTIME_CONFIG__;
+    const runtimeConfig = (globalThis as any).__RUNTIME_CONFIG__;
     
     // Fallback chain: runtime config -> build-time env vars -> default
     const baseUrl = runtimeConfig?.VITE_API_BASE_URL || 
@@ -53,7 +53,7 @@ class ConfigService {
   async loadConfigFromBackend(): Promise<Partial<ClientConfig> | null> {
     try {
       // Get runtime configuration if available
-      const runtimeConfig = (window as any).__RUNTIME_CONFIG__;
+      const runtimeConfig = (globalThis as any).__RUNTIME_CONFIG__;
       
       // Check if OIDC is enabled via runtime config
       const oidcEnabled = runtimeConfig?.VITE_OIDC_ENABLED === 'true';
@@ -69,7 +69,7 @@ class ConfigService {
               enabled: true,
               authority: runtimeConfig.VITE_OIDC_AUTHORITY || '',
               clientId: runtimeConfig.VITE_OIDC_CLIENT_ID || '',
-              redirectUri: runtimeConfig.VITE_OIDC_REDIRECT_URI || `${window.location.origin}/auth/success`,
+              redirectUri: runtimeConfig.VITE_OIDC_REDIRECT_URI || `${globalThis.location.origin}/auth/success`,
               scope: runtimeConfig.VITE_OIDC_SCOPE || 'openid profile email',
               audience: runtimeConfig.VITE_OIDC_AUDIENCE
             }
@@ -95,7 +95,7 @@ class ConfigService {
             enabled: true,
             authority: config.oidc_authority || '',
             clientId: config.oidc_client_id || '',
-            redirectUri: `${window.location.origin}/callback`,
+            redirectUri: `${globalThis.location.origin}/callback`,
             scope: 'openid profile email'
           } : undefined
         }

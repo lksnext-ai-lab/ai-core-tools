@@ -26,7 +26,6 @@ const Speedometer: React.FC<SpeedometerProps> = ({
     stress_level, 
     current_usage, 
     limit, 
-    remaining, 
     reset_in_seconds,
     is_over_limit 
   } = usageStats;
@@ -80,13 +79,18 @@ const Speedometer: React.FC<SpeedometerProps> = ({
     return `${minutes}m ${remainingSeconds}s`;
   };
 
+  const stressColors: Record<string, string> = {
+    unlimited: 'bg-green-500',
+    low: 'bg-green-500',
+    moderate: 'bg-yellow-400',
+    high: 'bg-orange-500',
+    critical: 'bg-red-500',
+  };
+
   const getStressIcon = () => {
     if (stress_level === 'unlimited') return '∞';
-    if (stress_level === 'low') return '🟢';
-    if (stress_level === 'moderate') return '🟡';
-    if (stress_level === 'high') return '🟠';
-    if (stress_level === 'critical') return '🔴';
-    return '⚪';
+    const colorClass = stressColors[stress_level] ?? 'bg-gray-300';
+    return <span className={`w-3 h-3 rounded-full inline-block ${colorClass}`} />;
   };
 
   return (

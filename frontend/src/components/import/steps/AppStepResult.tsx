@@ -17,7 +17,7 @@ function AppStepResult({
   onClose,
   onOpenApp,
   onRetry,
-}: Props) {
+}: Readonly<Props>) {
   if (isImporting) {
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -111,8 +111,8 @@ function AppStepResult({
                 Warnings ({s.total_warnings.length})
               </p>
               <ul className="text-xs text-amber-600 space-y-0.5 list-disc list-inside max-h-32 overflow-y-auto">
-                {s.total_warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
+                {s.total_warnings.map((w) => (
+                  <li key={w}>{w}</li>
                 ))}
               </ul>
             </div>
@@ -125,8 +125,8 @@ function AppStepResult({
                 Errors ({s.total_errors.length})
               </p>
               <ul className="text-xs text-red-600 space-y-0.5 list-disc list-inside">
-                {s.total_errors.map((e, i) => (
-                  <li key={i}>{e}</li>
+                {s.total_errors.map((e) => (
+                  <li key={e}>{e}</li>
                 ))}
               </ul>
             </div>

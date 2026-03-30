@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { apiService } from '../services/api';
 
 interface PendingInvitation {
@@ -19,10 +20,6 @@ function PendingInvitationsNotification() {
 
   useEffect(() => {
     loadPendingInvitations();
-    
-    // Poll for updates every 5 seconds to keep badge in sync with other tabs/pages
-    const interval = setInterval(loadPendingInvitations, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   async function loadPendingInvitations() {
@@ -61,6 +58,7 @@ function PendingInvitationsNotification() {
       setTimeout(() => setMessage(null), 3000);
       
     } catch (error) {
+      console.error(`Failed to ${action} invitation:`, error);
       setMessage({ type: 'error', text: `Failed to ${action} invitation` });
     } finally {
       setLoading(false);
@@ -77,7 +75,7 @@ function PendingInvitationsNotification() {
       <button
         onClick={toggleDetails}
         className="relative p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
-        title={`${invitations.length} pending invitation${invitations.length !== 1 ? 's' : ''}`}
+        title={`${invitations.length} pending invitation${invitations.length === 1 ? '' : 's'}`}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-3.5-3.5a2.5 2.5 0 010-3.5L19 7h-5M9 17H4l3.5-3.5a2.5 2.5 0 000-3.5L4 7h5m0 0V4a2 2 0 112 4h2a2 2 0 112 4v3" />
@@ -93,9 +91,12 @@ function PendingInvitationsNotification() {
       {showDetails && (
         <>
           {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-10" 
+          <button
+            type="button"
+            aria-label="Close notifications panel"
+            className="fixed inset-0 z-10 cursor-default bg-transparent border-0 p-0 w-full h-full"
             onClick={() => setShowDetails(false)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setShowDetails(false); }}
           />
           
           {/* Notification Panel - positioned below the button */}
@@ -115,7 +116,7 @@ function PendingInvitationsNotification() {
                   <span className={`text-sm mr-2 ${
                     message.type === 'success' ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {message.type === 'success' ? '✅' : '⚠️'}
+                    {message.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
                   </span>
                   <p className={`text-xs ${
                     message.type === 'success' ? 'text-green-800' : 'text-red-800'
@@ -128,7 +129,7 @@ function PendingInvitationsNotification() {
                       message.type === 'success' ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
                     }`}
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>

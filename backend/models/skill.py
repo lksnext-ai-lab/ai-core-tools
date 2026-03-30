@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -16,6 +16,7 @@ class Skill(Base):
     # Timestamps
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    is_frozen = Column(Boolean, default=False, nullable=False)
 
     # Foreign keys and relationships
     app_id = Column(Integer, ForeignKey('App.app_id'))

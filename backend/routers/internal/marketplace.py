@@ -2,12 +2,11 @@ import json
 import math
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
-from fastapi.responses import RedirectResponse
 from utils.security import generate_signature
 
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Annotated
 
 from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
@@ -15,13 +14,13 @@ from services.marketplace_service import MarketplaceService
 from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_service import AgentService
+from services.user_service import UserService
 from services.file_management_service import FileManagementService, FileReference
 from services.marketplace_quota_service import MarketplaceQuotaService
 from services.system_settings_service import SystemSettingsService
 from utils.config import is_omniadmin
 from models.conversation import Conversation, ConversationSource
 from models.agent import Agent, MarketplaceVisibility
-from models.user import User
 from schemas.marketplace_schemas import (
     MARKETPLACE_CATEGORIES,
     MarketplaceCatalogResponseSchema,
@@ -60,8 +59,8 @@ def _auth_context_to_dict(auth_context: AuthContext) -> Dict:
     summary="Get current user's marketplace quota usage",
 )
 async def get_marketplace_quota_usage(
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ) -> dict:
     """Get current user's marketplace quota usage for the current UTC month."""
     user_id = int(current_user.identity.id)
@@ -85,7 +84,7 @@ async def get_marketplace_quota_usage(
     summary="List marketplace categories",
 )
 async def list_categories(
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Return the predefined list of marketplace categories."""
     return {"categories": MARKETPLACE_CATEGORIES}
@@ -97,14 +96,14 @@ async def list_categories(
     response_model=MarketplaceCatalogResponseSchema,
 )
 async def marketplace_catalog(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    sort_by: Annotated[str, Query()] = "relevance",
     search: Optional[str] = None,
     category: Optional[str] = None,
     my_apps_only: bool = False,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    sort_by: str = Query("relevance"),
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
 ):
     """Browse published agents in the marketplace."""
     user_id = int(current_user.identity.id)
@@ -136,8 +135,8 @@ async def marketplace_catalog(
 )
 async def marketplace_agent_detail(
     agent_id: int,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Get full detail for a published marketplace agent."""
     user_id = int(current_user.identity.id)
@@ -162,8 +161,8 @@ async def marketplace_agent_detail(
 async def rate_marketplace_agent(
     agent_id: int,
     body: AgentRatingInputSchema,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """
     Submit or update a star rating (1–5) for a published marketplace agent.
@@ -185,8 +184,8 @@ async def rate_marketplace_agent(
 )
 async def get_my_rating(
     agent_id: int,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Return the authenticated user's current star rating for this agent (null if not rated)."""
     user_id = int(current_user.identity.id)
@@ -204,9 +203,9 @@ async def get_my_rating(
 )
 async def start_marketplace_conversation(
     agent_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     title: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
 ):
     """Create a new conversation with a published marketplace agent."""
     user_id = int(current_user.identity.id)
@@ -230,10 +229,10 @@ async def start_marketplace_conversation(
     response_model=MarketplaceConversationListSchema,
 )
 async def list_marketplace_conversations(
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """List the current user's marketplace conversations."""
     user_id = int(current_user.identity.id)
@@ -254,8 +253,8 @@ async def list_marketplace_conversations(
 )
 async def get_marketplace_conversation(
     conversation_id: int,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Get a marketplace conversation with its message history."""
     user_context = _auth_context_to_dict(current_user)
@@ -296,14 +295,23 @@ def _get_marketplace_conversation(
     db: Session,
 ) -> Conversation:
     """Load a marketplace conversation and verify it belongs to the user."""
-    conversation = db.query(Conversation).filter(
-        Conversation.conversation_id == conversation_id,
-        Conversation.user_id == user_id,
-        Conversation.source == ConversationSource.MARKETPLACE,
-    ).first()
+    conversation = ConversationService.get_marketplace_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    )
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CONVERSATION_NOT_FOUND)
     return conversation
+
+
+def _get_agent_or_404(db: Session, agent_id: int) -> Agent:
+    """Load agent via service layer and raise 404 when missing."""
+    agent_service = AgentService()
+    agent = agent_service.get_agent(db=db, agent_id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    return agent
 
 
 def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
@@ -321,16 +329,14 @@ def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
 )
 async def upload_marketplace_file(
     conversation_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    file: Annotated[UploadFile, File(...)],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Upload and persist a file for a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -366,15 +372,13 @@ async def upload_marketplace_file(
 )
 async def list_marketplace_files(
     conversation_id: int,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """List files attached to a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -402,15 +406,13 @@ async def list_marketplace_files(
 async def remove_marketplace_file(
     conversation_id: int,
     file_id: str,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Remove a file attached to a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -437,15 +439,13 @@ async def download_marketplace_file(
     conversation_id: int,
     file_id: str,
     request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
 ):
     """Download an uploaded or agent-generated file from a marketplace conversation."""
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AGENT_NOT_FOUND)
+    agent = _get_agent_or_404(db, conversation.agent_id)
 
     user_context = _build_file_user_context(current_user, agent.app_id)
     file_service = FileManagementService()
@@ -510,53 +510,6 @@ def _extract_jwt_token(request: Request) -> Optional[str]:
     return None
 
 
-async def _collect_file_references(
-    files: Optional[List[UploadFile]],
-    parsed_file_references: Optional[list],
-    agent_id: int,
-    conversation_id: int,
-    user_context: Dict,
-) -> List[FileReference]:
-    """Upload new files and merge with existing file references."""
-    file_service = FileManagementService()
-    all_refs: List[FileReference] = []
-    uploaded_ids: set = set()
-
-    if files:
-        for upload_file in files:
-            if upload_file.filename:
-                ref = await file_service.upload_file(
-                    file=upload_file,
-                    agent_id=agent_id,
-                    user_context=user_context,
-                    conversation_id=conversation_id,
-                )
-                all_refs.append(ref)
-                uploaded_ids.add(ref.file_id)
-
-    existing_files = await file_service.list_attached_files(
-        agent_id=agent_id,
-        user_context=user_context,
-        conversation_id=str(conversation_id),
-    )
-
-    if parsed_file_references:
-        requested_ids = set(parsed_file_references)
-        existing_files = [f for f in existing_files if f["file_id"] in requested_ids]
-
-    for file_data in existing_files:
-        if file_data["file_id"] not in uploaded_ids:
-            all_refs.append(
-                FileReference(
-                    file_id=file_data["file_id"],
-                    filename=file_data["filename"],
-                    file_type=file_data["file_type"],
-                    content=file_data["content"],
-                    file_path=file_data.get("file_path"),
-                )
-            )
-
-    return all_refs
 
 
 def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
@@ -582,21 +535,21 @@ def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
 async def marketplace_chat(
     conversation_id: int,
     request: Request,
-    message: str = Form(...),
-    files: List[UploadFile] = File(None),
-    file_references: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
-    current_user: AuthContext = Depends(get_current_user_oauth),
+    message: Annotated[str, Form(...)],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    files: Annotated[List[UploadFile], File()] = None,
+    file_references: Annotated[Optional[str], Form()] = None,
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
 
     # Load conversation and verify ownership + source
-    conversation = db.query(Conversation).filter(
-        Conversation.conversation_id == conversation_id,
-        Conversation.user_id == user_id,
-        Conversation.source == ConversationSource.MARKETPLACE,
-    ).first()
+    conversation = ConversationService.get_marketplace_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    )
 
     if not conversation:
         raise HTTPException(
@@ -605,11 +558,11 @@ async def marketplace_chat(
         )
 
     # Load and validate agent
-    agent = db.query(Agent).filter(Agent.agent_id == conversation.agent_id).first()
+    agent = _get_agent_or_404(db, conversation.agent_id)
     _validate_marketplace_agent(agent)
 
     # Marketplace quota enforcement
-    user = db.query(User).filter(User.user_id == user_id).first()
+    user = UserService.get_user_by_id(db, user_id)
     if user and not MarketplaceQuotaService.is_user_exempt(user):
         settings_service = SystemSettingsService(db)
         quota_value = settings_service.get_setting("marketplace_call_quota")
@@ -633,15 +586,15 @@ async def marketplace_chat(
             "token": jwt_token,
         }
 
-        all_file_references = await _collect_file_references(
+        all_file_references = await FileManagementService().resolve_chat_files(
             files=files,
-            parsed_file_references=parsed_refs,
+            file_reference_ids=parsed_refs,
             agent_id=agent.agent_id,
-            conversation_id=conversation_id,
             user_context=user_context,
+            conversation_id=conversation_id,
         )
 
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         result = await execution_service.execute_agent_chat_with_file_refs(
             agent_id=agent.agent_id,
             message=message,

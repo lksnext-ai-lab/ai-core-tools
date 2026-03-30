@@ -249,8 +249,12 @@ class RepositoryService:
         if repository_id == 0:
             # New repository
             vector_db_options = VectorStoreFactory.get_available_type_options()
-            embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
+            app_es = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+            system_es = EmbeddingServiceRepository.get_system_services(db)
+            embedding_services = (
+                [{"service_id": s.service_id, "name": s.name, "is_system": False} for s in app_es]
+                + [{"service_id": s.service_id, "name": s.name, "is_system": True} for s in system_es]
+            )
             
             # Get AI services for media transcription
             from repositories.ai_service_repository import AIServiceRepository
@@ -295,8 +299,12 @@ class RepositoryService:
             })
         
         # Get embedding services for form data
-        embedding_services_query = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-        embedding_services = [{"service_id": s.service_id, "name": s.name} for s in embedding_services_query]
+        app_es = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+        system_es = EmbeddingServiceRepository.get_system_services(db)
+        embedding_services = (
+            [{"service_id": s.service_id, "name": s.name, "is_system": False} for s in app_es]
+            + [{"service_id": s.service_id, "name": s.name, "is_system": True} for s in system_es]
+        )
         
         # Get AI services for media transcription
         from repositories.ai_service_repository import AIServiceRepository

@@ -45,6 +45,11 @@ class AIServiceRepository:
         db.commit()
     
     @staticmethod
+    def get_system_services(db: Session) -> List[AIService]:
+        """Return all AIService records with no app (system/platform services)."""
+        return db.query(AIService).filter(AIService.app_id.is_(None)).all()
+
+    @staticmethod
     def delete_by_app_id(db: Session, app_id: int) -> None:
         """Delete all AI services for a specific app"""
         db.query(AIService).filter(AIService.app_id == app_id).delete()

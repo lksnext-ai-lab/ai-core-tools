@@ -15,6 +15,10 @@ class AppRepository:
     def get_by_id(self, app_id: int) -> Optional[App]:
         """Get a specific app by ID"""
         return self.db.query(App).filter(App.app_id == app_id).first()
+
+    def get_all(self) -> List[App]:
+        """Get all apps."""
+        return self.db.query(App).all()
     
     def get_by_owner(self, user_id: int) -> List[App]:
         """Get apps owned by a specific user ordered by creation date"""
@@ -79,6 +83,8 @@ class AppRepository:
             app.max_file_size_mb = data['max_file_size_mb']
         if 'agent_cors_origins' in data:
             app.agent_cors_origins = data['agent_cors_origins']
+        if 'onboarding_dismissed' in data:
+            app.onboarding_dismissed = data['onboarding_dismissed']
     
     # Methods to get related entities for cascade deletion
     

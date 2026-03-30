@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { CheckCircle2, XCircle, Plug } from 'lucide-react';
 import FormActions from './FormActions';
 import { apiService } from '../../services/api';
 
@@ -76,7 +77,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     setError(null);
     
     try {
-      const result = await apiService.testMCPConnectionWithConfig(parseInt(appId), {
+      const result = await apiService.testMCPConnectionWithConfig(Number.parseInt(appId), {
         name: formData.name,
         description: formData.description,
         config: formData.config,
@@ -213,7 +214,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
         <div className={`p-3 rounded-lg border ${testResult.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <span className="text-xl">{testResult.status === 'success' ? '✅' : '❌'}</span>
+              {testResult.status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
             </div>
             <div className="ml-3 w-full">
               <h3 className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>
@@ -228,8 +229,8 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
                   <div className="bg-white rounded border border-green-200 max-h-40 overflow-y-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <tbody className="divide-y divide-gray-200">
-                        {testResult.tools.map((tool: any, index: number) => (
-                          <tr key={index}>
+                        {testResult.tools.map((tool: any) => (
+                          <tr key={tool.name}>
                             <td className="px-3 py-2 text-xs font-medium text-gray-900">{tool.name}</td>
                             <td className="px-3 py-2 text-xs text-gray-500">{tool.description}</td>
                           </tr>
@@ -248,7 +249,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-blue-400 text-xl">🔌</span>
+            <Plug className="w-4 h-4 text-blue-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-blue-800">

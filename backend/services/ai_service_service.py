@@ -7,6 +7,7 @@ from schemas.ai_service_schemas import (
     CreateUpdateAIServiceSchema,
 )
 from core.export_constants import PLACEHOLDER_API_KEY
+from utils.secret_utils import mask_api_key, is_masked_key
 from datetime import datetime
 from typing import List
 from tools.aiServiceTools import create_llm_from_service
@@ -18,27 +19,33 @@ from langchain_core.runnables import RunnableConfig
 logger = get_logger(__name__)
 
 class AIServiceService:
-    
+
+    @staticmethod
+    def _to_list_item(service: "AIService", is_system: bool = False) -> AIServiceListItemSchema:
+        """Convert an AIService ORM instance to a list item schema."""
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
+        return AIServiceListItemSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",  # description stores model name
+            created_at=service.create_date,
+            needs_api_key=needs_api_key,
+            is_system=is_system,
+        )
+
     @staticmethod
     def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIServiceListItemSchema]:
-        """Get all AI services for a specific app"""
-        ai_services = AIServiceRepository.get_by_app_id(db, app_id)
-        
-        result = []
-        for service in ai_services:
-            needs_api_key = (
-                not service.api_key
-                or service.api_key == PLACEHOLDER_API_KEY
-            )
-            result.append(AIServiceListItemSchema(
-                service_id=service.service_id,
-                name=service.name,
-                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                model_name=service.description or "",  # Use description as model info
-                created_at=service.create_date,
-                needs_api_key=needs_api_key,
-            ))
-        
+        """Get all AI services for a specific app, plus platform-level system services."""
+        app_services = AIServiceRepository.get_by_app_id(db, app_id)
+        system_services = AIServiceRepository.get_system_services(db)
+
+        result = [AIServiceService._to_list_item(svc, is_system=False) for svc in app_services]
+        result += [AIServiceService._to_list_item(svc, is_system=True) for svc in system_services]
+
         return result
     
     @staticmethod
@@ -79,7 +86,7 @@ class AIServiceService:
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",
-            api_key=service.api_key or "",
+            api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",  # Use endpoint as base_url
             created_at=service.create_date,
             available_providers=providers,
@@ -90,6 +97,13 @@ class AIServiceService:
     def create_or_update_ai_service(db: Session, app_id: int, service_id: int, service_data: CreateUpdateAIServiceSchema) -> AIServiceDetailSchema:
         """Create a new AI service or update an existing one"""
         if service_id == 0:
+            # Enforce Free tier restriction (SaaS mode only — Free users cannot create own AI Services)
+            from models.app import App as _App
+            from services.tier_enforcement_service import TierEnforcementService
+            _app = db.query(_App).filter(_App.app_id == app_id).first()
+            if _app:
+                TierEnforcementService.check_ai_service_allowed(db, _app.owner_id)
+
             # Create new AI service
             service = AIService()
             service.app_id = app_id
@@ -105,7 +119,9 @@ class AIServiceService:
         service.name = service_data.name
         service.provider = service_data.provider  # Store as string, not enum
         service.description = service_data.model_name  # Store model name in description
-        service.api_key = service_data.api_key
+        # Only update api_key if user provided a new (non-masked) value
+        if not is_masked_key(service_data.api_key):
+            service.api_key = service_data.api_key
         service.endpoint = service_data.base_url  # Store base_url in endpoint
         
         # Create or update the service
@@ -175,10 +191,11 @@ class AIServiceService:
             
             service = MockAIService(config)
             
-            # Guard: placeholder or missing API key
+            # Guard: placeholder, missing, or masked API key
             if (
                 not service.api_key
                 or service.api_key == PLACEHOLDER_API_KEY
+                or is_masked_key(service.api_key)
             ):
                 return {
                     "status": "error",

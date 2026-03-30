@@ -8,6 +8,6 @@ class ResourceListItemSchema(BaseModel):
     resource_id: int
     name: str
     file_type: str
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)

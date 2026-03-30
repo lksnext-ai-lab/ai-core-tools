@@ -244,6 +244,10 @@ class MCPServerService:
         if not app:
             return None
 
+        # Enforce per-app MCP server limit (SaaS mode only)
+        from services.tier_enforcement_service import TierEnforcementService
+        TierEnforcementService.check_resource_limit(db, app_id, 'mcp_servers')
+
         # Generate or validate slug
         if data.slug:
             slug = MCPServerService.generate_slug(data.slug)

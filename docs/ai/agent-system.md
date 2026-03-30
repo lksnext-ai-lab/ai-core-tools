@@ -52,6 +52,9 @@ class Agent(Base):
 | `silo_id` | Vector store for RAG (optional) |
 | `output_parser_id` | Structured output schema (optional) |
 | `temperature` | LLM sampling temperature (0.0-1.0) |
+| `marketplace_visibility` | `UNPUBLISHED` / `PRIVATE` / `PUBLIC` (default `UNPUBLISHED`) |
+| `enable_code_interpreter` | Enable code interpreter tool (default `false`) |
+| `server_tools` | JSON list of server-side built-in tool configs (default `[]`) |
 
 **Linked resources**:
 - `ai_service`: LLM configuration (OpenAI, Anthropic, etc.)
@@ -60,6 +63,7 @@ class Agent(Base):
 - `skill_associations`: AgentSkill (many-to-many, legacy)
 - `mcp_associations`: AgentMCP (many-to-many)
 - `tool_associations`: AgentTool (self-referential, agents as tools)
+- `marketplace_profile`: `AgentMarketplaceProfile` (1:1, optional) — marketplace catalog metadata
 
 ### Creating an Agent
 

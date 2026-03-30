@@ -197,15 +197,15 @@ class AgentRepository:
     
     @staticmethod
     def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIService]:
-        """Get all AI services for a specific app"""
-        return AIServiceRepository.get_by_app_id(db, app_id)
-    
+        """Get all AI services for a specific app, including system (app_id=NULL) services."""
+        return AIServiceRepository.get_by_app_id(db, app_id) + AIServiceRepository.get_system_services(db)
+
     @staticmethod
     def get_ai_services_dict_by_app_id(db: Session, app_id: int) -> Dict[int, Dict[str, str]]:
         """Get AI services as a dictionary for quick lookup"""
         ai_services = AgentRepository.get_ai_services_by_app_id(db, app_id)
         return {
-            s.service_id: {"name": s.name, "model_name": s.description, "provider": s.provider} 
+            s.service_id: {"name": s.name, "model_name": s.description, "provider": s.provider}
             for s in ai_services
         }
     
@@ -286,7 +286,10 @@ class AgentRepository:
         """Get form data needed for agent editing (consolidating multiple queries)"""
         # Get AI services
         ai_services = AgentRepository.get_ai_services_by_app_id(db, app_id)
-        ai_services_list = [{"service_id": s.service_id, "name": s.name} for s in ai_services]
+        ai_services_list = [
+            {"service_id": s.service_id, "name": f"[System] {s.name}" if s.app_id is None else s.name}
+            for s in ai_services
+        ]
         
         # Get silos
         silos = AgentRepository.get_silos_by_app_id(db, app_id)

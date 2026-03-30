@@ -2,6 +2,8 @@ import React from 'react';
 import { Header } from '../header/Header';
 import { Sidebar } from '../sidebar/Sidebar';
 import { Footer } from '../footer/Footer';
+import { PageTitle } from '../header/PageTitle';
+import QuotaWarningBanner from '../QuotaWarningBanner';
 import type { NavigationConfig } from '../../core/types';
 
 interface LayoutProps {
@@ -55,13 +57,17 @@ export const Layout: React.FC<LayoutProps> = ({
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Full-width Header */}
       {showHeader && (
-        <Header 
+        <Header
           navigationConfig={navigationConfig}
           title={sidebarProps?.title || headerProps?.title}
           logoUrl={sidebarProps?.logoUrl || headerProps?.logoUrl}
           {...headerProps}
-        />
+        >
+          {headerProps?.children ?? <PageTitle navigationConfig={navigationConfig} />}
+        </Header>
       )}
+
+      <QuotaWarningBanner />
 
       {/* Main Content Row */}
       <div className="flex-1 flex overflow-hidden">

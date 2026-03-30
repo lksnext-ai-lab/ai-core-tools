@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -59,11 +60,7 @@ function AgentsPage() {
   });
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [appId]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     if (!appId) return;
     
     try {
@@ -71,8 +68,8 @@ function AgentsPage() {
       setError(null);
       
       const [agentsResponse, appResponse] = await Promise.all([
-        apiService.getAgents(parseInt(appId)),
-        apiService.getApp(parseInt(appId))
+        apiService.getAgents(Number.parseInt(appId)),
+        apiService.getApp(Number.parseInt(appId))
       ]);
       
       setAgents(agentsResponse);
@@ -83,7 +80,11 @@ function AgentsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [appId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const handleCreateAgent = () => {
     navigate(`/apps/${appId}/agents/0`);
@@ -108,7 +109,7 @@ function AgentsPage() {
     if (agent.is_tool) {
       try {
         setLoadingMcpUsage(true);
-        const usage = await apiService.getAgentMCPUsage(parseInt(appId), agent.agent_id);
+        const usage = await apiService.getAgentMCPUsage(Number.parseInt(appId), agent.agent_id);
         setDeleteAgentMcpUsage(usage);
       } catch (err) {
         console.error('Error loading MCP usage:', err);
@@ -122,7 +123,7 @@ function AgentsPage() {
     if (!agentToDelete || !appId) return;
 
     try {
-      await apiService.deleteAgent(parseInt(appId), agentToDelete.agent_id);
+      await apiService.deleteAgent(Number.parseInt(appId), agentToDelete.agent_id);
       setAgents(agents.filter(a => a.agent_id !== agentToDelete.agent_id));
       setShowDeleteModal(false);
       setAgentToDelete(null);
@@ -143,7 +144,7 @@ function AgentsPage() {
 
     try {
       const blob = await apiService.exportAgent(
-        parseInt(appId),
+        Number.parseInt(appId),
         agentToExport.agent_id,
         exportOptions.includeAIService,
         exportOptions.includeSilo,
@@ -154,18 +155,18 @@ function AgentsPage() {
       
       // Generate filename
       const timestamp = new Date().toISOString().split('T')[0];
-      const sanitizedName = agentToExport.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const sanitizedName = agentToExport.name.replaceAll(/[^a-z0-9]/gi, '_').toLowerCase();
       const filename = `agent-${sanitizedName}-${timestamp}.json`;
       
       // Download
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      globalThis.URL.revokeObjectURL(url);
+      a.remove();
 
       setShowExportDialog(false);
       setAgentToExport(null);
@@ -201,10 +202,10 @@ function AgentsPage() {
   const getAgentTypeIcon = (type: string) => {
     switch (type) {
       case 'ocr_agent':
-        return '📷';
+        return <FileText className="w-4 h-4" />;
       case 'agent':
       default:
-        return '🤖';
+        return <Bot className="w-4 h-4" />;
     }
   };
 
@@ -251,7 +252,7 @@ function AgentsPage() {
               onClick={() => setShowImportModal(true)}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
-              <span aria-hidden="true" className="mr-2">⬆️</span>
+              <ArrowUp className="w-4 h-4 mr-2" aria-hidden="true" />
               <span>Import Agent</span>
             </button>
           )}
@@ -398,26 +399,26 @@ function AgentsPage() {
                   {
                     label: 'Playground',
                     onClick: () => handlePlayground(agent.agent_id),
-                    icon: '🎮',
+                    icon: <Gamepad2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
                       label: 'Export',
                       onClick: () => handleExportClick(agent),
-                      icon: '⬇️',
-                      variant: 'secondary' as const
+                      icon: <ArrowDownToLine className="w-4 h-4" />,
+                      variant: 'primary' as const
                     },
                     {
                       label: 'Edit',
                       onClick: () => handleEditAgent(agent.agent_id),
-                      icon: '✏️',
+                      icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
                       label: 'Delete',
-                      onClick: () => handleDeleteAgent(agent),
-                      icon: '🗑️',
+                      onClick: () => { void handleDeleteAgent(agent); },
+                      icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
                     }
                   ] : [])
@@ -427,7 +428,7 @@ function AgentsPage() {
             )
           }
         ]}
-        emptyIcon="🤖"
+        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Agents Yet"
         emptySubMessage="Create your first AI agent to get started with intelligent automation."
         loading={loading}
@@ -467,7 +468,7 @@ function AgentsPage() {
                   <span className="text-amber-500 mr-2">!</span>
                   <div className="text-sm">
                     <p className="font-medium text-amber-900">
-                      This agent is used in {deleteAgentMcpUsage.mcp_servers.length} MCP server{deleteAgentMcpUsage.mcp_servers.length !== 1 ? 's' : ''}:
+                      This agent is used in {deleteAgentMcpUsage.mcp_servers.length} MCP server{deleteAgentMcpUsage.mcp_servers.length === 1 ? '' : 's'}:
                     </p>
                     <ul className="mt-1 text-amber-800 list-disc list-inside">
                       {deleteAgentMcpUsage.mcp_servers.map(s => (
@@ -565,7 +566,7 @@ function AgentsPage() {
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <div className="flex items-start">
-                <span className="text-amber-500 mr-2">⚠️</span>
+                <AlertTriangle className="w-4 h-4 text-amber-500 mr-2 shrink-0" />
                 <p className="text-sm text-amber-800">
                   Conversation history is NOT exported. Only configuration is included.
                 </p>
@@ -596,7 +597,7 @@ function AgentsPage() {
       {/* Import Stepper */}
       {showImportModal && (
         <AgentImportStepper
-          appId={parseInt(appId!)}
+          appId={Number.parseInt(appId!)}
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           onImportComplete={handleImportComplete}

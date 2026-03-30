@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2, CheckCircle2, XCircle, X, Lightbulb, FileText } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
@@ -56,7 +57,7 @@ function DataStructuresPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getOutputParsers(parseInt(appId));
+      const response = await apiService.getOutputParsers(Number.parseInt(appId));
       setDataStructures(response);
       // Cache the response
       settingsCache.setDataStructures(appId, response);
@@ -74,7 +75,7 @@ function DataStructuresPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getOutputParsers(parseInt(appId));
+      const response = await apiService.getOutputParsers(Number.parseInt(appId));
       setDataStructures(response);
       // Cache the response
       settingsCache.setDataStructures(appId, response);
@@ -95,7 +96,7 @@ function DataStructuresPage() {
     if (!structureToDelete || !appId) return;
 
     try {
-      await apiService.deleteOutputParser(parseInt(appId), structureToDelete.parser_id);
+      await apiService.deleteOutputParser(Number.parseInt(appId), structureToDelete.parser_id);
       const newDataStructures = dataStructures.filter(ds => ds.parser_id !== structureToDelete.parser_id);
       setDataStructures(newDataStructures);
       // Update cache
@@ -113,7 +114,7 @@ function DataStructuresPage() {
     
     try {
       // Load a blank structure with available parsers list
-      const blankStructure = await apiService.getOutputParser(parseInt(appId), 0);
+      const blankStructure = await apiService.getOutputParser(Number.parseInt(appId), 0);
       setEditingStructure(blankStructure);
       setIsModalOpen(true);
     } catch (err) {
@@ -126,7 +127,7 @@ function DataStructuresPage() {
     if (!appId) return;
     
     try {
-      const structure = await apiService.getOutputParser(parseInt(appId), parserId);
+      const structure = await apiService.getOutputParser(Number.parseInt(appId), parserId);
       setEditingStructure(structure);
       setIsModalOpen(true);
     } catch (err) {
@@ -141,11 +142,11 @@ function DataStructuresPage() {
     try {
       if (editingStructure && editingStructure.parser_id !== 0) {
         // Update existing structure - no need to invalidate cache
-        await apiService.updateOutputParser(parseInt(appId), editingStructure.parser_id, data);
+        await apiService.updateOutputParser(Number.parseInt(appId), editingStructure.parser_id, data);
         await loadDataStructures();
       } else {
         // Create new structure - invalidate cache and force reload
-        await apiService.createOutputParser(parseInt(appId), data);
+        await apiService.createOutputParser(Number.parseInt(appId), data);
         settingsCache.invalidateDataStructures(appId);
         await forceReloadDataStructures();
       }
@@ -167,23 +168,23 @@ function DataStructuresPage() {
     setExportingParserId(parserId);
     
     try {
-      const blob = await apiService.exportOutputParser(parseInt(appId), parserId);
+      const blob = await apiService.exportOutputParser(Number.parseInt(appId), parserId);
       
       // Find parser name for filename
       const parser = dataStructures.find(p => p.parser_id === parserId);
       const parserName = parser?.name || 'output-parser';
-      const sanitizedName = parserName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const sanitizedName = parserName.replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
       const timestamp = new Date().toISOString().split('T')[0];
       const filename = `output-parser-${sanitizedName}-${timestamp}.json`;
       
       // Create download link
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      globalThis.URL.revokeObjectURL(url);
       a.remove();
     } catch (err) {
       setNotification({
@@ -205,7 +206,7 @@ function DataStructuresPage() {
     
     try {
       const result = await apiService.importOutputParser(
-        parseInt(appId),
+        Number.parseInt(appId),
         file,
         conflictMode,
         newName
@@ -278,7 +279,7 @@ function DataStructuresPage() {
                 onClick={() => setShowImportModal(true)}
                 className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
               >
-                <span className="mr-2">📤</span>Import
+                <Upload className="w-4 h-4 mr-2" />Import
               </button>
               <button 
                 onClick={handleCreateStructure}
@@ -303,11 +304,9 @@ function DataStructuresPage() {
           }`}>
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <span className={`text-xl ${
-                  notification.type === 'success' ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {notification.type === 'success' ? '✓' : '✗'}
-                </span>
+                {notification.type === 'success'
+                  ? <CheckCircle2 className="w-5 h-5 text-green-400" />
+                  : <XCircle className="w-5 h-5 text-red-400" />}
               </div>
               <div className="ml-3 flex-1">
                 <p className={`text-sm font-medium ${
@@ -325,7 +324,7 @@ function DataStructuresPage() {
                 } focus:outline-none`}
               >
                 <span className="sr-only">Dismiss</span>
-                <span className="text-lg">×</span>
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -340,7 +339,7 @@ function DataStructuresPage() {
               header: 'Name',
               render: (structure) => (
                 <div className="flex items-center">
-                  <span className="text-purple-400 text-xl mr-3">📊</span>
+                  <BarChart2 className="w-5 h-5 text-purple-400 mr-3 shrink-0" />
                   {canEdit ? (
                     <button
                       type="button"
@@ -388,20 +387,20 @@ function DataStructuresPage() {
                       {
                         label: exportingParserId === structure.parser_id ? 'Exporting...' : 'Export',
                         onClick: () => { void handleExport(structure.parser_id); },
-                        icon: exportingParserId === structure.parser_id ? '⏳' : '📥',
+                        icon: exportingParserId === structure.parser_id ? <ArrowDownToLine className="w-4 h-4 animate-pulse" /> : <ArrowDownToLine className="w-4 h-4" />,
                         variant: 'primary' as const,
                         disabled: exportingParserId === structure.parser_id
                       },
                       {
                         label: 'Edit',
                         onClick: () => { void handleEditStructure(structure.parser_id); },
-                        icon: '✏️',
+                        icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary'
                       },
                       {
                         label: 'Delete',
                         onClick: () => handleDelete(structure),
-                        icon: '🗑️',
+                        icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
                     ]}
@@ -413,7 +412,7 @@ function DataStructuresPage() {
               )
             }
           ]}
-          emptyIcon="📊"
+          emptyIcon={<BarChart2 className="w-10 h-10 text-gray-300" />}
           emptyMessage="No Data Structures"
           emptySubMessage="Create your first data structure to define schemas for structured data extraction."
           loading={loading}
@@ -436,7 +435,7 @@ function DataStructuresPage() {
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
             <div className="flex">
               <div className="flex-shrink-0">
-                <span className="text-purple-400 text-xl">💡</span>
+                <Lightbulb className="w-5 h-5 text-purple-400" />
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-purple-800">
@@ -457,7 +456,7 @@ function DataStructuresPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex">
               <div className="flex-shrink-0">
-                <span className="text-blue-400 text-xl">📝</span>
+                <FileText className="w-5 h-5 text-blue-400" />
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-blue-800">

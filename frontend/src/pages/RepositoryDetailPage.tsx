@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, FolderOpen, Video, FileText, ArrowDownToLine, ArrowLeftRight, Trash2, Tv, Search } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import FolderTree from '../components/FolderTree';
@@ -52,6 +53,58 @@ interface RepositoryDetail {
     create_date: string;
     folder_id: number | null;
   }
+
+function isTerminalMediaStatus(status: string): boolean {
+  return status === 'ready' || status === 'error';
+}
+
+function filterByFolder<T extends { folder_id?: number | null }>(
+  items: T[] | undefined,
+  selectedFolderId: number | null
+): T[] {
+  if (!items) return [];
+  return items.filter(item =>
+    selectedFolderId === null ? !item.folder_id : item.folder_id === selectedFolderId
+  );
+}
+
+function updateMediaInRepo(prev: RepositoryDetail | null, mediaId: number, media: Media): RepositoryDetail | null {
+  if (!prev) return null;
+  return {
+    ...prev,
+    media: prev.media.map(m => (m.media_id === mediaId ? media : m)),
+  };
+}
+
+function FolderBreadcrumb({ path }: { readonly path: string }) {
+  if (!path) return null;
+  return (
+    <>
+      <span className="mx-2">/</span>
+      <span className="text-blue-600 font-medium">{path}</span>
+    </>
+  );
+}
+
+function UploadButtonIcon({ uploading }: { readonly uploading: boolean }) {
+  if (uploading) return <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />;
+  return <FolderOpen className="w-4 h-4" />;
+}
+
+function getAllFolderPaths(
+  folders: Array<{ folder_id: number; name: string; subfolders?: Array<{ folder_id: number; name: string; subfolders?: unknown[] }> }>,
+  parentPath: string = ''
+): Array<{ folder_id: number; name: string; full_path: string }> {
+  const result: Array<{ folder_id: number; name: string; full_path: string }> = [];
+  for (const folder of folders) {
+    const fullPath = parentPath ? `${parentPath}/${folder.name}` : folder.name;
+    result.push({ folder_id: folder.folder_id, name: folder.name, full_path: fullPath });
+    if (folder.subfolders && folder.subfolders.length > 0) {
+      result.push(...getAllFolderPaths(folder.subfolders as Parameters<typeof getAllFolderPaths>[0], fullPath));
+    }
+  }
+  return result;
+}
 
 const RepositoryDetailPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
@@ -125,14 +178,9 @@ const RepositoryDetailPage: React.FC = () => {
     
     const interval = setInterval(async () => {
       try {
-        const media = await apiService.getMediaStatus(parseInt(appId!), parseInt(repositoryId!), mediaId);
-        
-        setRepository(prev => prev ? {
-          ...prev,
-          media: prev.media.map(m => m.media_id === mediaId ? media : m)
-        } : prev);
-        
-        if (media.status === 'ready' || media.status === 'error') {
+        const media = await apiService.getMediaStatus(Number.parseInt(appId!), Number.parseInt(repositoryId!), mediaId);
+        setRepository(prev => updateMediaInRepo(prev, mediaId, media));
+        if (isTerminalMediaStatus(media.status)) {
           stopPolling(mediaId);
         }
       } catch (err) {
@@ -155,7 +203,7 @@ const RepositoryDetailPage: React.FC = () => {
   const loadRepository = async (clearError: boolean = true) => {
     try {
       setLoading(true);
-      const data = await apiService.getRepository(parseInt(appId!), parseInt(repositoryId!));
+      const data = await apiService.getRepository(Number.parseInt(appId!), Number.parseInt(repositoryId!));
       setRepository(data);
       
       // Start polling for processing media
@@ -188,7 +236,7 @@ const RepositoryDetailPage: React.FC = () => {
       });
 
       console.log('Uploading files with folder_id:', selectedFolderId);
-      const result = await apiService.uploadResources(parseInt(appId!), parseInt(repositoryId!), Array.from(files), selectedFolderId || undefined);
+      const result = await apiService.uploadResources(Number.parseInt(appId!), Number.parseInt(repositoryId!), Array.from(files), selectedFolderId || undefined);
       
       console.log('Upload result:', result);
       
@@ -235,8 +283,8 @@ const RepositoryDetailPage: React.FC = () => {
 
       if (uploadType === 'file') {
         const result = await apiService.uploadMedia(
-          parseInt(appId!),
-          parseInt(repositoryId!),
+          Number.parseInt(appId!),
+          Number.parseInt(repositoryId!),
           mediaFiles,
           selectedFolderId || undefined,
           mediaConfig,
@@ -251,8 +299,8 @@ const RepositoryDetailPage: React.FC = () => {
         }
       } else {
         await apiService.addYouTube(
-          parseInt(appId!),
-          parseInt(repositoryId!),
+          Number.parseInt(appId!),
+          Number.parseInt(repositoryId!),
           youtubeUrl,
           selectedFolderId || undefined,
           mediaConfig,
@@ -305,8 +353,8 @@ const RepositoryDetailPage: React.FC = () => {
     
     try {
       await apiService.createFolder(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         newFolderName.trim(),
         folderActionData.parentFolderId
       );
@@ -325,8 +373,8 @@ const RepositoryDetailPage: React.FC = () => {
     
     try {
       await apiService.updateFolder(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         folderActionData.folderId,
         newFolderName.trim()
       );
@@ -345,8 +393,8 @@ const RepositoryDetailPage: React.FC = () => {
     
     try {
       await apiService.deleteFolder(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         folderActionData.folderId
       );
       setShowDeleteFolderModal(false);
@@ -368,8 +416,8 @@ const RepositoryDetailPage: React.FC = () => {
     
     try {
       await apiService.moveFolder(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         folderActionData.folderId,
         newParentFolderId || undefined
       );
@@ -383,79 +431,37 @@ const RepositoryDetailPage: React.FC = () => {
     }
   };
 
-  // Get all folder paths for display and filtering
-  const getAllFolderPaths = (folders: any[], parentPath: string = ''): Array<{folder_id: number, name: string, full_path: string}> => {
-    const result: Array<{folder_id: number, name: string, full_path: string}> = [];
-    
-    for (const folder of folders) {
-      const fullPath = parentPath ? `${parentPath}/${folder.name}` : folder.name;
-      result.push({
-        folder_id: folder.folder_id,
-        name: folder.name,
-        full_path: fullPath
-      });
-      
-      if (folder.subfolders && folder.subfolders.length > 0) {
-        result.push(...getAllFolderPaths(folder.subfolders, fullPath));
-      }
-    }
-    
-    return result;
-  };
-
   // Get valid destination folders (exclude the folder being moved and its descendants)
   const getValidDestinationFolders = () => {
     if (!repository?.folders || !folderActionData.folderId) return [];
-    
-    // Get all folder paths
     const allFolders = getAllFolderPaths(repository.folders);
-    
-    // Filter out the folder being moved and its descendants
-    const validFolders = allFolders.filter(folder => {
-      // Don't allow moving to the same folder
-      if (folder.folder_id === folderActionData.folderId) return false;
-      
-      // Don't allow moving to descendants (this would create circular reference)
-      // For now, we'll rely on backend validation, but we could add frontend validation here
-      return true;
-    });
-    
-    return validFolders;
+    // Backend validates circular references; frontend just excludes the moved folder itself
+    return allFolders.filter(folder => folder.folder_id !== folderActionData.folderId);
   };
 
   // Filter resources by selected folder
-  const filteredResources = repository?.resources.filter(resource => {
-    if (selectedFolderId === null) {
-      return !resource.folder_id; // Show root-level resources
-    }
-    return resource.folder_id === selectedFolderId;
-  }) || [];
+  const filteredResources = filterByFolder(repository?.resources, selectedFolderId);
 
   // Filter media by selected folder
-  const filteredMedia = repository?.media.filter(media => {
-    if (selectedFolderId === null) {
-      return !media.folder_id;
-    }
-    return media.folder_id === selectedFolderId;
-  }) || [];
+  const filteredMedia = filterByFolder(repository?.media, selectedFolderId);
 
   const isEmpty =
   filteredResources.length === 0 && filteredMedia.length === 0;
 
   const handleDownloadResource = async (resource: Resource) => {
     try {
-      const response = await apiService.downloadResource(parseInt(appId!), parseInt(repositoryId!), resource.resource_id);
+      const response = await apiService.downloadResource(Number.parseInt(appId!), Number.parseInt(repositoryId!), resource.resource_id);
       
       // Create a blob from the response and download it
       const blob = new Blob([response], { type: 'application/octet-stream' });
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = resource.uri; // Use uri which contains the filename with extension
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      globalThis.URL.revokeObjectURL(url);
+      a.remove();
     } catch (err) {
       console.error('Error downloading resource:', err);
       setError('Failed to download file');
@@ -477,7 +483,7 @@ const RepositoryDetailPage: React.FC = () => {
     if (!resourceToDelete) return;
 
     try {
-      await apiService.deleteResource(parseInt(appId!), parseInt(repositoryId!), resourceToDelete.resource_id);
+      await apiService.deleteResource(Number.parseInt(appId!), Number.parseInt(repositoryId!), resourceToDelete.resource_id);
       await loadRepository(); // Reload to update the list
       setShowDeleteModal(false);
       setResourceToDelete(null);
@@ -492,8 +498,8 @@ const RepositoryDetailPage: React.FC = () => {
 
     try {
       await apiService.moveResource(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         resourceToMove.resource_id,
         moveToFolderId || undefined
       );
@@ -522,8 +528,8 @@ const RepositoryDetailPage: React.FC = () => {
       stopPolling(mediaToDelete.media_id);  // Add this - stop polling before delete
       
       await apiService.deleteMedia(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         mediaToDelete.media_id
       );
       await loadRepository();
@@ -546,8 +552,8 @@ const RepositoryDetailPage: React.FC = () => {
 
     try {
       await apiService.moveMedia(
-        parseInt(appId!),
-        parseInt(repositoryId!),
+        Number.parseInt(appId!),
+        Number.parseInt(repositoryId!),
         mediaToMove.media_id,
         moveMediaToFolderId || undefined
       );
@@ -599,7 +605,7 @@ const RepositoryDetailPage: React.FC = () => {
               onClick={() => navigate(`/apps/${appId}/repositories`)}
               className="text-gray-500 hover:text-gray-700 transition-colors"
             >
-              ← Back
+              <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back
             </button>
             <h1 className="text-3xl font-bold text-gray-900">{repository.name}</h1>
           </div>
@@ -615,12 +621,7 @@ const RepositoryDetailPage: React.FC = () => {
             >
               Repository Root
             </button>
-            {selectedFolderPath && (
-              <>
-                <span className="mx-2">/</span>
-                <span className="text-blue-600 font-medium">{selectedFolderPath}</span>
-              </>
-            )}
+            <FolderBreadcrumb path={selectedFolderPath} />
           </div>
         </div>
         
@@ -629,7 +630,7 @@ const RepositoryDetailPage: React.FC = () => {
             onClick={() => navigate(`/apps/${appId}/repositories/${repositoryId}/playground`)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
           >
-            🔍 Search
+            <Search className="w-4 h-4" /> Search
           </button>
           {canEdit && (
             <>
@@ -638,11 +639,7 @@ const RepositoryDetailPage: React.FC = () => {
                 disabled={uploading}
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               >
-                {uploading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                ) : (
-                  <span>📁</span>
-                )}
+                <UploadButtonIcon uploading={uploading} />
                 Upload Files
               </button>
 
@@ -654,7 +651,7 @@ const RepositoryDetailPage: React.FC = () => {
                 disabled={uploading}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               >
-                🎥 Upload Media
+                <Video className="w-4 h-4" /> Upload Media
               </button>
             </>
           )}
@@ -681,8 +678,8 @@ const RepositoryDetailPage: React.FC = () => {
         {/* Folder Tree Sidebar */}
         <div className="lg:col-span-1">
           <FolderTree
-            appId={parseInt(appId!)}
-            repositoryId={parseInt(repositoryId!)}
+            appId={Number.parseInt(appId!)}
+            repositoryId={Number.parseInt(repositoryId!)}
             selectedFolderId={selectedFolderId ?? undefined}
             onFolderSelect={handleFolderSelect}
             onFolderCreate={handleCreateFolder}
@@ -710,9 +707,9 @@ const RepositoryDetailPage: React.FC = () => {
             {/* ✅ SHARED EMPTY STATE */}
             {isEmpty ? (
               <div className="p-10 text-center">
-                <div className="flex justify-center gap-6 mb-4 text-4xl">
-                  <span className="text-gray-400">📄</span>
-                  <span className="text-gray-400">🎥</span>
+                <div className="flex justify-center gap-6 mb-4">
+                  <FileText className="w-10 h-10 text-gray-400" />
+                  <Video className="w-10 h-10 text-gray-400" />
                 </div>
 
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -756,7 +753,7 @@ const RepositoryDetailPage: React.FC = () => {
                         className="px-6 py-4 flex items-center justify-between"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="bg-gray-100 p-2 rounded-lg">📄</div>
+                          <div className="bg-gray-100 p-2 rounded-lg"><FileText className="w-4 h-4" /></div>
                           <div>
                             <h3 className="font-medium text-gray-900">
                               {resource.name}
@@ -774,21 +771,21 @@ const RepositoryDetailPage: React.FC = () => {
                               onClick={() => handleMoveResource(resource)}
                               className="p-2 text-gray-400 hover:text-purple-600"
                             >
-                              ↔️
+                              <ArrowLeftRight className="w-4 h-4" />
                             </button>
                           )}
                           <button
                             onClick={() => handleDownloadResource(resource)}
                             className="p-2 text-gray-400 hover:text-blue-600"
                           >
-                            ⬇️
+                            <ArrowDownToLine className="w-4 h-4" />
                           </button>
                           {canEdit && (
                             <button
                               onClick={() => handleDeleteResource(resource)}
                               className="p-2 text-gray-400 hover:text-red-600"
                             >
-                              🗑️
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -804,7 +801,7 @@ const RepositoryDetailPage: React.FC = () => {
                       <div key={media.media_id} className="px-6 py-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <div className="bg-purple-100 p-2 rounded-lg">🎥</div>
+                            <div className="bg-purple-100 p-2 rounded-lg"><Video className="w-5 h-5 text-purple-600" /></div>
                             <div>
                               <h4 className="font-medium text-gray-900">
                                 {media.name}
@@ -828,13 +825,13 @@ const RepositoryDetailPage: React.FC = () => {
                                   onClick={() => handleMoveMedia(media)}
                                   className="p-2 text-gray-400 hover:text-purple-600"
                                 >
-                                  ↔️
+                                  <ArrowLeftRight className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteMedia(media)}
                                   className="p-2 text-gray-400 hover:text-red-600"
                                 >
-                                  🗑️
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </>
                             )}
@@ -1040,7 +1037,7 @@ const RepositoryDetailPage: React.FC = () => {
             </label>
             <select
               value={newParentFolderId || ''}
-              onChange={(e) => setNewParentFolderId(e.target.value ? parseInt(e.target.value) : null)}
+              onChange={(e) => setNewParentFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Repository Root</option>
@@ -1083,7 +1080,7 @@ const RepositoryDetailPage: React.FC = () => {
             value={moveMediaToFolderId || ''}
             onChange={(e) =>
               setMoveMediaToFolderId(
-                e.target.value ? parseInt(e.target.value) : null
+                e.target.value ? Number.parseInt(e.target.value) : null
               )
             }
             className="w-full px-3 py-2 border rounded-md"
@@ -1127,7 +1124,7 @@ const RepositoryDetailPage: React.FC = () => {
             </label>
             <select
               value={moveToFolderId || ''}
-              onChange={(e) => setMoveToFolderId(e.target.value ? parseInt(e.target.value) : null)}
+              onChange={(e) => setMoveToFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Repository Root</option>
@@ -1173,23 +1170,24 @@ const RepositoryDetailPage: React.FC = () => {
               onClick={() => setUploadType('file')}
               className={`flex-1 px-4 py-2 rounded ${uploadType === 'file' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
             >
-              📁 File Upload
+              <FolderOpen className="w-4 h-4 inline-block mr-1" /> File Upload
             </button>
             <button
               onClick={() => setUploadType('youtube')}
               className={`flex-1 px-4 py-2 rounded ${uploadType === 'youtube' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
             >
-              📺 YouTube URL
+              <Tv className="w-4 h-4 inline-block mr-1" /> YouTube URL
             </button>
           </div>
 
           {/* File Upload */}
           {uploadType === 'file' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="media-files-input" className="block text-sm font-medium text-gray-700 mb-2">
                 Select Video/Audio Files
               </label>
               <input
+                id="media-files-input"
                 type="file"
                 multiple
                 accept="video/*,audio/*"
@@ -1205,10 +1203,11 @@ const RepositoryDetailPage: React.FC = () => {
           {/* YouTube URL */}
           {uploadType === 'youtube' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="youtube-url-input" className="block text-sm font-medium text-gray-700 mb-2">
                 YouTube URL
               </label>
               <input
+                id="youtube-url-input"
                 type="text"
                 value={youtubeUrl}
                 onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -1224,15 +1223,16 @@ const RepositoryDetailPage: React.FC = () => {
             
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transcription Service *</label>
+                <label htmlFor="transcription-service-select" className="block text-sm font-medium text-gray-700 mb-1">Transcription Service *</label>
                 {!repository?.ai_services || repository.ai_services.length === 0 ? (
                   <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
                     No transcription services available. Please create an AI service.
                   </div>
                 ) : (
                   <select
+                    id="transcription-service-select"
                     value={selectedTranscriptionServiceId || ''}
-                    onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? parseInt(e.target.value) : null)}
+                    onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? Number.parseInt(e.target.value) : null)}
                     className="w-full px-3 py-2 border rounded-md text-sm"
                   >
                     <option value="">-- Select a Transcription Service --</option>
@@ -1246,8 +1246,9 @@ const RepositoryDetailPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Language (optional)</label>
+                <label htmlFor="media-language-select" className="block text-sm text-gray-700 mb-1">Language (optional)</label>
                 <select
+                  id="media-language-select"
                   value={mediaConfig.forced_language}
                   onChange={(e) => setMediaConfig({...mediaConfig, forced_language: e.target.value})}
                   className="w-full px-3 py-2 border rounded-md text-sm"
@@ -1262,33 +1263,36 @@ const RepositoryDetailPage: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs text-gray-700 mb-1">Min Chunk (s)</label>
+                  <label htmlFor="chunk-min-duration" className="block text-xs text-gray-700 mb-1">Min Chunk (s)</label>
                   <input
+                    id="chunk-min-duration"
                     type="number"
                     value={mediaConfig.chunk_min_duration}
-                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_min_duration: parseInt(e.target.value)})}
+                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_min_duration: Number.parseInt(e.target.value)})}
                     className="w-full px-2 py-1 border rounded text-sm"
                     min="10"
                     max="60"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-700 mb-1">Max Chunk (s)</label>
+                  <label htmlFor="chunk-max-duration" className="block text-xs text-gray-700 mb-1">Max Chunk (s)</label>
                   <input
+                    id="chunk-max-duration"
                     type="number"
                     value={mediaConfig.chunk_max_duration}
-                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_max_duration: parseInt(e.target.value)})}
+                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_max_duration: Number.parseInt(e.target.value)})}
                     className="w-full px-2 py-1 border rounded text-sm"
                     min="60"
                     max="300"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-700 mb-1">Overlap (s)</label>
+                  <label htmlFor="chunk-overlap" className="block text-xs text-gray-700 mb-1">Overlap (s)</label>
                   <input
+                    id="chunk-overlap"
                     type="number"
                     value={mediaConfig.chunk_overlap}
-                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_overlap: parseInt(e.target.value)})}
+                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_overlap: Number.parseInt(e.target.value)})}
                     className="w-full px-2 py-1 border rounded text-sm"
                     min="0"
                     max="20"

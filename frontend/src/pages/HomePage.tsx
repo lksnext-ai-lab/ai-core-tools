@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowRight, BarChart2, Info, AppWindow, Users } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 
 function HomePage() {
@@ -21,7 +22,7 @@ function HomePage() {
         <div className="bg-white rounded-lg shadow-md border p-6">
           <div className="flex items-center mb-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">📱</span>
+              <AppWindow className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 ml-4">My Apps</h3>
           </div>
@@ -32,7 +33,7 @@ function HomePage() {
             to="/apps"
             className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
           >
-            Go to Apps →
+            Go to Apps <ArrowRight className="w-4 h-4 inline-block ml-1" />
           </Link>
         </div>
 
@@ -41,7 +42,7 @@ function HomePage() {
           <div className="bg-white rounded-lg shadow-md border p-6">
             <div className="flex items-center mb-4">
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">👥</span>
+                <Users className="w-6 h-6" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 ml-4">Users</h3>
             </div>
@@ -52,7 +53,7 @@ function HomePage() {
               to="/admin/users"
               className="block w-full bg-green-600 hover:bg-green-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
             >
-              Manage Users →
+              Manage Users <ArrowRight className="w-4 h-4 inline-block ml-1" />
             </Link>
           </div>
         )}
@@ -62,7 +63,7 @@ function HomePage() {
           <div className="bg-white rounded-lg shadow-md border p-6">
             <div className="flex items-center mb-4">
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📊</span>
+                <BarChart2 className="w-5 h-5 text-white" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 ml-4">Statistics</h3>
             </div>
@@ -73,7 +74,7 @@ function HomePage() {
               to="/admin/stats"
               className="block w-full bg-purple-600 hover:bg-purple-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
             >
-              View Stats →
+              View Stats <ArrowRight className="w-4 h-4 inline-block ml-1" />
             </Link>
           </div>
         )}
@@ -82,7 +83,7 @@ function HomePage() {
         <div className="bg-white rounded-lg shadow-md border p-6">
           <div className="flex items-center mb-4">
             <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">ℹ️</span>
+              <Info className="w-5 h-5 text-white" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 ml-4">About</h3>
           </div>

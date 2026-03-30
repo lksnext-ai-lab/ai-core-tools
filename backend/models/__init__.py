@@ -26,6 +26,10 @@ from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
 from .system_setting import SystemSetting
 from .marketplace_usage import MarketplaceUsage
+from .subscription import Subscription, SubscriptionTier, BillingStatus
+from .tier_config import TierConfig
+from .usage_record import UsageRecord
+from .user_credential import UserCredential
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -37,5 +41,9 @@ __all__ = [
     'Media',
     'MCPServer', 'MCPServerAgent',
     'SystemSetting',
-    'MarketplaceUsage'
+    'MarketplaceUsage',
+    'Subscription', 'SubscriptionTier', 'BillingStatus',
+    'TierConfig',
+    'UsageRecord',
+    'UserCredential',
 ] 

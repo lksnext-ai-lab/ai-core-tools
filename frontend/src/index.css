@@ -1,3 +1,172 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Staggered entrance: elements start invisible, animation fills to opacity:1 */
+.animate-fade-in-up,
+.animate-fade-in-up-d1,
+.animate-fade-in-up-d2,
+.animate-fade-in-up-d3 {
+  opacity: 0;
+}
+
+/* Theme-aware button: uses CSS var from ThemeProvider */
+.btn-primary {
+  background-color: var(--color-primary);
+}
+.btn-primary:hover {
+  filter: brightness(0.88);
+}
+.btn-primary:active {
+  transform: scale(0.96);
+}
+
+/* Login form — gradient CTA button */
+.btn-login-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--color-primary) 0%,
+    color-mix(in srgb, var(--color-primary) 80%, #7c3aed 20%) 50%,
+    color-mix(in srgb, var(--color-primary) 60%, #0ea5e9 40%) 100%
+  );
+  background-size: 200% 200%;
+  transition: background-position 0.4s ease, box-shadow 0.3s ease, transform 0.15s ease;
+}
+.btn-login-gradient:hover:not(:disabled) {
+  background-position: right center;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 50%, transparent);
+}
+.btn-login-gradient:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Login form — input focus glow */
+.input-login:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent),
+              0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+}
+
+/* Login — speech bubble emerge animation (grows from robot side) */
+@keyframes bubble-emerge {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateX(-12px);
+    transform-origin: left center;
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03) translateX(2px);
+    transform-origin: left center;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    transform-origin: left center;
+  }
+}
+.speech-bubble-emerge {
+  animation: bubble-emerge 0.4s ease-out both;
+}
+
+/* Login — speech bubble tail pointing left (toward robot mouth) */
+.speech-bubble-right::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 7px solid white;
+}
+
+/* ============================================
+   Playground — glassmorphic chat components
+   ============================================ */
+
+/* Semi-transparent glass panel (adapts to light/dark via opacity) */
+.pg-glass {
+  @apply bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/30 shadow-lg;
+}
+
+/* User chat bubble — neutral gray, readable in both modes (modern pattern) */
+.pg-bubble-user {
+  @apply bg-gray-100 dark:bg-gray-700/80 text-gray-900 dark:text-gray-100
+         rounded-2xl rounded-br-sm px-4 py-3;
+}
+
+/* Agent message — no bubble, clean plain text (ChatGPT / Claude.ai pattern) */
+.pg-bubble-agent {
+  @apply px-1 py-2;
+}
+
+/* Send button gradient */
+.pg-btn-send {
+  @apply bg-gradient-to-r from-blue-600 to-indigo-600 text-white
+         rounded-xl px-4 py-2.5 font-medium
+         hover:from-blue-700 hover:to-indigo-700
+         disabled:opacity-40 disabled:cursor-not-allowed
+         transition-all duration-150 active:scale-95;
+}
+
+/* Tool status pill */
+.pg-tool-pill {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium
+         bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300
+         border border-indigo-200/50 dark:border-indigo-700/30;
+}
+.pg-tool-pill--complete {
+  @apply bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300
+         border-emerald-200/50 dark:border-emerald-700/30;
+}
+
+/* Blinking cursor for streaming text */
+.pg-cursor::after {
+  content: '▍';
+  @apply animate-blink-cursor text-indigo-500 dark:text-indigo-400 ml-0.5;
+}
+
+/* Scroll-to-bottom fab */
+.pg-scroll-fab {
+  @apply absolute bottom-20 left-1/2 -translate-x-1/2
+         bg-white/80 dark:bg-gray-800/80 backdrop-blur-md
+         border border-gray-200 dark:border-gray-700
+         rounded-full p-2 shadow-lg cursor-pointer
+         hover:bg-white dark:hover:bg-gray-800
+         transition-all duration-200;
+}
+
+/* Conversation sidebar active item */
+.pg-sidebar-active {
+  @apply bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500;
+}
+
+/* Login card — animated shimmer border */
+.card-login-shimmer {
+  position: relative;
+}
+.card-login-shimmer::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-primary) 50%, transparent) 40%,
+    color-mix(in srgb, #7c3aed 40%, transparent) 60%,
+    transparent 100%
+  );
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.6;
+}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Gamepad2, Link2, Pencil, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
@@ -64,7 +65,7 @@ function AgentPlaygroundPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getAgent(parseInt(appId), parseInt(agentId));
+      const response = await apiService.getAgent(Number.parseInt(appId), Number.parseInt(agentId));
       setAgent(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agent');
@@ -95,7 +96,7 @@ function AgentPlaygroundPage() {
       // Create a new conversation
       // Files are now managed per-conversation, so no need to clear them
       // Each conversation has its own isolated file context
-      const response = await apiService.createConversation(parseInt(agentId));
+      const response = await apiService.createConversation(Number.parseInt(agentId));
       setCurrentConversationId(response.conversation_id);
       setConversationKey(prev => prev + 1); // Force remount to clear messages and load new conversation's files
       setConversationReloadTrigger(prev => prev + 1); // Trigger conversation list reload
@@ -159,138 +160,112 @@ function AgentPlaygroundPage() {
   const isOCRAgent = agent.type === 'ocr_agent';
 
   const tabs = [
-    {
-      id: 'playground',
-      label: '🎮 Playground',
-      description: 'Test your agent interactively'
-    },
-    {
-      id: 'api',
-      label: '🔗 API Examples',
-      description: 'Integration code examples'
-    }
+    { id: 'playground', label: 'Playground', icon: <Gamepad2 className="w-4 h-4" /> },
+    { id: 'api', label: 'API Examples', icon: <Link2 className="w-4 h-4" /> },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3 h-[calc(100vh-4rem)] animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Agent Playground</h1>
-          <p className="text-gray-600 mt-1">
-            Test and integrate your AI agent
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Agent Playground</h1>
         </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setIsPromptModalOpen(true)}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+            className="pg-glass px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
           >
-            <span>✏️</span>
+            <Pencil className="w-4 h-4" />
             <span>Edit Prompts</span>
           </button>
           <button
             onClick={handleBack}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="pg-glass px-4 py-2 rounded-lg text-gray-600 dark:text-gray-300 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
           >
-            ← Back to Agents
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Agents</span>
           </button>
         </div>
       </div>
 
-      {/* Agent Info */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">{agent.name}</h2>
-            {agent.description && (
-              <p className="text-gray-600 mt-1">{agent.description}</p>
-            )}
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              agent.status === 'active' 
-                ? 'bg-green-100 text-green-800' 
-                : 'bg-yellow-100 text-yellow-800'
-            }`}>
-              {agent.status}
+      {/* Agent Info — compact single-line header bar */}
+      <div className="pg-glass rounded-xl px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white truncate mr-4">
+          {agent.name}
+        </h2>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            agent.status === 'active'
+              ? 'bg-green-100/80 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+              : 'bg-yellow-100/80 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
+          }`}>
+            {agent.status}
+          </span>
+          <span className="px-2.5 py-0.5 bg-blue-100/80 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 rounded-full text-xs font-medium">
+            {agent.type}
+          </span>
+          {agent.has_memory && (
+            <span className="px-2.5 py-0.5 bg-purple-100/80 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full text-xs font-medium">
+              Memory
             </span>
-            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-              {agent.type}
+          )}
+          {agent.silo && (
+            <span className="px-2.5 py-0.5 bg-teal-100/80 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 rounded-full text-xs font-medium">
+              RAG
             </span>
-          </div>
+          )}
         </div>
-
-        {/* Silo Information */}
-        {agent.silo && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
-              <span className="mr-2">🗄️</span>
-              Connected Silo: {agent.silo.name}
-            </h3>
-            {agent.silo.metadata_definition && (
-              <p className="text-sm text-gray-600">
-                <span className="mr-2">🔍</span>
-                Metadata filtering available ({agent.silo.metadata_definition.fields.length} fields)
-              </p>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Tab Navigation */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-6 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600 bg-blue-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <span>{tab.label}</span>
-                </div>
-                <div className="text-xs text-gray-400 mt-1">{tab.description}</div>
-              </button>
-            ))}
-          </nav>
+      {/* Tab Navigation + Content */}
+      <div className="flex flex-col flex-1 min-h-0 gap-2">
+        {/* Tab bar */}
+        <div className="pg-glass rounded-xl px-2 py-1.5 flex items-center gap-1 flex-shrink-0">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? 'bg-white/80 dark:bg-gray-700/80 text-indigo-600 dark:text-indigo-300 border-b-2 border-indigo-500 shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-gray-700/40'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">{tab.icon}{tab.label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Tab Content */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl">
           {/* Conversation Sidebar - Only show for non-OCR agents with memory */}
           {activeTab === 'playground' && !isOCRAgent && agent.has_memory && (
             <ConversationSidebar
               key={conversationReloadTrigger}
-              agentId={parseInt(agentId!)}
+              agentId={Number.parseInt(agentId!)}
               currentConversationId={currentConversationId}
               onConversationSelect={handleConversationSelect}
               onNewConversation={handleNewConversation}
             />
           )}
-          
+
           {/* Main Content Area */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {activeTab === 'playground' && (
               <>
-                {/* Playground Interface */}
                 {isOCRAgent ? (
-                  <OCRInterface 
-                    appId={parseInt(appId!)} 
-                    agentId={parseInt(agentId!)} 
+                  <OCRInterface
+                    appId={Number.parseInt(appId!)}
+                    agentId={Number.parseInt(agentId!)}
                     agentName={agent.name}
                     outputParser={agent.output_parser}
                   />
                 ) : (
-                  <ChatInterface 
+                  <ChatInterface
                     key={conversationKey}
-                    appId={parseInt(appId!)} 
-                    agentId={parseInt(agentId!)} 
+                    appId={Number.parseInt(appId!)}
+                    agentId={Number.parseInt(agentId!)}
                     agentName={agent.name}
                     conversationId={currentConversationId}
                     onConversationCreated={handleConversationCreated}
@@ -303,9 +278,9 @@ function AgentPlaygroundPage() {
             )}
 
             {activeTab === 'api' && (
-              <APIExamples 
-                appId={parseInt(appId!)}
-                agentId={parseInt(agentId!)}
+              <APIExamples
+                appId={Number.parseInt(appId!)}
+                agentId={Number.parseInt(agentId!)}
                 agentName={agent.name}
                 agentType={agent.type}
                 hasSilo={!!agent.silo}
@@ -320,8 +295,8 @@ function AgentPlaygroundPage() {
       <PromptModal
         isOpen={isPromptModalOpen}
         onClose={() => setIsPromptModalOpen(false)}
-        appId={parseInt(appId!)}
-        agentId={parseInt(agentId!)}
+        appId={Number.parseInt(appId!)}
+        agentId={Number.parseInt(agentId!)}
         agentName={agent.name}
         initialSystemPrompt={agent.system_prompt || ''}
         initialPromptTemplate={agent.prompt_template || ''}

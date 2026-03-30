@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Bot, MessageCircle, Paperclip, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -79,7 +80,7 @@ export default function MarketplaceChatPage() {
 
   // Load conversation history
   useEffect(() => {
-    if (!numericId || isNaN(numericId)) {
+    if (!numericId || Number.isNaN(numericId)) {
       setError('Invalid conversation ID');
       setLoadingHistory(false);
       return;
@@ -130,7 +131,7 @@ export default function MarketplaceChatPage() {
 
   // Load persistent files whenever the conversation changes
   useEffect(() => {
-    if (!numericId || isNaN(numericId)) return;
+    if (!numericId || Number.isNaN(numericId)) return;
     const loadFiles = async () => {
       try {
         const response = await apiService.listMarketplaceFiles(numericId);
@@ -326,13 +327,13 @@ export default function MarketplaceChatPage() {
   if (error && messages.length === 0) {
     return (
       <div className="space-y-4">
-        <ErrorState error={error} onRetry={() => window.location.reload()} />
+        <ErrorState error={error} onRetry={() => globalThis.location.reload()} />
         <div className="text-center">
           <Link
             to="/marketplace"
-            className="text-sm text-blue-600 hover:text-blue-800 underline"
+            className="text-sm text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1"
           >
-            ← Back to Marketplace
+            <ArrowLeft className="w-4 h-4" /> Back to Marketplace
           </Link>
         </div>
       </div>
@@ -357,7 +358,7 @@ export default function MarketplaceChatPage() {
       {/* Top bar */}
       <div className="flex items-center justify-between border-b bg-white px-4 py-3 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-2xl" aria-hidden="true">🤖</span>
+          <Bot className="w-6 h-6 text-blue-500" aria-hidden="true" />
           <div>
             <h2 className="text-sm font-semibold text-gray-900">{agentName}</h2>
             <p className="text-xs text-gray-500">
@@ -402,7 +403,7 @@ export default function MarketplaceChatPage() {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center py-16 text-gray-400">
-            <span className="text-4xl block mb-3" aria-hidden="true">💬</span>
+            <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" aria-hidden="true" />
             <p className="text-sm">Send a message to start chatting with this agent.</p>
           </div>
         )}
@@ -413,7 +414,7 @@ export default function MarketplaceChatPage() {
 
         {isSending && (
           <div className="flex items-start gap-3">
-            <span className="text-lg flex-shrink-0" aria-hidden="true">🤖</span>
+            <Bot className="w-5 h-5 flex-shrink-0 text-blue-400" aria-hidden="true" />
             <div className="bg-gray-100 rounded-lg px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
@@ -447,7 +448,7 @@ export default function MarketplaceChatPage() {
             className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
           >
-            📎
+            <Paperclip className="w-5 h-5" />
           </button>
           <input
             ref={fileInputRef}
@@ -516,7 +517,7 @@ function ChatBubble({ message, resolveFileUrl }: ChatBubbleProps) {
   if (message.type === 'error') {
     return (
       <div className="flex items-start gap-3">
-        <span className="text-lg flex-shrink-0" aria-hidden="true">⚠️</span>
+        <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-500" aria-hidden="true" />
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 max-w-[75%]">
           <p className="text-sm text-red-700">{message.content}</p>
         </div>
@@ -527,7 +528,7 @@ function ChatBubble({ message, resolveFileUrl }: ChatBubbleProps) {
   // Agent message
   return (
     <div className="flex items-start gap-3">
-      <span className="text-lg flex-shrink-0" aria-hidden="true">🤖</span>
+      <Bot className="w-5 h-5 flex-shrink-0 text-blue-400" aria-hidden="true" />
       <div className="bg-gray-100 rounded-lg px-4 py-3 max-w-[75%]">
         <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
       </div>

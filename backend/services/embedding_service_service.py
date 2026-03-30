@@ -7,31 +7,37 @@ from schemas.embedding_service_schemas import (
     CreateUpdateEmbeddingServiceSchema
 )
 from core.export_constants import PLACEHOLDER_API_KEY
+from utils.secret_utils import mask_api_key, is_masked_key
 from typing import List, Optional
 from datetime import datetime
 
 class EmbeddingServiceService:
 
     @staticmethod
+    def _to_list_item(service: "EmbeddingService", is_system: bool = False) -> EmbeddingServiceListItemSchema:
+        """Convert an EmbeddingService ORM instance to a list item schema."""
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
+        return EmbeddingServiceListItemSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",
+            created_at=service.create_date,
+            needs_api_key=needs_api_key,
+            is_system=is_system,
+        )
+
+    @staticmethod
     def get_embedding_services_list(db: Session, app_id: int) -> List[EmbeddingServiceListItemSchema]:
-        """Get list of embedding services for an app"""
-        embedding_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-        
-        result = []
-        for service in embedding_services:
-            needs_api_key = (
-                not service.api_key
-                or service.api_key == PLACEHOLDER_API_KEY
-            )
-            result.append(EmbeddingServiceListItemSchema(
-                service_id=service.service_id,
-                name=service.name,
-                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                model_name=service.description or "",
-                created_at=service.create_date,
-                needs_api_key=needs_api_key,
-            ))
-        
+        """Get list of embedding services for an app, plus platform-level system services."""
+        app_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+        system_services = EmbeddingServiceRepository.get_system_services(db)
+
+        result = [EmbeddingServiceService._to_list_item(svc, is_system=False) for svc in app_services]
+        result += [EmbeddingServiceService._to_list_item(svc, is_system=True) for svc in system_services]
         return result
 
     @staticmethod
@@ -70,7 +76,7 @@ class EmbeddingServiceService:
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",
-            api_key=service.api_key or "",
+            api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",
             created_at=service.create_date,
             available_providers=providers,
@@ -101,7 +107,9 @@ class EmbeddingServiceService:
         service.name = service_data.name
         service.provider = service_data.provider
         service.description = service_data.model_name
-        service.api_key = service_data.api_key
+        # Only update api_key if user provided a new (non-masked) value
+        if not is_masked_key(service_data.api_key):
+            service.api_key = service_data.api_key
         service.endpoint = service_data.base_url
         
         if service_id == 0:

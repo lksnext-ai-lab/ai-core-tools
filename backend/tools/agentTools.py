@@ -20,6 +20,8 @@ import langsmith as ls
 import json
 import asyncio
 import os
+import base64
+import mimetypes
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
@@ -276,7 +278,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             response_format=pydantic_model,
             tools=tools,
             checkpointer=checkpointer,
-            middleware=middleware or (),
+            middleware=middleware or [],
         )
     else:
         agent_chain = create_langchain_agent(
@@ -284,7 +286,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             system_prompt=system_prompt_content,
             tools=tools,
             checkpointer=checkpointer,
-            middleware=middleware or (),
+            middleware=middleware or [],
         )
 
     # Add logging for the created agent
@@ -336,6 +338,111 @@ def parse_agent_response(response_text, agent):
             logger.error(f"Error parsing JSON response: {e}")
             return response_text
     return response_text
+
+
+def build_human_message(
+    agent: Agent,
+    message: str,
+    image_files: List[Dict],
+    user_context: Optional[Dict] = None,
+) -> HumanMessage:
+    """Build the HumanMessage that will be fed into the agent chain.
+
+    When ``image_files`` is non-empty the content becomes a multimodal list of
+    text + image_url blocks.  Images are served via a signed URL when
+    ``AICT_BASE_URL`` is set (production), or inlined as base64 data URIs in
+    development mode.
+
+    Args:
+        agent: The (freshly loaded) Agent ORM instance.
+        message: The already-enhanced text message (with file content appended
+            if applicable).
+        image_files: List of image-file dicts (``file_path`` key required).
+        user_context: Caller context dict used to generate signed URLs.
+
+    Returns:
+        A ``HumanMessage`` instance ready for ``agent_chain.ainvoke()`` /
+        ``agent_chain.astream()``.
+    """
+    from utils.config import get_app_config
+
+    formatted_message = agent.prompt_template.format(question=message)
+
+    if not image_files:
+        return HumanMessage(content=formatted_message)
+
+    app_config = get_app_config()
+    tmp_base_folder = app_config["TMP_BASE_FOLDER"]
+    aict_base_url = os.getenv("AICT_BASE_URL")
+
+    content: List[Dict] = [{"type": "text", "text": formatted_message}]
+
+    for img in image_files:
+        file_path: str = img.get("file_path", "")
+        if not file_path:
+            logger.warning("Image file has no file_path — skipping: %s", img)
+            continue
+
+        # Normalise to forward slashes and strip leading slash
+        file_path = file_path.replace("\\", "/").lstrip("/")
+
+        if aict_base_url:
+            # Production mode — generate a signed static URL
+            aict_base_url = aict_base_url.rstrip("/")
+            user_email: Optional[str] = (
+                user_context.get("email") if user_context else None
+            )
+            if user_email:
+                from utils.security import generate_signature
+
+                sig = generate_signature(file_path, user_email)
+                url = (
+                    f"{aict_base_url}/static/{file_path}"
+                    f"?user={user_email}&sig={sig}"
+                )
+            else:
+                url = f"{aict_base_url}/static/{file_path}"
+
+            logger.info("Adding image to message using signed URL: %s", url)
+            content.append({"type": "image_url", "image_url": {"url": url}})
+        else:
+            # Development mode — inline as base64 data URI
+            full_path = os.path.join(tmp_base_folder, file_path)
+            if os.path.exists(full_path):
+                try:
+                    mime_type, _ = mimetypes.guess_type(full_path)
+                    if not mime_type:
+                        mime_type = "image/jpeg"
+                    with open(full_path, "rb") as fh:
+                        encoded = base64.b64encode(fh.read()).decode("utf-8")
+                    data_url = f"data:{mime_type};base64,{encoded}"
+                    logger.info(
+                        "Adding image as base64 (length: %d)", len(encoded)
+                    )
+                    content.append(
+                        {"type": "image_url", "image_url": {"url": data_url}}
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Error encoding image as base64: %s — falling back to URL",
+                        exc,
+                    )
+                    url = f"http://localhost:8000/static/{file_path}"
+                    content.append(
+                        {"type": "image_url", "image_url": {"url": url}}
+                    )
+            else:
+                url = f"http://localhost:8000/static/{file_path}"
+                logger.warning(
+                    "Image not found at %s — falling back to URL: %s",
+                    full_path,
+                    url,
+                )
+                content.append(
+                    {"type": "image_url", "image_url": {"url": url}}
+                )
+
+    return HumanMessage(content=content)
 
 
 def get_langsmith_config(agent):

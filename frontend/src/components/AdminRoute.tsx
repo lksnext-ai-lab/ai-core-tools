@@ -15,13 +15,8 @@ interface AdminRouteProps {
  * 
  * If not authenticated or not admin, redirects to home page
  */
-function AdminRoute({ children }: AdminRouteProps) {
+function AdminRoute({ children }: Readonly<AdminRouteProps>) {
   const { user, loading } = useUser();
-
-  // Debug logging
-  console.log('AdminRoute - User:', user);
-  console.log('AdminRoute - Is Admin:', user?.is_admin);
-  console.log('AdminRoute - Loading:', loading);
 
   // Show nothing while loading
   if (loading) {
@@ -33,13 +28,11 @@ function AdminRoute({ children }: AdminRouteProps) {
   }
 
   // If not authenticated or not admin, redirect to home
-  if (!user || !user.is_admin) {
-    console.log('AdminRoute - Access DENIED - Redirecting to home');
+  if (!user?.is_admin) {
     return <Navigate to="/" replace />;
   }
 
   // User is authenticated and is admin, render the protected content
-  console.log('AdminRoute - Access GRANTED - Rendering admin content');
   return <>{children}</>;
 }
 

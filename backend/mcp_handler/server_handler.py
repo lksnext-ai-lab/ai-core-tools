@@ -6,10 +6,13 @@ Supports JSON-RPC 2.0 over HTTP with Streamable HTTP transport.
 """
 
 from typing import Any, Dict, Optional
+import inspect
 import json
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+
+from db.database import SessionLocal
 
 from models.mcp_server import MCPServer
 from services.agent_execution_service import AgentExecutionService
@@ -114,9 +117,12 @@ class MCPServerHandler:
         if not handler:
             raise MCPError(JSONRPCError.METHOD_NOT_FOUND, f"Method not found: {method}")
 
-        return await handler(params)
+        result = handler(params)
+        if inspect.iscoroutine(result):
+            return await result
+        return result
 
-    async def _handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle initialize request"""
         client_info = params.get("clientInfo", {})
         logger.info(f"MCP client initializing: {client_info.get('name', 'unknown')}")
@@ -134,16 +140,16 @@ class MCPServerHandler:
             }
         }
 
-    async def _handle_ping(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_ping(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle ping request"""
         return {}
 
-    async def _handle_initialized_notification(self, params: Dict[str, Any]) -> None:
+    def _handle_initialized_notification(self, params: Dict[str, Any]) -> None:
         """Handle initialized notification"""
         logger.info(f"MCP client initialized for server {self.server_id}")
         return None
 
-    async def _handle_tools_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_tools_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle tools/list request - return agents as tools"""
         session = SessionLocal()
         try:
@@ -193,6 +199,17 @@ class MCPServerHandler:
         finally:
             session.close()
 
+    def _find_agent_by_tool_name(self, mcp_server: MCPServer, tool_name: str):
+        """Find the agent associated to a given tool name in an MCP server."""
+        for assoc in mcp_server.agent_associations:
+            assoc_agent = assoc.agent
+            if not assoc_agent:
+                continue
+            expected_name = assoc.tool_name_override or self._generate_tool_name(assoc_agent.name)
+            if expected_name == tool_name:
+                return assoc_agent
+        return None
+
     async def _handle_tools_call(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle tools/call request - execute an agent"""
         tool_name = params.get("name")
@@ -209,16 +226,7 @@ class MCPServerHandler:
             if not mcp_server:
                 raise MCPError(JSONRPCError.INTERNAL_ERROR, "MCP server not found")
 
-            agent = None
-            for assoc in mcp_server.agent_associations:
-                assoc_agent = assoc.agent
-                if not assoc_agent:
-                    continue
-
-                expected_name = assoc.tool_name_override or self._generate_tool_name(assoc_agent.name)
-                if expected_name == tool_name:
-                    agent = assoc_agent
-                    break
+            agent = self._find_agent_by_tool_name(mcp_server, tool_name)
 
             if not agent:
                 raise MCPError(JSONRPCError.INVALID_PARAMS, f"Tool not found: {tool_name}")
@@ -242,13 +250,14 @@ class MCPServerHandler:
                 "source": "mcp"
             }
 
-            result = await self.agent_execution_service.execute_agent_chat(
+            result = await self.agent_execution_service.execute_agent_chat_with_file_refs(
                 agent_id=agent.agent_id,
                 message=message,
-                files=None,
+                file_references=None,
                 search_params=None,
                 user_context=user_context,
-                db=session
+                conversation_id=None,
+                db=session,
             )
 
             # Format response

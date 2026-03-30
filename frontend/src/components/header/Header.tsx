@@ -1,27 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Link, useParams, useLocation } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useUser } from '../../contexts/UserContext';
+import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
-import { apiService } from '../../services/api';
 import type { NavigationConfig } from '../../core/types';
-
-interface App {
-  app_id: number;
-  name: string;
-  description?: string;
-  created_at: string;
-  updated_at: string;
-  owner_id: number;
-  is_public: boolean;
-  agent_count: number;
-  repository_count: number;
-  silo_count: number;
-  domain_count: number;
-  collaborator_count: number;
-  langsmith_configured: boolean;
-  agent_rate_limit: number;
-}
 
 interface HeaderProps {
   navigationConfig?: NavigationConfig;
@@ -31,73 +14,19 @@ interface HeaderProps {
   logoUrl?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ 
-  navigationConfig, 
+export const Header: React.FC<HeaderProps> = ({
   className = "",
   children,
   title,
   logoUrl
 }) => {
   const { appId } = useParams();
-  const location = useLocation();
   const { user } = useUser();
   const { logout } = useAuth();
+  const { isSaasMode } = useDeploymentMode();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [currentApp, setCurrentApp] = useState<App | null>(null);
-  const [isLoadingApp, setIsLoadingApp] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Fetch app data when appId changes
-  const loadAppData = useCallback(async () => {
-    if (!appId) return;
-    
-    setIsLoadingApp(true);
-    try {
-      const apps = await apiService.getApps();
-      const app = apps.find((a: App) => a.app_id === parseInt(appId));
-      setCurrentApp(app || null);
-    } catch (error) {
-      console.error('Failed to load app data:', error);
-      setCurrentApp(null);
-    } finally {
-      setIsLoadingApp(false);
-    }
-  }, [appId]);
-
-  useEffect(() => {
-    if (appId) {
-      loadAppData();
-    } else {
-      setCurrentApp(null);
-    }
-  }, [appId, loadAppData]);
-
-  // Calculate the most specific matching path once
-  const currentPath = location.pathname;
-  const mostSpecificMatch = React.useMemo(() => {
-    if (!navigationConfig?.appNavigation || !appId) return '';
-    
-    const allNavPaths = navigationConfig.appNavigation.map(item => 
-      item.path.replace(':appId', appId)
-    );
-    
-    // Find all paths that match the current path
-    const matchingPaths = allNavPaths.filter(navPath => 
-      currentPath === navPath || currentPath.startsWith(navPath + '/')
-    );
-    
-    // Return the longest (most specific) matching path
-    return matchingPaths.reduce((longest, current) => 
-      current.length > longest.length ? current : longest, ''
-    );
-  }, [currentPath, navigationConfig?.appNavigation, appId]);
-
-  const isActive = (path: string) => {
-    // Only highlight if this path is the most specific match
-    return mostSpecificMatch === path;
-  };
-
-  // Get user initials for avatar
   const getUserInitials = (name?: string, email?: string) => {
     if (name) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -108,14 +37,12 @@ export const Header: React.FC<HeaderProps> = ({
     return 'U';
   };
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
@@ -123,116 +50,60 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className={`bg-white shadow-sm border-b border-gray-200 px-6 py-4 ${className}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-6">
-          {/* Logo/Brand Section */}
-          <div className="flex items-center">
-            <Link to="/apps" className="flex items-center">
-              <img 
-                src={logoUrl || "/mattin-small.png"} 
-                alt={title || "AI Core Tools"} 
-                className="w-8 h-8 mr-3"
-              />
-              <span className="text-xl font-bold text-gray-900">
-                {title || "AI Core Tools"}
-              </span>
-            </Link>
-          </div>
+    <header className={`bg-white border-b border-gray-200 h-14 flex items-center ${className}`}>
 
-          {/* App Context and Change App */}
-          {appId && (
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900">
-                    {(() => {
-                      if (isLoadingApp) return 'Loading...';
-                      if (currentApp) return currentApp.name;
-                      return 'App not found';
-                    })()}
-                  </h3>
-                  <Link 
-                  to="/apps" 
-                  className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
-                >
-                  Change App
-                </Link>
-                </div>
-                
-              </div>
-            </div>
-          )}
+      {/* Logo + Platform name — w-64 to match sidebar width */}
+      <div className="flex-shrink-0 w-64 flex items-center gap-2 pl-4 pr-3 min-w-0">
+        <Link to="/apps" className="flex-shrink-0 flex items-center gap-2">
+          <img
+            src={logoUrl || "/mattin-small.png"}
+            alt={title || "AI Core Tools"}
+            className="w-9 h-9 object-contain"
+          />
+          <span className="hidden sm:inline text-base font-bold text-gray-900 whitespace-nowrap">
+            {title || "AI Core Tools"}
+          </span>
+        </Link>
+      </div>
 
-          {/* App-specific horizontal navigation */}
-          {appId && navigationConfig?.appNavigation && (
-            <nav className="flex space-x-6 border-l border-gray-200 pl-6">
-              {navigationConfig.appNavigation.map((item) => {
-                // Skip admin items if user is not admin
-                if (item.adminOnly && !user?.is_admin) {
-                  return null;
-                }
+      {/* Vertical divider — aligns with sidebar right border */}
+      <div className="self-stretch w-px bg-gray-200 flex-shrink-0 my-2" />
 
-                // Replace :appId placeholder with actual appId
-                const path = item.path.replace(':appId', appId);
-                const active = isActive(path);
-                
-                return (
-                  <Link
-                    key={`app-nav-${item.path}`}
-                    to={path}
-                    className={`relative px-1 py-2 text-sm font-medium transition-all duration-200 ${
-                      active
-                        ? 'text-blue-600' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <span className="flex items-center">
-                      {item.icon && <span className="mr-2 text-base">{item.icon}</span>}
-                      {item.name}
-                    </span>
-                    {/* Active indicator - bottom border */}
-                    {active && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
-                    )}
-                  </Link>
-                );
-              }).filter(Boolean)}
-            </nav>
-          )}
+      {/* Spacer + custom children + right actions */}
+      <div className="flex-1 min-w-0 flex items-center justify-between pl-4 pr-4 gap-4">
 
-          {/* Custom children */}
+        {/* Slot for custom children (e.g. search bar, breadcrumbs) */}
+        <div className="flex-1 min-w-0">
           {children}
         </div>
-        
-        {/* Top Right Actions */}
-        <div className="flex items-center space-x-4">
-          {/* Pending Invitations */}
+
+        {/* Right section — never shrinks */}
+        <div className="flex-shrink-0 flex items-center gap-2">
           <PendingInvitationsNotification />
-          
+
           {/* User Menu Dropdown */}
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               aria-expanded={isUserMenuOpen}
               aria-haspopup="true"
             >
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
+              <div className="w-7 h-7 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-medium">
                   {getUserInitials(user?.name, user?.email)}
                 </span>
               </div>
-              <div className="hidden md:block text-left">
-                <p className="text-sm font-medium text-gray-900">
+              <div className="hidden lg:block text-left">
+                <p className="text-sm font-medium text-gray-900 leading-tight">
                   {user?.name || 'User'}
                 </p>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-gray-500 leading-tight">
                   {user?.email}
                 </p>
               </div>
               <svg
-                className={`w-4 h-4 text-gray-400 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`}
+                className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -241,24 +112,21 @@ export const Header: React.FC<HeaderProps> = ({
               </svg>
             </button>
 
-            {/* Dropdown Menu */}
             {isUserMenuOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                 <div className="py-1" role="menu" aria-orientation="vertical">
-                  {/* User Info Header */}
                   <div className="px-4 py-3 border-b border-gray-100">
                     <p className="text-sm font-medium text-gray-900">
                       {user?.name || 'User'}
                     </p>
-                    <p className="text-sm text-gray-600 truncate">
+                    <p className="text-sm text-gray-500 truncate">
                       {user?.email}
                     </p>
                   </div>
 
-                  {/* Menu Items */}
                   <Link
                     to="/profile"
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                     role="menuitem"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
@@ -271,7 +139,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {appId && (
                     <Link
                       to={`/apps/${appId}/settings`}
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       role="menuitem"
                       onClick={() => setIsUserMenuOpen(false)}
                     >
@@ -283,13 +151,27 @@ export const Header: React.FC<HeaderProps> = ({
                     </Link>
                   )}
 
+                  {isSaasMode && (
+                    <Link
+                      to="/subscription"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      role="menuitem"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      Subscription
+                    </Link>
+                  )}
+
                   <div className="border-t border-gray-100">
                     <button
                       onClick={() => {
                         logout();
                         setIsUserMenuOpen(false);
                       }}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       role="menuitem"
                     >
                       <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -301,8 +183,9 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
             )}
-          </div>                                        
+          </div>
         </div>
+
       </div>
     </header>
   );

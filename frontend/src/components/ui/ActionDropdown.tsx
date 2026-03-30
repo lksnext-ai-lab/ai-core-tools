@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 export interface ActionItem {
   label: string;
   onClick: () => void;
-  icon?: string;
+  icon?: React.ReactNode;
   variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
   disabled?: boolean;
 }
@@ -11,7 +12,7 @@ export interface ActionItem {
 interface ActionDropdownProps {
   actions: ActionItem[];
   triggerText?: string;
-  triggerIcon?: string;
+  triggerIcon?: React.ReactNode;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   position?: { x: number; y: number } | null;
@@ -22,7 +23,7 @@ interface ActionDropdownProps {
 const ActionDropdown: React.FC<ActionDropdownProps> = ({
   actions,
   triggerText = 'Actions',
-  triggerIcon = '⋮',
+  triggerIcon = <MoreVertical className="w-4 h-4" />,
   className = '',
   size = 'md',
   position = null,
@@ -35,10 +36,10 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
-  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
-  const setIsOpen = externalIsOpen !== undefined ? (open: boolean) => {
+  const isOpen = externalIsOpen ?? internalIsOpen;
+  const setIsOpen = externalIsOpen === undefined ? setInternalIsOpen : (open: boolean) => {
     if (!open && onClose) onClose();
-  } : setInternalIsOpen;
+  };
 
   useLayoutEffect(() => {
     if (isOpen && !position) {
@@ -77,7 +78,6 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     const triggerRect = dropdownRef.current.getBoundingClientRect();
     const menuRect = menuRef.current.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
     
     // Check if dropdown would go below viewport
     const spaceBelow = viewportHeight - triggerRect.bottom;
@@ -87,7 +87,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     // Check if this is likely the last row by looking at the table structure
     const tableRow = dropdownRef.current.closest('tr');
     const tableBody = dropdownRef.current.closest('tbody');
-    const isLastRow = tableRow && tableBody && tableRow === tableBody.lastElementChild;
+    const isLastRow = tableRow !== null && tableRow === tableBody?.lastElementChild;
 
     // Use fixed positioning to avoid being clipped by overflow containers
     let style: React.CSSProperties = {
@@ -106,15 +106,9 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
     // Check horizontal position
     const dropdownWidth = 192; // w-48 in pixels
-    const spaceRight = viewportWidth - triggerRect.right;
     
-    if (spaceRight < dropdownWidth) {
-      // Align to the right edge of the trigger
-      style.left = `${triggerRect.right - dropdownWidth}px`;
-    } else {
-      // Align to the right edge of the trigger
-      style.left = `${triggerRect.right - dropdownWidth}px`;
-    }
+    // Align to the right edge of the trigger
+    style.left = `${triggerRect.right - dropdownWidth}px`;
 
     return style;
   };
@@ -236,9 +230,9 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
           style={getDropdownStyle()}
         >
           <div className="py-1">
-            {actions.map((action, index) => (
+            {actions.map((action) => (
               <button
-                key={index}
+                key={action.label}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
