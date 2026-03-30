@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-03-14 (based on commit `91a003b` + marketplace feature)
+> Last updated: 2026-03-25 (based on commit `891d5f8`)
 
 ## Table of Contents
 
@@ -46,6 +46,8 @@
 - [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
 - [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
+- [SaaS Mode](guides/saas-mode.md) — SaaS deployment: Stripe billing, subscription tiers, quota enforcement, and `system_defaults.yaml` configuration
+- [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent
 
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph

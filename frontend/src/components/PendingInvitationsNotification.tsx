@@ -20,10 +20,6 @@ function PendingInvitationsNotification() {
 
   useEffect(() => {
     loadPendingInvitations();
-    
-    // Poll for updates every 5 seconds to keep badge in sync with other tabs/pages
-    const interval = setInterval(loadPendingInvitations, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   async function loadPendingInvitations() {

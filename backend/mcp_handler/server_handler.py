@@ -250,13 +250,14 @@ class MCPServerHandler:
                 "source": "mcp"
             }
 
-            result = await self.agent_execution_service.execute_agent_chat(
+            result = await self.agent_execution_service.execute_agent_chat_with_file_refs(
                 agent_id=agent.agent_id,
                 message=message,
-                files=None,
+                file_references=None,
                 search_params=None,
                 user_context=user_context,
-                db=session
+                conversation_id=None,
+                db=session,
             )
 
             # Format response

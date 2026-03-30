@@ -114,12 +114,26 @@ class AuthService {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
-    
+
     // Store the token
     if (response.access_token) {
       this.setToken(response.access_token, response.expires_at);
     }
-    
+
+    return response;
+  }
+
+  // SaaS LOCAL mode - email+password login
+  async localLogin(email: string, password: string): Promise<{ access_token: string; user: any; expires_at: string }> {
+    const response = await this.request('/internal/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (response.access_token) {
+      this.setToken(response.access_token, response.expires_at);
+    }
+
     return response;
   }
 

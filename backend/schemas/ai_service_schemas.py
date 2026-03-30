@@ -13,7 +13,8 @@ class AIServiceListItemSchema(BaseModel):
     model_name: str
     created_at: Optional[datetime] = None
     needs_api_key: bool = False
-    
+    is_system: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -19,27 +19,33 @@ from langchain_core.runnables import RunnableConfig
 logger = get_logger(__name__)
 
 class AIServiceService:
-    
+
+    @staticmethod
+    def _to_list_item(service: "AIService", is_system: bool = False) -> AIServiceListItemSchema:
+        """Convert an AIService ORM instance to a list item schema."""
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
+        return AIServiceListItemSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",  # description stores model name
+            created_at=service.create_date,
+            needs_api_key=needs_api_key,
+            is_system=is_system,
+        )
+
     @staticmethod
     def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIServiceListItemSchema]:
-        """Get all AI services for a specific app"""
-        ai_services = AIServiceRepository.get_by_app_id(db, app_id)
-        
-        result = []
-        for service in ai_services:
-            needs_api_key = (
-                not service.api_key
-                or service.api_key == PLACEHOLDER_API_KEY
-            )
-            result.append(AIServiceListItemSchema(
-                service_id=service.service_id,
-                name=service.name,
-                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                model_name=service.description or "",  # Use description as model info
-                created_at=service.create_date,
-                needs_api_key=needs_api_key,
-            ))
-        
+        """Get all AI services for a specific app, plus platform-level system services."""
+        app_services = AIServiceRepository.get_by_app_id(db, app_id)
+        system_services = AIServiceRepository.get_system_services(db)
+
+        result = [AIServiceService._to_list_item(svc, is_system=False) for svc in app_services]
+        result += [AIServiceService._to_list_item(svc, is_system=True) for svc in system_services]
+
         return result
     
     @staticmethod
@@ -91,6 +97,13 @@ class AIServiceService:
     def create_or_update_ai_service(db: Session, app_id: int, service_id: int, service_data: CreateUpdateAIServiceSchema) -> AIServiceDetailSchema:
         """Create a new AI service or update an existing one"""
         if service_id == 0:
+            # Enforce Free tier restriction (SaaS mode only — Free users cannot create own AI Services)
+            from models.app import App as _App
+            from services.tier_enforcement_service import TierEnforcementService
+            _app = db.query(_App).filter(_App.app_id == app_id).first()
+            if _app:
+                TierEnforcementService.check_ai_service_allowed(db, _app.owner_id)
+
             # Create new AI service
             service = AIService()
             service.app_id = app_id

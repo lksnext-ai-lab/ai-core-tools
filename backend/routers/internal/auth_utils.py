@@ -337,6 +337,9 @@ def get_current_user_dev(
 if AuthConfig.LOGIN_MODE == "FAKE":
     logger.info("🔓 Using FAKE login mode authentication (development/testing only)")
     get_current_user_oauth = get_current_user_dev
+elif AuthConfig.LOGIN_MODE == "LOCAL":
+    logger.info("🔑 Using LOCAL auth mode (SaaS email+password, accepts local-auth JWTs)")
+    get_current_user_oauth = get_current_user_dev  # reuses same decoder — accepts LOCAL_AUTH_ISSUER tokens
 else:
     logger.info("🔐 Using OIDC authentication")
     get_current_user_oauth = get_current_user_oidc

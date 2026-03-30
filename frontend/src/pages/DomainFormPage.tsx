@@ -6,6 +6,7 @@ import { apiService } from '../services/api';
 interface EmbeddingService {
   service_id: number;
   name: string;
+  is_system?: boolean;
 }
 
 interface VectorDbOption {
@@ -270,7 +271,7 @@ function DomainFormPage() {
             <option value="">Select an embedding service</option>
             {embeddingServices.map((service) => (
               <option key={service.service_id} value={service.service_id}>
-                {service.name}
+                {service.is_system ? `[System] ${service.name}` : service.name}
               </option>
             ))}
           </select>

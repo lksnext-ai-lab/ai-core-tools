@@ -11,6 +11,8 @@ from .conversations import router as conversations_router
 from .auth import router as auth_router
 from .user import router as user_router
 from .marketplace import marketplace_router
+from .config import router as config_router
+from .platform_chatbot import platform_chatbot_router
 
 # Create the main internal router
 internal_router = APIRouter()
@@ -27,3 +29,13 @@ internal_router.include_router(conversations_router)
 internal_router.include_router(auth_router, prefix="/auth")
 internal_router.include_router(user_router)
 internal_router.include_router(marketplace_router)
+internal_router.include_router(config_router)
+internal_router.include_router(platform_chatbot_router, prefix="/platform-chatbot")
+
+# SaaS-specific routers (conditionally registered based on deployment mode)
+from deployment_mode import is_saas_mode
+if is_saas_mode():
+    from .saas_auth import router as saas_auth_router
+    from .subscription import router as subscription_router
+    internal_router.include_router(saas_auth_router, prefix="/auth")
+    internal_router.include_router(subscription_router)

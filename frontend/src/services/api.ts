@@ -112,6 +112,7 @@ class ApiService {
       await this.handleResponseError(response);
     }
 
+    if (response.status === 204) return null;
     return response.json();
   }
 
@@ -173,6 +174,13 @@ class ApiService {
     return this.request(`/internal/auth/invitations/${invitationId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ action }),
+    });
+  }
+
+  async register(email: string, password: string) {
+    return this.request('/internal/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
     });
   }
 
@@ -1937,6 +1945,201 @@ class ApiService {
     return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
       method: 'DELETE',
     });
+  }
+
+  // ==================== SAAS / SUBSCRIPTION METHODS ====================
+
+  async getSubscription() {
+    return this.request('/internal/subscription');
+  }
+
+  async createCheckoutSession(tier: string) {
+    return this.request('/internal/subscription/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  async createPortalSession() {
+    return this.request('/internal/subscription/portal', {
+      method: 'POST',
+    });
+  }
+
+  async getUsage() {
+    return this.request('/internal/usage');
+  }
+
+  // ==================== SAAS ADMIN METHODS ====================
+
+  async getAdminSaasUsers() {
+    return this.request('/internal/admin/saas/users');
+  }
+
+  async overrideUserTier(userId: number, tier: string) {
+    return this.request(`/internal/admin/saas/users/${userId}/tier`, {
+      method: 'PUT',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  async getTierConfig() {
+    return this.request('/internal/admin/saas/tier-config');
+  }
+
+  async updateTierConfig(data: { tier: string; resource_type: string; limit_value: number }) {
+    return this.request('/internal/admin/saas/tier-config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemAIServices() {
+    return this.request('/internal/admin/system-ai-services');
+  }
+
+  async createSystemAIService(data: {
+    name: string;
+    provider: string;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request('/internal/admin/system-ai-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemAIService(serviceId: number, data: {
+    name: string;
+    provider: string;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemAIService(serviceId: number) {
+    return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getSystemEmbeddingServices() {
+    return this.request('/internal/admin/system-embedding-services');
+  }
+
+  async createSystemEmbeddingService(data: {
+    name: string;
+    provider: string;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request('/internal/admin/system-embedding-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemEmbeddingService(serviceId: number, data: {
+    name: string;
+    provider: string;
+    model_name: string;
+    api_key: string;
+    base_url?: string;
+  }) {
+    return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemEmbeddingServiceImpact(serviceId: number) {
+    return this.request(`/internal/admin/system-embedding-services/${serviceId}/impact`);
+  }
+
+  async deleteSystemEmbeddingService(serviceId: number) {
+    return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ==================== PLATFORM CHATBOT API ====================
+
+  async getPlatformChatbotConfig(): Promise<{
+    enabled: boolean;
+    agent_name: string | null;
+    agent_description: string | null;
+  }> {
+    return this.request('/internal/platform-chatbot/config');
+  }
+
+  async sendPlatformChatbotMessage(
+    message: string,
+    sessionId: string
+  ): Promise<{ response: string | Record<string, unknown>; agent_id: number; conversation_id: number | null; metadata: Record<string, unknown> }> {
+    return this.request('/internal/platform-chatbot/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, session_id: sessionId }),
+    });
+  }
+
+  async streamPlatformChatbotMessage(
+    message: string,
+    sessionId: string,
+    options: { onEvent: (event: StreamEvent) => void; signal?: AbortSignal }
+  ): Promise<void> {
+    const url = `${this.baseURL}/internal/platform-chatbot/chat/stream`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ message, session_id: sessionId }),
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines: each event is "data: {json}\n\n"
+        const lines = buffer.split('\n\n');
+        // Keep the last incomplete chunk in the buffer
+        buffer = lines.pop() || '';
+
+        this.parseSSELines(lines, options.onEvent);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   // ==================== UTILITY METHODS ====================

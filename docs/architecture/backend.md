@@ -171,6 +171,10 @@ async def create_agent(
 | **url_service** | URL management for domains |
 | **user_service** | User profile management |
 | **web_crawler_service** | Web scraping and crawling |
+| **subscription_service** | Stripe billing, tier transitions, webhook handling (SaaS) |
+| **tier_enforcement_service** | Quota enforcement per subscription tier (SaaS) |
+| **usage_tracking_service** | Per-user LLM call and resource usage tracking (SaaS) |
+| **tier_config_seeder** | Seeds default tier limits from `system_defaults.yaml` into DB on startup (SaaS) |
 
 **Service pattern**:
 ```python
@@ -211,6 +215,9 @@ Services orchestrate multiple repositories, handle business rules, and integrate
 | **silo_repository** | Silo | Silo CRUD |
 | **url_repository** | Url | URL CRUD |
 | **user_repository** | User | User CRUD |
+| **subscription_repository** | Subscription | Subscription billing state (SaaS) |
+| **tier_config_repository** | TierConfig | Per-tier resource limit configuration; reads defaults from `system_defaults.yaml` (SaaS) |
+| **usage_record_repository** | UsageRecord | Usage records for quota enforcement (SaaS) |
 
 **Repository pattern**:
 ```python
@@ -256,6 +263,8 @@ Repositories encapsulate SQL queries and provide a clean interface for data oper
 | **Domain** | `domains` | Web domains for scraping |
 | **Url** | `urls` | URLs within domains |
 | **Media** | `media` | Media files (images, audio, video) |
+| **Subscription** | `subscriptions` | User subscription tier and billing state (SaaS) |
+| **TierConfig** | `tier_configs` | Configurable per-tier resource limits (SaaS) |
 
 **Model pattern**:
 ```python
@@ -334,6 +343,8 @@ Supporting utilities for cross-cutting concerns:
 | **logger** | Structured logging with Winston-style API |
 | **provider** | EntraID/OIDC provider initialization |
 | **security** | Security utilities (signature verification, hashing) |
+| **deployment_mode** | Deployment mode detection (`is_saas_mode()`, `validate_saas_env()`) |
+| **system_defaults.yaml** | YAML file with editable default settings: marketplace quota, tier resource limits. Read at startup; safe to commit and modify without code changes. |
 
 ## Application Lifecycle
 

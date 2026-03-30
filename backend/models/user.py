@@ -11,11 +11,15 @@ class User(Base):
     name = Column(String(255))
     create_date = Column(DateTime, default=datetime.now)
     is_active = Column(Boolean, default=True, nullable=False)
-    
+    auth_method = Column(String(50), default='oidc', nullable=True)
+    email_verified = Column(Boolean, default=True, nullable=False)
+
     # Relationships
     owned_apps = relationship('App', foreign_keys='App.owner_id', back_populates='owner', lazy=True)
     app_collaborations = relationship('AppCollaborator', foreign_keys='AppCollaborator.user_id', back_populates='user', lazy=True)
     api_keys = relationship('APIKey', back_populates='user', lazy=True)
+    subscription = relationship('Subscription', back_populates='user', uselist=False, lazy=True)
+    credential = relationship('UserCredential', back_populates='user', uselist=False, lazy=True)
 
     def get_id(self):
         return self.user_id

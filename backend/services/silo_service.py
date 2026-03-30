@@ -215,6 +215,12 @@ class SiloService:
                     raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
                 logger.info(f"Updating existing silo {silo_id}")
             else:
+                # Enforce per-app silo limit before creation (SaaS mode only)
+                app_id = silo_data.get('app_id')
+                if app_id:
+                    from services.tier_enforcement_service import TierEnforcementService
+                    TierEnforcementService.check_resource_limit(session, int(app_id), 'silos')
+
                 silo = Silo()
                 # Set default type to CUSTOM, but allow override from form data
                 silo.silo_type = SiloType.CUSTOM.value
@@ -414,7 +420,7 @@ class SiloService:
             loader = PyPDFLoader(file_path, extract_images=False)
         elif file_extension == '.docx':
             loader = Docx2txtLoader(file_path)
-        elif file_extension == '.txt':
+        elif file_extension in ('.txt', '.md'):
             loader = TextLoader(file_path, encoding='utf-8')
         else:
             logger.error(f"Unsupported file type: {file_extension}")
@@ -1142,7 +1148,11 @@ class SiloService:
             logger.info(f"Getting form data for app_id: {app_id}")
             form_data = SiloRepository.get_form_data_for_silo(app_id, 0, db)  # We already have the silo
             output_parsers = [{"parser_id": p.parser_id, "name": p.name} for p in form_data['output_parsers']]
-            embedding_services = [{"service_id": s.service_id, "name": s.name} for s in form_data['embedding_services']]
+            from schemas.embedding_service_schemas import EmbeddingServiceOptionSchema
+            embedding_services = (
+                [EmbeddingServiceOptionSchema(service_id=s.service_id, name=s.name, provider=s.provider.value if hasattr(s.provider, 'value') else s.provider, is_system=False) for s in form_data['embedding_services']]
+                + [EmbeddingServiceOptionSchema(service_id=s.service_id, name=s.name, provider=s.provider.value if hasattr(s.provider, 'value') else s.provider, is_system=True) for s in form_data.get('system_embedding_services', [])]
+            )
             logger.info(f"Found {len(output_parsers)} parsers and {len(embedding_services)} embedding services")
         except Exception as e:
             logger.error(f"Error getting form data: {str(e)}")

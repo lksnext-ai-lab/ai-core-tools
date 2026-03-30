@@ -72,7 +72,7 @@ class AuthConfig:
         
         # Login Mode Configuration
         cls.LOGIN_MODE = os.getenv('AICT_LOGIN', 'OIDC').upper()
-        if cls.LOGIN_MODE not in ['OIDC', 'FAKE']:
+        if cls.LOGIN_MODE not in ['OIDC', 'FAKE', 'LOCAL']:
             logger.warning(f"Invalid AICT_LOGIN value '{cls.LOGIN_MODE}', defaulting to OIDC")
             cls.LOGIN_MODE = 'OIDC'
         

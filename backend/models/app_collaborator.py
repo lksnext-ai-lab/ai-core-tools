@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -29,6 +29,7 @@ class AppCollaborator(Base):
     invited_at = Column(DateTime, default=datetime.now, nullable=False)
     accepted_at = Column(DateTime, nullable=True)
     status = Column(Enum(CollaborationStatus), nullable=False, default=CollaborationStatus.PENDING)
+    is_frozen = Column(Boolean, default=False, nullable=False)
     
     # Relationships
     app = relationship('App', back_populates='collaborators')

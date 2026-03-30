@@ -50,7 +50,7 @@ async def process_ocr(
     
     # Use unified service layer
     from services.agent_execution_service import AgentExecutionService
-    execution_service = AgentExecutionService(db)
+    execution_service = AgentExecutionService()
     
     try:
         result = await execution_service.execute_agent_ocr(
