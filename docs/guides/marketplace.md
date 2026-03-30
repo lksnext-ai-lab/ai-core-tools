@@ -191,6 +191,47 @@ Returns `ConversationWithHistoryResponse` — full message history for the conve
 
 ---
 
+## File Attachments in Conversations
+
+Marketplace conversations support file attachments. Files are stored under the owning agent's app workspace and are accessible only to the uploading user.
+
+### Upload a file
+
+```http
+POST /internal/marketplace/conversations/{conversation_id}/upload-file
+Content-Type: multipart/form-data
+
+file=<file>
+```
+
+Response includes `file_id`, `filename`, `file_type`, `file_size_bytes`, `processing_status`, `content_preview`, and `has_extractable_content`. Pass one or more `file_id` values as `file_references` in a subsequent `/chat` request to make the agent aware of the uploaded content.
+
+### List attached files
+
+```http
+GET /internal/marketplace/conversations/{conversation_id}/files
+```
+
+Returns a list of file objects plus `total_size_bytes` and `total_size_display`.
+
+### Remove a file
+
+```http
+DELETE /internal/marketplace/conversations/{conversation_id}/files/{file_id}
+```
+
+Returns `{"success": true}` on successful removal.
+
+### Download a file
+
+```http
+GET /internal/marketplace/conversations/{conversation_id}/files/{file_id}/download
+```
+
+Returns a cryptographically signed `download_url` valid for the requesting user. The URL is constructed using `AICT_BASE_URL` and includes a per-user HMAC signature (`?user=&sig=`).
+
+---
+
 ## Rating Agents
 
 Users who have had at least one conversation with a marketplace agent can submit a star rating (1–5).

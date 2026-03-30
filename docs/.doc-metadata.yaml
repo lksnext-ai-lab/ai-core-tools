@@ -5,8 +5,8 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "891d5f8"
-last_synced_date: "2026-03-25T00:00:00+00:00"
+last_synced_commit: "manual-scan-2026-03-30"  # Update to actual HEAD SHA: git log --format="%H" -1
+last_synced_date: "2026-03-30T00:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
@@ -15,10 +15,14 @@ last_sync_summary:
     - "docs/index.md"
     - "docs/reference/environment-variables.md"
     - "docs/architecture/backend.md"
+    - "docs/api/internal-api.md"
+    - "docs/architecture/database.md"
+    - "docs/guides/marketplace.md"
     - "docs/.doc-metadata.yaml"
   files_created:
     - "docs/guides/saas-mode.md"
+    - "docs/guides/platform-chatbot.md"
   files_deleted: []
-  commits_covered: 1
-  commit_range: "91a003b..891d5f8"
-  notes: "Documented SaaS mode feature: new saas-mode.md guide covering deployment modes, subscription tiers, Stripe setup, quota enforcement, system_defaults.yaml tier customization, and admin operations. Added SaaS env vars (AICT_DEPLOYMENT_MODE, STRIPE_*, EMAIL_*, SMTP_*) to environment-variables.md. Updated backend.md with SaaS services (subscription_service, tier_enforcement_service, usage_tracking_service, tier_config_seeder), repositories (subscription_repository, tier_config_repository, usage_record_repository), models (Subscription, TierConfig), and system_defaults.yaml utility entry."
+  commits_covered: null
+  commit_range: "91a003b..HEAD"
+  notes: "Merged two parallel doc sync operations. (1) SaaS mode: new saas-mode.md and platform-chatbot.md guides, SaaS env vars (AICT_DEPLOYMENT_MODE, STRIPE_*, EMAIL_*, SMTP_*), backend.md updates for SaaS services/repos/models. (2) Marketplace/Admin: AgentMarketplaceRating and SystemSetting DB models, User.is_active field, Admin API user activation/deactivation, system stats, system settings CRUD with resolution chain, fixed quota reset response schema, marketplace file attachment endpoints (upload/list/delete/download)."

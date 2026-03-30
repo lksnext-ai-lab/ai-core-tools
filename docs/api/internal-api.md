@@ -180,6 +180,10 @@ See [App Export and Import](../guides/app-export-import.md) for details.
 | POST | `/agents/{agent_id}/rate` | Rate agent (1–5 stars) | authenticated |
 | GET | `/agents/{agent_id}/my-rating` | Get own rating | authenticated |
 | GET | `/quota-usage` | Monthly call quota status | authenticated |
+| POST | `/conversations/{id}/upload-file` | Upload file to conversation | authenticated |
+| GET | `/conversations/{id}/files` | List conversation files | authenticated |
+| DELETE | `/conversations/{id}/files/{file_id}` | Remove file from conversation | authenticated |
+| GET | `/conversations/{id}/files/{file_id}/download` | Get signed download URL for a conversation file | authenticated |
 
 See [Agent Marketplace](../guides/marketplace.md) for the full workflow.
 
@@ -407,13 +411,32 @@ Content-Type: application/json
 
 **Base**: `/internal/admin`
 
-| Method | Endpoint | Purpose | Min Role |
-|--------|----------|---------|----------|
-| GET | `/users` | List all users | omniadmin |
-| GET | `/users/{user_id}` | Get user details | omniadmin |
-| PUT | `/users/{user_id}` | Update user | omniadmin |
-| DELETE | `/users/{user_id}` | Delete user | omniadmin |
-| POST | `/users/{user_id}/reset-marketplace-quota` | Reset user's monthly marketplace quota | omniadmin |
+All admin endpoints require the `OMNIADMIN` role (configured via `AICT_OMNIADMINS` environment variable).
+
+#### User Management
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/users` | List all users (paginated, optional `search` query param) |
+| GET | `/users/{user_id}` | Get user details including owned apps count and `is_active` status |
+| DELETE | `/users/{user_id}` | Delete user and all associated data |
+| POST | `/users/{user_id}/activate` | Activate a deactivated user account |
+| POST | `/users/{user_id}/deactivate` | Deactivate an active user account |
+| POST | `/users/{user_id}/reset-marketplace-quota` | Reset user's current-month marketplace call count to 0 |
+
+**Example: Activate / Deactivate User**
+
+```http
+POST /internal/admin/users/7/activate
+Cookie: session=...
+
+Response:
+{
+  "message": "User user@example.com has been activated successfully",
+  "user_id": 7,
+  "is_active": true
+}
+```
 
 **Example: Reset Marketplace Quota**
 
@@ -423,12 +446,84 @@ Cookie: session=...
 
 Response:
 {
+  "message": "Marketplace quota reset successfully",
   "user_id": 7,
-  "call_count": 0,
-  "year": 2026,
-  "month": 3
+  "user_email": "user@example.com",
+  "previous_count": 14,
+  "new_count": 0,
+  "reset_by": "admin@example.com",
+  "timestamp": "2026-03-30T10:00:00Z"
 }
 ```
+
+#### System Statistics
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/stats` | Platform-wide statistics (users, apps, agents, API keys) |
+
+**Example: Get Stats**
+
+```http
+GET /internal/admin/stats
+Cookie: session=...
+
+Response:
+{
+  "total_users": 42,
+  "active_users": 38,
+  "inactive_users": 4,
+  "total_apps": 17,
+  "total_agents": 89,
+  "total_api_keys": 31,
+  "active_api_keys": 28,
+  "inactive_api_keys": 3,
+  "recent_users": [...],
+  "users_with_apps": 12
+}
+```
+
+#### System Settings
+
+Settings are resolved in priority order: **env var → database override → default** (from `system_defaults.yaml`).
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/settings` | List all settings with resolved values, types, and sources |
+| PUT | `/settings/{key}` | Override a setting value in the database |
+| DELETE | `/settings/{key}` | Reset a setting to its default (removes DB override) |
+
+**Example: List Settings**
+
+```http
+GET /internal/admin/settings
+Cookie: session=...
+
+Response:
+[
+  {
+    "key": "marketplace_call_quota",
+    "value": "100",
+    "type": "integer",
+    "category": "marketplace",
+    "description": "Maximum API calls per user per month to marketplace agents. 0 = unlimited.",
+    "resolved_value": 100,
+    "source": "db"
+  }
+]
+```
+
+**Example: Update a Setting**
+
+```http
+PUT /internal/admin/settings/marketplace_call_quota
+Cookie: session=...
+Content-Type: application/json
+
+{ "value": "200" }
+```
+
+See [Database Schema — SystemSetting](../architecture/database.md) for the full list of built-in settings.
 
 ### OCR
 
@@ -585,6 +680,10 @@ Response:
 | GET | `/conversations` | List user's conversations | user |
 | GET | `/conversations/{id}` | Get conversation history | user |
 | POST | `/conversations/{id}/chat` | Send message | user |
+| POST | `/conversations/{id}/upload-file` | Upload file for use in conversation | user |
+| GET | `/conversations/{id}/files` | List files attached to conversation | user |
+| DELETE | `/conversations/{id}/files/{file_id}` | Remove a file from conversation | user |
+| GET | `/conversations/{id}/files/{file_id}/download` | Get signed download URL for a file | user |
 
 **Example: Start Conversation**
 

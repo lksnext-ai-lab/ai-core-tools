@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-03-25 (based on commit `891d5f8`)
+> Last updated: 2026-03-30 (based on commit `891d5f8` + marketplace ratings, quota, file management, user activation, system settings, admin stats, SaaS mode, platform chatbot)
 
 ## Table of Contents
 
