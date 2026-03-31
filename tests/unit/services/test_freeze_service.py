@@ -308,7 +308,7 @@ class TestRecalculateOnUpgrade:
         db = MagicMock()
 
         mock_freeze = Mock()
-        with patch.object(FreezeService, "apply_freeze", mock_freeze):
+        with patch("services.freeze_service.FreezeService.apply_freeze", mock_freeze):
             FreezeService.recalculate_on_upgrade(db, user_id=42, new_tier="pro")
 
         mock_freeze.assert_called_once_with(db, 42, "pro")

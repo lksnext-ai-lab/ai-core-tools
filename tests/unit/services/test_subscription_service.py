@@ -96,7 +96,7 @@ class TestHandleWebhookDispatch:
         mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_paid", mock_handler),
+            patch("services.subscription_service.SubscriptionService._on_invoice_paid", mock_handler),
         ):
             event = make_stripe_event("invoice.paid", {"customer": "cus_1"})
             stripe_mock = MagicMock()
@@ -113,7 +113,7 @@ class TestHandleWebhookDispatch:
         mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_payment_failed", mock_handler),
+            patch("services.subscription_service.SubscriptionService._on_invoice_payment_failed", mock_handler),
         ):
             event = make_stripe_event("invoice.payment_failed", {"customer": "cus_1"})
             stripe_mock = MagicMock()
@@ -131,7 +131,7 @@ class TestHandleWebhookDispatch:
         mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_subscription_updated", mock_handler),
+            patch("services.subscription_service.SubscriptionService._on_subscription_updated", mock_handler),
         ):
             event = make_stripe_event("customer.subscription.updated",
                                       make_stripe_sub_obj("cus_1"))
@@ -150,7 +150,7 @@ class TestHandleWebhookDispatch:
         mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_subscription_deleted", mock_handler),
+            patch("services.subscription_service.SubscriptionService._on_subscription_deleted", mock_handler),
         ):
             event = make_stripe_event("customer.subscription.deleted",
                                       make_stripe_sub_obj("cus_1"))
@@ -169,7 +169,7 @@ class TestHandleWebhookDispatch:
         mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_trial_will_end", mock_handler),
+            patch("services.subscription_service.SubscriptionService._on_trial_will_end", mock_handler),
         ):
             event = make_stripe_event("customer.subscription.trial_will_end",
                                       make_stripe_sub_obj("cus_1"))
@@ -212,7 +212,7 @@ class TestHandleWebhookIdempotency:
 
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_paid") as mock_handler,
+            patch("services.subscription_service.SubscriptionService._on_invoice_paid") as mock_handler,
         ):
             event = make_stripe_event("invoice.paid", {"customer": "cus_1"}, "evt_dup")
             stripe_mock = MagicMock()
@@ -235,7 +235,7 @@ class TestHandleWebhookIdempotency:
         mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_paid", mock_handler),
+            patch("services.subscription_service.SubscriptionService._on_invoice_paid", mock_handler),
         ):
             event = make_stripe_event("invoice.paid", {"customer": "cus_1"}, "evt_new")
             stripe_mock = MagicMock()
