@@ -23,6 +23,11 @@ import os
 import base64
 import mimetypes
 from utils.logger import get_logger
+from utils.langsmith_utils import (
+    get_langsmith_client_kwargs,
+    get_langsmith_debug_metadata,
+    normalize_langsmith_api_key,
+)
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
@@ -451,12 +456,11 @@ def get_langsmith_config(agent):
     Returns a dict with client and project_name if the app has a valid LangSmith
     API key configured, or None otherwise.
     """
-    if agent.app.langsmith_api_key:
+    api_key = normalize_langsmith_api_key(getattr(agent.app, "langsmith_api_key", None))
+    if api_key:
+        debug_meta = get_langsmith_debug_metadata(api_key)
         try:
-            client = ls.Client(
-                api_key=agent.app.langsmith_api_key,
-                api_url="https://api.smith.langchain.com",
-            )
+            client = ls.Client(**get_langsmith_client_kwargs(api_key))
             try:
                 client._get_settings()
                 logger.info(
@@ -469,12 +473,20 @@ def get_langsmith_config(agent):
                     logger.error(
                         f"LangSmith API key is INVALID or EXPIRED for app '{agent.app.name}'. "
                         f"Traces will NOT be sent. "
+                        f"endpoint={debug_meta['endpoint']} "
+                        f"workspace_id_present={debug_meta['workspace_id_present']} "
+                        f"key_length={debug_meta['key_length']} "
+                        f"key_suffix=****{debug_meta['key_suffix']}. "
                         f"Generate a new key at https://smith.langchain.com/settings"
                     )
                 else:
                     logger.error(
                         f"LangSmith API key validation FAILED for app '{agent.app.name}': "
                         f"{type(validation_err).__name__}: {validation_err}. "
+                        f"endpoint={debug_meta['endpoint']} "
+                        f"workspace_id_present={debug_meta['workspace_id_present']} "
+                        f"key_length={debug_meta['key_length']} "
+                        f"key_suffix=****{debug_meta['key_suffix']}. "
                         f"Traces will NOT be sent."
                     )
                 return None
@@ -727,4 +739,3 @@ def get_retriever_tool(silo: Silo, search_params=None):
             document_prompt=document_prompt
         )
     return None
-

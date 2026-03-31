@@ -26,6 +26,11 @@ from schemas.import_schemas import (
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
+from utils.langsmith_utils import (
+    get_langsmith_client_kwargs,
+    get_langsmith_debug_metadata,
+    normalize_langsmith_api_key,
+)
 from utils.secret_utils import mask_api_key, is_masked_key, normalize_credential_map
 
 # Import nested routers for app-specific resources
@@ -530,7 +535,7 @@ async def create_app(
     app_dict = {
         'name': app_data.name,
         'owner_id': user_id,
-        'langsmith_api_key': app_data.langsmith_api_key,
+        'langsmith_api_key': normalize_langsmith_api_key(app_data.langsmith_api_key),
         'agent_rate_limit': (app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT),
         'max_file_size_mb': (app_data.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB),
         'agent_cors_origins': app_data.agent_cors_origins
@@ -595,6 +600,8 @@ async def update_app(
     langsmith_key = app_data.langsmith_api_key
     if is_masked_key(langsmith_key):
         langsmith_key = app.langsmith_api_key
+    else:
+        langsmith_key = normalize_langsmith_api_key(langsmith_key)
 
     update_dict = {
         'app_id': app_id,
@@ -703,11 +710,10 @@ async def validate_langsmith_key(
             detail="No LangSmith API key configured for this app"
         )
 
+    debug_meta = get_langsmith_debug_metadata(app.langsmith_api_key)
+
     try:
-        client = ls.Client(
-            api_key=app.langsmith_api_key,
-            api_url="https://api.smith.langchain.com",
-        )
+        client = ls.Client(**get_langsmith_client_kwargs(app.langsmith_api_key))
         settings = client._get_settings()
         tenant_handle = getattr(settings, 'tenant_handle', None)
         logger.info(
@@ -723,12 +729,18 @@ async def validate_langsmith_key(
         error_msg = str(e)
         logger.error(
             f"LangSmith API key validation failed for app '{app.name}': "
-            f"{type(e).__name__}: {error_msg}"
+            f"{type(e).__name__}: {error_msg}. "
+            f"endpoint={debug_meta['endpoint']} "
+            f"workspace_id_present={debug_meta['workspace_id_present']} "
+            f"key_length={debug_meta['key_length']} "
+            f"key_suffix=****{debug_meta['key_suffix']}"
         )
         if "403" in error_msg or "Forbidden" in error_msg:
             detail = (
-                "LangSmith API key is invalid or expired. "
-                "Generate a new key at https://smith.langchain.com/settings"
+                "LangSmith API key was rejected by LangSmith. "
+                "If this key was recently regenerated, verify LANGSMITH_ENDPOINT and "
+                "LANGSMITH_WORKSPACE_ID for this deployment, especially for EU or "
+                "multi-workspace/service-key setups."
             )
         elif "401" in error_msg or "Unauthorized" in error_msg:
             detail = "LangSmith API key is missing or malformed."
@@ -843,4 +855,3 @@ async def export_full_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Export failed: {str(e)}",
         )
-
