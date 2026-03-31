@@ -127,7 +127,14 @@ class Agent(Base):
         cascade='all, delete-orphan'
     )
 
+    a2a_config = relationship(
+        'A2AAgent',
+        back_populates='agent',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+
     __mapper_args__ = {
         'polymorphic_identity': 'agent',
         'polymorphic_on': type
-    } 
+    }

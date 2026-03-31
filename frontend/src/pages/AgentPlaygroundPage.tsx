@@ -14,7 +14,12 @@ interface Agent {
   description?: string;
   status: string;
   type: string;
+  source_type?: 'local' | 'a2a';
   has_memory?: boolean;
+  a2a_config?: {
+    remote_skill_name: string;
+    health_status: string;
+  } | null;
   system_prompt?: string;
   prompt_template?: string;
   silo?: {
@@ -172,13 +177,15 @@ function AgentPlaygroundPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Agent Playground</h1>
         </div>
         <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setIsPromptModalOpen(true)}
-            className="pg-glass px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
-          >
-            <Pencil className="w-4 h-4" />
-            <span>Edit Prompts</span>
-          </button>
+          {agent.source_type !== 'a2a' && (
+            <button
+              onClick={() => setIsPromptModalOpen(true)}
+              className="pg-glass px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
+            >
+              <Pencil className="w-4 h-4" />
+              <span>Edit Prompts</span>
+            </button>
+          )}
           <button
             onClick={handleBack}
             className="pg-glass px-4 py-2 rounded-lg text-gray-600 dark:text-gray-300 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
@@ -205,6 +212,16 @@ function AgentPlaygroundPage() {
           <span className="px-2.5 py-0.5 bg-blue-100/80 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 rounded-full text-xs font-medium">
             {agent.type}
           </span>
+          {agent.source_type === 'a2a' && (
+            <span className="px-2.5 py-0.5 bg-sky-100/80 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 rounded-full text-xs font-medium">
+              A2A
+            </span>
+          )}
+          {agent.a2a_config && (
+            <span className="px-2.5 py-0.5 bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full text-xs font-medium">
+              {agent.a2a_config.health_status}
+            </span>
+          )}
           {agent.has_memory && (
             <span className="px-2.5 py-0.5 bg-purple-100/80 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full text-xs font-medium">
               Memory

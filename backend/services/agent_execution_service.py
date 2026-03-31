@@ -22,6 +22,8 @@ from tools.ocrAgentTools import (
 from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
+from services.a2a_service import A2AService
+from services.a2a_executor_service import A2AExecutorService
 from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
@@ -88,6 +90,7 @@ class AgentExecutionService:
         Returns:
             Dict containing agent response and metadata.
         """
+        ctx = None
         try:
             ctx = await self._prepare_turn(
                 agent_id=agent_id,
@@ -109,11 +112,21 @@ class AgentExecutionService:
                 working_dir=ctx.working_dir,
             )
 
+            if db and A2AService.is_a2a_agent(ctx.fresh_agent):
+                A2AService.update_health(db, ctx.fresh_agent.a2a_config, healthy=True)
+
             return await self._finalize_turn(ctx, response, db)
 
         except HTTPException:
             raise
         except Exception as e:
+            if db and ctx and A2AService.is_a2a_agent(ctx.fresh_agent):
+                A2AService.update_health(
+                    db,
+                    ctx.fresh_agent.a2a_config,
+                    healthy=False,
+                    error_summary=str(e),
+                )
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
 
@@ -976,6 +989,19 @@ class AgentExecutionService:
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
         """
+        if A2AService.is_a2a_agent(fresh_agent):
+            logger.info(
+                "Routing non-streaming execution to A2A executor for agent_id=%s skill_id=%s",
+                fresh_agent.agent_id,
+                getattr(getattr(fresh_agent, "a2a_config", None), "remote_skill_id", None),
+            )
+            executor = A2AExecutorService()
+            return await executor.execute(
+                fresh_agent,
+                message,
+                user_context=user_context,
+            )
+
         import langsmith as ls
         from tools.agentTools import create_agent, prepare_agent_config
         from langchain.messages import HumanMessage

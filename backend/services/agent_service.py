@@ -1,10 +1,12 @@
 from typing import Union, List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE
+from models.a2a_agent import A2AAgent
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
+from services.a2a_service import A2AService
 
 
 def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
@@ -26,6 +28,10 @@ def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
         "published_at": published_at,
         "updated_at": updated_at,
     }
+
+
+def _get_source_type(agent) -> str:
+    return "a2a" if A2AService.is_a2a_agent(agent) else "local"
 
 class AgentService:
 
@@ -56,6 +62,17 @@ class AgentService:
                 marketplace_visibility=(
                     agent.marketplace_visibility.value
                     if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
+                    else None
+                ),
+                source_type=_get_source_type(agent),
+                health_status=(
+                    getattr(agent.a2a_config, 'health_status', None)
+                    if getattr(agent, 'a2a_config', None)
+                    else None
+                ),
+                last_successful_refresh_at=(
+                    getattr(agent.a2a_config, 'last_successful_refresh_at', None)
+                    if getattr(agent, 'a2a_config', None)
                     else None
                 ),
             ))
@@ -134,6 +151,8 @@ class AgentService:
             marketplace_profile=_serialize_marketplace_profile(
                 getattr(agent, 'marketplace_profile', None)
             ),
+            source_type=_get_source_type(agent),
+            a2a_config=A2AService.serialize_record(getattr(agent, 'a2a_config', None)),
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
@@ -143,7 +162,7 @@ class AgentService:
             return type('Agent', (), {
                 'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': '', 
                 'type': 'agent', 'is_tool': False, 'create_date': None, 'request_count': 0,
-                'temperature': DEFAULT_AGENT_TEMPERATURE
+                'temperature': DEFAULT_AGENT_TEMPERATURE, 'a2a_config': None
             })()
         else:
             # Existing agent - determine if it's OCR agent or regular agent
@@ -185,12 +204,22 @@ class AgentService:
     def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str, user_id: int = None) -> int:
         """Create or update agent"""
         agent_id = agent_data.get('agent_id')
+        requested_source_type = agent_data.get('source_type', 'local')
 
         # If agent_id is 0, treat it as a new agent
         if agent_id == 0:
             agent_id = None
 
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        existing_source_type = _get_source_type(agent) if agent else 'local'
+
+        if agent and requested_source_type != existing_source_type:
+            raise ValueError("Changing an agent between local and A2A sources is not supported yet")
+
+        if requested_source_type == 'a2a':
+            if agent_type != 'agent':
+                raise ValueError("External A2A import is only supported for regular agents")
+            agent_data = self._sanitize_a2a_agent_data(agent_data)
 
         if not agent:
             # Enforce per-app agent limit before creation (SaaS mode only)
@@ -217,6 +246,9 @@ class AgentService:
             agent = AgentRepository.update(db, agent)
         else:
             agent = AgentRepository.create(db, agent)
+
+        if requested_source_type == 'a2a':
+            self._upsert_a2a_config(db, agent.agent_id, agent_data.get('a2a_config'))
         
         # Return the agent ID
         return agent.agent_id
@@ -270,6 +302,34 @@ class AgentService:
             agent.is_tool = is_tool_value
         else:
             agent.is_tool = is_tool_value == 'on'
+
+    def _sanitize_a2a_agent_data(self, data: dict) -> dict:
+        sanitized = dict(data)
+        sanitized['service_id'] = None
+        sanitized['silo_id'] = None
+        sanitized['output_parser_id'] = None
+        sanitized['tool_ids'] = []
+        sanitized['mcp_config_ids'] = []
+        sanitized['skill_ids'] = []
+        sanitized['enable_code_interpreter'] = False
+        sanitized['server_tools'] = []
+        sanitized['system_prompt'] = ''
+        sanitized['prompt_template'] = ''
+        sanitized['is_tool'] = False
+        sanitized['has_memory'] = False
+        return sanitized
+
+    def _upsert_a2a_config(self, db: Session, agent_id: int, canonical_config: Optional[dict]) -> None:
+        if not canonical_config:
+            raise ValueError("Canonical A2A source configuration is required")
+
+        record = db.query(A2AAgent).filter(A2AAgent.agent_id == agent_id).first()
+        if not record:
+            record = A2AAgent(agent_id=agent_id)
+
+        A2AService.apply_source_config(record, canonical_config)
+        db.add(record)
+        db.commit()
 
     def update_agent_tools(self, db: Session, agent_id: int, tool_ids: list, form_data: dict = None):
         """Update agent tools associations"""

@@ -34,6 +34,7 @@ class AgentExecutionRepository:
             joinedload(Agent.ai_service),
             joinedload(Agent.output_parser),
             joinedload(Agent.app),
+            joinedload(Agent.a2a_config),
             # Skill associations with nested skill data
             selectinload(Agent.skill_associations).joinedload(AgentSkill.skill),
             # Tool agents and their relationships (critical for IACTTool)

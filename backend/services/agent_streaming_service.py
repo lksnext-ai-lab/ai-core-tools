@@ -18,6 +18,8 @@ from tools.streaming_utils import (
     map_stream_event,
     SSE_TOKEN,
 )
+from services.a2a_executor_service import A2AExecutorService
+from services.a2a_service import A2AService
 from services.agent_execution_service import AgentExecutionService
 from utils.logger import get_logger
 
@@ -110,6 +112,46 @@ class AgentStreamingService:
                     "has_memory": ctx.agent.has_memory,
                 },
             )
+
+            if A2AService.is_a2a_agent(ctx.fresh_agent):
+                logger.info(
+                    "Routing streaming execution to A2A executor for agent_id=%s skill_id=%s conversation_id=%s",
+                    ctx.fresh_agent.agent_id,
+                    getattr(getattr(ctx.fresh_agent, "a2a_config", None), "remote_skill_id", None),
+                    ctx.effective_conv_id,
+                )
+                accumulated_content = ""
+                executor = A2AExecutorService()
+
+                async for event in executor.stream(
+                    ctx.fresh_agent,
+                    ctx.enhanced_message,
+                    user_context=ctx.user_context,
+                ):
+                    if event["type"] == SSE_TOKEN:
+                        accumulated_content += event["data"].get("content", "")
+                    yield format_sse_event(event["type"], event["data"])
+
+                if effective_db:
+                    A2AService.update_health(
+                        effective_db,
+                        ctx.fresh_agent.a2a_config,
+                        healthy=True,
+                    )
+
+                result = await self.execution_service._finalize_turn(
+                    ctx, accumulated_content, effective_db
+                )
+
+                yield format_sse_event(
+                    "done",
+                    {
+                        "response": result["parsed_response"],
+                        "conversation_id": result["effective_conv_id"],
+                        "files": result["files_data"],
+                    },
+                )
+                return
 
             # ----------------------------------------------------------------
             # 3. Build agent chain
@@ -211,6 +253,13 @@ class AgentStreamingService:
             )
 
         except Exception as exc:
+            if effective_db and 'ctx' in locals() and ctx and A2AService.is_a2a_agent(ctx.fresh_agent):
+                A2AService.update_health(
+                    effective_db,
+                    ctx.fresh_agent.a2a_config,
+                    healthy=False,
+                    error_summary=str(exc),
+                )
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
             yield format_sse_event("error", {"message": str(exc)})
 

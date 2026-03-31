@@ -41,6 +41,7 @@ def make_agent(
     agent.request_count = 0
     agent.is_frozen = is_frozen  # SaaS mode: must be explicitly False to avoid MagicMock truthiness
     agent.ai_service = None
+    agent.a2a_config = None
     agent.prompt_template = MagicMock()
     agent.prompt_template.format.return_value = "formatted message"
     return agent
@@ -229,6 +230,22 @@ class TestSuccessfulExecution:
             )
 
         assert result["metadata"]["files_processed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_routes_a2a_agents_to_a2a_executor(self):
+        agent = make_agent(agent_id=1, has_memory=False)
+        agent.a2a_config = MagicMock(card_url="https://example.com/.well-known/agent-card.json")
+        svc, _ = make_service(agent=agent)
+
+        with patch("services.agent_execution_service.A2AExecutorService.execute", new=AsyncMock(return_value="Remote reply")) as mock_execute:
+            result = await svc._execute_agent_async(
+                agent,
+                "hello",
+                user_context={"user_id": 1},
+            )
+
+        assert result == "Remote reply"
+        mock_execute.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

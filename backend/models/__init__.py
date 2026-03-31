@@ -12,6 +12,7 @@ from .mcp_config import MCPConfig
 from .silo import Silo
 from .skill import Skill
 from .agent import Agent
+from .a2a_agent import A2AAgent
 from .agent_marketplace_profile import AgentMarketplaceProfile
 from .agent_marketplace_rating import AgentMarketplaceRating
 from .skill import Skill
@@ -34,10 +35,10 @@ from .user_credential import UserCredential
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill',
-    'Agent', 'AgentMarketplaceProfile', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
+    'Agent', 'A2AAgent', 'AgentMarketplaceProfile', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
     'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
-    'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Agent', 'A2AAgent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
     'Media',
     'MCPServer', 'MCPServerAgent',
     'SystemSetting',

@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb,
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import { discoverA2ACard, type AgentCard, type AgentSkill } from '../services/a2aDiscovery';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
@@ -12,6 +13,24 @@ import type { TabItem } from '../components/ui/Tabs';
 import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
+
+type AgentSourceType = 'local' | 'a2a';
+
+interface A2AAgentConfig {
+  card_url: string;
+  remote_agent_id?: string;
+  remote_skill_id: string;
+  remote_skill_name: string;
+  remote_agent_metadata: Record<string, any>;
+  remote_skill_metadata: Record<string, any>;
+  sync_status: string;
+  health_status: string;
+  last_successful_refresh_at?: string | null;
+  last_refresh_attempt_at?: string | null;
+  last_refresh_error?: string | null;
+  documentation_url?: string | null;
+  icon_url?: string | null;
+}
 
 // Define the Agent types
 interface Agent {
@@ -37,6 +56,8 @@ interface Agent {
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
+  source_type?: AgentSourceType;
+  a2a_config?: A2AAgentConfig | null;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -55,6 +76,7 @@ interface AgentFormData {
   system_prompt: string;
   prompt_template: string;
   type: string;
+  source_type: AgentSourceType;
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
@@ -69,6 +91,11 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  a2a_card_url: string;
+  a2a_selected_skill_id: string;
+  a2a_selected_skill_name?: string;
+  a2a_card_snapshot?: Record<string, any>;
+  a2a_skill_snapshot?: Record<string, any>;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -187,6 +214,7 @@ function AgentFormPage() {
     system_prompt: '',
     prompt_template: '',
     type: 'agent',
+    source_type: 'local',
     is_tool: false,
     has_memory: false,
     enable_code_interpreter: false,
@@ -197,9 +225,14 @@ function AgentFormPage() {
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
-    skill_ids: []
+    skill_ids: [],
+    a2a_card_url: '',
+    a2a_selected_skill_id: ''
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
+  const [a2aDiscovery, setA2aDiscovery] = useState<{ card: AgentCard; skills: AgentSkill[] } | null>(null);
+  const [a2aLoading, setA2aLoading] = useState(false);
+  const [a2aError, setA2aError] = useState<string | null>(null);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -241,6 +274,7 @@ function AgentFormPage() {
         system_prompt: response.system_prompt || '',
         prompt_template: response.prompt_template || '',
         type: response.type || 'agent',
+        source_type: response.source_type || 'local',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
         enable_code_interpreter: response.enable_code_interpreter || false,
@@ -255,11 +289,24 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        a2a_card_url: response.a2a_config?.card_url || '',
+        a2a_selected_skill_id: response.a2a_config?.remote_skill_id || '',
+        a2a_selected_skill_name: response.a2a_config?.remote_skill_name || '',
+        a2a_card_snapshot: response.a2a_config?.remote_agent_metadata || undefined,
+        a2a_skill_snapshot: response.a2a_config?.remote_skill_metadata || undefined,
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
         text_system_prompt: response.text_system_prompt || ''
       });
+
+      if (response.a2a_config?.remote_agent_metadata) {
+        const remoteCard = response.a2a_config.remote_agent_metadata as AgentCard;
+        const remoteSkills = Array.isArray(remoteCard.skills) ? remoteCard.skills : [];
+        setA2aDiscovery({ card: remoteCard, skills: remoteSkills });
+      } else {
+        setA2aDiscovery(null);
+      }
 
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
@@ -336,6 +383,117 @@ function AgentFormPage() {
     }));
   };
 
+  const applyImportedA2ASkill = useCallback((card: AgentCard, skill: AgentSkill) => {
+    setFormData(prev => ({
+      ...prev,
+      source_type: 'a2a',
+      type: 'agent',
+      name: skill.name || card.name || prev.name,
+      description: skill.description || card.description || prev.description,
+      is_tool: false,
+      has_memory: false,
+      enable_code_interpreter: false,
+      server_tools: [],
+      service_id: undefined,
+      silo_id: undefined,
+      output_parser_id: undefined,
+      tool_ids: [],
+      mcp_config_ids: [],
+      skill_ids: [],
+      system_prompt: '',
+      prompt_template: '',
+      a2a_selected_skill_id: skill.id,
+      a2a_selected_skill_name: skill.name,
+      a2a_card_snapshot: card as Record<string, any>,
+      a2a_skill_snapshot: skill as Record<string, any>,
+    }));
+    setShowOutputParser(false);
+  }, []);
+
+  const handleSourceTypeChange = (sourceType: AgentSourceType) => {
+    setA2aError(null);
+    if (sourceType === 'local') {
+      setA2aDiscovery(null);
+      setFormData(prev => ({
+        ...prev,
+        source_type: 'local',
+        a2a_selected_skill_id: '',
+        a2a_selected_skill_name: undefined,
+        a2a_card_snapshot: undefined,
+        a2a_skill_snapshot: undefined,
+      }));
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      source_type: 'a2a',
+      type: 'agent',
+      is_tool: false,
+      has_memory: false,
+      enable_code_interpreter: false,
+      server_tools: [],
+      service_id: undefined,
+      silo_id: undefined,
+      output_parser_id: undefined,
+      tool_ids: [],
+      mcp_config_ids: [],
+      skill_ids: [],
+      system_prompt: '',
+      prompt_template: '',
+    }));
+    setShowOutputParser(false);
+  };
+
+  const handleDiscoverA2AAgent = useCallback(async () => {
+    if (!appId) {
+      setA2aError('Missing app context while loading the A2A agent card.');
+      return;
+    }
+
+    if (!formData.a2a_card_url.trim()) {
+      setA2aError('Enter a public A2A agent card URL first.');
+      return;
+    }
+
+    try {
+      setA2aLoading(true);
+      setA2aError(null);
+      const discovery = await discoverA2ACard(Number.parseInt(appId), formData.a2a_card_url.trim());
+      setA2aDiscovery({ card: discovery.card, skills: discovery.skills });
+
+      if (discovery.skills.length === 0) {
+        setA2aError('This A2A agent card does not expose any importable skills.');
+        setFormData(prev => ({
+          ...prev,
+          a2a_selected_skill_id: '',
+          a2a_selected_skill_name: undefined,
+          a2a_card_snapshot: discovery.card as Record<string, any>,
+          a2a_skill_snapshot: undefined,
+        }));
+        return;
+      }
+
+      const selectedSkill =
+        discovery.skills.find((skill) => skill.id === formData.a2a_selected_skill_id) ||
+        discovery.skills[0];
+
+      applyImportedA2ASkill(discovery.card, selectedSkill);
+    } catch (err) {
+      setA2aDiscovery(null);
+      setA2aError(err instanceof Error ? err.message : 'Failed to load the A2A agent card');
+    } finally {
+      setA2aLoading(false);
+    }
+  }, [appId, applyImportedA2ASkill, formData.a2a_card_url, formData.a2a_selected_skill_id]);
+
+  const handleA2ASkillSelect = (skillId: string) => {
+    if (!a2aDiscovery) return;
+    const selectedSkill = a2aDiscovery.skills.find((skill) => skill.id === skillId);
+    if (!selectedSkill) return;
+    applyImportedA2ASkill(a2aDiscovery.card, selectedSkill);
+  };
+
   // Marketplace handlers
   const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
     if (!appId || !agentId || Number.parseInt(agentId) === 0) return;
@@ -410,6 +568,7 @@ function AgentFormPage() {
       system_prompt: formData.system_prompt,
       prompt_template: formData.prompt_template,
       type: formData.type,
+        source_type: formData.source_type,
       is_tool: formData.is_tool,
       has_memory: formData.has_memory,
       enable_code_interpreter: formData.enable_code_interpreter,
@@ -428,8 +587,21 @@ function AgentFormPage() {
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
       text_system_prompt: formData.text_system_prompt,
+        a2a_config: formData.source_type === 'a2a' ? {
+          card_url: formData.a2a_card_url,
+          selected_skill_id: formData.a2a_selected_skill_id,
+          selected_skill_name: formData.a2a_selected_skill_name,
+          card_snapshot: formData.a2a_card_snapshot,
+          skill_snapshot: formData.a2a_skill_snapshot,
+        } : undefined,
       app_id: Number.parseInt(appId),
     };
+
+      if (formData.source_type === 'a2a') {
+        if (!formData.a2a_card_url || !formData.a2a_selected_skill_id) {
+          throw new Error('Load a public A2A agent card and select a skill before saving.');
+        }
+      }
 
     const isNew = Number.parseInt(agentId) === 0;
 
@@ -468,6 +640,7 @@ function AgentFormPage() {
 
   const pageTitle = getPageTitle(formData.type, isNewAgent);
   const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
+  const isA2AAgent = formData.source_type === 'a2a';
 
   const tabs: TabItem[] = [
     { id: 'basic', label: 'Basic' },
@@ -532,6 +705,126 @@ function AgentFormPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
+                  <label htmlFor="source_type" className="block text-sm font-medium text-gray-700 mb-2">
+                    Source
+                  </label>
+                  <select
+                    id="source_type"
+                    value={formData.source_type}
+                    onChange={(e) => handleSourceTypeChange(e.target.value as AgentSourceType)}
+                    disabled={!isNewAgent}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-500"
+                  >
+                    <option value="local">Local</option>
+                    <option value="a2a">External / A2A Agent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
+                    Agent Type
+                  </label>
+                  <select
+                    id="type"
+                    value={formData.type}
+                    onChange={(e) => handleInputChange('type', e.target.value)}
+                    disabled={isA2AAgent}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-500"
+                  >
+                    <option value="agent">AI Agent</option>
+                    <option value="ocr_agent">OCR Agent</option>
+                  </select>
+                </div>
+
+                {isA2AAgent && (
+                  <div className="md:col-span-2 rounded-2xl border border-blue-200 bg-blue-50 p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900">Import Public A2A Agent</h4>
+                        <p className="mt-1 text-sm text-blue-800">
+                          Load a public agent card through the backend, choose exactly one remote skill, and create a first-class MattinAI agent backed by that external capability.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { void handleDiscoverA2AAgent(); }}
+                        disabled={a2aLoading}
+                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                      >
+                        {a2aLoading ? 'Loading...' : 'Load Card'}
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="md:col-span-2">
+                        <label htmlFor="a2a_card_url" className="block text-sm font-medium text-blue-900 mb-2">
+                          Public Agent Card URL
+                        </label>
+                        <input
+                          type="url"
+                          id="a2a_card_url"
+                          value={formData.a2a_card_url}
+                          onChange={(e) => handleInputChange('a2a_card_url', e.target.value)}
+                          className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          placeholder="https://example.com/.well-known/agent-card.json"
+                        />
+                      </div>
+
+                      {a2aDiscovery && (
+                        <>
+                          <div>
+                            <label htmlFor="a2a_skill" className="block text-sm font-medium text-blue-900 mb-2">
+                              Remote Skill
+                            </label>
+                            <select
+                              id="a2a_skill"
+                              value={formData.a2a_selected_skill_id}
+                              onChange={(e) => handleA2ASkillSelect(e.target.value)}
+                              className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                            >
+                              {a2aDiscovery.skills.map((skill) => (
+                                <option key={skill.id} value={skill.id}>
+                                  {skill.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="rounded-xl border border-blue-200 bg-white p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Remote Agent</p>
+                            <p className="mt-1 text-sm font-semibold text-gray-900">{a2aDiscovery.card.name}</p>
+                            {a2aDiscovery.card.description && (
+                              <p className="mt-2 text-sm text-gray-600">{a2aDiscovery.card.description}</p>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                              <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-800">
+                                {a2aDiscovery.skills.length} skill{a2aDiscovery.skills.length === 1 ? '' : 's'}
+                              </span>
+                              <span className="rounded-full bg-emerald-100 px-2 py-1 font-medium text-emerald-800">
+                                Browser discovery OK
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {a2aError && (
+                      <p className="mt-3 text-sm text-red-700">{a2aError}</p>
+                    )}
+
+                    {agent?.a2a_config && (
+                      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                        <p className="font-medium text-gray-900">Saved external state</p>
+                        <p className="mt-1">Health: {agent.a2a_config.health_status}</p>
+                        <p>Sync: {agent.a2a_config.sync_status}</p>
+                        <p>Imported skill: {agent.a2a_config.remote_skill_name}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                     Nombre *
                   </label>
@@ -544,21 +837,6 @@ function AgentFormPage() {
                     required
                     placeholder="Nombre..."
                   />
-                </div>
-
-                <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent Type
-                  </label>
-                  <select
-                    id="type"
-                    value={formData.type}
-                    onChange={(e) => handleInputChange('type', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  >
-                    <option value="agent">AI Agent</option>
-                    <option value="ocr_agent">OCR Agent</option>
-                  </select>
                 </div>
 
                 <div className="md:col-span-2">
@@ -589,6 +867,12 @@ function AgentFormPage() {
               </div>
               
               <div className="space-y-6">
+                {isA2AAgent ? (
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-6 text-sm text-blue-900">
+                    Imported A2A agents execute through the selected remote skill. Local system prompts and prompt templates are disabled in Phase 1 so the imported agent stays faithful to the upstream capability.
+                  </div>
+                ) : (
+                <>
                 <div>
                   <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
                     System Prompt
@@ -720,6 +1004,8 @@ function AgentFormPage() {
                     </div>
                   </div>
                 )}
+                </>
+                )}
               </div>
             </div>
           )}
@@ -727,8 +1013,13 @@ function AgentFormPage() {
           {/* TAB 3: CONFIGURATION */}
           {activeTab === 'configuration' && (
             <div className="space-y-6">
+              {isA2AAgent && (
+                <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
+                  External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter in Phase 1. The imported remote skill is the execution backend.
+                </div>
+              )}
               {/* Configuration for regular agents */}
-              {formData.type !== 'ocr_agent' && (
+              {formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <>
                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                     <div className="flex items-center mb-6">
@@ -1105,8 +1396,13 @@ function AgentFormPage() {
           {/* TAB 4: ADVANCED */}
           {activeTab === 'advanced' && (
             <div className="space-y-6">
+              {isA2AAgent && (
+                <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
+                  Native MattinAI execution-shaping capabilities are intentionally disabled for imported A2A agents in Phase 1. This keeps the imported agent a pure wrapper around the selected external skill.
+                </div>
+              )}
               {/* Tools Card - Only for regular agents */}
-              {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
+              {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
@@ -1156,7 +1452,7 @@ function AgentFormPage() {
               )}
 
               {/* MCP Configs Card - Only for regular agents */}
-              {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
+              {agent?.mcp_configs && formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
@@ -1244,7 +1540,7 @@ function AgentFormPage() {
               )}
 
               {/* Skills Card - Only for regular agents */}
-              {agent?.skills && formData.type !== 'ocr_agent' && (
+              {agent?.skills && formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center justify-between mb-6">
                     <div>

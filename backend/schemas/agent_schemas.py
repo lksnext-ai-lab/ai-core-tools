@@ -1,9 +1,57 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from models.agent import DEFAULT_AGENT_TEMPERATURE
 
 # ==================== AGENT SCHEMAS ====================
+
+
+class A2AAgentSourceConfigSchema(BaseModel):
+    """Source linkage payload submitted when importing an A2A agent."""
+
+    card_url: str
+    selected_skill_id: str
+    selected_skill_name: Optional[str] = None
+    card_snapshot: Optional[Dict[str, Any]] = None
+    skill_snapshot: Optional[Dict[str, Any]] = None
+
+
+class A2AAgentDetailSchema(BaseModel):
+    """Persisted A2A metadata returned in agent detail responses."""
+
+    card_url: str
+    remote_agent_id: Optional[str] = None
+    remote_skill_id: str
+    remote_skill_name: str
+    remote_agent_metadata: Dict[str, Any]
+    remote_skill_metadata: Dict[str, Any]
+    sync_status: str
+    health_status: str
+    last_successful_refresh_at: Optional[datetime] = None
+    last_refresh_attempt_at: Optional[datetime] = None
+    last_refresh_error: Optional[str] = None
+    documentation_url: Optional[str] = None
+    icon_url: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class A2AAgentCardDiscoveryRequestSchema(BaseModel):
+    """Request payload for backend-side A2A card discovery."""
+
+    card_url: str
+
+
+class A2AAgentCardDiscoveryResponseSchema(BaseModel):
+    """Discovered A2A card payload returned to the UI."""
+
+    card_url: str
+    remote_agent_id: Optional[str] = None
+    card: Dict[str, Any]
+    skills: List[Dict[str, Any]]
+    documentation_url: Optional[str] = None
+    icon_url: Optional[str] = None
+
 
 class AgentListItemSchema(BaseModel):
     """Schema for agent list items"""
@@ -18,6 +66,9 @@ class AgentListItemSchema(BaseModel):
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
     marketplace_visibility: Optional[str] = None
     is_frozen: bool = False
+    source_type: Literal["local", "a2a"] = "local"
+    health_status: Optional[str] = None
+    last_successful_refresh_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,6 +115,8 @@ class AgentDetailSchema(BaseModel):
     marketplace_visibility: Optional[str] = None
     marketplace_profile: Optional[Dict[str, Any]] = None
     is_frozen: bool = False
+    source_type: Literal["local", "a2a"] = "local"
+    a2a_config: Optional[A2AAgentDetailSchema] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,6 +146,14 @@ class CreateUpdateAgentSchema(BaseModel):
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
     text_system_prompt: Optional[str] = None
+    source_type: Literal["local", "a2a"] = "local"
+    a2a_config: Optional[A2AAgentSourceConfigSchema] = None
+
+    @model_validator(mode="after")
+    def validate_source_config(self):
+        if self.source_type == "a2a" and self.a2a_config is None:
+            raise ValueError("a2a_config is required when source_type is 'a2a'")
+        return self
 
 
 class UpdatePromptSchema(BaseModel):

@@ -109,6 +109,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       let conversationId: number | null = options?.conversationId ?? null;
       let finalResponse: string | Record<string, unknown> = '';
       let finalFiles: Array<{ file_id: string; filename: string; file_type: string }> = [];
+      let streamFailureMessage: string | null = null;
 
       try {
         await streamFnRef.current(message, {
@@ -143,7 +144,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
               }
 
               case 'thinking': {
-                const msg = (event.data as { message?: string }).message;
+                const payload = event.data as { message?: string; content?: string };
+                const msg = payload.message || payload.content;
                 if (msg) setThinkingMessage(msg);
                 break;
               }
@@ -172,12 +174,17 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
 
               case 'error': {
                 const errMsg = (event.data as { message?: string }).message || 'Stream error';
+                streamFailureMessage = errMsg;
                 setStreamError(errMsg);
                 break;
               }
             }
           },
         });
+
+        if (streamFailureMessage) {
+          throw new Error(streamFailureMessage);
+        }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {
           setStreamError(null);
