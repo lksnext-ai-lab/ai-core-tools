@@ -19,12 +19,9 @@ pipeline {
         SONAR_BRANCH = "develop"
         IMAGE_SONARSCANNER = 'registry.lksnext.com/devsecops/custom-sonarscanner-cli:1.0'
         IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
-        
     }
     
     stages {
-
-        
         stage('Docker login') {
             steps {
                 script {
