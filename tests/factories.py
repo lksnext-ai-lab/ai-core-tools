@@ -16,6 +16,14 @@ import factory
 from datetime import datetime
 from factory.alchemy import SQLAlchemyModelFactory
 
+from models.user import User
+from models.app import App
+from models.ai_service import AIService
+from models.agent import Agent
+from models.api_key import APIKey
+from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
+from models.silo import Silo
+
 
 # ---------------------------------------------------------------------------
 # Base factory — all factories inherit from this
@@ -33,7 +41,7 @@ class BaseFactory(SQLAlchemyModelFactory):
 
 class UserFactory(BaseFactory):
     class Meta:
-        model = "models.user.User"  # resolved lazily
+        model = User
 
     email = factory.Sequence(lambda n: f"user{n}@mattin-test.com")
     name = factory.Faker("name")
@@ -47,7 +55,7 @@ class UserFactory(BaseFactory):
 
 class AppFactory(BaseFactory):
     class Meta:
-        model = "models.app.App"
+        model = App
 
     name = factory.Sequence(lambda n: f"Test App {n}")
     slug = factory.Sequence(lambda n: f"test-app-{n}")
@@ -67,7 +75,7 @@ class AppFactory(BaseFactory):
 
 class AIServiceFactory(BaseFactory):
     class Meta:
-        model = "models.ai_service.AIService"
+        model = AIService
 
     name = factory.Sequence(lambda n: f"AI Service {n}")
     provider = "OpenAI"
@@ -86,7 +94,7 @@ class AIServiceFactory(BaseFactory):
 
 class AgentFactory(BaseFactory):
     class Meta:
-        model = "models.agent.Agent"
+        model = Agent
 
     name = factory.Sequence(lambda n: f"Agent {n}")
     description = "A test agent"
@@ -113,7 +121,7 @@ class AgentFactory(BaseFactory):
 
 class APIKeyFactory(BaseFactory):
     class Meta:
-        model = "models.api_key.APIKey"
+        model = APIKey
 
     key = factory.Sequence(lambda n: f"test-api-key-{n:04d}-integration-only")  # pragma: allowlist secret
     name = factory.Sequence(lambda n: f"Test Key {n}")
@@ -137,16 +145,12 @@ class APIKeyFactory(BaseFactory):
 
 class AppCollaboratorFactory(BaseFactory):
     class Meta:
-        model = "models.app_collaborator.AppCollaborator"
+        model = AppCollaborator
 
     app = factory.SubFactory(AppFactory)
     user = factory.SubFactory(UserFactory)
-    role = factory.LazyAttribute(lambda _: __import__(
-        "models.app_collaborator", fromlist=["CollaborationRole"]
-    ).CollaborationRole.EDITOR)
-    status = factory.LazyAttribute(lambda _: __import__(
-        "models.app_collaborator", fromlist=["CollaborationStatus"]
-    ).CollaborationStatus.ACCEPTED)
+    role = CollaborationRole.EDITOR
+    status = CollaborationStatus.ACCEPTED
     invited_by = factory.LazyAttribute(lambda obj: obj.user.user_id)
     invited_at = factory.LazyFunction(datetime.now)
     accepted_at = factory.LazyFunction(datetime.now)
@@ -158,6 +162,26 @@ class AppCollaboratorFactory(BaseFactory):
     @factory.lazy_attribute
     def user_id(self):
         return self.user.user_id if self.user else None
+
+
+# ---------------------------------------------------------------------------
+# Silo
+# ---------------------------------------------------------------------------
+
+class SiloFactory(BaseFactory):
+    class Meta:
+        model = Silo
+
+    name = factory.Sequence(lambda n: f"Test Silo {n}")
+    description = "A test silo"
+    silo_type = "CUSTOM"
+    vector_db_type = "PGVECTOR"
+    status = "active"
+    app = factory.SubFactory(AppFactory)
+
+    @factory.lazy_attribute
+    def app_id(self):
+        return self.app.app_id if self.app else None
 
 
 # ---------------------------------------------------------------------------
@@ -182,5 +206,6 @@ def configure_factories(session) -> None:
         AgentFactory,
         APIKeyFactory,
         AppCollaboratorFactory,
+        SiloFactory,
     ]:
         factory_cls._meta.sqlalchemy_session = session

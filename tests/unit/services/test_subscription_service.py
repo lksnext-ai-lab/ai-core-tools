@@ -4,7 +4,7 @@ The database, Stripe SDK, and email service are fully mocked.
 """
 import os
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, Mock, patch, call
 from fastapi import HTTPException
 
 # Set required env vars via setdefault so we never override a value already set
@@ -93,9 +93,10 @@ class TestHandleWebhookDispatch:
         sub = make_sub(stripe_customer_id="cus_1")
         db.query.return_value.filter.return_value.first.return_value = None
 
+        mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_paid") as mock_handler,
+            patch.object(SubscriptionService, "_on_invoice_paid", mock_handler),
         ):
             event = make_stripe_event("invoice.paid", {"customer": "cus_1"})
             stripe_mock = MagicMock()
@@ -109,9 +110,10 @@ class TestHandleWebhookDispatch:
     def test_invoice_payment_failed_dispatched(self):
         db = MagicMock()
 
+        mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_payment_failed") as mock_handler,
+            patch.object(SubscriptionService, "_on_invoice_payment_failed", mock_handler),
         ):
             event = make_stripe_event("invoice.payment_failed", {"customer": "cus_1"})
             stripe_mock = MagicMock()
@@ -126,9 +128,10 @@ class TestHandleWebhookDispatch:
     def test_subscription_updated_dispatched(self):
         db = MagicMock()
 
+        mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_subscription_updated") as mock_handler,
+            patch.object(SubscriptionService, "_on_subscription_updated", mock_handler),
         ):
             event = make_stripe_event("customer.subscription.updated",
                                       make_stripe_sub_obj("cus_1"))
@@ -144,9 +147,10 @@ class TestHandleWebhookDispatch:
     def test_subscription_deleted_dispatched(self):
         db = MagicMock()
 
+        mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_subscription_deleted") as mock_handler,
+            patch.object(SubscriptionService, "_on_subscription_deleted", mock_handler),
         ):
             event = make_stripe_event("customer.subscription.deleted",
                                       make_stripe_sub_obj("cus_1"))
@@ -162,9 +166,10 @@ class TestHandleWebhookDispatch:
     def test_trial_will_end_dispatched(self):
         db = MagicMock()
 
+        mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_trial_will_end") as mock_handler,
+            patch.object(SubscriptionService, "_on_trial_will_end", mock_handler),
         ):
             event = make_stripe_event("customer.subscription.trial_will_end",
                                       make_stripe_sub_obj("cus_1"))
@@ -227,9 +232,10 @@ class TestHandleWebhookIdempotency:
         """A new event ID is processed and then marked in the DB."""
         db = MagicMock()
 
+        mock_handler = Mock()
         with (
             patch("services.subscription_service._get_stripe_client") as mock_client,
-            patch.object(SubscriptionService, "_on_invoice_paid") as mock_handler,
+            patch.object(SubscriptionService, "_on_invoice_paid", mock_handler),
         ):
             event = make_stripe_event("invoice.paid", {"customer": "cus_1"}, "evt_new")
             stripe_mock = MagicMock()

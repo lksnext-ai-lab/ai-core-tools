@@ -314,7 +314,7 @@ class TestDownloadResource:
                 resources_url(
                     fake_app.app_id,
                     fake_repository.repository_id,
-                    f"/resources/{fake_resource.resource_id}/download",
+                    f"/{fake_resource.resource_id}/download",
                 ),
                 headers=api_headers(fake_api_key.key),
             )
@@ -327,7 +327,7 @@ class TestDownloadResource:
             resources_url(
                 fake_app.app_id,
                 fake_repository.repository_id,
-                "/resources/999999/download",
+                "/999999/download",
             ),
             headers=api_headers(fake_api_key.key),
         )

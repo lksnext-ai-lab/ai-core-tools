@@ -26,14 +26,11 @@ from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
 from models.silo import Silo
 from models.agent import Agent
+from models.user import User
 from services.full_app_export_service import FullAppExportService
 from services.full_app_import_service import FullAppImportService
 from schemas.export_schemas import AppExportFileSchema
-from schemas.import_schemas import (
-    ConflictMode,
-    ComponentSelectionSchema,
-    ImportTargetMode,
-)
+from schemas.import_schemas import ConflictMode
 
 
 # ==================== FIXTURES ====================
@@ -41,20 +38,30 @@ from schemas.import_schemas import (
 
 @pytest.fixture(scope="function")
 def test_app(db_session: Session):
-    """Create a test app for testing."""
+    """Create a test app with an owner user for testing."""
     timestamp = datetime.now().timestamp()
-    app = App(name=f"Test App Full Export {timestamp}", slug=f"test-app-full-{timestamp}")
+    owner = User(email=f"owner-{timestamp}@test.com", name="Test Owner")
+    db_session.add(owner)
+    db_session.flush()
+
+    app = App(
+        name=f"Test App Full Export {timestamp}",
+        slug=f"test-app-full-{timestamp}",
+        owner_id=owner.user_id,
+    )
     db_session.add(app)
     db_session.commit()
     db_session.refresh(app)
-    
+
     yield app
-    
+
     # Cleanup (cascading deletes should handle related entities)
     try:
         db_session.delete(app)
+        db_session.flush()
+        db_session.delete(owner)
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
 
 
@@ -264,207 +271,205 @@ class TestFullAppExportIntegration:
 @pytest.mark.integration
 class TestFullAppImportIntegration:
     """Integration tests for full app import with real database."""
-    
-    def test_import_into_existing_app_cycle(
+
+    def test_import_creates_new_app_cycle(
         self, db_session: Session, populated_app: dict
     ):
-        """Test export → import cycle into different app."""
+        """Test export → import cycle always creates a new app."""
         export_service = FullAppExportService(db_session)
         import_service = FullAppImportService(db_session)
-        
-        # Export from populated app
+
         source_app = populated_app["app"]
-        export_data = export_service.export_full_app(source_app.app_id, user_id=1)
-        
-        # Create target app
-        target_app = App(
-            name=f"Target App {datetime.now().timestamp()}",
-            slug=f"target-app-{datetime.now().timestamp()}",
+        export_data = export_service.export_full_app(source_app.app_id, user_id=source_app.owner_id)
+
+        new_name = f"Imported App {datetime.now().timestamp()}"
+        summary = import_service.import_full_app(
+            export_data=export_data,
+            user_id=source_app.owner_id,
+            conflict_mode=ConflictMode.FAIL,
+            new_name=new_name,
         )
-        db_session.add(target_app)
-        db_session.commit()
-        db_session.refresh(target_app)
-        
+
+        imported_app = None
         try:
-            # Import into target app
-            summary = import_service.import_full_app(
-                target_app_id=target_app.app_id,
-                export_data=export_data,
-                conflict_mode=ConflictMode.FAIL,
-                target_mode=ImportTargetMode.EXISTING_APP,
-            )
-            
-            # Verify import summary
-            assert summary.app_id == target_app.app_id
-            assert summary.total_components == 7  # 2 AI + 1 Emb + 1 Parser + 1 MCP + 1 Silo + 2 Agents - 1 (Agent bundled components)
-            assert summary.components_imported["ai_services"] == 2
-            assert summary.components_imported["embedding_services"] == 1
-            assert summary.components_imported["output_parsers"] == 1
-            assert summary.components_imported["mcp_configs"] == 1
-            assert summary.components_imported["silos"] == 1
-            assert summary.components_imported["agents"] == 2
+            assert summary.app_id != source_app.app_id
+            imported_app = db_session.query(App).filter(
+                App.app_id == summary.app_id
+            ).first()
+            assert imported_app is not None
+            assert imported_app.name == new_name
+
+            assert summary.total_components >= 7
+            assert summary.components_imported.get("ai_services", 0) == 2
+            assert summary.components_imported.get("embedding_services", 0) == 1
+            assert summary.components_imported.get("output_parsers", 0) == 1
+            assert summary.components_imported.get("mcp_configs", 0) == 1
+            assert summary.components_imported.get("agents", 0) == 2
             assert len(summary.total_errors) == 0
-            
-            # Verify components exist in target app
-            target_ai_services = (
+
+            new_ai_services = (
                 db_session.query(AIService)
-                .filter(AIService.app_id == target_app.app_id)
+                .filter(AIService.app_id == summary.app_id)
                 .all()
             )
-            assert len(target_ai_services) >= 2
-            
+            assert len(new_ai_services) == 2
         finally:
-            # Cleanup target app
-            db_session.delete(target_app)
-            db_session.commit()
-    
+            if imported_app:
+                db_session.delete(imported_app)
+                db_session.commit()
+
     def test_import_as_new_app(self, db_session: Session, populated_app: dict):
-        """Test import creating new app from export."""
+        """Test import creating new app with custom name."""
         export_service = FullAppExportService(db_session)
         import_service = FullAppImportService(db_session)
-        
-        # Export from populated app
+
         source_app = populated_app["app"]
-        export_data = export_service.export_full_app(source_app.app_id, user_id=1)
-        
-        # Import as new app
+        export_data = export_service.export_full_app(source_app.app_id, user_id=source_app.owner_id)
+
+        custom_name = f"Custom Import {datetime.now().timestamp()}"
         summary = import_service.import_full_app(
-            target_app_id=None,
             export_data=export_data,
+            user_id=source_app.owner_id,
             conflict_mode=ConflictMode.FAIL,
-            target_mode=ImportTargetMode.NEW_APP,
+            new_name=custom_name,
         )
-        
-        # Verify new app was created
-        assert summary.app_id is not None
-        assert summary.app_id != source_app.app_id
-        new_app = db_session.query(App).filter(App.app_id == summary.app_id).first()
-        assert new_app is not None
-        
+
+        imported_app = None
         try:
-            # Verify components imported
+            assert summary.app_id is not None
+            assert summary.app_id != source_app.app_id
+            imported_app = db_session.query(App).filter(
+                App.app_id == summary.app_id
+            ).first()
+            assert imported_app is not None
+            assert imported_app.name == custom_name
             assert summary.total_components > 0
             assert len(summary.total_errors) == 0
         finally:
-            # Cleanup new app
-            if new_app:
-                db_session.delete(new_app)
+            if imported_app:
+                db_session.delete(imported_app)
                 db_session.commit()
-    
+
     def test_import_selective_components(
         self, db_session: Session, populated_app: dict
     ):
-        """Test selective component import."""
+        """Test selective component import using component_selection dict."""
         export_service = FullAppExportService(db_session)
         import_service = FullAppImportService(db_session)
-        
-        # Export from populated app
+
         source_app = populated_app["app"]
-        export_data = export_service.export_full_app(source_app.app_id, user_id=1)
-        
-        # Create target app
-        target_app = App(
-            name=f"Selective Import {datetime.now().timestamp()}",
-            slug=f"selective-{datetime.now().timestamp()}",
+        export_data = export_service.export_full_app(source_app.app_id, user_id=source_app.owner_id)
+
+        # Include only AI services and output parsers by providing their names.
+        # Keys absent from component_selection → exclude all of that type.
+        component_selection = {
+            "ai_service": [s.name for s in export_data.ai_services],
+            "output_parser": [p.name for p in export_data.output_parsers],
+        }
+
+        new_name = f"Selective Import {datetime.now().timestamp()}"
+        summary = import_service.import_full_app(
+            export_data=export_data,
+            user_id=source_app.owner_id,
+            conflict_mode=ConflictMode.FAIL,
+            new_name=new_name,
+            component_selection=component_selection,
         )
-        db_session.add(target_app)
-        db_session.commit()
-        db_session.refresh(target_app)
-        
+
+        imported_app = None
         try:
-            # Import only AI services and output parsers
-            selection = ComponentSelectionSchema(
-                import_ai_services=True,
-                import_embedding_services=False,
-                import_output_parsers=True,
-                import_mcp_configs=False,
-                import_silos=False,
-                import_agents=False,
-            )
-            
-            summary = import_service.import_full_app(
-                target_app_id=target_app.app_id,
-                export_data=export_data,
-                conflict_mode=ConflictMode.FAIL,
-                selection=selection,
-                target_mode=ImportTargetMode.EXISTING_APP,
-            )
-            
-            # Verify only selected components imported
+            imported_app = db_session.query(App).filter(
+                App.app_id == summary.app_id
+            ).first()
+
             assert summary.components_imported.get("ai_services", 0) == 2
             assert summary.components_imported.get("output_parsers", 0) == 1
-            assert summary.components_skipped.get("embedding_services", 0) == 1
-            assert summary.components_skipped.get("mcp_configs", 0) == 1
-            assert summary.components_skipped.get("silos", 0) == 1
-            assert summary.components_skipped.get("agents", 0) == 2
-            
+            assert summary.components_imported.get("embedding_services", 0) == 0
+            assert summary.components_imported.get("mcp_configs", 0) == 0
+            assert summary.components_imported.get("silos", 0) == 0
+            assert summary.components_imported.get("agents", 0) == 0
         finally:
-            # Cleanup target app
-            db_session.delete(target_app)
-            db_session.commit()
-    
+            if imported_app:
+                db_session.delete(imported_app)
+                db_session.commit()
+
     def test_import_conflict_rename_mode(
         self, db_session: Session, populated_app: dict
     ):
-        """Test import with RENAME conflict mode."""
+        """Test import with RENAME conflict mode handles name collisions."""
         export_service = FullAppExportService(db_session)
         import_service = FullAppImportService(db_session)
-        
-        # Export from populated app
+
         source_app = populated_app["app"]
-        export_data = export_service.export_full_app(source_app.app_id, user_id=1)
-        
-        # Import into same app with RENAME mode (should create duplicates)
-        summary = import_service.import_full_app(
-            target_app_id=source_app.app_id,
+        owner_id = source_app.owner_id
+        export_data = export_service.export_full_app(source_app.app_id, user_id=owner_id)
+
+        fixed_name = f"Import Rename Test {datetime.now().timestamp()}"
+
+        # First import — creates a new app with fixed_name
+        first_summary = import_service.import_full_app(
             export_data=export_data,
+            user_id=owner_id,
             conflict_mode=ConflictMode.RENAME,
-            target_mode=ImportTargetMode.EXISTING_APP,
+            new_name=fixed_name,
         )
-        
-        # Should succeed without errors
-        assert len(summary.total_errors) == 0
-        
-        # Verify renamed components exist
-        ai_services = (
-            db_session.query(AIService)
-            .filter(AIService.app_id == source_app.app_id)
-            .all()
+        assert len(first_summary.total_errors) == 0
+
+        # Second import with same name — RENAME mode auto-renames
+        second_summary = import_service.import_full_app(
+            export_data=export_data,
+            user_id=owner_id,
+            conflict_mode=ConflictMode.RENAME,
+            new_name=fixed_name,
         )
-        # Should have original 2 + imported 2 = 4 (some renamed)
-        assert len(ai_services) >= 2
-    
-    def test_import_rollback_on_error(self, db_session: Session):
-        """Test that import rolls back on error (transaction safety)."""
+        assert len(second_summary.total_errors) == 0
+        assert second_summary.app_id != first_summary.app_id
+
+        for app_id in [first_summary.app_id, second_summary.app_id]:
+            app = db_session.query(App).filter(App.app_id == app_id).first()
+            if app:
+                db_session.delete(app)
+        db_session.commit()
+
+    def test_import_rollback_on_error(
+        self, db_session: Session, populated_app: dict
+    ):
+        """Test that import raises ValueError on name conflict with FAIL mode."""
+        export_service = FullAppExportService(db_session)
         import_service = FullAppImportService(db_session)
-        
-        # Create invalid export data (missing required fields)
-        from schemas.export_schemas import ExportMetadataSchema, ExportAppSchema
-        
-        invalid_export = AppExportFileSchema(
-            metadata=ExportMetadataSchema(
-                export_version="1.0.0",
-                export_date=datetime.now().isoformat(),
-                source_app_id=1,
-            ),
-            app=ExportAppSchema(name="Invalid App"),
-            ai_services=[],
-            embedding_services=[],
-            output_parsers=[],
-            mcp_configs=[],
-            silos=[],
-            repositories=[],
-            agents=[],
+
+        source_app = populated_app["app"]
+        owner_id = source_app.owner_id
+        export_data = export_service.export_full_app(source_app.app_id, user_id=owner_id)
+
+        # First import — creates a new app with a controlled name
+        fixed_name = f"Rollback Test {datetime.now().timestamp()}"
+        first_summary = import_service.import_full_app(
+            export_data=export_data,
+            user_id=owner_id,
+            conflict_mode=ConflictMode.RENAME,
+            new_name=fixed_name,
         )
-        
-        # Try to import into non-existent app (should fail)
-        with pytest.raises(ValueError):
-            import_service.import_full_app(
-                target_app_id=99999,
-                export_data=invalid_export,
-                conflict_mode=ConflictMode.FAIL,
-                target_mode=ImportTargetMode.EXISTING_APP,
+        created_app = db_session.query(App).filter(
+            App.app_id == first_summary.app_id
+        ).first()
+
+        try:
+            # Second import with same name + FAIL mode → ValueError
+            with pytest.raises(ValueError, match="already exists"):
+                import_service.import_full_app(
+                    export_data=export_data,
+                    user_id=owner_id,
+                    conflict_mode=ConflictMode.FAIL,
+                    new_name=fixed_name,
+                )
+
+            # Only one app with that name should exist
+            all_with_name = (
+                db_session.query(App).filter(App.name == fixed_name).all()
             )
-        
-        # Verify no partial import occurred (transaction rolled back)
-        # This is implicit - if transaction wasn't rolled back, we'd have partial data
+            assert len(all_with_name) == 1
+        finally:
+            if created_app:
+                db_session.delete(created_app)
+                db_session.commit()

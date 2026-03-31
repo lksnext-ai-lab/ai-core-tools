@@ -43,7 +43,7 @@ class TestCallAgent:
             ".execute_agent_chat_with_file_refs",
             new=AsyncMock(return_value=MOCK_CHAT_RESULT),
         ), patch(
-            "routers.public.v1.chat._process_chat_files",
+            "services.file_management_service.FileManagementService.resolve_chat_files",
             new=AsyncMock(return_value=[]),
         ):
             resp = client.post(
@@ -83,7 +83,7 @@ class TestCallAgentStream:
             yield 'data: {"type": "token", "data": "hi"}\n\n'
 
         with patch(
-            "routers.public.v1.chat._process_chat_files",
+            "services.file_management_service.FileManagementService.resolve_chat_files",
             new=AsyncMock(return_value=[]),
         ), patch(
             "services.agent_streaming_service.AgentStreamingService"

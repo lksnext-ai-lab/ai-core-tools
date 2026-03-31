@@ -263,7 +263,7 @@ class TestEmbeddingServiceImportIntegration:
         assert imported_service.name == export_data.embedding_service.name
         assert imported_service.provider == "MistralAI"  # Compare to string value
         assert imported_service.description == "mistral-embed"
-        assert imported_service.api_key is None
+        assert imported_service.api_key == "CHANGE_ME"  # API key placeholder after import
 
         # Cleanup
         db_session.delete(imported_service)

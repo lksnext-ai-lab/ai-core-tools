@@ -229,7 +229,7 @@ class TestAIServiceImportIntegration:
             AIService.app_id == test_app.app_id
         ).first()
         assert created_service is not None
-        assert created_service.api_key is None  # Should be None after import
+        assert created_service.api_key == "CHANGE_ME"  # Placeholder after import
         assert created_service.provider == export_data.ai_service.provider
         
         # Cleanup
@@ -483,7 +483,7 @@ class TestExportImportRoundTrip:
         assert imported_service.description == sample_ai_service.description
         assert imported_service.endpoint == sample_ai_service.endpoint
         assert imported_service.api_version == sample_ai_service.api_version
-        assert imported_service.api_key is None  # API key not imported
+        assert imported_service.api_key == "CHANGE_ME"  # API key placeholder after import
         
         # Cleanup
         db_session.delete(imported_service)

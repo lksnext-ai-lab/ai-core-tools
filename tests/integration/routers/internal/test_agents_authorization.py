@@ -190,7 +190,7 @@ class TestConversationAuthorization:
     ):
         db.flush()
         response = client.post(
-            f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}/reset-conversation",
+            f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}/reset",
             headers=unrelated_user_headers,
         )
         assert response.status_code == 403

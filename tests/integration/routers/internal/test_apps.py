@@ -37,7 +37,7 @@ def app_payload(
         "agent_rate_limit": agent_rate_limit,
         "max_file_size_mb": max_file_size_mb,
         "langsmith_api_key": langsmith_api_key,
-        "agent_cors_origins": agent_cors_origins or [],
+        "agent_cors_origins": ",".join(agent_cors_origins) if agent_cors_origins else None,
     }
 
 
@@ -83,7 +83,7 @@ class TestListApps:
         assert "silo_count" in app
         assert "collaborator_count" in app
 
-    def test_list_apps_excludes_other_users_apps(self, client, fake_user, db):
+    def test_list_apps_excludes_other_users_apps(self, client, fake_user, auth_headers, db):
         """User doesn't see other users' apps."""
         from tests.factories import UserFactory, AppFactory, configure_factories
 
@@ -92,10 +92,7 @@ class TestListApps:
         other_app = AppFactory(owner=other_user)
         db.flush()
 
-        from routers.internal.auth_utils import create_jwt_token
-
-        headers = {"Authorization": f"Bearer {create_jwt_token(fake_user.user_id)}"}
-        response = client.get("/internal/apps", headers=headers)
+        response = client.get("/internal/apps", headers=auth_headers)
         apps = response.json()
         assert not any(a["app_id"] == other_app.app_id for a in apps)
 
@@ -115,7 +112,7 @@ class TestListApps:
         usage = app["usage_stats"]
         assert "current_usage" in usage
         assert "limit" in usage
-        assert "percentage_used" in usage
+        assert "usage_percentage" in usage
 
 
 # ---------------------------------------------------------------------------
@@ -180,11 +177,14 @@ class TestGetApp:
         db.flush()
 
         from tests.factories import UserFactory
-        from routers.internal.auth_utils import create_jwt_token
 
         another_user = UserFactory()
         db.flush()
-        headers = {"Authorization": f"Bearer {create_jwt_token(another_user.user_id)}"}
+        # Log in as another_user via dev-login to get valid auth headers
+        login_resp = client.post(
+            "/internal/auth/dev-login", json={"email": another_user.email}
+        )
+        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
         response = client.get(f"/internal/apps/{other_app.app_id}", headers=headers)
         assert response.status_code == 403
@@ -230,7 +230,7 @@ class TestCreateApp:
         assert app["name"] == "Full Featured App"
         assert app["agent_rate_limit"] == 100
         assert app["max_file_size_mb"] == 50
-        assert app["agent_cors_origins"] == ["https://example.com"]
+        assert app["agent_cors_origins"] == "https://example.com"
 
     def test_create_app_sets_current_user_as_owner(self, client, fake_user, auth_headers, db):
         """Created app is owned by the authenticated user."""
@@ -341,7 +341,7 @@ class TestUpdateApp:
             headers=owner_headers,
         )
         assert response.status_code == 200
-        assert response.json()["agent_cors_origins"] == origins
+        assert response.json()["agent_cors_origins"] == "https://app.example.com,https://admin.example.com"
 
     def test_update_app_returns_404_for_missing_app(self, client, owner_headers):
         """Updating non-existent app returns 404."""
