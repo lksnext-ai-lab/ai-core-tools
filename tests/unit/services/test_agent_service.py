@@ -451,6 +451,29 @@ class TestCreateOrUpdateAgent:
         
         assert result == 5  # Returns the agent ID
 
+    def test_a2a_sanitization_keeps_tool_agent_flag(self):
+        """Imported A2A agents may still be exposed as tool agents via MCP."""
+        service = AgentService()
+
+        sanitized = service._sanitize_a2a_agent_data({
+            'source_type': 'a2a',
+            'is_tool': True,
+            'has_memory': True,
+            'enable_code_interpreter': True,
+            'server_tools': ['web_search'],
+            'tool_ids': [2],
+            'mcp_config_ids': [3],
+            'skill_ids': [4],
+        })
+
+        assert sanitized['is_tool'] is True
+        assert sanitized['has_memory'] is False
+        assert sanitized['enable_code_interpreter'] is False
+        assert sanitized['server_tools'] == []
+        assert sanitized['tool_ids'] == []
+        assert sanitized['mcp_config_ids'] == []
+        assert sanitized['skill_ids'] == []
+
 
 # ---------------------------------------------------------------------------
 # update_agent_tools

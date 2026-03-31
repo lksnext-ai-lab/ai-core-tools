@@ -315,7 +315,6 @@ class AgentService:
         sanitized['server_tools'] = []
         sanitized['system_prompt'] = ''
         sanitized['prompt_template'] = ''
-        sanitized['is_tool'] = False
         sanitized['has_memory'] = False
         return sanitized
 

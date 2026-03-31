@@ -390,7 +390,6 @@ function AgentFormPage() {
       type: 'agent',
       name: skill.name || card.name || prev.name,
       description: skill.description || card.description || prev.description,
-      is_tool: false,
       has_memory: false,
       enable_code_interpreter: false,
       server_tools: [],
@@ -429,7 +428,6 @@ function AgentFormPage() {
       ...prev,
       source_type: 'a2a',
       type: 'agent',
-      is_tool: false,
       has_memory: false,
       enable_code_interpreter: false,
       server_tools: [],
@@ -869,7 +867,7 @@ function AgentFormPage() {
               <div className="space-y-6">
                 {isA2AAgent ? (
                   <div className="rounded-2xl border border-blue-200 bg-blue-50 p-6 text-sm text-blue-900">
-                    Imported A2A agents execute through the selected remote skill. Local system prompts and prompt templates are disabled in Phase 1 so the imported agent stays faithful to the upstream capability.
+                    Imported A2A agents execute through the selected remote skill. Local system prompts and prompt templates are disabled in Phase 1 so the imported agent stays faithful to the upstream capability. The Tool Agent option remains available so the imported agent can still be exposed through MCP servers.
                   </div>
                 ) : (
                 <>
@@ -1018,7 +1016,7 @@ function AgentFormPage() {
                   External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter in Phase 1. The imported remote skill is the execution backend.
                 </div>
               )}
-              {/* Configuration for regular agents */}
+              {/* Configuration for regular local agents */}
               {formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <>
                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -1108,113 +1106,122 @@ function AgentFormPage() {
                     </div>
                   </div>
 
-                  {/* Agent Capabilities Card */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                        <Zap className="w-5 h-5 text-green-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
-                    </div>
+                </>
+              )}
 
-                    {/* MCP Warning Dialog */}
-                    {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
-                      <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                        <div className="flex items-start">
-                          <span className="text-amber-500 text-xl mr-3">!</span>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-amber-900 mb-2">
-                              This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </h4>
-                            <p className="text-sm text-amber-800 mb-2">
-                              Unmarking this agent as a tool will make it unavailable in the following MCP servers:
-                            </p>
-                            <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
-                              {mcpUsage.mcp_servers.map(s => (
-                                <li key={s.server_id}>{s.server_name}</li>
-                              ))}
-                            </ul>
-                            <div className="flex space-x-3">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleInputChange('is_tool', false);
-                                  setShowMcpWarning(false);
-                                }}
-                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Unmark as Tool Anyway
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowMcpWarning(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
+              {/* Agent Capabilities Card */}
+              {formData.type !== 'ocr_agent' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                  <div className="flex items-center mb-6">
+                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
+                      <Zap className="w-5 h-5 text-green-600" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
+                  </div>
+
+                  {/* MCP Warning Dialog */}
+                  {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
+                    <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <div className="flex items-start">
+                        <span className="text-amber-500 text-xl mr-3">!</span>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-amber-900 mb-2">
+                            This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                          </h4>
+                          <p className="text-sm text-amber-800 mb-2">
+                            Unmarking this agent as a tool will make it unavailable in the following MCP servers:
+                          </p>
+                          <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
+                            {mcpUsage.mcp_servers.map(s => (
+                              <li key={s.server_id}>{s.server_name}</li>
+                            ))}
+                          </ul>
+                          <div className="flex space-x-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleInputChange('is_tool', false);
+                                setShowMcpWarning(false);
+                              }}
+                              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Unmark as Tool Anyway
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowMcpWarning(false)}
+                              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
-                          id="is_tool"
-                          type="checkbox"
-                          checked={formData.is_tool}
-                          onChange={(e) => {
-                            // If unmarking as tool and agent is used in MCP servers, show warning
-                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
-                              setShowMcpWarning(true);
-                            } else {
-                              handleInputChange('is_tool', e.target.checked);
-                            }
-                          }}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="ml-3">
-                          <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
-                          <p className="text-xs text-gray-500">Can be used by other agents</p>
-                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                            <p className="text-xs text-purple-600 mt-1">
-                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
-                          id="has_memory"
-                          type="checkbox"
-                          checked={formData.has_memory}
-                          onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="ml-3">
-                          <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
-                          <p className="text-xs text-gray-500">Maintains conversation memory</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
-                          id="enable_code_interpreter"
-                          type="checkbox"
-                          checked={formData.enable_code_interpreter}
-                          onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="ml-3">
-                          <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
-                          <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                      <input
+                        id="is_tool"
+                        type="checkbox"
+                        checked={formData.is_tool}
+                        onChange={(e) => {
+                          if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                            setShowMcpWarning(true);
+                          } else {
+                            handleInputChange('is_tool', e.target.checked);
+                          }
+                        }}
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="ml-3">
+                        <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
+                        <p className="text-xs text-gray-500">
+                          {isA2AAgent ? 'Expose this imported A2A agent through MCP servers and other agents.' : 'Can be used by other agents'}
+                        </p>
+                        {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                          <p className="text-xs text-purple-600 mt-1">
+                            Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    {/* Provider-side Tools */}
+                    {!isA2AAgent && (
+                      <>
+                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                          <input
+                            id="has_memory"
+                            type="checkbox"
+                            checked={formData.has_memory}
+                            onChange={(e) => handleInputChange('has_memory', e.target.checked)}
+                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="ml-3">
+                            <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
+                            <p className="text-xs text-gray-500">Maintains conversation memory</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                          <input
+                            id="enable_code_interpreter"
+                            type="checkbox"
+                            checked={formData.enable_code_interpreter}
+                            onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
+                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="ml-3">
+                            <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
+                            <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {!isA2AAgent && (
                     <div className="mt-6 pt-6 border-t border-gray-100">
                       <div className="mb-3">
                         <h4 className="text-sm font-semibold text-gray-800">Provider-side Tools</h4>
@@ -1296,8 +1303,8 @@ function AgentFormPage() {
                         Unsupported tools for the selected provider are silently ignored.
                       </p>
                     </div>
-                  </div>
-                </>
+                  )}
+                </div>
               )}
 
               {/* Configuration for OCR agents */}
@@ -1398,7 +1405,7 @@ function AgentFormPage() {
             <div className="space-y-6">
               {isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
-                  Native MattinAI execution-shaping capabilities are intentionally disabled for imported A2A agents in Phase 1. This keeps the imported agent a pure wrapper around the selected external skill.
+                  Most native MattinAI execution-shaping capabilities are intentionally disabled for imported A2A agents in Phase 1. This keeps the imported agent a pure wrapper around the selected external skill, while still allowing it to be marked as a Tool Agent and exposed through MCP servers.
                 </div>
               )}
               {/* Tools Card - Only for regular agents */}
