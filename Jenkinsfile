@@ -79,7 +79,7 @@ pipeline {
                             -e AICT_OMNIADMINS=admin@test.com \
                             -e AICT_MODE=SELF-HOSTED \
                             -e FRONTEND_URL=http://localhost:5173 \
-                            -e REPO_BASE_FOLDER=/tmp/test_repos \ 
+                            -e REPO_BASE_FOLDER=/tmp/test_repos \
                             -v "$(pwd)/test-results:/app/test-results" \
                             mattin-test-runner \
                             pytest -v \
