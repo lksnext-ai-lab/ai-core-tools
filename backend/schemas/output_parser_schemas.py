@@ -17,7 +17,7 @@ class OutputParserListItemSchema(BaseModel):
 class OutputParserFieldSchema(BaseModel):
     """Schema for individual parser fields"""
     name: str
-    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'parser'
+    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'dict', 'parser'
     description: str
     parser_id: Optional[int] = None  # For type='parser'
     list_item_type: Optional[str] = None  # For type='list'
