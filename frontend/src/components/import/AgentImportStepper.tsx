@@ -48,6 +48,9 @@ function AgentImportStepper({
   const [validationError, setValidationError] = useState<
     string | null
   >(null);
+  const needsAIServiceResolution = Boolean(
+    preview?.ai_service || preview?.requires_ai_service_selection
+  );
 
   // Step 2: Dependencies
   const [useExistingAIService, setUseExistingAIService] =
@@ -119,9 +122,12 @@ function AgentImportStepper({
           );
         }
 
-        // If no bundled AI service, force "use existing"
-        if (!result.ai_service) {
+        // Only force AI service selection when the backend says it is required.
+        if (result.requires_ai_service_selection) {
           setUseExistingAIService(true);
+        } else {
+          setUseExistingAIService(false);
+          setSelectedAIServiceId(null);
         }
       } catch (err: unknown) {
         setValidationError(
@@ -139,11 +145,14 @@ function AgentImportStepper({
       case 0: // Upload
         return !preview || isValidating;
       case 1: // Dependencies
+        if (!needsAIServiceResolution) {
+          return false;
+        }
         if (useExistingAIService && !selectedAIServiceId) {
           return true;
         }
         if (
-          !preview?.ai_service &&
+          preview?.requires_ai_service_selection &&
           !selectedAIServiceId
         ) {
           return true;
@@ -210,7 +219,7 @@ function AgentImportStepper({
           newName:
             conflictMode === 'rename' ? newName : undefined,
           selectedAIServiceId:
-            useExistingAIService
+            needsAIServiceResolution && useExistingAIService
               ? selectedAIServiceId ?? undefined
               : undefined,
           importBundledSilo,

@@ -30,6 +30,10 @@ function AgentStepReview({
   importBundledMCPConfigs,
   importBundledAgentTools,
 }: Readonly<Props>) {
+  const needsAIServiceResolution = Boolean(
+    preview.ai_service || preview.requires_ai_service_selection
+  );
+
   const agentAction = () => {
     if (!preview.agent.has_conflict) return 'Create';
     if (conflictMode === 'override') return 'Update';
@@ -67,12 +71,14 @@ function AgentStepReview({
       name: agentDisplayName,
       action: agentAction(),
     },
-    {
-      icon: COMPONENT_TYPE_ICONS.ai_service,
-      type: 'AI Service',
-      name: preview.ai_service?.component_name || '—',
-      action: aiServiceAction(),
-    },
+    needsAIServiceResolution
+      ? {
+          icon: COMPONENT_TYPE_ICONS.ai_service,
+          type: 'AI Service',
+          name: preview.ai_service?.component_name || '—',
+          action: aiServiceAction(),
+        }
+      : null,
     preview.silo
       ? {
           icon: COMPONENT_TYPE_ICONS.silo,
@@ -155,7 +161,7 @@ function AgentStepReview({
         </table>
       </div>
 
-      {(!useExistingAIService && preview.ai_service) && (
+      {needsAIServiceResolution && (!useExistingAIService && preview.ai_service) && (
         <Alert
           type="info"
           message="API keys for imported services will need to be configured after import."

@@ -6,8 +6,8 @@ These schemas define the structure of exported data with:
 - Heavy data excluded (vectors, files, conversations, crawled content)
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, model_validator
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 
@@ -153,6 +153,39 @@ class ExportAgentMCPRefSchema(BaseModel):
     mcp_name: str  # Reference by name
 
 
+class ExportA2AAuthConfigSchema(BaseModel):
+    """Sanitized A2A auth config for export/import."""
+
+    scheme_name: Optional[str] = None
+    scheme_type: Literal["none", "apiKey", "http", "oauth2", "openIdConnect", "mtls"] = "none"
+    api_key: Optional[str] = None
+    bearer_token: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    client_certificate: Optional[str] = None
+    client_key: Optional[str] = None
+    ca_certificate: Optional[str] = None
+
+
+class ExportA2AConfigSchema(BaseModel):
+    """Persisted A2A source metadata included in exports."""
+
+    card_url: str
+    remote_agent_id: Optional[str] = None
+    remote_skill_id: str
+    remote_skill_name: str
+    auth_config: Optional[ExportA2AAuthConfigSchema] = None
+    remote_agent_metadata: Dict[str, Any] = Field(default_factory=dict)
+    remote_skill_metadata: Dict[str, Any] = Field(default_factory=dict)
+    sync_status: str
+    health_status: str
+    last_successful_refresh_at: Optional[datetime] = None
+    last_refresh_attempt_at: Optional[datetime] = None
+    last_refresh_error: Optional[str] = None
+    documentation_url: Optional[str] = None
+    icon_url: Optional[str] = None
+
+
 class ExportAgentSchema(BaseModel):
     """Agent export schema (configuration only, no conversations)"""
 
@@ -174,7 +207,15 @@ class ExportAgentSchema(BaseModel):
     vision_service_name: Optional[str] = None  # Reference by name (OCR agents only)
     vision_system_prompt: Optional[str] = None  # OCR agents only
     text_system_prompt: Optional[str] = None  # OCR agents only
+    source_type: Literal["local", "a2a"] = "local"
+    a2a_config: Optional[ExportA2AConfigSchema] = None
     # Exclude: conversation history, request_count, usage stats
+
+    @model_validator(mode="after")
+    def validate_source_config(self):
+        if self.source_type == "a2a" and self.a2a_config is None:
+            raise ValueError("a2a_config is required when source_type is 'a2a'")
+        return self
 
 
 # ==================== APP ====================

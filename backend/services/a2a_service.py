@@ -39,6 +39,7 @@ class A2AService:
     }
 
     HEALTHY = "healthy"
+    PENDING = "pending"
     DEGRADED = "degraded"
     UNREACHABLE = "unreachable"
     INVALID = "invalid"
@@ -230,6 +231,17 @@ class A2AService:
             if field_name in masked:
                 masked[field_name] = mask_secret(masked.get(field_name))
         return masked
+
+    @staticmethod
+    def sanitize_export_auth_config(auth_config: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        if not auth_config:
+            return None
+
+        sanitized = dict(auth_config)
+        for field_name in A2AService.SECRET_AUTH_FIELDS:
+            if field_name in sanitized:
+                sanitized[field_name] = None
+        return sanitized
 
     @staticmethod
     @asynccontextmanager
@@ -542,6 +554,45 @@ class A2AService:
             "documentation_url": record.documentation_url,
             "icon_url": record.icon_url,
         }
+
+    @staticmethod
+    def serialize_export_record(record: Optional[A2AAgent]) -> Optional[dict[str, Any]]:
+        if not record:
+            return None
+
+        return {
+            "card_url": record.card_url,
+            "remote_agent_id": record.remote_agent_id,
+            "remote_skill_id": record.remote_skill_id,
+            "remote_skill_name": record.remote_skill_name,
+            "auth_config": A2AService.sanitize_export_auth_config(record.auth_config),
+            "remote_agent_metadata": record.remote_agent_metadata or {},
+            "remote_skill_metadata": record.remote_skill_metadata or {},
+            "sync_status": record.sync_status,
+            "health_status": record.health_status,
+            "last_successful_refresh_at": record.last_successful_refresh_at,
+            "last_refresh_attempt_at": record.last_refresh_attempt_at,
+            "last_refresh_error": record.last_refresh_error,
+            "documentation_url": record.documentation_url,
+            "icon_url": record.icon_url,
+        }
+
+    @staticmethod
+    def prepare_imported_config(exported_config: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        if not exported_config:
+            return None
+
+        imported = dict(exported_config)
+        imported["auth_config"] = A2AService.sanitize_export_auth_config(
+            exported_config.get("auth_config")
+        )
+        imported["health_status"] = A2AService.PENDING
+        imported["last_successful_refresh_at"] = None
+        imported["last_refresh_attempt_at"] = None
+        imported["last_refresh_error"] = (
+            "Imported from export. Refresh the remote A2A agent card before first execution."
+        )
+        return imported
 
     @staticmethod
     def update_health(

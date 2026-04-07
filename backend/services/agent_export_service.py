@@ -8,12 +8,14 @@ from schemas.export_schemas import (
     AgentExportFileSchema,
     ExportAgentToolRefSchema,
     ExportAgentMCPRefSchema,
+    ExportA2AConfigSchema,
 )
 from services.base_export_service import BaseExportService
 from services.ai_service_export_service import AIServiceExportService
 from services.silo_export_service import SiloExportService
 from services.output_parser_export_service import OutputParserExportService
 from services.mcp_config_export_service import MCPConfigExportService
+from services.a2a_service import A2AService
 from repositories.agent_repository import AgentRepository
 import logging
 
@@ -148,6 +150,14 @@ class AgentExportService(BaseExportService):
             vision_service_name=vision_service_name,
             vision_system_prompt=vision_system_prompt,
             text_system_prompt=text_system_prompt,
+            source_type="a2a" if getattr(agent, "a2a_config", None) else "local",
+            a2a_config=(
+                ExportA2AConfigSchema.model_validate(
+                    A2AService.serialize_export_record(agent.a2a_config)
+                )
+                if getattr(agent, "a2a_config", None)
+                else None
+            ),
         )
 
         # Create metadata
