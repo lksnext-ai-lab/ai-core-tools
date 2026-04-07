@@ -28,6 +28,7 @@ export interface AgentCard {
   skills?: AgentSkill[];
   securitySchemes?: Record<string, unknown>;
   security?: Array<Record<string, string[]>>;
+  authentication?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -117,6 +118,41 @@ export function extractA2ASecuritySchemes(card?: AgentCard | null): A2AAdvertise
   return Object.entries(rawSchemes)
     .map(([name, rawScheme]) => normalizeSecurityScheme(name, rawScheme))
     .filter((scheme): scheme is A2AAdvertisedSecurityScheme => Boolean(scheme));
+}
+
+export function extractUnsupportedA2AAuthSchemeNames(card?: AgentCard | null): string[] {
+  const names = new Set<string>();
+  const rawSchemes = card?.securitySchemes;
+  if (rawSchemes && typeof rawSchemes === 'object' && !Array.isArray(rawSchemes)) {
+    for (const [name, rawScheme] of Object.entries(rawSchemes)) {
+      if (!normalizeSecurityScheme(name, rawScheme)) {
+        names.add(name);
+      }
+    }
+  }
+
+  const rawAuthentication = card?.authentication;
+  if (rawAuthentication && typeof rawAuthentication === 'object' && !Array.isArray(rawAuthentication)) {
+    const advertisedSchemes = (rawAuthentication as Record<string, unknown>).schemes;
+    if (Array.isArray(advertisedSchemes)) {
+      for (const schemeName of advertisedSchemes) {
+        if (typeof schemeName === 'string' && schemeName.trim()) {
+          names.add(schemeName.trim());
+        }
+      }
+    }
+  }
+
+  return Array.from(names);
+}
+
+export function getA2ARawAuthentication(card?: AgentCard | null): Record<string, unknown> | null {
+  const rawAuthentication = card?.authentication;
+  if (!rawAuthentication || typeof rawAuthentication !== 'object' || Array.isArray(rawAuthentication)) {
+    return null;
+  }
+
+  return rawAuthentication as Record<string, unknown>;
 }
 
 export function getEffectiveA2ASecurityRequirements(

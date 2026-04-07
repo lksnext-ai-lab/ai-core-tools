@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import tempfile
 from contextlib import asynccontextmanager
@@ -381,9 +382,62 @@ class A2AService:
         return agent_card
 
     @staticmethod
-    async def discover_card(card_url: str) -> dict[str, Any]:
+    async def _fetch_raw_card_snapshot(card_url: str) -> dict[str, Any]:
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError(
+                "A2A support requires the 'httpx' dependency to be installed."
+            ) from exc
+
+        base_url, relative_path = A2AService.split_card_url(card_url)
+        timeout = httpx.Timeout(15.0, read=20.0)
+        raw_url = f"{base_url}{relative_path}"
+
+        async with A2AService.create_authenticated_httpx_client(
+            timeout=timeout,
+            follow_redirects=True,
+        ) as httpx_client:
+            response = await httpx_client.get(raw_url)
+            response.raise_for_status()
+
+        try:
+            payload = response.json()
+        except json.JSONDecodeError as exc:
+            raise ValueError("A2A agent card did not return valid JSON") from exc
+
+        if not isinstance(payload, dict):
+            raise ValueError("A2A agent card JSON must be an object")
+
+        return payload
+
+    @staticmethod
+    def _merge_card_snapshot(
+        agent_card: Any,
+        raw_snapshot: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        parsed_snapshot = agent_card.model_dump(mode="json", exclude_none=True)
+        if not isinstance(raw_snapshot, dict):
+            return parsed_snapshot
+
+        merged_snapshot = dict(raw_snapshot)
+        merged_snapshot.update(parsed_snapshot)
+        return merged_snapshot
+
+    @staticmethod
+    async def _resolve_agent_card_with_snapshot(
+        card_url: str,
+    ) -> tuple[Any, dict[str, Any]]:
         agent_card = await A2AService._resolve_agent_card(card_url)
-        card_snapshot = agent_card.model_dump(mode="json", exclude_none=True)
+        raw_snapshot = await A2AService._fetch_raw_card_snapshot(card_url)
+        return agent_card, A2AService._merge_card_snapshot(
+            agent_card,
+            raw_snapshot,
+        )
+
+    @staticmethod
+    async def discover_card(card_url: str) -> dict[str, Any]:
+        agent_card, card_snapshot = await A2AService._resolve_agent_card_with_snapshot(card_url)
 
         return {
             "card_url": card_url,
@@ -404,7 +458,7 @@ class A2AService:
         if not selected_skill_id:
             raise ValueError("An A2A skill must be selected")
 
-        agent_card = await A2AService._resolve_agent_card(card_url)
+        agent_card, card_snapshot = await A2AService._resolve_agent_card_with_snapshot(card_url)
         selected_skill = next(
             (skill for skill in agent_card.skills if skill.id == selected_skill_id),
             None,
@@ -420,7 +474,6 @@ class A2AService:
             raise ValueError("Submitted A2A skill snapshot does not match the selected skill")
 
         now = datetime.utcnow()
-        card_snapshot = agent_card.model_dump(mode="json", exclude_none=True)
         skill_snapshot = selected_skill.model_dump(mode="json", exclude_none=True)
         advertised_schemes = A2AService.extract_security_schemes(card_snapshot)
         canonical_auth_config = A2AService._canonicalize_auth_config(
@@ -456,7 +509,7 @@ class A2AService:
         record.last_refresh_attempt_at = refresh_attempt_at
 
         try:
-            agent_card = await A2AService._resolve_agent_card(record.card_url)
+            agent_card, card_snapshot = await A2AService._resolve_agent_card_with_snapshot(record.card_url)
         except RuntimeError:
             raise
         except Exception as exc:
@@ -473,7 +526,6 @@ class A2AService:
             )
             return record
 
-        card_snapshot = agent_card.model_dump(mode="json", exclude_none=True)
         record.remote_agent_id = agent_card.url
         record.remote_agent_metadata = card_snapshot
         record.documentation_url = getattr(agent_card, "documentation_url", None)

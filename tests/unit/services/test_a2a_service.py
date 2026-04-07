@@ -45,10 +45,10 @@ async def test_validate_source_config_canonicalizes_api_key_auth(monkeypatch):
     }
     card = _make_card(card_snapshot, [_make_skill("skill-1", "Search")])
 
-    async def fake_resolve(card_url: str):
-        return card
+    async def fake_resolve_with_snapshot(card_url: str):
+        return card, card_snapshot
 
-    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+    monkeypatch.setattr(A2AService, "_resolve_agent_card_with_snapshot", fake_resolve_with_snapshot)
 
     canonical = await A2AService.validate_source_config({
         "card_url": "https://remote.example.com/.well-known/agent-card.json",
@@ -83,10 +83,10 @@ async def test_validate_source_config_preserves_existing_masked_bearer_token(mon
     }
     card = _make_card(card_snapshot, [_make_skill("skill-1", "Search")])
 
-    async def fake_resolve(card_url: str):
-        return card
+    async def fake_resolve_with_snapshot(card_url: str):
+        return card, card_snapshot
 
-    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+    monkeypatch.setattr(A2AService, "_resolve_agent_card_with_snapshot", fake_resolve_with_snapshot)
 
     canonical = await A2AService.validate_source_config(
         {
@@ -196,10 +196,10 @@ async def test_refresh_card_updates_cached_metadata(monkeypatch):
     )
     db = MagicMock()
 
-    async def fake_resolve(card_url: str):
-        return card
+    async def fake_resolve_with_snapshot(card_url: str):
+        return card, card_snapshot
 
-    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+    monkeypatch.setattr(A2AService, "_resolve_agent_card_with_snapshot", fake_resolve_with_snapshot)
 
     refreshed = await A2AService.refresh_card(record, db)
 
@@ -243,10 +243,10 @@ async def test_refresh_card_marks_agent_invalid_when_selected_skill_disappears(m
     )
     db = MagicMock()
 
-    async def fake_resolve(card_url: str):
-        return card
+    async def fake_resolve_with_snapshot(card_url: str):
+        return card, card_snapshot
 
-    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+    monkeypatch.setattr(A2AService, "_resolve_agent_card_with_snapshot", fake_resolve_with_snapshot)
 
     refreshed = await A2AService.refresh_card(record, db)
 
@@ -260,3 +260,82 @@ async def test_refresh_card_marks_agent_invalid_when_selected_skill_disappears(m
     assert record.last_refresh_attempt_at is not None
     db.add.assert_called_once_with(record)
     db.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_discover_card_preserves_raw_authentication_metadata(monkeypatch):
+    parsed_card_snapshot = {
+        "url": "https://remote.example.com",
+        "name": "Remote Agent",
+        "skills": [{"id": "skill-1", "name": "Search"}],
+    }
+    raw_card_snapshot = {
+        **parsed_card_snapshot,
+        "authentication": {
+            "schemes": ["x402"],
+        },
+    }
+    card = _make_card(parsed_card_snapshot, [_make_skill("skill-1", "Search")])
+
+    async def fake_resolve(card_url: str):
+        return card
+
+    async def fake_fetch_raw(card_url: str):
+        return raw_card_snapshot
+
+    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+    monkeypatch.setattr(A2AService, "_fetch_raw_card_snapshot", fake_fetch_raw)
+
+    discovery = await A2AService.discover_card(
+        "https://remote.example.com/.well-known/agent.json"
+    )
+
+    assert discovery["card"]["authentication"] == {"schemes": ["x402"]}
+
+
+@pytest.mark.asyncio
+async def test_refresh_card_preserves_raw_authentication_metadata(monkeypatch):
+    parsed_card_snapshot = {
+        "url": "https://remote.example.com",
+        "name": "Remote Agent",
+        "skills": [{"id": "skill-1", "name": "Updated Search"}],
+    }
+    raw_card_snapshot = {
+        **parsed_card_snapshot,
+        "authentication": {
+            "schemes": ["x402"],
+        },
+    }
+    card = _make_card(parsed_card_snapshot, [_make_skill("skill-1", "Updated Search")])
+    record = SimpleNamespace(
+        agent_id=7,
+        card_url="https://remote.example.com/.well-known/agent.json",
+        remote_agent_id="https://remote.example.com/old",
+        remote_skill_id="skill-1",
+        remote_skill_name="Search",
+        remote_agent_metadata={"name": "Old Agent"},
+        remote_skill_metadata={"id": "skill-1", "name": "Search"},
+        sync_status="error",
+        health_status="degraded",
+        last_successful_refresh_at=None,
+        last_refresh_attempt_at=None,
+        last_refresh_error="stale",
+        documentation_url=None,
+        icon_url=None,
+    )
+    db = MagicMock()
+
+    async def fake_resolve(card_url: str):
+        return card
+
+    async def fake_fetch_raw(card_url: str):
+        return raw_card_snapshot
+
+    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+    monkeypatch.setattr(A2AService, "_fetch_raw_card_snapshot", fake_fetch_raw)
+
+    refreshed = await A2AService.refresh_card(record, db)
+
+    assert refreshed.remote_agent_metadata["authentication"] == {
+        "schemes": ["x402"]
+    }

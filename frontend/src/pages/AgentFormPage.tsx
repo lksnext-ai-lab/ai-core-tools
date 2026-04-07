@@ -7,6 +7,8 @@ import { MESSAGES, errorMessage } from '../constants/messages';
 import {
   discoverA2ACard,
   extractA2ASecuritySchemes,
+  extractUnsupportedA2AAuthSchemeNames,
+  getA2ARawAuthentication,
   getEffectiveA2ASecurityRequirements,
   type A2AAdvertisedSecurityScheme,
   type A2AAgentAuthConfig,
@@ -767,6 +769,8 @@ function AgentFormPage() {
   const isA2AAgent = formData.source_type === 'a2a';
   const effectiveA2ACard = (a2aDiscovery?.card || formData.a2a_card_snapshot || agent?.a2a_config?.remote_agent_metadata || null) as AgentCard | null;
   const advertisedA2ASecuritySchemes = extractA2ASecuritySchemes(effectiveA2ACard);
+  const unsupportedA2AAuthSchemeNames = extractUnsupportedA2AAuthSchemeNames(effectiveA2ACard);
+  const rawA2AAuthentication = getA2ARawAuthentication(effectiveA2ACard);
   const selectedA2AAuthScheme = advertisedA2ASecuritySchemes.find(
     (scheme) => scheme.name === formData.a2a_auth_config?.scheme_name,
   ) || null;
@@ -774,6 +778,15 @@ function AgentFormPage() {
     effectiveA2ACard,
     formData.a2a_selected_skill_id,
   );
+  const showA2AAuthSection = (
+    advertisedA2ASecuritySchemes.length > 0
+    || unsupportedA2AAuthSchemeNames.length > 0
+    || Boolean(rawA2AAuthentication)
+    || Boolean(formData.a2a_auth_config?.scheme_name)
+  );
+  const rawA2AAuthenticationJson = rawA2AAuthentication
+    ? JSON.stringify(rawA2AAuthentication, null, 2)
+    : '';
 
   const tabs: TabItem[] = [
     { id: 'basic', label: 'Basic' },
@@ -942,18 +955,25 @@ function AgentFormPage() {
                       )}
                     </div>
 
-                    {(advertisedA2ASecuritySchemes.length > 0 || formData.a2a_auth_config?.scheme_name) && (
+                    {showA2AAuthSection && (
                       <div className="mt-4 rounded-xl border border-blue-200 bg-white p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Remote Authentication</p>
                             <p className="mt-1 text-sm text-gray-700">
-                              A2A agent cards advertise auth using `securitySchemes` plus `security` or per-skill `securityRequirements`. MattinAI applies the configured credentials on outbound A2A requests.
+                              A2A agent cards may advertise auth using `securitySchemes`, `security`, per-skill `securityRequirements`, or vendor-specific metadata like `authentication`. MattinAI only configures recognized schemes today, but this section still shows the remote agent&apos;s declared requirements.
                             </p>
                           </div>
-                          <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
-                            {advertisedA2ASecuritySchemes.length} advertised scheme{advertisedA2ASecuritySchemes.length === 1 ? '' : 's'}
-                          </span>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-800">
+                              {advertisedA2ASecuritySchemes.length} configurable scheme{advertisedA2ASecuritySchemes.length === 1 ? '' : 's'}
+                            </span>
+                            {unsupportedA2AAuthSchemeNames.length > 0 && (
+                              <span className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-900">
+                                {unsupportedA2AAuthSchemeNames.length} read-only scheme{unsupportedA2AAuthSchemeNames.length === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {effectiveA2ASecurityRequirements.length > 0 && (
@@ -969,28 +989,58 @@ function AgentFormPage() {
                           </div>
                         )}
 
-                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                          <div className="md:col-span-2">
-                            <label htmlFor="a2a_auth_scheme" className="block text-sm font-medium text-gray-700 mb-2">
-                              Advertised Auth Scheme
-                            </label>
-                            <select
-                              id="a2a_auth_scheme"
-                              value={formData.a2a_auth_config?.scheme_name || ''}
-                              onChange={(e) => {
-                                const scheme = advertisedA2ASecuritySchemes.find((item) => item.name === e.target.value) || null;
-                                handleA2AAuthSchemeChange(scheme);
-                              }}
-                              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">No authentication</option>
-                              {advertisedA2ASecuritySchemes.map((scheme) => (
-                                <option key={scheme.name} value={scheme.name}>
-                                  {scheme.name} ({scheme.type})
-                                </option>
+                        {unsupportedA2AAuthSchemeNames.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+                            <p className="font-medium">Additional advertised auth schemes</p>
+                            <p className="mt-1">
+                              The remote card declares these schemes, but MattinAI cannot configure them yet.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {unsupportedA2AAuthSchemeNames.map((schemeName) => (
+                                <span key={`a2a-unsupported-auth-${schemeName}`} className="rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-900">
+                                  {schemeName}
+                                </span>
                               ))}
-                            </select>
+                            </div>
                           </div>
+                        )}
+
+                        {rawA2AAuthenticationJson && (
+                          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                            <p className="font-medium text-gray-900">Raw authentication metadata</p>
+                            <p className="mt-1">
+                              This is read-only metadata from the remote card.
+                            </p>
+                            <pre className="mt-2 overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100">
+                              {rawA2AAuthenticationJson}
+                            </pre>
+                          </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                          {(advertisedA2ASecuritySchemes.length > 0 || formData.a2a_auth_config?.scheme_name) && (
+                            <div className="md:col-span-2">
+                              <label htmlFor="a2a_auth_scheme" className="block text-sm font-medium text-gray-700 mb-2">
+                                Advertised Auth Scheme
+                              </label>
+                              <select
+                                id="a2a_auth_scheme"
+                                value={formData.a2a_auth_config?.scheme_name || ''}
+                                onChange={(e) => {
+                                  const scheme = advertisedA2ASecuritySchemes.find((item) => item.name === e.target.value) || null;
+                                  handleA2AAuthSchemeChange(scheme);
+                                }}
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="">No authentication</option>
+                                {advertisedA2ASecuritySchemes.map((scheme) => (
+                                  <option key={scheme.name} value={scheme.name}>
+                                    {scheme.name} ({scheme.type})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
 
                           {selectedA2AAuthScheme && (
                             <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
