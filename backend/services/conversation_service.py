@@ -488,6 +488,45 @@ class ConversationService:
                 conversation.last_message = last_message[:200]
             
             db.commit()
+
+    @staticmethod
+    def update_a2a_remote_state(
+        db: Session,
+        conversation_id: int,
+        *,
+        task_id: Optional[str],
+        context_id: Optional[str],
+        task_state: Optional[str],
+    ) -> Optional[Conversation]:
+        """Persist the latest remote A2A task continuity state for a conversation."""
+        conversation = db.query(Conversation).filter(
+            Conversation.conversation_id == conversation_id
+        ).first()
+
+        if not conversation:
+            return None
+
+        conversation.a2a_remote_task_id = task_id
+        conversation.a2a_remote_context_id = context_id
+        conversation.a2a_remote_task_state = task_state
+        conversation.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(conversation)
+        return conversation
+
+    @staticmethod
+    def clear_a2a_remote_state(
+        db: Session,
+        conversation_id: int,
+    ) -> Optional[Conversation]:
+        """Clear any persisted remote A2A task continuity state for a conversation."""
+        return ConversationService.update_a2a_remote_state(
+            db,
+            conversation_id,
+            task_id=None,
+            context_id=None,
+            task_state=None,
+        )
     
     @staticmethod
     def _validate_user_access(conversation: Conversation, user_context: AuthContext|dict) -> bool:
@@ -524,4 +563,3 @@ class ConversationService:
             return True
         
         return False
-

@@ -4,6 +4,7 @@ import ast
 import json
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
@@ -23,7 +24,11 @@ from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
 from services.a2a_service import A2AService
-from services.a2a_executor_service import A2AExecutorService
+from services.a2a_executor_service import (
+    A2AExecutionResult,
+    A2AExecutorService,
+    A2AMemoryContext,
+)
 from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
@@ -110,8 +115,14 @@ class AgentExecutionService:
                 ctx.user_context,
                 ctx.image_files,
                 ctx.processed_files,
+                ctx.a2a_memory_context,
                 working_dir=ctx.working_dir,
             )
+
+            if isinstance(response, A2AExecutionResult):
+                self._apply_a2a_remote_state(ctx, response, db)
+                await self._persist_a2a_history(ctx, response.text)
+                response = response.text
 
             if db and A2AService.is_a2a_agent(ctx.fresh_agent):
                 A2AService.update_health(db, ctx.fresh_agent.a2a_config, healthy=True)
@@ -239,6 +250,24 @@ class AgentExecutionService:
         effective_conv_id = conversation_id or (
             conversation.conversation_id if conversation else None
         )
+        a2a_memory_context = None
+        if (
+            fresh_agent.has_memory
+            and conversation is not None
+            and session_id_for_cache
+            and A2AService.is_a2a_agent(fresh_agent)
+        ):
+            history = await self._build_a2a_memory_history(
+                fresh_agent,
+                session_id_for_cache,
+            )
+            a2a_memory_context = A2AMemoryContext(
+                history=history,
+                remote_task_id=getattr(conversation, "a2a_remote_task_id", None),
+                remote_context_id=getattr(conversation, "a2a_remote_context_id", None),
+                remote_task_state=getattr(conversation, "a2a_remote_task_state", None),
+                history_length=(getattr(fresh_agent, "memory_max_messages", 20) or 20),
+            )
 
         # 9. Resolve working directory
         app_config = get_app_config()
@@ -271,6 +300,7 @@ class AgentExecutionService:
             processed_files=processed_files,
             search_params=search_params,
             user_context=user_context,
+            a2a_memory_context=a2a_memory_context,
         )
 
     async def _finalize_turn(
@@ -409,6 +439,213 @@ class AgentExecutionService:
             "files_data": files_data,
         }
 
+    async def _build_a2a_memory_history(
+        self,
+        agent: Agent,
+        session_id_for_cache: str,
+    ) -> List[Dict[str, str]]:
+        """Load and bound local history before projecting it to a remote A2A task."""
+        from services.agent_cache_service import CheckpointerCacheService
+
+        raw_history = await CheckpointerCacheService.get_conversation_history_async(
+            agent.agent_id,
+            session_id_for_cache,
+        )
+        if not raw_history:
+            return []
+
+        normalized_history: List[Dict[str, str]] = []
+        for item in raw_history:
+            if not isinstance(item, dict):
+                continue
+            role = (item.get("role") or "").strip().lower()
+            if role not in {"user", "agent"}:
+                continue
+            content = item.get("content")
+            if not isinstance(content, str):
+                continue
+            cleaned_content = self._clean_history_attached_files_content(content)
+            cleaned_content = " ".join(cleaned_content.split())
+            if not cleaned_content:
+                continue
+            normalized_history.append({"role": role, "content": cleaned_content})
+
+        if not normalized_history:
+            return []
+
+        max_messages = max(1, int(getattr(agent, "memory_max_messages", 20) or 20))
+        token_limit = max(
+            1,
+            int(getattr(agent, "memory_summarize_threshold", 4000) or 4000),
+        )
+        char_budget = max(1000, token_limit * 4)
+
+        trimmed_history = normalized_history[-max_messages:]
+        kept_history: List[Dict[str, str]] = []
+        used_chars = 0
+        for item in reversed(trimmed_history):
+            item_cost = len(item["content"]) + 32
+            if kept_history and used_chars + item_cost > char_budget:
+                break
+            kept_history.append(item)
+            used_chars += item_cost
+        kept_history.reverse()
+
+        omitted_count = len(normalized_history) - len(kept_history)
+        if omitted_count > 0:
+            kept_history.insert(
+                0,
+                {
+                    "role": "system",
+                    "content": (
+                        f"{omitted_count} earlier conversation message(s) were omitted "
+                        "to stay within MattinAI memory limits."
+                    ),
+                },
+            )
+
+        return kept_history
+
+    @staticmethod
+    def _clean_history_attached_files_content(text: str) -> str:
+        """Strip inline attached-file payloads from cached memory history."""
+        if not text:
+            return text
+
+        files_marker = "\n\n[Attached files:]"
+        base_folder_marker = "\n\nFiles base folder is:"
+
+        marker_pos = -1
+        base_pos = text.find(base_folder_marker)
+        if base_pos != -1:
+            marker_pos = base_pos
+
+        files_pos = text.find(files_marker)
+        if files_pos != -1 and (marker_pos == -1 or files_pos < marker_pos):
+            marker_pos = files_pos
+
+        if marker_pos != -1:
+            cleaned = text[:marker_pos].strip()
+            return f"{cleaned} 📎" if cleaned else "📎"
+
+        return text
+
+    def _apply_a2a_remote_state(
+        self,
+        ctx: AgentExecutionContext,
+        result: A2AExecutionResult,
+        db: Session | None,
+    ) -> None:
+        """Persist the latest remote task/context identifiers on the conversation."""
+        if not ctx.conversation:
+            logger.info(
+                "Skipping A2A remote state persistence because no conversation is attached for agent_id=%s",
+                getattr(ctx.fresh_agent, "agent_id", getattr(ctx.agent, "agent_id", None)),
+            )
+            return
+
+        logger.info(
+            "Persisting A2A remote state for conversation_id=%s agent_id=%s task_id=%s context_id=%s task_state=%s",
+            getattr(ctx.conversation, "conversation_id", None),
+            getattr(ctx.fresh_agent, "agent_id", getattr(ctx.agent, "agent_id", None)),
+            result.remote_task_id,
+            result.remote_context_id,
+            result.remote_task_state,
+        )
+        ctx.conversation.a2a_remote_task_id = result.remote_task_id
+        ctx.conversation.a2a_remote_context_id = result.remote_context_id
+        ctx.conversation.a2a_remote_task_state = result.remote_task_state
+
+        if db is not None and hasattr(db, "flush"):
+            try:
+                db.flush()
+                logger.info(
+                    "Flushed A2A remote state for conversation_id=%s task_id=%s context_id=%s task_state=%s",
+                    getattr(ctx.conversation, "conversation_id", None),
+                    getattr(ctx.conversation, "a2a_remote_task_id", None),
+                    getattr(ctx.conversation, "a2a_remote_context_id", None),
+                    getattr(ctx.conversation, "a2a_remote_task_state", None),
+                )
+            except Exception:
+                logger.debug(
+                    "Unable to flush A2A remote state for conversation %s before finalize",
+                    getattr(ctx.conversation, "conversation_id", None),
+                    exc_info=True,
+                )
+
+    async def _persist_a2a_history(
+        self,
+        ctx: AgentExecutionContext,
+        response_text: Any,
+    ) -> None:
+        """Mirror successful A2A turns into the LangGraph checkpointer history."""
+        if (
+            not ctx.session_id_for_cache
+            or not getattr(ctx.fresh_agent, "has_memory", False)
+            or not A2AService.is_a2a_agent(ctx.fresh_agent)
+        ):
+            return
+
+        user_message = (ctx.enhanced_message or "").strip()
+        assistant_message = str(response_text or "").strip()
+        if not user_message and not assistant_message:
+            return
+
+        try:
+            from langchain_core.messages import AIMessage, HumanMessage
+            from langgraph.checkpoint.base import empty_checkpoint
+            from services.agent_cache_service import CheckpointerCacheService
+
+            checkpointer = await CheckpointerCacheService.get_async_checkpointer()
+            thread_id = f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
+            base_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+            state_tuple = await checkpointer.aget_tuple(base_config)
+
+            if state_tuple is not None and state_tuple.checkpoint is not None:
+                config = state_tuple.config
+                checkpoint = state_tuple.checkpoint.copy()
+                checkpoint["channel_values"] = checkpoint["channel_values"].copy()
+                checkpoint["channel_versions"] = checkpoint["channel_versions"].copy()
+                messages = list(checkpoint["channel_values"].get("messages", []))
+                step = int((state_tuple.metadata or {}).get("step", 0)) + 1
+            else:
+                config = base_config
+                checkpoint = empty_checkpoint()
+                checkpoint["channel_values"] = {}
+                checkpoint["channel_versions"] = {}
+                messages = []
+                step = 0
+
+            if user_message:
+                messages.append(HumanMessage(content=user_message))
+            if assistant_message:
+                messages.append(AIMessage(content=assistant_message))
+
+            version = str(uuid4())
+            checkpoint["channel_values"]["messages"] = messages
+            checkpoint["channel_versions"]["messages"] = version
+
+            await checkpointer.aput(
+                config,
+                checkpoint,
+                {"source": "update", "step": step, "parents": {}},
+                {"messages": version},
+            )
+            logger.info(
+                "Persisted A2A turn history for agent_id=%s conversation_id=%s thread_id=%s message_count=%s",
+                getattr(ctx.fresh_agent, "agent_id", None),
+                getattr(ctx.conversation, "conversation_id", None),
+                thread_id,
+                len(messages),
+            )
+        except Exception:
+            logger.warning(
+                "Unable to persist A2A turn history for agent_id=%s conversation_id=%s",
+                getattr(ctx.fresh_agent, "agent_id", None),
+                getattr(ctx.conversation, "conversation_id", None),
+                exc_info=True,
+            )
+
     async def execute_agent_ocr(
         self, 
         agent_id: int, 
@@ -528,6 +765,21 @@ class AgentExecutionService:
                 # Reset the session object (clears messages and memory)
                 # This should be done after invalidating checkpointer to ensure we have the session ID
                 await self.session_service.reset_user_session(agent_id, user_context)
+
+                if db is not None and A2AService.is_a2a_agent(agent) and conversation_id:
+                    from services.conversation_service import ConversationService
+
+                    conversation = ConversationService.get_conversation(
+                        db=db,
+                        conversation_id=int(conversation_id),
+                        user_context=user_context,
+                        agent_id=agent_id,
+                    )
+                    if conversation:
+                        conversation.a2a_remote_task_id = None
+                        conversation.a2a_remote_context_id = None
+                        conversation.a2a_remote_task_state = None
+                        db.commit()
             
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService
@@ -986,6 +1238,7 @@ class AgentExecutionService:
         user_context: Dict = None,
         image_files: List[Dict] = None,
         attachment_files: List[Dict] = None,
+        a2a_memory_context: Optional[A2AMemoryContext] = None,
         working_dir: Optional[str] = None
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
@@ -1005,11 +1258,12 @@ class AgentExecutionService:
                 message,
                 user_context=user_context,
                 attachment_files=attachment_files,
+                memory_context=a2a_memory_context,
             )
 
         import langsmith as ls
         from tools.agentTools import create_agent, prepare_agent_config
-        from langchain.messages import HumanMessage
+        from langchain_core.messages import HumanMessage
 
         mcp_client = None
         try:

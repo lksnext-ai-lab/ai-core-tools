@@ -18,7 +18,7 @@ from tools.streaming_utils import (
     map_stream_event,
     SSE_TOKEN,
 )
-from services.a2a_executor_service import A2AExecutorService
+from services.a2a_executor_service import A2AExecutionResult, A2AExecutorService
 from services.a2a_service import A2AService
 from services.agent_execution_service import AgentExecutionService
 from utils.logger import get_logger
@@ -121,6 +121,7 @@ class AgentStreamingService:
                     ctx.effective_conv_id,
                 )
                 accumulated_content = ""
+                remote_result = None
                 executor = A2AExecutorService()
 
                 async for event in executor.stream(
@@ -128,10 +129,33 @@ class AgentStreamingService:
                     ctx.enhanced_message,
                     user_context=ctx.user_context,
                     attachment_files=ctx.processed_files,
+                    memory_context=ctx.a2a_memory_context,
                 ):
                     if event["type"] == SSE_TOKEN:
                         accumulated_content += event["data"].get("content", "")
+                    elif event["type"] == "final":
+                        remote_result = A2AExecutionResult(
+                            text=event["data"].get("content", ""),
+                            remote_task_id=event["data"].get("remote_task_id"),
+                            remote_context_id=event["data"].get("remote_context_id"),
+                            remote_task_state=event["data"].get("remote_task_state"),
+                        )
                     yield format_sse_event(event["type"], event["data"])
+
+                if remote_result is not None:
+                    self.execution_service._apply_a2a_remote_state(
+                        ctx,
+                        remote_result,
+                        effective_db,
+                    )
+
+                final_response_text = accumulated_content or (
+                    remote_result.text if remote_result else ""
+                )
+                await self.execution_service._persist_a2a_history(
+                    ctx,
+                    final_response_text,
+                )
 
                 if effective_db:
                     A2AService.update_health(
@@ -141,7 +165,9 @@ class AgentStreamingService:
                     )
 
                 result = await self.execution_service._finalize_turn(
-                    ctx, accumulated_content, effective_db
+                    ctx,
+                    final_response_text,
+                    effective_db,
                 )
 
                 yield format_sse_event(

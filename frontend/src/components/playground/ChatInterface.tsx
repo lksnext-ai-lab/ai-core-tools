@@ -38,6 +38,8 @@ interface ChatInterfaceProps {
   agentId: number;
   agentName: string;
   conversationId?: number | null;
+  supportsConversationThreads?: boolean;
+  onNewConversation?: () => void;
   onConversationCreated?: (conversationId: number) => void;
   onMessageSent?: () => void;
   metadataFields?: SearchFilterMetadataField[];
@@ -49,6 +51,8 @@ function ChatInterface({
   agentId,
   agentName,
   conversationId,
+  supportsConversationThreads = false,
+  onNewConversation,
   onConversationCreated,
   onMessageSent,
   metadataFields,
@@ -433,6 +437,7 @@ function ChatInterface({
   }));
 
   const canSend = !isStreaming && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+  const canStartNewConversation = supportsConversationThreads && typeof onNewConversation === 'function';
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -504,34 +509,65 @@ function ChatInterface({
       <div className="flex gap-4 items-start">
         {/* Chat card */}
         <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
-          {/* Reset button — subtle, top-right corner */}
+          {/* Conversation actions */}
           <div className="flex justify-end px-4 pt-3 pb-1">
-            <button
-              type="button"
-              onClick={handleResetConversation}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
-                         text-gray-500 dark:text-gray-400
-                         hover:text-red-600 dark:hover:text-red-400
-                         hover:bg-red-50 dark:hover:bg-red-900/20
-                         border border-transparent hover:border-red-200 dark:hover:border-red-800/40
-                         transition-all duration-150"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+            {canStartNewConversation ? (
+              <button
+                type="button"
+                onClick={onNewConversation}
+                disabled={isStreaming || isLoadingHistory}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                           text-indigo-600 dark:text-indigo-300
+                           hover:text-indigo-700 dark:hover:text-indigo-200
+                           hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                           border border-indigo-200/70 dark:border-indigo-800/40
+                           disabled:opacity-50 disabled:cursor-not-allowed
+                           transition-all duration-150"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Reset
-            </button>
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+                New conversation
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResetConversation}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                           text-gray-500 dark:text-gray-400
+                           hover:text-red-600 dark:hover:text-red-400
+                           hover:bg-red-50 dark:hover:bg-red-900/20
+                           border border-transparent hover:border-red-200 dark:hover:border-red-800/40
+                           transition-all duration-150"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                Reset
+              </button>
+            )}
           </div>
 
           {/* Messages container */}

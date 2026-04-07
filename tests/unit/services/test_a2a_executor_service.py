@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
-from services.a2a_executor_service import A2AExecutorService
+from services.a2a_executor_service import (
+    A2AExecutionResult,
+    A2AExecutorService,
+    A2AMemoryContext,
+)
 
 
 class _RecordingRun:
@@ -83,12 +87,14 @@ async def test_execute_reports_direct_langsmith_trace_for_a2a(monkeypatch):
         user_context=None,
         attachment_files=None,
         langsmith_config=None,
+        memory_context=None,
     ):
         captured["agent"] = agent_arg
         captured["message"] = message_arg
         captured["user_context"] = user_context
         captured["attachment_files"] = attachment_files
         captured["langsmith_config"] = langsmith_config
+        captured["memory_context"] = memory_context
         yield {"type": "token", "data": {"content": "partial"}}
         yield {"type": "final", "data": {"content": "final remote reply"}}
 
@@ -103,7 +109,8 @@ async def test_execute_reports_direct_langsmith_trace_for_a2a(monkeypatch):
             attachment_files=[{"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}],
         )
 
-    assert result == "final remote reply"
+    assert isinstance(result, A2AExecutionResult)
+    assert result.text == "final remote reply"
     assert captured["attachment_files"] == [
         {"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}
     ]
@@ -114,13 +121,21 @@ async def test_execute_reports_direct_langsmith_trace_for_a2a(monkeypatch):
     root_trace = trace_entries[0]
     assert root_trace["name"] == "A2A Agent Invocation: Imported A2A Agent"
     assert root_trace["run_type"] == "chain"
-    assert root_trace["inputs"] == {"message": "hello world", "streaming": False}
+    assert root_trace["inputs"] == {
+        "message": "hello world",
+        "streaming": False,
+        "history_messages": 0,
+        "continuation_task_id": None,
+    }
     assert root_trace["metadata"]["source_type"] == "a2a"
     assert root_trace["metadata"]["remote_skill_id"] == "skill-1"
     assert root_trace["outputs"] == {
         "response": "final remote reply",
         "response_length": len("final remote reply"),
         "streaming": False,
+        "remote_task_id": None,
+        "remote_context_id": None,
+        "remote_task_state": None,
     }
 
 
@@ -138,6 +153,7 @@ async def test_stream_reports_direct_langsmith_trace_for_a2a(monkeypatch):
         user_context=None,
         attachment_files=None,
         langsmith_config=None,
+        memory_context=None,
     ):
         yield {"type": "thinking", "data": {"content": "working", "message": "working"}}
         yield {"type": "token", "data": {"content": "streamed text"}}
@@ -162,7 +178,12 @@ async def test_stream_reports_direct_langsmith_trace_for_a2a(monkeypatch):
     assert len(tracing_context_entries) == 1
     assert len(trace_entries) == 1
     root_trace = trace_entries[0]
-    assert root_trace["inputs"] == {"message": "stream this", "streaming": True}
+    assert root_trace["inputs"] == {
+        "message": "stream this",
+        "streaming": True,
+        "history_messages": 0,
+        "continuation_task_id": None,
+    }
     assert root_trace["outputs"] == {
         "response": "streamed text",
         "response_length": len("streamed text"),
@@ -234,3 +255,43 @@ def test_build_request_message_skips_unreadable_attachments(tmp_path):
 
     assert len(message.parts) == 1
     assert message.parts[0].root.text == "Hello"
+
+
+def test_build_request_message_reuses_remote_task_ids_when_resumable():
+    service = A2AExecutorService()
+    memory_context = A2AMemoryContext(
+        remote_task_id="task-123",
+        remote_context_id="ctx-456",
+        remote_task_state="input-required",
+    )
+
+    message = service._build_request_message(
+        "Here is the requested follow-up",
+        memory_context=memory_context,
+    )
+
+    assert getattr(message, "task_id", getattr(message, "taskId", None)) == "task-123"
+    assert getattr(message, "context_id", getattr(message, "contextId", None)) == "ctx-456"
+    assert "Conversation context from previous turns" not in message.parts[0].root.text
+
+
+def test_build_request_message_does_not_fallback_to_local_history_when_remote_task_is_terminal():
+    service = A2AExecutorService()
+    memory_context = A2AMemoryContext(
+        history=[
+            {"role": "user", "content": "We are discussing quarterly forecasts."},
+            {"role": "agent", "content": "Understood. I can keep working from that context."},
+        ],
+        remote_task_id="task-completed",
+        remote_context_id="ctx-456",
+        remote_task_state="completed",
+    )
+
+    message = service._build_request_message(
+        "Please continue with the final recommendation",
+        memory_context=memory_context,
+    )
+
+    text = message.parts[0].root.text
+    assert text == "Please continue with the final recommendation"
+    assert getattr(message, "referenceTaskIds", None) in (None, [])

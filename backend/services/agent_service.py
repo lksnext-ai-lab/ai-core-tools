@@ -315,7 +315,6 @@ class AgentService:
         sanitized['server_tools'] = []
         sanitized['system_prompt'] = ''
         sanitized['prompt_template'] = ''
-        sanitized['has_memory'] = False
         return sanitized
 
     def _upsert_a2a_config(self, db: Session, agent_id: int, canonical_config: Optional[dict]) -> None:

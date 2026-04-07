@@ -38,3 +38,4 @@ class AgentExecutionContext:
     processed_files: List[Dict[str, Any]] = field(default_factory=list)
     search_params: Optional[Dict[str, Any]] = None
     user_context: Optional[Dict[str, Any]] = None
+    a2a_memory_context: Optional[Any] = None

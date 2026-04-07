@@ -285,6 +285,8 @@ function AgentPlaygroundPage() {
                     agentId={Number.parseInt(agentId!)}
                     agentName={agent.name}
                     conversationId={currentConversationId}
+                    supportsConversationThreads={Boolean(agent.has_memory)}
+                    onNewConversation={agent.has_memory ? handleNewConversation : undefined}
                     onConversationCreated={handleConversationCreated}
                     onMessageSent={handleMessageSent}
                     metadataFields={agent.silo?.metadata_definition?.fields}

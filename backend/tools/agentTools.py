@@ -1,4 +1,4 @@
-from langchain.messages import HumanMessage, SystemMessage, AnyMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
 from models.agent import Agent

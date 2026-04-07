@@ -179,6 +179,123 @@ const OutputParserField = ({
   </div>
 );
 
+const MemoryManagementSection = ({
+  formData,
+  handleInputChange,
+  isA2AAgent,
+}: {
+  formData: AgentFormData;
+  handleInputChange: (field: keyof AgentFormData, value: any) => void;
+  isA2AAgent: boolean;
+}) => (
+  <div className="border-t border-gray-200 pt-6">
+    <div className="flex items-center mb-6">
+      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
+        <Brain className="w-5 h-5 text-indigo-600" />
+      </div>
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          {isA2AAgent
+            ? 'MattinAI will keep local conversation history and reuse the remote A2A task when possible.'
+            : 'Configura la estrategia de gestión de memoria del agente'}
+        </p>
+      </div>
+    </div>
+
+    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
+      <div className="flex items-start">
+        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
+        <div>
+          <p className="text-sm text-indigo-800 font-medium">
+            {isA2AAgent ? 'Conversation continuity for imported A2A agents' : 'Estrategia Híbrida Automática'}
+          </p>
+          <p className="text-xs text-indigo-700 mt-1">
+            {isA2AAgent
+              ? 'When enabled, each conversation thread keeps its own MattinAI-managed memory and remote A2A task continuity. Starting a new conversation creates a fresh remote thread.'
+              : 'El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div className="space-y-6">
+      <div>
+        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
+          Máximo de Mensajes
+        </label>
+        <input
+          type="number"
+          id="memory_max_messages"
+          min="1"
+          max="100"
+          value={formData.memory_max_messages}
+          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
+          Límite de Tokens
+        </label>
+        <input
+          type="number"
+          id="memory_max_tokens"
+          min="100"
+          max="32000"
+          step="100"
+          value={formData.memory_max_tokens}
+          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          Número máximo de tokens para el historial de conversación (recomendado: 4000)
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
+          Umbral de Resumen
+        </label>
+        <input
+          type="number"
+          id="memory_summarize_threshold"
+          min="1"
+          max="50"
+          value={formData.memory_summarize_threshold}
+          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <span className="text-gray-600">Mensajes:</span>
+          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
+        </div>
+        <div>
+          <span className="text-gray-600">Tokens:</span>
+          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
+        </div>
+        <div>
+          <span className="text-gray-600">Umbral:</span>
+          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 function getPageTitle(type: string, isNewAgent: boolean): string {
   if (type === 'ocr_agent') return 'Agente OCR';
   if (isNewAgent) return 'Create Agent';
@@ -441,7 +558,7 @@ function AgentFormPage() {
       type: 'agent',
       name: skill.name || card.name || prev.name,
       description: skill.description || card.description || prev.description,
-      has_memory: false,
+      has_memory: prev.has_memory,
       enable_code_interpreter: false,
       server_tools: [],
       service_id: undefined,
@@ -482,7 +599,7 @@ function AgentFormPage() {
       ...prev,
       source_type: 'a2a',
       type: 'agent',
-      has_memory: false,
+      has_memory: prev.has_memory,
       enable_code_interpreter: false,
       server_tools: [],
       service_id: undefined,
@@ -1312,7 +1429,7 @@ function AgentFormPage() {
               <div className="space-y-6">
                 {isA2AAgent ? (
                   <div className="rounded-2xl border border-blue-200 bg-blue-50 p-6 text-sm text-blue-900">
-                    Imported A2A agents execute through the selected remote skill. Local system prompts and prompt templates are disabled in Phase 1 so the imported agent stays faithful to the upstream capability. The Tool Agent option remains available so the imported agent can still be exposed through MCP servers.
+                    Imported A2A agents execute through the selected remote skill. Local system prompts and prompt templates stay disabled so the imported agent remains faithful to the upstream capability, but conversational memory can still be enabled below so MattinAI can manage conversation threads and remote task continuity.
                   </div>
                 ) : (
                 <>
@@ -1345,109 +1462,14 @@ function AgentFormPage() {
                   <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
 
-                {/* Memory Management - Conditional */}
-                {formData.has_memory && (
-                  <div className="border-t border-gray-200 pt-6">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-                        <Brain className="w-5 h-5 text-indigo-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configura la estrategia de gestión de memoria del agente</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
-                      <div className="flex items-start">
-                        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
-                        <div>
-                          <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
-                          <p className="text-xs text-indigo-700 mt-1">
-                            El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, 
-                            recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-6">
-                      <div>
-                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                          Máximo de Mensajes
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_messages"
-                          min="1"
-                          max="100"
-                          value={formData.memory_max_messages}
-                          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                          Límite de Tokens
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_tokens"
-                          min="100"
-                          max="32000"
-                          step="100"
-                          value={formData.memory_max_tokens}
-                          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de tokens para el historial de conversación (recomendado: 4000)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                          Umbral de Resumen
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_summarize_threshold"
-                          min="1"
-                          max="50"
-                          value={formData.memory_summarize_threshold}
-                          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Mensajes:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Tokens:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Umbral:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
                 </>
+                )}
+                {formData.has_memory && (
+                  <MemoryManagementSection
+                    formData={formData}
+                    handleInputChange={handleInputChange}
+                    isA2AAgent={isA2AAgent}
+                  />
                 )}
               </div>
             </div>
@@ -1458,7 +1480,7 @@ function AgentFormPage() {
             <div className="space-y-6">
               {isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
-                  External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter in Phase 1. The imported remote skill is the execution backend.
+                  External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter. The imported remote skill remains the execution backend, while conversational memory stays available as an optional MattinAI-managed layer.
                 </div>
               )}
               {/* Configuration for regular local agents */}
@@ -1633,36 +1655,38 @@ function AgentFormPage() {
                       </div>
                     </div>
 
-                    {!isA2AAgent && (
-                      <>
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <input
-                            id="has_memory"
-                            type="checkbox"
-                            checked={formData.has_memory}
-                            onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
-                            <p className="text-xs text-gray-500">Maintains conversation memory</p>
-                          </div>
-                        </div>
+                    <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                      <input
+                        id="has_memory"
+                        type="checkbox"
+                        checked={formData.has_memory}
+                        onChange={(e) => handleInputChange('has_memory', e.target.checked)}
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="ml-3">
+                        <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
+                        <p className="text-xs text-gray-500">
+                          {isA2AAgent
+                            ? 'Enable MattinAI-managed conversation threads for this imported A2A agent'
+                            : 'Maintains conversation memory'}
+                        </p>
+                      </div>
+                    </div>
 
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <input
-                            id="enable_code_interpreter"
-                            type="checkbox"
-                            checked={formData.enable_code_interpreter}
-                            onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
-                            <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
-                          </div>
+                    {!isA2AAgent && (
+                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <input
+                          id="enable_code_interpreter"
+                          type="checkbox"
+                          checked={formData.enable_code_interpreter}
+                          onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
+                          <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
 
@@ -1850,7 +1874,7 @@ function AgentFormPage() {
             <div className="space-y-6">
               {isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
-                  Most native MattinAI execution-shaping capabilities are intentionally disabled for imported A2A agents in Phase 1. This keeps the imported agent a pure wrapper around the selected external skill, while still allowing it to be marked as a Tool Agent and exposed through MCP servers.
+                  Most native MattinAI execution-shaping capabilities remain intentionally disabled for imported A2A agents. Conversational memory is the exception: when enabled, MattinAI manages the conversation thread while the selected external skill remains the execution backend.
                 </div>
               )}
               {/* Tools Card - Only for regular agents */}
