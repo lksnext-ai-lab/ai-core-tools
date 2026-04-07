@@ -29,6 +29,22 @@ def normalize_credential_map(data: Mapping[str, Any] | None) -> dict | None:
     return {k: normalize_credential(v) for k, v in data.items()}
 
 
+def mask_secret(value: str | None) -> str:
+    """Mask a secret for safe display, showing only the last 4 characters."""
+    if not value or value == PLACEHOLDER_API_KEY:
+        return ""
+    if len(value) <= 4:
+        return MASKED_KEY_PREFIX
+    return MASKED_KEY_PREFIX + value[-4:]
+
+
+def is_masked_secret(value: str | None) -> bool:
+    """Check if a secret value is a masked placeholder (not a real secret)."""
+    if not value:
+        return False
+    return value.startswith(MASKED_KEY_PREFIX)
+
+
 def mask_api_key(key: str | None) -> str:
     """Mask an API key for safe display, showing only the last 4 characters.
 
@@ -38,15 +54,9 @@ def mask_api_key(key: str | None) -> str:
         mask_api_key("CHANGE_ME") -> ""
         mask_api_key("abc") -> "****"
     """
-    if not key or key == PLACEHOLDER_API_KEY:
-        return ""
-    if len(key) <= 4:
-        return MASKED_KEY_PREFIX
-    return MASKED_KEY_PREFIX + key[-4:]
+    return mask_secret(key)
 
 
 def is_masked_key(key: str | None) -> bool:
     """Check if a key value is a masked placeholder (not a real key)."""
-    if not key:
-        return False
-    return key.startswith(MASKED_KEY_PREFIX)
+    return is_masked_secret(key)

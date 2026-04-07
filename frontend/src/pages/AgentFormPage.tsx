@@ -4,7 +4,15 @@ import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb,
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
-import { discoverA2ACard, type AgentCard, type AgentSkill } from '../services/a2aDiscovery';
+import {
+  discoverA2ACard,
+  extractA2ASecuritySchemes,
+  getEffectiveA2ASecurityRequirements,
+  type A2AAdvertisedSecurityScheme,
+  type A2AAgentAuthConfig,
+  type AgentCard,
+  type AgentSkill,
+} from '../services/a2aDiscovery';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
@@ -21,6 +29,7 @@ interface A2AAgentConfig {
   remote_agent_id?: string;
   remote_skill_id: string;
   remote_skill_name: string;
+  auth_config?: A2AAgentAuthConfig | null;
   remote_agent_metadata: Record<string, any>;
   remote_skill_metadata: Record<string, any>;
   sync_status: string;
@@ -96,11 +105,24 @@ interface AgentFormData {
   a2a_selected_skill_name?: string;
   a2a_card_snapshot?: Record<string, any>;
   a2a_skill_snapshot?: Record<string, any>;
+  a2a_auth_config: A2AAgentAuthConfig;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
 }
+
+const EMPTY_A2A_AUTH_CONFIG: A2AAgentAuthConfig = {
+  scheme_name: null,
+  scheme_type: 'none',
+  api_key: '',
+  bearer_token: '',
+  username: '',
+  password: '',
+  client_certificate: '',
+  client_key: '',
+  ca_certificate: '',
+};
 
 // Output Parser Field Component
 const OutputParserField = ({
@@ -227,7 +249,8 @@ function AgentFormPage() {
     mcp_config_ids: [],
     skill_ids: [],
     a2a_card_url: '',
-    a2a_selected_skill_id: ''
+    a2a_selected_skill_id: '',
+    a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [a2aDiscovery, setA2aDiscovery] = useState<{ card: AgentCard; skills: AgentSkill[] } | null>(null);
@@ -294,6 +317,7 @@ function AgentFormPage() {
         a2a_selected_skill_name: response.a2a_config?.remote_skill_name || '',
         a2a_card_snapshot: response.a2a_config?.remote_agent_metadata || undefined,
         a2a_skill_snapshot: response.a2a_config?.remote_skill_metadata || undefined,
+        a2a_auth_config: response.a2a_config?.auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -356,6 +380,29 @@ function AgentFormPage() {
     }));
   };
 
+  const handleA2AAuthConfigChange = (field: keyof A2AAgentAuthConfig, value: string | null) => {
+    setFormData(prev => ({
+      ...prev,
+      a2a_auth_config: {
+        ...prev.a2a_auth_config,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleA2AAuthSchemeChange = (scheme: A2AAdvertisedSecurityScheme | null) => {
+    setFormData(prev => ({
+      ...prev,
+      a2a_auth_config: scheme ? {
+        ...EMPTY_A2A_AUTH_CONFIG,
+        scheme_name: scheme.name,
+        scheme_type: scheme.type,
+      } : {
+        ...EMPTY_A2A_AUTH_CONFIG,
+      },
+    }));
+  };
+
   const handleToolToggle = (toolId: number) => {
     setFormData(prev => ({
       ...prev,
@@ -405,6 +452,7 @@ function AgentFormPage() {
       a2a_selected_skill_name: skill.name,
       a2a_card_snapshot: card as Record<string, any>,
       a2a_skill_snapshot: skill as Record<string, any>,
+      a2a_auth_config: prev.a2a_auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
     }));
     setShowOutputParser(false);
   }, []);
@@ -420,6 +468,7 @@ function AgentFormPage() {
         a2a_selected_skill_name: undefined,
         a2a_card_snapshot: undefined,
         a2a_skill_snapshot: undefined,
+        a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
       }));
       return;
     }
@@ -439,6 +488,7 @@ function AgentFormPage() {
       skill_ids: [],
       system_prompt: '',
       prompt_template: '',
+      a2a_auth_config: prev.a2a_auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
     }));
     setShowOutputParser(false);
   };
@@ -458,7 +508,22 @@ function AgentFormPage() {
       setA2aLoading(true);
       setA2aError(null);
       const discovery = await discoverA2ACard(Number.parseInt(appId), formData.a2a_card_url.trim());
+      const discoveredSchemes = extractA2ASecuritySchemes(discovery.card);
       setA2aDiscovery({ card: discovery.card, skills: discovery.skills });
+
+      setFormData(prev => {
+        if (!prev.a2a_auth_config?.scheme_name) {
+          return prev;
+        }
+        const authSchemeStillAdvertised = discoveredSchemes.some((scheme) => scheme.name === prev.a2a_auth_config.scheme_name);
+        if (authSchemeStillAdvertised) {
+          return prev;
+        }
+        return {
+          ...prev,
+          a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
+        };
+      });
 
       if (discovery.skills.length === 0) {
         setA2aError('This A2A agent card does not expose any importable skills.');
@@ -591,6 +656,7 @@ function AgentFormPage() {
           selected_skill_name: formData.a2a_selected_skill_name,
           card_snapshot: formData.a2a_card_snapshot,
           skill_snapshot: formData.a2a_skill_snapshot,
+          auth_config: formData.a2a_auth_config?.scheme_name ? formData.a2a_auth_config : undefined,
         } : undefined,
       app_id: Number.parseInt(appId),
     };
@@ -639,6 +705,15 @@ function AgentFormPage() {
   const pageTitle = getPageTitle(formData.type, isNewAgent);
   const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
   const isA2AAgent = formData.source_type === 'a2a';
+  const effectiveA2ACard = (a2aDiscovery?.card || formData.a2a_card_snapshot || agent?.a2a_config?.remote_agent_metadata || null) as AgentCard | null;
+  const advertisedA2ASecuritySchemes = extractA2ASecuritySchemes(effectiveA2ACard);
+  const selectedA2AAuthScheme = advertisedA2ASecuritySchemes.find(
+    (scheme) => scheme.name === formData.a2a_auth_config?.scheme_name,
+  ) || null;
+  const effectiveA2ASecurityRequirements = getEffectiveA2ASecurityRequirements(
+    effectiveA2ACard,
+    formData.a2a_selected_skill_id,
+  );
 
   const tabs: TabItem[] = [
     { id: 'basic', label: 'Basic' },
@@ -806,6 +881,244 @@ function AgentFormPage() {
                         </>
                       )}
                     </div>
+
+                    {(advertisedA2ASecuritySchemes.length > 0 || formData.a2a_auth_config?.scheme_name) && (
+                      <div className="mt-4 rounded-xl border border-blue-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Remote Authentication</p>
+                            <p className="mt-1 text-sm text-gray-700">
+                              A2A agent cards advertise auth using `securitySchemes` plus `security` or per-skill `securityRequirements`. MattinAI applies the configured credentials on outbound A2A requests.
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+                            {advertisedA2ASecuritySchemes.length} advertised scheme{advertisedA2ASecuritySchemes.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+
+                        {effectiveA2ASecurityRequirements.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            <p className="font-medium">Declared security requirements</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {effectiveA2ASecurityRequirements.map((requirement, index) => (
+                                <span key={`a2a-security-requirement-${index}`} className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900">
+                                  {Object.entries(requirement).map(([schemeName, scopes]) => `${schemeName}${scopes.length > 0 ? ` (${scopes.join(', ')})` : ''}`).join(' + ')}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div className="md:col-span-2">
+                            <label htmlFor="a2a_auth_scheme" className="block text-sm font-medium text-gray-700 mb-2">
+                              Advertised Auth Scheme
+                            </label>
+                            <select
+                              id="a2a_auth_scheme"
+                              value={formData.a2a_auth_config?.scheme_name || ''}
+                              onChange={(e) => {
+                                const scheme = advertisedA2ASecuritySchemes.find((item) => item.name === e.target.value) || null;
+                                handleA2AAuthSchemeChange(scheme);
+                              }}
+                              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">No authentication</option>
+                              {advertisedA2ASecuritySchemes.map((scheme) => (
+                                <option key={scheme.name} value={scheme.name}>
+                                  {scheme.name} ({scheme.type})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {selectedA2AAuthScheme && (
+                            <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                              <p className="font-medium text-gray-900">Selected scheme details</p>
+                              <p className="mt-1">Type: {selectedA2AAuthScheme.type}</p>
+                              {selectedA2AAuthScheme.type === 'apiKey' && (
+                                <p className="mt-1">
+                                  Location: {String(selectedA2AAuthScheme.config.in || 'header')}
+                                  {' · '}
+                                  Name: {String(selectedA2AAuthScheme.config.name || 'X-API-Key')}
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'http' && (
+                                <p className="mt-1">
+                                  HTTP scheme: {String(selectedA2AAuthScheme.config.scheme || 'Bearer')}
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'oauth2' && Boolean(selectedA2AAuthScheme.config.flows) && (
+                                <p className="mt-1">
+                                  OAuth2 flow metadata is advertised by the card. MattinAI currently uses a configured access token for outbound calls.
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'openIdConnect' && (
+                                <p className="mt-1">
+                                  OIDC discovery URL: {String(selectedA2AAuthScheme.config.openIdConnectUrl || 'Not provided')}
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'mtls' && (
+                                <p className="mt-1">
+                                  Configure the client certificate and key PEMs below to enable mutual TLS.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme?.type === 'apiKey' && (
+                            <div className="md:col-span-2">
+                              <label htmlFor="a2a_auth_api_key" className="block text-sm font-medium text-gray-700 mb-2">
+                                API Key
+                              </label>
+                              <input
+                                type="password"
+                                id="a2a_auth_api_key"
+                                value={formData.a2a_auth_config.api_key || ''}
+                                onChange={(e) => handleA2AAuthConfigChange('api_key', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if ((formData.a2a_auth_config.api_key || '').startsWith('****') && e.key.length === 1) {
+                                    handleA2AAuthConfigChange('api_key', '');
+                                  }
+                                }}
+                                autoComplete="off"
+                                data-lpignore="true"
+                                data-form-type="other"
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter the remote A2A API key"
+                              />
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme?.type === 'http' && String(selectedA2AAuthScheme.config.scheme || 'Bearer').toLowerCase() === 'basic' && (
+                            <>
+                              <div>
+                                <label htmlFor="a2a_auth_username" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Username
+                                </label>
+                                <input
+                                  type="text"
+                                  id="a2a_auth_username"
+                                  value={formData.a2a_auth_config.username || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('username', e.target.value)}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Enter the HTTP Basic username"
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor="a2a_auth_password" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Password
+                                </label>
+                                <input
+                                  type="password"
+                                  id="a2a_auth_password"
+                                  value={formData.a2a_auth_config.password || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('password', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.password || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('password', '');
+                                    }
+                                  }}
+                                  autoComplete="off"
+                                  data-lpignore="true"
+                                  data-form-type="other"
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Enter the HTTP Basic password"
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          {selectedA2AAuthScheme && (
+                            (selectedA2AAuthScheme.type === 'oauth2'
+                              || selectedA2AAuthScheme.type === 'openIdConnect'
+                              || (selectedA2AAuthScheme.type === 'http'
+                                && String(selectedA2AAuthScheme.config.scheme || 'Bearer').toLowerCase() !== 'basic'))
+                          ) && (
+                            <div className="md:col-span-2">
+                              <label htmlFor="a2a_auth_bearer_token" className="block text-sm font-medium text-gray-700 mb-2">
+                                Access Token
+                              </label>
+                              <input
+                                type="password"
+                                id="a2a_auth_bearer_token"
+                                value={formData.a2a_auth_config.bearer_token || ''}
+                                onChange={(e) => handleA2AAuthConfigChange('bearer_token', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if ((formData.a2a_auth_config.bearer_token || '').startsWith('****') && e.key.length === 1) {
+                                    handleA2AAuthConfigChange('bearer_token', '');
+                                  }
+                                }}
+                                autoComplete="off"
+                                data-lpignore="true"
+                                data-form-type="other"
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter the bearer token MattinAI should forward"
+                              />
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme?.type === 'mtls' && (
+                            <>
+                              <div className="md:col-span-2">
+                                <label htmlFor="a2a_auth_client_certificate" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Client Certificate (PEM)
+                                </label>
+                                <textarea
+                                  id="a2a_auth_client_certificate"
+                                  value={formData.a2a_auth_config.client_certificate || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('client_certificate', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.client_certificate || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('client_certificate', '');
+                                    }
+                                  }}
+                                  rows={4}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="-----BEGIN CERTIFICATE-----"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label htmlFor="a2a_auth_client_key" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Client Key (PEM)
+                                </label>
+                                <textarea
+                                  id="a2a_auth_client_key"
+                                  value={formData.a2a_auth_config.client_key || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('client_key', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.client_key || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('client_key', '');
+                                    }
+                                  }}
+                                  rows={4}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="-----BEGIN PRIVATE KEY-----"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label htmlFor="a2a_auth_ca_certificate" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Custom CA Certificate (Optional)
+                                </label>
+                                <textarea
+                                  id="a2a_auth_ca_certificate"
+                                  value={formData.a2a_auth_config.ca_certificate || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('ca_certificate', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.ca_certificate || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('ca_certificate', '');
+                                    }
+                                  }}
+                                  rows={4}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="-----BEGIN CERTIFICATE-----"
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {a2aError && (
                       <p className="mt-3 text-sm text-red-700">{a2aError}</p>

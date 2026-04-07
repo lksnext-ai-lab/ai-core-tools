@@ -297,7 +297,9 @@ class A2AExecutorService:
                     )
 
             with trace_cm as remote_run:
-                async with httpx.AsyncClient(
+                async with A2AService.create_authenticated_httpx_client(
+                    card_snapshot=getattr(agent.a2a_config, "remote_agent_metadata", None),
+                    auth_config=getattr(agent.a2a_config, "auth_config", None),
                     timeout=timeout,
                     follow_redirects=True,
                 ) as httpx_client:

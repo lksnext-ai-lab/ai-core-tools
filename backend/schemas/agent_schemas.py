@@ -6,6 +6,20 @@ from models.agent import DEFAULT_AGENT_TEMPERATURE
 # ==================== AGENT SCHEMAS ====================
 
 
+class A2AAgentAuthConfigSchema(BaseModel):
+    """Authentication configuration for outbound A2A calls."""
+
+    scheme_name: Optional[str] = None
+    scheme_type: Literal["none", "apiKey", "http", "oauth2", "openIdConnect", "mtls"] = "none"
+    api_key: Optional[str] = None
+    bearer_token: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    client_certificate: Optional[str] = None
+    client_key: Optional[str] = None
+    ca_certificate: Optional[str] = None
+
+
 class A2AAgentSourceConfigSchema(BaseModel):
     """Source linkage payload submitted when importing an A2A agent."""
 
@@ -14,6 +28,7 @@ class A2AAgentSourceConfigSchema(BaseModel):
     selected_skill_name: Optional[str] = None
     card_snapshot: Optional[Dict[str, Any]] = None
     skill_snapshot: Optional[Dict[str, Any]] = None
+    auth_config: Optional[A2AAgentAuthConfigSchema] = None
 
 
 class A2AAgentDetailSchema(BaseModel):
@@ -23,6 +38,7 @@ class A2AAgentDetailSchema(BaseModel):
     remote_agent_id: Optional[str] = None
     remote_skill_id: str
     remote_skill_name: str
+    auth_config: Optional[A2AAgentAuthConfigSchema] = None
     remote_agent_metadata: Dict[str, Any]
     remote_skill_metadata: Dict[str, Any]
     sync_status: str

@@ -407,10 +407,16 @@ async def create_or_update_agent(
     """
     # App access validation would be implemented here
     canonical_a2a_config = None
+    existing_a2a_auth_config = None
+    if agent_id != 0:
+        existing_agent = agent_service.get_agent(db, agent_id)
+        existing_a2a_auth_config = getattr(getattr(existing_agent, "a2a_config", None), "auth_config", None)
+
     if agent_data.source_type == 'a2a' and agent_data.a2a_config:
         try:
             canonical_a2a_config = await A2AService.validate_source_config(
-                agent_data.a2a_config.model_dump()
+                agent_data.a2a_config.model_dump(),
+                existing_auth_config=existing_a2a_auth_config,
             )
         except ValueError as exc:
             raise HTTPException(
@@ -451,7 +457,12 @@ async def create_or_update_agent(
         'a2a_config': canonical_a2a_config,
     }
     
-    logger.info(f"Creating/updating agent with data: {agent_dict}")
+    safe_agent_dict = dict(agent_dict)
+    safe_a2a_config = dict(safe_agent_dict.get('a2a_config') or {})
+    if safe_a2a_config.get('auth_config'):
+        safe_a2a_config['auth_config'] = {'configured': True}
+    safe_agent_dict['a2a_config'] = safe_a2a_config or None
+    logger.info(f"Creating/updating agent with data: {safe_agent_dict}")
     
     try:
         # Create or update agent

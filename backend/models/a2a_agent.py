@@ -20,6 +20,7 @@ class A2AAgent(Base):
     remote_agent_id = Column(String(512), nullable=True)
     remote_skill_id = Column(String(255), nullable=False)
     remote_skill_name = Column(String(255), nullable=False)
+    auth_config = Column(JSON, nullable=True)
     remote_agent_metadata = Column(JSON, nullable=False, default=dict)
     remote_skill_metadata = Column(JSON, nullable=False, default=dict)
     sync_status = Column(String(32), nullable=False, default="synced")
