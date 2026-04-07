@@ -109,6 +109,7 @@ class AgentExecutionService:
                 ctx.session_id_for_cache,
                 ctx.user_context,
                 ctx.image_files,
+                ctx.processed_files,
                 working_dir=ctx.working_dir,
             )
 
@@ -180,6 +181,8 @@ class AgentExecutionService:
                     "type": file_ref.file_type,
                     "file_id": file_ref.file_id,
                     "file_path": file_ref.file_path,
+                    "mime_type": getattr(file_ref, "mime_type", None),
+                    "file_size_bytes": getattr(file_ref, "file_size_bytes", None),
                 })
 
         # 6. Get / create conversation for memory-enabled agents
@@ -982,6 +985,7 @@ class AgentExecutionService:
         session_id_for_cache: str = None,
         user_context: Dict = None,
         image_files: List[Dict] = None,
+        attachment_files: List[Dict] = None,
         working_dir: Optional[str] = None
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
@@ -1000,6 +1004,7 @@ class AgentExecutionService:
                 fresh_agent,
                 message,
                 user_context=user_context,
+                attachment_files=attachment_files,
             )
 
         import langsmith as ls

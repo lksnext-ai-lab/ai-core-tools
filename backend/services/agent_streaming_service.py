@@ -127,6 +127,7 @@ class AgentStreamingService:
                     ctx.fresh_agent,
                     ctx.enhanced_message,
                     user_context=ctx.user_context,
+                    attachment_files=ctx.processed_files,
                 ):
                     if event["type"] == SSE_TOKEN:
                         accumulated_content += event["data"].get("content", "")

@@ -77,10 +77,17 @@ async def test_execute_reports_direct_langsmith_trace_for_a2a(monkeypatch):
     langsmith_config = {"client": object(), "project_name": "demo-project"}
     captured = {}
 
-    async def fake_iterate_remote_events(agent_arg, message_arg, user_context=None, langsmith_config=None):
+    async def fake_iterate_remote_events(
+        agent_arg,
+        message_arg,
+        user_context=None,
+        attachment_files=None,
+        langsmith_config=None,
+    ):
         captured["agent"] = agent_arg
         captured["message"] = message_arg
         captured["user_context"] = user_context
+        captured["attachment_files"] = attachment_files
         captured["langsmith_config"] = langsmith_config
         yield {"type": "token", "data": {"content": "partial"}}
         yield {"type": "final", "data": {"content": "final remote reply"}}
@@ -93,9 +100,13 @@ async def test_execute_reports_direct_langsmith_trace_for_a2a(monkeypatch):
             agent,
             "hello world",
             user_context={"app_id": 42, "user_id": 99},
+            attachment_files=[{"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}],
         )
 
     assert result == "final remote reply"
+    assert captured["attachment_files"] == [
+        {"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}
+    ]
     assert captured["langsmith_config"] is langsmith_config
     assert len(tracing_context_entries) == 1
     assert tracing_context_entries[0]["project_name"] == "demo-project"
@@ -121,7 +132,13 @@ async def test_stream_reports_direct_langsmith_trace_for_a2a(monkeypatch):
     langsmith_config = {"client": object(), "project_name": "demo-project"}
     emitted_events = []
 
-    async def fake_iterate_remote_events(agent_arg, message_arg, user_context=None, langsmith_config=None):
+    async def fake_iterate_remote_events(
+        agent_arg,
+        message_arg,
+        user_context=None,
+        attachment_files=None,
+        langsmith_config=None,
+    ):
         yield {"type": "thinking", "data": {"content": "working", "message": "working"}}
         yield {"type": "token", "data": {"content": "streamed text"}}
         yield {"type": "final", "data": {"content": "streamed text"}}
@@ -134,6 +151,7 @@ async def test_stream_reports_direct_langsmith_trace_for_a2a(monkeypatch):
             agent,
             "stream this",
             user_context={"app_id": 42, "user_id": 99},
+            attachment_files=[{"filename": "brief.pdf", "file_path": "conversations/1/brief.pdf", "type": "pdf"}],
         ):
             emitted_events.append(event)
 
@@ -151,3 +169,68 @@ async def test_stream_reports_direct_langsmith_trace_for_a2a(monkeypatch):
         "streaming": True,
         "emitted_token": True,
     }
+
+
+def test_build_request_message_includes_binary_file_parts(tmp_path):
+    service = A2AExecutorService()
+    upload_dir = tmp_path / "conversations" / "12"
+    upload_dir.mkdir(parents=True)
+    (upload_dir / "diagram.png").write_bytes(b"png-bytes")
+    (upload_dir / "brief.pdf").write_bytes(b"%PDF-1.4")
+
+    with patch("utils.config.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}):
+        message = service._build_request_message(
+            "Please review the attachments",
+            attachment_files=[
+                {
+                    "file_id": "img-1",
+                    "filename": "diagram.png",
+                    "file_path": "conversations/12/diagram.png",
+                    "type": "image",
+                },
+                {
+                    "file_id": "pdf-1",
+                    "filename": "brief.pdf",
+                    "file_path": "conversations/12/brief.pdf",
+                    "type": "pdf",
+                    "mime_type": "application/pdf",
+                },
+            ],
+        )
+
+    assert message.role.value == "user"
+    assert len(message.parts) == 3
+    assert message.parts[0].root.kind == "text"
+    assert message.parts[0].root.text == "Please review the attachments"
+
+    image_part = message.parts[1].root
+    assert image_part.kind == "file"
+    assert image_part.file.name == "diagram.png"
+    assert image_part.file.mime_type == "image/png"
+    assert image_part.metadata == {"file_id": "img-1", "file_type": "image"}
+
+    pdf_part = message.parts[2].root
+    assert pdf_part.kind == "file"
+    assert pdf_part.file.name == "brief.pdf"
+    assert pdf_part.file.mime_type == "application/pdf"
+    assert pdf_part.metadata == {"file_id": "pdf-1", "file_type": "pdf"}
+
+
+def test_build_request_message_skips_unreadable_attachments(tmp_path):
+    service = A2AExecutorService()
+
+    with patch("utils.config.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}):
+        message = service._build_request_message(
+            "Hello",
+            attachment_files=[
+                {
+                    "file_id": "missing-1",
+                    "filename": "missing.png",
+                    "file_path": "conversations/99/missing.png",
+                    "type": "image",
+                }
+            ],
+        )
+
+    assert len(message.parts) == 1
+    assert message.parts[0].root.text == "Hello"

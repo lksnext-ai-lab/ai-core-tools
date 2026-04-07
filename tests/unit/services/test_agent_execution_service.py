@@ -242,10 +242,16 @@ class TestSuccessfulExecution:
                 agent,
                 "hello",
                 user_context={"user_id": 1},
+                attachment_files=[{"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}],
             )
 
         assert result == "Remote reply"
-        mock_execute.assert_awaited_once()
+        mock_execute.assert_awaited_once_with(
+            agent,
+            "hello",
+            user_context={"user_id": 1},
+            attachment_files=[{"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}],
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
+import os
 from contextlib import nullcontext
 from typing import Any, AsyncGenerator, Optional
+from uuid import uuid4
 
 from models.agent import Agent
 from services.a2a_service import A2AService
@@ -69,13 +73,15 @@ class A2AExecutorService:
         agent: Agent,
         message: str,
         user_context: Optional[dict[str, Any]] = None,
+        attachment_files: Optional[list[dict[str, Any]]] = None,
     ) -> str:
         logger.info(
-            "Starting A2A execute for agent_id=%s card_url=%s skill_id=%s message_len=%s",
+            "Starting A2A execute for agent_id=%s card_url=%s skill_id=%s message_len=%s attachment_count=%s",
             agent.agent_id,
             getattr(agent.a2a_config, "card_url", None),
             getattr(agent.a2a_config, "remote_skill_id", None),
             len(message or ""),
+            len(attachment_files or []),
         )
         langsmith_config = self._get_langsmith_config(agent)
         trace_metadata = self._build_trace_metadata(agent, user_context=user_context)
@@ -118,6 +124,7 @@ class A2AExecutorService:
                     agent,
                     message,
                     user_context,
+                    attachment_files=attachment_files,
                     langsmith_config=langsmith_config,
                 ):
                     if event["type"] == "token":
@@ -153,13 +160,15 @@ class A2AExecutorService:
         agent: Agent,
         message: str,
         user_context: Optional[dict[str, Any]] = None,
+        attachment_files: Optional[list[dict[str, Any]]] = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         logger.info(
-            "Starting A2A stream for agent_id=%s card_url=%s skill_id=%s message_len=%s",
+            "Starting A2A stream for agent_id=%s card_url=%s skill_id=%s message_len=%s attachment_count=%s",
             agent.agent_id,
             getattr(agent.a2a_config, "card_url", None),
             getattr(agent.a2a_config, "remote_skill_id", None),
             len(message or ""),
+            len(attachment_files or []),
         )
         emitted_token = False
         langsmith_config = self._get_langsmith_config(agent)
@@ -204,6 +213,7 @@ class A2AExecutorService:
                     agent,
                     message,
                     user_context,
+                    attachment_files=attachment_files,
                     langsmith_config=langsmith_config,
                 ):
                     if event["type"] == "token":
@@ -246,11 +256,12 @@ class A2AExecutorService:
         agent: Agent,
         message: str,
         user_context: Optional[dict[str, Any]] = None,
+        attachment_files: Optional[list[dict[str, Any]]] = None,
         langsmith_config: Optional[dict[str, Any]] = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         try:
             import httpx
-            from a2a.client import ClientConfig, ClientFactory, create_text_message_object
+            from a2a.client import ClientConfig, ClientFactory
             from a2a.types import Message, TransportProtocol
         except ImportError as exc:
             raise RuntimeError(
@@ -283,6 +294,7 @@ class A2AExecutorService:
                             "base_url": base_url,
                             "relative_card_path": relative_card_path,
                             "request_metadata": request_metadata,
+                            "attachment_count": len(attachment_files or []),
                         },
                         metadata=self._build_trace_metadata(
                             agent,
@@ -328,15 +340,19 @@ class A2AExecutorService:
                     )
 
                     async with client:
-                        request_message = create_text_message_object(content=message)
+                        request_message = self._build_request_message(
+                            message,
+                            attachment_files=attachment_files,
+                        )
                         final_text = ""
                         status_updates = 0
                         artifact_updates = 0
                         logger.info(
-                            "Sending A2A message for agent_id=%s skill_id=%s metadata=%s",
+                            "Sending A2A message for agent_id=%s skill_id=%s metadata=%s attachment_count=%s",
                             agent.agent_id,
                             agent.a2a_config.remote_skill_id,
                             request_metadata,
+                            max(len(request_message.parts) - 1, 0),
                         )
 
                         async for response in client.send_message(
@@ -416,6 +432,118 @@ class A2AExecutorService:
                 exc_info=True,
             )
             raise
+
+    def _build_request_message(
+        self,
+        message: str,
+        *,
+        attachment_files: Optional[list[dict[str, Any]]] = None,
+    ) -> Any:
+        try:
+            from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+        except ImportError as exc:
+            raise RuntimeError(
+                "A2A execution requires the optional 'a2a-sdk' dependency to be installed."
+            ) from exc
+
+        parts = [Part(TextPart(text=message or ""))]
+        for file_data in attachment_files or []:
+            file_part = self._build_file_part(
+                file_data,
+                FilePart=FilePart,
+                FileWithBytes=FileWithBytes,
+            )
+            if file_part is not None:
+                parts.append(Part(file_part))
+
+        return Message(
+            role=Role.user,
+            parts=parts,
+            messageId=str(uuid4()),
+        )
+
+    def _build_file_part(
+        self,
+        file_data: dict[str, Any],
+        *,
+        FilePart: Any,
+        FileWithBytes: Any,
+    ) -> Any | None:
+        absolute_path = self._resolve_attachment_path(file_data)
+        if not absolute_path:
+            logger.warning(
+                "Skipping A2A attachment without readable file path: file_id=%s filename=%s",
+                file_data.get("file_id"),
+                file_data.get("filename"),
+            )
+            return None
+
+        try:
+            with open(absolute_path, "rb") as handle:
+                encoded_bytes = base64.b64encode(handle.read()).decode("utf-8")
+        except OSError as exc:
+            logger.warning(
+                "Failed to read A2A attachment %s from %s: %s",
+                file_data.get("filename") or absolute_path,
+                absolute_path,
+                exc,
+            )
+            return None
+
+        filename = file_data.get("filename") or os.path.basename(absolute_path)
+        mime_type = self._resolve_attachment_mime_type(file_data, absolute_path)
+
+        return FilePart(
+            file=FileWithBytes(
+                bytes=encoded_bytes,
+                mimeType=mime_type,
+                name=filename,
+            ),
+            metadata={
+                "file_id": file_data.get("file_id"),
+                "file_type": file_data.get("type"),
+            },
+        )
+
+    def _resolve_attachment_path(self, file_data: dict[str, Any]) -> str | None:
+        raw_path = (file_data.get("file_path") or "").strip()
+        if not raw_path:
+            return None
+
+        if os.path.isabs(raw_path):
+            return raw_path if os.path.exists(raw_path) else None
+
+        from utils.config import get_app_config
+
+        tmp_base_folder = os.path.abspath(get_app_config()["TMP_BASE_FOLDER"])
+        candidate = os.path.abspath(os.path.join(tmp_base_folder, raw_path.lstrip("/\\")))
+        if candidate != tmp_base_folder and not candidate.startswith(f"{tmp_base_folder}{os.sep}"):
+            logger.warning("Rejected A2A attachment path outside TMP_BASE_FOLDER: %s", raw_path)
+            return None
+
+        return candidate if os.path.exists(candidate) else None
+
+    def _resolve_attachment_mime_type(
+        self,
+        file_data: dict[str, Any],
+        absolute_path: str,
+    ) -> str:
+        mime_type = file_data.get("mime_type")
+        if isinstance(mime_type, str) and mime_type.strip():
+            return mime_type.strip()
+
+        guessed_mime, _ = mimetypes.guess_type(file_data.get("filename") or absolute_path)
+        if guessed_mime:
+            return guessed_mime
+
+        file_type = file_data.get("type")
+        if file_type == "image":
+            return "image/jpeg"
+        if file_type == "pdf":
+            return "application/pdf"
+        if file_type == "text":
+            return "text/plain"
+        return "application/octet-stream"
 
     def _task_to_text(self, task: Any) -> str:
         if task is None:
