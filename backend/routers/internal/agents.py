@@ -315,6 +315,45 @@ async def discover_a2a_card(
         ) from exc
 
 
+@agents_router.post(
+    "/{agent_id}/refresh-a2a-card",
+    summary="Refresh imported A2A agent metadata",
+    tags=["Agents"],
+    response_model=AgentDetailSchema,
+)
+async def refresh_a2a_card(
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
+):
+    """Refresh the cached agent card metadata for an imported A2A agent."""
+    agent = _get_agent_or_404(db, agent_id, app_id)
+    if not getattr(agent, "a2a_config", None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only imported A2A agents can refresh a remote agent card",
+        )
+
+    try:
+        await A2AService.refresh_card(agent.a2a_config, db)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+    refreshed_agent = agent_service.get_agent_detail(db, app_id, agent_id)
+    if not refreshed_agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=AGENT_NOT_FOUND_ERROR,
+        )
+    return refreshed_agent
+
+
 @agents_router.get("/{agent_id}",
                   summary="Get agent details",
                   tags=["Agents"],

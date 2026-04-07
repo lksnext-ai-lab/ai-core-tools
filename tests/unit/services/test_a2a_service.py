@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -165,3 +166,97 @@ async def test_create_authenticated_httpx_client_applies_query_api_key():
         timeout=timeout,
     ) as client:
         assert client.params["token"] == "secret-query-token"
+
+
+@pytest.mark.asyncio
+async def test_refresh_card_updates_cached_metadata(monkeypatch):
+    card_snapshot = {
+        "url": "https://remote.example.com",
+        "name": "Remote Agent",
+        "skills": [{"id": "skill-1", "name": "Updated Search"}],
+        "documentationUrl": "https://docs.example.com/agent",
+        "iconUrl": "https://docs.example.com/icon.png",
+    }
+    card = _make_card(card_snapshot, [_make_skill("skill-1", "Updated Search")])
+    record = SimpleNamespace(
+        agent_id=7,
+        card_url="https://remote.example.com/.well-known/agent-card.json",
+        remote_agent_id="https://remote.example.com/old",
+        remote_skill_id="skill-1",
+        remote_skill_name="Search",
+        remote_agent_metadata={"name": "Old Agent"},
+        remote_skill_metadata={"id": "skill-1", "name": "Search"},
+        sync_status="error",
+        health_status="degraded",
+        last_successful_refresh_at=None,
+        last_refresh_attempt_at=None,
+        last_refresh_error="stale",
+        documentation_url=None,
+        icon_url=None,
+    )
+    db = MagicMock()
+
+    async def fake_resolve(card_url: str):
+        return card
+
+    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+
+    refreshed = await A2AService.refresh_card(record, db)
+
+    assert refreshed is record
+    assert record.remote_agent_id == "https://remote.example.com"
+    assert record.remote_skill_name == "Updated Search"
+    assert record.remote_agent_metadata == card_snapshot
+    assert record.remote_skill_metadata == {"id": "skill-1", "name": "Updated Search"}
+    assert record.sync_status == A2AService.SYNCED
+    assert record.health_status == A2AService.HEALTHY
+    assert record.last_refresh_error is None
+    assert record.last_successful_refresh_at is not None
+    assert record.last_refresh_attempt_at == record.last_successful_refresh_at
+    db.add.assert_called_once_with(record)
+    db.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_refresh_card_marks_agent_invalid_when_selected_skill_disappears(monkeypatch):
+    card_snapshot = {
+        "url": "https://remote.example.com",
+        "name": "Remote Agent",
+        "skills": [{"id": "skill-2", "name": "Other Skill"}],
+    }
+    card = _make_card(card_snapshot, [_make_skill("skill-2", "Other Skill")])
+    record = SimpleNamespace(
+        agent_id=7,
+        card_url="https://remote.example.com/.well-known/agent-card.json",
+        remote_agent_id="https://remote.example.com",
+        remote_skill_id="skill-1",
+        remote_skill_name="Search",
+        remote_agent_metadata={"name": "Old Agent"},
+        remote_skill_metadata={"id": "skill-1", "name": "Search"},
+        sync_status="synced",
+        health_status="healthy",
+        last_successful_refresh_at=None,
+        last_refresh_attempt_at=None,
+        last_refresh_error=None,
+        documentation_url=None,
+        icon_url=None,
+    )
+    db = MagicMock()
+
+    async def fake_resolve(card_url: str):
+        return card
+
+    monkeypatch.setattr(A2AService, "_resolve_agent_card", fake_resolve)
+
+    refreshed = await A2AService.refresh_card(record, db)
+
+    assert refreshed is record
+    assert record.remote_agent_metadata == card_snapshot
+    assert record.remote_skill_metadata == {"id": "skill-1", "name": "Search"}
+    assert record.sync_status == A2AService.ERROR
+    assert record.health_status == A2AService.INVALID
+    assert "skill-1" in (record.last_refresh_error or "")
+    assert record.last_successful_refresh_at is None
+    assert record.last_refresh_attempt_at is not None
+    db.add.assert_called_once_with(record)
+    db.commit.assert_called_once()

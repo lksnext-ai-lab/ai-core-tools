@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -256,6 +256,8 @@ function AgentFormPage() {
   const [a2aDiscovery, setA2aDiscovery] = useState<{ card: AgentCard; skills: AgentSkill[] } | null>(null);
   const [a2aLoading, setA2aLoading] = useState(false);
   const [a2aError, setA2aError] = useState<string | null>(null);
+  const [a2aRefreshLoading, setA2aRefreshLoading] = useState(false);
+  const [a2aRefreshSuccess, setA2aRefreshSuccess] = useState<string | null>(null);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -459,6 +461,7 @@ function AgentFormPage() {
 
   const handleSourceTypeChange = (sourceType: AgentSourceType) => {
     setA2aError(null);
+    setA2aRefreshSuccess(null);
     if (sourceType === 'local') {
       setA2aDiscovery(null);
       setFormData(prev => ({
@@ -507,6 +510,7 @@ function AgentFormPage() {
     try {
       setA2aLoading(true);
       setA2aError(null);
+      setA2aRefreshSuccess(null);
       const discovery = await discoverA2ACard(Number.parseInt(appId), formData.a2a_card_url.trim());
       const discoveredSchemes = extractA2ASecuritySchemes(discovery.card);
       setA2aDiscovery({ card: discovery.card, skills: discovery.skills });
@@ -556,6 +560,62 @@ function AgentFormPage() {
     if (!selectedSkill) return;
     applyImportedA2ASkill(a2aDiscovery.card, selectedSkill);
   };
+
+  const handleRefreshA2ACard = useCallback(async () => {
+    if (!appId || !agentId || Number.parseInt(agentId) === 0 || !agent?.a2a_config) {
+      return;
+    }
+
+    try {
+      setA2aRefreshLoading(true);
+      setA2aRefreshSuccess(null);
+      setA2aError(null);
+
+      const refreshedAgent = await apiService.refreshA2ACard(
+        Number.parseInt(appId),
+        Number.parseInt(agentId),
+      );
+      setAgent(refreshedAgent);
+
+      const refreshedConfig = refreshedAgent.a2a_config;
+      const savedConfig = agent.a2a_config;
+      const shouldSyncVisibleA2AState = Boolean(
+        refreshedConfig
+        && savedConfig
+        && formData.a2a_card_url === savedConfig.card_url
+        && formData.a2a_selected_skill_id === savedConfig.remote_skill_id,
+      );
+
+      if (refreshedConfig && shouldSyncVisibleA2AState) {
+        const refreshedCard = refreshedConfig.remote_agent_metadata as AgentCard;
+        const refreshedSkills = Array.isArray(refreshedCard?.skills) ? refreshedCard.skills as AgentSkill[] : [];
+        setA2aDiscovery(refreshedCard ? { card: refreshedCard, skills: refreshedSkills } : null);
+        setFormData(prev => ({
+          ...prev,
+          a2a_selected_skill_name: refreshedConfig.remote_skill_name || prev.a2a_selected_skill_name,
+          a2a_card_snapshot: refreshedConfig.remote_agent_metadata || prev.a2a_card_snapshot,
+          a2a_skill_snapshot: refreshedConfig.remote_skill_metadata || prev.a2a_skill_snapshot,
+        }));
+      }
+
+      if (refreshedConfig?.last_refresh_error) {
+        setA2aError(refreshedConfig.last_refresh_error);
+        return;
+      }
+
+      setA2aRefreshSuccess('Remote A2A metadata refreshed successfully.');
+    } catch (err) {
+      setA2aError(err instanceof Error ? err.message : 'Failed to refresh the remote A2A agent card');
+    } finally {
+      setA2aRefreshLoading(false);
+    }
+  }, [
+    agent,
+    agentId,
+    appId,
+    formData.a2a_card_url,
+    formData.a2a_selected_skill_id,
+  ]);
 
   // Marketplace handlers
   const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
@@ -1120,17 +1180,39 @@ function AgentFormPage() {
                       </div>
                     )}
 
-                    {a2aError && (
-                      <p className="mt-3 text-sm text-red-700">{a2aError}</p>
-                    )}
-
                     {agent?.a2a_config && (
                       <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                        <p className="font-medium text-gray-900">Saved external state</p>
-                        <p className="mt-1">Health: {agent.a2a_config.health_status}</p>
-                        <p>Sync: {agent.a2a_config.sync_status}</p>
-                        <p>Imported skill: {agent.a2a_config.remote_skill_name}</p>
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-medium text-gray-900">Saved external state</p>
+                            <p className="mt-1">Health: {agent.a2a_config.health_status}</p>
+                            <p>Sync: {agent.a2a_config.sync_status}</p>
+                            <p>Imported skill: {agent.a2a_config.remote_skill_name}</p>
+                            {agent.a2a_config.last_successful_refresh_at && (
+                              <p>Last successful refresh: {new Date(agent.a2a_config.last_successful_refresh_at).toLocaleString()}</p>
+                            )}
+                          </div>
+                          {!isNewAgent && (
+                            <button
+                              type="button"
+                              onClick={() => { void handleRefreshA2ACard(); }}
+                              disabled={a2aRefreshLoading}
+                              className="inline-flex shrink-0 items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <RefreshCw className={`mr-2 h-4 w-4 ${a2aRefreshLoading ? 'animate-spin' : ''}`} />
+                              {a2aRefreshLoading ? 'Refreshing...' : 'Refresh metadata'}
+                            </button>
+                          )}
+                        </div>
                       </div>
+                    )}
+
+                    {a2aRefreshSuccess && (
+                      <p className="mt-3 text-sm text-emerald-700">{a2aRefreshSuccess}</p>
+                    )}
+
+                    {a2aError && (
+                      <p className="mt-3 text-sm text-red-700">{a2aError}</p>
                     )}
                   </div>
                 )}

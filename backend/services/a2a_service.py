@@ -435,6 +435,75 @@ class A2AService:
         }
 
     @staticmethod
+    async def refresh_card(record: A2AAgent, db: Session) -> A2AAgent:
+        """Refresh cached remote metadata for an imported A2A agent."""
+        if not record:
+            raise ValueError("A2A agent configuration is required")
+
+        refresh_attempt_at = datetime.utcnow()
+        record.last_refresh_attempt_at = refresh_attempt_at
+
+        try:
+            agent_card = await A2AService._resolve_agent_card(record.card_url)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            record.sync_status = A2AService.ERROR
+            record.health_status = A2AService.UNREACHABLE
+            record.last_refresh_error = str(exc)[:1000] or "Failed to refresh the remote A2A agent card"
+            db.add(record)
+            db.commit()
+            logger.warning(
+                "Failed to refresh A2A card for agent %s from %s: %s",
+                record.agent_id,
+                record.card_url,
+                exc,
+            )
+            return record
+
+        card_snapshot = agent_card.model_dump(mode="json", exclude_none=True)
+        record.remote_agent_id = agent_card.url
+        record.remote_agent_metadata = card_snapshot
+        record.documentation_url = getattr(agent_card, "documentation_url", None)
+        record.icon_url = getattr(agent_card, "icon_url", None)
+
+        selected_skill = next(
+            (skill for skill in agent_card.skills if skill.id == record.remote_skill_id),
+            None,
+        )
+        if selected_skill is None:
+            record.sync_status = A2AService.ERROR
+            record.health_status = A2AService.INVALID
+            record.last_refresh_error = (
+                f"Selected A2A skill '{record.remote_skill_id}' is no longer present in the agent card"
+            )[:1000]
+            db.add(record)
+            db.commit()
+            logger.warning(
+                "Refreshed A2A card for agent %s but skill %s is no longer present",
+                record.agent_id,
+                record.remote_skill_id,
+            )
+            return record
+
+        record.remote_skill_name = selected_skill.name
+        record.remote_skill_metadata = selected_skill.model_dump(mode="json", exclude_none=True)
+        record.sync_status = A2AService.SYNCED
+        record.health_status = A2AService.HEALTHY
+        record.last_successful_refresh_at = refresh_attempt_at
+        record.last_refresh_error = None
+        db.add(record)
+        db.commit()
+
+        logger.info(
+            "Refreshed A2A card for agent %s from %s (skill=%s)",
+            record.agent_id,
+            record.card_url,
+            record.remote_skill_id,
+        )
+        return record
+
+    @staticmethod
     def apply_source_config(record: A2AAgent, canonical_config: dict[str, Any]) -> A2AAgent:
         record.card_url = canonical_config["card_url"]
         record.remote_agent_id = canonical_config.get("remote_agent_id")
