@@ -1,6 +1,7 @@
 from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
+from pydantic import BaseModel, Field
 from models.agent import Agent
 from models.silo import Silo, SiloType
 from langchain.tools import BaseTool, tool
@@ -9,7 +10,7 @@ from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.dateTimeTools import get_current_date
 from tools.ai.fileTools import fetch_file_in_base64
 from tools.ai.workspaceTools import create_download_url_tool
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Type
 from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -94,6 +95,12 @@ def _run_async_callable_sync(async_callable, *args, **kwargs):
     if "error" in outcome:
         raise outcome["error"]
     return outcome["result"]
+
+
+class AgentToolInput(BaseModel):
+    """Explicit JSON schema for agent-backed tools."""
+
+    query: str = Field(description="The request to send to the agent tool.")
 
 
 def build_agent_tool(agent: Agent, user_context: Optional[Dict] = None) -> BaseTool:
@@ -574,6 +581,7 @@ def get_langsmith_config(agent):
 class A2ATool(BaseTool):
     name: str = "a2a_agent_tool"
     description: str = "Invoke an imported remote A2A agent"
+    args_schema: Type[BaseModel] = AgentToolInput
     agent: Agent
     user_context: Optional[Dict] = None
     executor: Any = None
@@ -596,14 +604,14 @@ class A2ATool(BaseTool):
         )
         return result.text if hasattr(result, "text") else str(result)
 
-    def _run(self, query: str, *args, **kwargs) -> str:
+    def _run(self, query: str) -> str:
         try:
             return _run_async_callable_sync(self._execute, query)
         except Exception as e:
             logger.error(f"Error executing remote agent tool {self.name}: {str(e)}")
             return f"Error executing remote agent tool: {str(e)}"
 
-    async def _arun(self, query: str, *args, **kwargs) -> str:
+    async def _arun(self, query: str) -> str:
         try:
             return await self._execute(query)
         except Exception as e:
@@ -614,6 +622,7 @@ class A2ATool(BaseTool):
 class IACTTool(BaseTool):
     name: str = "agent_tool"
     description: str = "Search for a repository"
+    args_schema: Type[BaseModel] = AgentToolInput
     agent: Agent
     user_context: Optional[Dict] = None
     react_agent: Any = None
@@ -660,7 +669,7 @@ class IACTTool(BaseTool):
             system_prompt=tool_system_prompt if tool_system_prompt else None,
         )
 
-    def _run(self, query: str, *args, **kwargs) -> str:
+    def _run(self, query: str) -> str:
         """Synchronous execution of the agent tool"""
         try:
             formatted_prompt = _format_tool_prompt(self.agent, query)
@@ -672,7 +681,7 @@ class IACTTool(BaseTool):
             logger.error(f"Error executing agent tool {self.name}: {str(e)}")
             return f"Error executing agent tool: {str(e)}"
     
-    async def _arun(self, query: str, *args, **kwargs) -> str:
+    async def _arun(self, query: str) -> str:
         """Asynchronous execution of the agent tool"""
         try:
             formatted_prompt = _format_tool_prompt(self.agent, query)

@@ -74,3 +74,24 @@ def test_iact_tool_wraps_nested_a2a_tools_without_local_llm_lookup():
 
     nested_tools = mock_create_agent.call_args.kwargs["tools"]
     assert any(isinstance(tool, agentTools.A2ATool) for tool in nested_tools)
+
+
+def test_agent_backed_tools_expose_gemini_compatible_schema():
+    remote_tool = agentTools.A2ATool(_make_agent("Remote Tool", a2a=True))
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
+    ):
+        local_tool = agentTools.IACTTool(_make_agent("Local Tool"))
+
+    for tool in (remote_tool, local_tool):
+        schema = tool.tool_call_schema.model_json_schema()
+        assert schema["properties"] == {
+            "query": {
+                "description": "The request to send to the agent tool.",
+                "title": "Query",
+                "type": "string",
+            }
+        }
+        assert schema["required"] == ["query"]
