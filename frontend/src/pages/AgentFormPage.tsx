@@ -1063,9 +1063,6 @@ function AgentFormPage() {
                               <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-800">
                                 {a2aDiscovery.skills.length} skill{a2aDiscovery.skills.length === 1 ? '' : 's'}
                               </span>
-                              <span className="rounded-full bg-emerald-100 px-2 py-1 font-medium text-emerald-800">
-                                Browser discovery OK
-                              </span>
                             </div>
                           </div>
                         </>
