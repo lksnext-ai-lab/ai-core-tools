@@ -39,6 +39,7 @@ class AgentExecutionRepository:
             selectinload(Agent.skill_associations).joinedload(AgentSkill.skill),
             # Tool agents and their relationships (critical for IACTTool)
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.ai_service),
+            selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.a2a_config),
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.silo),
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.tool_associations)
         ).filter(Agent.agent_id == agent_id).first()
