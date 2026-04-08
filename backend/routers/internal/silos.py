@@ -11,12 +11,14 @@ from services.silo_import_service import SiloImportService
 from models.silo import Silo
 
 from schemas.silo_schemas import (
-    SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema, SiloSearchSchema
+    SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema,
+    CreateSiloSchema, UpdateSiloSchema, SiloSearchSchema
 )
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import SiloExportFileSchema
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
+from utils.error_handlers import ValidationError
 
 from db.database import get_db
 
@@ -187,39 +189,75 @@ async def get_silo(
         )
 
 
-@silos_router.post("/{silo_id}",
-                   summary="Create or update silo",
+@silos_router.post("/",
+                   summary="Create silo",
                    tags=["Silos"],
-                   response_model=SiloDetailSchema)
-async def create_or_update_silo(
+                   response_model=SiloDetailSchema,
+                   status_code=status.HTTP_201_CREATED)
+async def create_silo(
     app_id: int,
-    silo_id: int,
-    silo_data: CreateUpdateSiloSchema,
+    silo_data: CreateSiloSchema,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
-    Create a new silo or update an existing one.
-    """    
-    if silo_id != 0:
-        _validate_silo_app_ownership(silo_id, app_id, db)
-    
+    Create a new silo.
+    """
     try:
-        # Create or update using the service
-        silo = SiloService.create_or_update_silo_router(app_id, silo_id, silo_data, db)
-        
-        # Return updated silo (reuse the GET logic)
-        logger.info(f"Silo created/updated successfully: {silo.silo_id}, now getting details")
-        return await get_silo(app_id, silo.silo_id, auth_context, role, db)
-        
+        silo = SiloService.create_or_update_silo_router(app_id, 0, silo_data, db)
+        logger.info(f"Silo created successfully: {silo.silo_id}")
+        return await get_silo(app_id, silo.silo_id, auth_context, db, role)
+
     except HTTPException:
         raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
-        logger.error(f"Error creating/updating silo: {str(e)}", exc_info=True)
+        logger.error(f"Error creating silo: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating/updating silo: {str(e)}"
+            detail=f"Error creating silo: {str(e)}"
+        )
+
+
+@silos_router.put("/{silo_id}",
+                  summary="Update silo",
+                  tags=["Silos"],
+                  response_model=SiloDetailSchema)
+async def update_silo(
+    app_id: int,
+    silo_id: int,
+    silo_data: UpdateSiloSchema,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """
+    Update an existing silo. Note: vector_db_type cannot be changed after creation.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+
+    try:
+        silo = SiloService.create_or_update_silo_router(app_id, silo_id, silo_data, db)
+        logger.info(f"Silo updated successfully: {silo.silo_id}")
+        return await get_silo(app_id, silo.silo_id, auth_context, db, role)
+
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error updating silo: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating silo: {str(e)}"
         )
 
 

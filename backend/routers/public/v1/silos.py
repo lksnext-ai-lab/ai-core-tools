@@ -25,7 +25,7 @@ from .schemas import (
 from .auth import get_api_key_auth, validate_api_key_for_app, validate_silo_ownership
 from db.database import get_db
 
-from schemas.silo_schemas import CreateUpdateSiloSchema, SiloSearchSchema
+from schemas.silo_schemas import CreateUpdateSiloSchema, UpdateSiloSchema, SiloSearchSchema
 
 from utils.logger import get_logger
 
@@ -153,11 +153,11 @@ async def get_silo(
 async def update_silo(
     app_id: int,
     silo_id: int,
-    silo_data: CreateUpdateSiloSchema,
+    silo_data: UpdateSiloSchema,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Update silo properties."""
+    """Update silo properties. Note: vector_db_type cannot be changed after creation."""
     validate_api_key_for_app(app_id, api_key, db)
     validate_silo_ownership(db, silo_id, app_id)
 

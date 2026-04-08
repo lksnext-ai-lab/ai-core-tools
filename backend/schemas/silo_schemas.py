@@ -41,14 +41,27 @@ class SiloDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateSiloSchema(BaseModel):
-    """Schema for creating or updating a silo"""
+class CreateSiloSchema(BaseModel):
+    """Schema for creating a new silo (vector_db_type is settable on creation only)"""
     name: str
     description: Optional[str] = None
     type: Optional[str] = None
     output_parser_id: Optional[int] = None
     embedding_service_id: Optional[int] = None
     vector_db_type: Optional[str] = None
+
+
+class UpdateSiloSchema(BaseModel):
+    """Schema for updating an existing silo (vector_db_type is immutable after creation)"""
+    name: str
+    description: Optional[str] = None
+    type: Optional[str] = None
+    output_parser_id: Optional[int] = None
+    embedding_service_id: Optional[int] = None
+
+
+# Kept for backward compatibility with the public API router
+CreateUpdateSiloSchema = CreateSiloSchema
 
 
 class SiloSearchSchema(BaseModel):

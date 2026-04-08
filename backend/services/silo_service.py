@@ -214,6 +214,15 @@ class SiloService:
                 if not silo:
                     raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
                 logger.info(f"Updating existing silo {silo_id}")
+                if (
+                    requested_vector_db_type is not None
+                    and silo.vector_db_type is not None
+                    and requested_vector_db_type != silo.vector_db_type.upper()
+                ):
+                    raise ValidationError(
+                        "vector_db_type cannot be changed after a silo has been created. "
+                        "Delete and recreate the silo to use a different vector database."
+                    )
             else:
                 # Enforce per-app silo limit before creation (SaaS mode only)
                 app_id = silo_data.get('app_id')
@@ -1215,6 +1224,8 @@ class SiloService:
         Create or update silo using router data
         """
         # Prepare form data for the service
+        # vector_db_type uses getattr so this method works with both CreateSiloSchema
+        # (which has the field) and UpdateSiloSchema (which intentionally omits it).
         form_data = {
             'silo_id': silo_id,
             'name': silo_data.name,
@@ -1223,7 +1234,7 @@ class SiloService:
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,
             'embedding_service_id': silo_data.embedding_service_id,
-            'vector_db_type': silo_data.vector_db_type
+            'vector_db_type': getattr(silo_data, 'vector_db_type', None)
         }
         
         # Create or update using the existing service
