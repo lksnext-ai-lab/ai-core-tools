@@ -386,6 +386,11 @@ async def create_or_update_agent(
         'silo_id': agent_data.silo_id,
         'output_parser_id': agent_data.output_parser_id,
         'temperature': agent_data.temperature,
+        'a2a_enabled': agent_data.a2a_enabled,
+        'a2a_name_override': agent_data.a2a_name_override,
+        'a2a_description_override': agent_data.a2a_description_override,
+        'a2a_skill_tags': agent_data.a2a_skill_tags or [],
+        'a2a_examples': agent_data.a2a_examples or [],
         # OCR-specific fields
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,

@@ -37,6 +37,11 @@ def agent_payload(
     tool_ids: list = None,
     mcp_config_ids: list = None,
     skill_ids: list = None,
+    a2a_enabled: bool = False,
+    a2a_name_override: str = None,
+    a2a_description_override: str = None,
+    a2a_skill_tags: list = None,
+    a2a_examples: list = None,
     # OCR-specific
     vision_service_id: int = None,
     vision_system_prompt: str = None,
@@ -58,6 +63,11 @@ def agent_payload(
         "tool_ids": tool_ids or [],
         "mcp_config_ids": mcp_config_ids or [],
         "skill_ids": skill_ids or [],
+        "a2a_enabled": a2a_enabled,
+        "a2a_name_override": a2a_name_override,
+        "a2a_description_override": a2a_description_override,
+        "a2a_skill_tags": a2a_skill_tags or [],
+        "a2a_examples": a2a_examples or [],
         "vision_service_id": vision_service_id,
         "vision_system_prompt": vision_system_prompt or "",
         "text_system_prompt": text_system_prompt or "",
@@ -100,6 +110,7 @@ class TestListAgents:
         self, client, fake_app, fake_agent, auth_headers, db
     ):
         """Each agent includes expected fields."""
+        fake_agent.a2a_enabled = True
         db.flush()
         response = client.get(
             f"/internal/apps/{fake_app.app_id}/agents",
@@ -114,6 +125,8 @@ class TestListAgents:
         assert "type" in agent
         assert "is_tool" in agent
         assert "created_at" in agent
+        assert "a2a_enabled" in agent
+        assert agent["a2a_enabled"] is True
 
     def test_list_agents_requires_authentication(self, client, fake_app):
         """Missing auth headers returns 401/403."""
@@ -177,6 +190,11 @@ class TestGetAgentDetails:
         self, client, fake_app, fake_agent, auth_headers, db
     ):
         """Response includes all agent fields."""
+        fake_agent.a2a_enabled = True
+        fake_agent.a2a_name_override = "Public Support Agent"
+        fake_agent.a2a_description_override = "Handles partner support through A2A"
+        fake_agent.a2a_skill_tags = ["support", "partners"]
+        fake_agent.a2a_examples = ["Summarize this support thread", "Triage this request"]
         db.flush()
         response = client.get(
             f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}",
@@ -195,6 +213,11 @@ class TestGetAgentDetails:
         assert "silo_id" in data
         assert "output_parser_id" in data
         assert "temperature" in data
+        assert data["a2a_enabled"] is True
+        assert data["a2a_name_override"] == "Public Support Agent"
+        assert data["a2a_description_override"] == "Handles partner support through A2A"
+        assert data["a2a_skill_tags"] == ["support", "partners"]
+        assert data["a2a_examples"] == ["Summarize this support thread", "Triage this request"]
 
     def test_get_agent_returns_empty_lists_for_associations(
         self, client, fake_app, fake_agent, auth_headers, db
@@ -284,6 +307,11 @@ class TestCreateAgent:
             has_memory=True,
             service_id=fake_ai_service.service_id,
             temperature=0.5,
+            a2a_enabled=True,
+            a2a_name_override="A2A Full Agent",
+            a2a_description_override="Protocol-facing description",
+            a2a_skill_tags=["triage", "documents"],
+            a2a_examples=["Classify this invoice", "Extract action items"],
         )
         response = client.post(
             f"/internal/apps/{fake_app.app_id}/agents/0",
@@ -295,6 +323,11 @@ class TestCreateAgent:
         assert agent["name"] == "Full Agent"
         assert agent["has_memory"] is True
         assert agent["temperature"] == pytest.approx(0.5)
+        assert agent["a2a_enabled"] is True
+        assert agent["a2a_name_override"] == "A2A Full Agent"
+        assert agent["a2a_description_override"] == "Protocol-facing description"
+        assert agent["a2a_skill_tags"] == ["triage", "documents"]
+        assert agent["a2a_examples"] == ["Classify this invoice", "Extract action items"]
 
     def test_create_agent_as_tool(
         self, client, fake_app, fake_ai_service, owner_headers, db
@@ -412,6 +445,30 @@ class TestUpdateAgent:
         )
         assert response.status_code == 200
         assert response.json()["temperature"] == pytest.approx(new_temp)
+
+    def test_update_agent_changes_a2a_fields(
+        self, client, fake_app, fake_agent, owner_headers, db
+    ):
+        """Updating A2A settings persists the change."""
+        db.flush()
+        response = client.post(
+            f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}",
+            json=agent_payload(
+                a2a_enabled=True,
+                a2a_name_override="Support Broker",
+                a2a_description_override="Exposed for partner automations",
+                a2a_skill_tags=["support", "routing"],
+                a2a_examples=["Route this customer issue", "Summarize this ticket"],
+            ),
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["a2a_enabled"] is True
+        assert data["a2a_name_override"] == "Support Broker"
+        assert data["a2a_description_override"] == "Exposed for partner automations"
+        assert data["a2a_skill_tags"] == ["support", "routing"]
+        assert data["a2a_examples"] == ["Route this customer issue", "Summarize this ticket"]
 
     def test_update_agent_returns_404_for_missing_agent(
         self, client, fake_app, owner_headers

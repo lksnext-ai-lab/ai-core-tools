@@ -56,6 +56,11 @@ def make_agent(
     agent.vision_service_id = None
     agent.vision_system_prompt = None
     agent.text_system_prompt = None
+    agent.a2a_enabled = False
+    agent.a2a_name_override = None
+    agent.a2a_description_override = None
+    agent.a2a_skill_tags = []
+    agent.a2a_examples = []
     return agent
 
 

@@ -21,6 +21,7 @@ interface Agent {
   name: string;
   type: string;
   is_tool: boolean;
+  a2a_enabled?: boolean;
   created_at: string;
   request_count: number;
   description?: string;
@@ -314,6 +315,11 @@ function AgentsPage() {
                   {agent.is_tool && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                       Tool 
+                    </span>
+                  )}
+                  {agent.a2a_enabled && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
+                      A2A
                     </span>
                   )}
                 </div>

@@ -50,6 +50,7 @@ from models.url import Url
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
 from routers.mcp import mcp_router
+from routers.a2a import a2a_router
 from utils.provider import initialize_provider, shutdown_provider, get_provider
 from lks_idprovider_fastapi.dependencies import get_default_provider
 
@@ -207,6 +208,7 @@ app.add_middleware(
 app.include_router(internal_router, prefix="/internal")
 app.include_router(public_v1_router, prefix="/public/v1")
 app.include_router(mcp_router, prefix="/mcp/v1", tags=["MCP"])
+app.include_router(a2a_router, tags=["A2A"])
 
 # Add client config endpoint
 @app.get("/api/internal/client-config")

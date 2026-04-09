@@ -58,6 +58,7 @@ class AgentService:
                     if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
                     else None
                 ),
+                a2a_enabled=getattr(agent, 'a2a_enabled', False) or False,
             ))
         
         return result
@@ -134,6 +135,11 @@ class AgentService:
             marketplace_profile=_serialize_marketplace_profile(
                 getattr(agent, 'marketplace_profile', None)
             ),
+            a2a_enabled=getattr(agent, 'a2a_enabled', False) or False,
+            a2a_name_override=getattr(agent, 'a2a_name_override', None),
+            a2a_description_override=getattr(agent, 'a2a_description_override', None),
+            a2a_skill_tags=getattr(agent, 'a2a_skill_tags', None) or [],
+            a2a_examples=getattr(agent, 'a2a_examples', None) or [],
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
@@ -244,6 +250,16 @@ class AgentService:
         agent.enable_code_interpreter = bool(enable_ci_value)
 
         agent.server_tools = data.get('server_tools') or []
+        if 'a2a_enabled' in data:
+            agent.a2a_enabled = bool(data.get('a2a_enabled', False))
+        if 'a2a_name_override' in data:
+            agent.a2a_name_override = data.get('a2a_name_override') or None
+        if 'a2a_description_override' in data:
+            agent.a2a_description_override = data.get('a2a_description_override') or None
+        if 'a2a_skill_tags' in data:
+            agent.a2a_skill_tags = data.get('a2a_skill_tags') or []
+        if 'a2a_examples' in data:
+            agent.a2a_examples = data.get('a2a_examples') or []
         
         # Memory management fields
         if data.get('memory_max_messages') is not None:

@@ -18,6 +18,7 @@ class AgentListItemSchema(BaseModel):
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
     marketplace_visibility: Optional[str] = None
     is_frozen: bool = False
+    a2a_enabled: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,6 +65,11 @@ class AgentDetailSchema(BaseModel):
     marketplace_visibility: Optional[str] = None
     marketplace_profile: Optional[Dict[str, Any]] = None
     is_frozen: bool = False
+    a2a_enabled: bool = False
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: List[str] = []
+    a2a_examples: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +95,11 @@ class CreateUpdateAgentSchema(BaseModel):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
+    a2a_enabled: Optional[bool] = False
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: Optional[List[str]] = []
+    a2a_examples: Optional[List[str]] = []
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
@@ -116,6 +127,7 @@ class PublicAgentSchema(BaseModel):
     has_memory: Optional[bool] = None
     create_date: Optional[datetime] = None
     request_count: int
+    a2a_enabled: bool = False
 
 
 class PublicAgentDetailSchema(BaseModel):
@@ -140,6 +152,11 @@ class PublicAgentDetailSchema(BaseModel):
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
+    a2a_enabled: bool = False
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: List[str] = []
+    a2a_examples: List[str] = []
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
@@ -165,6 +182,11 @@ class CreateAgentRequestSchema(BaseModel):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
+    a2a_enabled: Optional[bool] = False
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: Optional[List[str]] = []
+    a2a_examples: Optional[List[str]] = []
 
 
 class CreateOCRAgentRequestSchema(BaseModel):
@@ -185,6 +207,11 @@ class CreateOCRAgentRequestSchema(BaseModel):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
+    a2a_enabled: Optional[bool] = False
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: Optional[List[str]] = []
+    a2a_examples: Optional[List[str]] = []
 
 
 class UpdateAgentRequestSchema(BaseModel):
@@ -205,6 +232,11 @@ class UpdateAgentRequestSchema(BaseModel):
     tool_ids: Optional[List[int]] = None
     mcp_config_ids: Optional[List[int]] = None
     skill_ids: Optional[List[int]] = None
+    a2a_enabled: Optional[bool] = None
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: Optional[List[str]] = None
+    a2a_examples: Optional[List[str]] = None
 
 
 class UpdateOCRAgentRequestSchema(BaseModel):
