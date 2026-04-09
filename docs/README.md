@@ -44,6 +44,7 @@ The project aims to simplify the integration and use of AI technologies within L
 - [LLM Integration](ai/llm-integration.md) — Supported LLM providers, configuration, and structured output
 - [RAG & Vector Stores](ai/rag-vector-stores.md) — Silo system, vector database backends (PGVector, Qdrant), and retrieval
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
+- [A2A Integration](ai/a2a-integration.md) — High-level design for exposing Mattin AI agents as A2A-compatible agents
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
 
 ### API Reference
