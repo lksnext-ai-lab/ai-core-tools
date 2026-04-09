@@ -52,14 +52,14 @@ async def test_validate_source_config_canonicalizes_api_key_auth(monkeypatch):
 
     canonical = await A2AService.validate_source_config({
         "card_url": "https://remote.example.com/.well-known/agent-card.json",
-        "selected_skill_id": "skill-1",
         "auth_config": {
             "scheme_name": "remoteApiKey",
             "api_key": "secret-api-key",
         },
     })
 
-    assert canonical["remote_skill_id"] == "skill-1"
+    assert canonical["remote_agent_id"] == "https://remote.example.com"
+    assert canonical["remote_agent_metadata"] == card_snapshot
     assert canonical["auth_config"] == {
         "scheme_name": "remoteApiKey",
         "scheme_type": "apiKey",
@@ -91,7 +91,6 @@ async def test_validate_source_config_preserves_existing_masked_bearer_token(mon
     canonical = await A2AService.validate_source_config(
         {
             "card_url": "https://remote.example.com/.well-known/agent-card.json",
-            "selected_skill_id": "skill-1",
             "auth_config": {
                 "scheme_name": "google",
                 "bearer_token": mask_secret("existing-access-token"),
@@ -115,15 +114,15 @@ def test_serialize_record_masks_auth_config_secrets():
     record = SimpleNamespace(
         card_url="https://remote.example.com/.well-known/agent-card.json",
         remote_agent_id="https://remote.example.com",
-        remote_skill_id="skill-1",
-        remote_skill_name="Search",
         auth_config={
             "scheme_name": "remoteApiKey",
             "scheme_type": "apiKey",
             "api_key": "secret-api-key",
         },
-        remote_agent_metadata={"name": "Remote Agent"},
-        remote_skill_metadata={"id": "skill-1"},
+        remote_agent_metadata={
+            "name": "Remote Agent",
+            "skills": [{"id": "skill-1", "name": "Search"}],
+        },
         sync_status="synced",
         health_status="healthy",
         last_successful_refresh_at=None,
@@ -140,6 +139,7 @@ def test_serialize_record_masks_auth_config_secrets():
         "scheme_type": "apiKey",
         "api_key": mask_secret("secret-api-key"),
     }
+    assert serialized["advertised_skills"] == [{"id": "skill-1", "name": "Search"}]
 
 
 @pytest.mark.asyncio
@@ -182,10 +182,7 @@ async def test_refresh_card_updates_cached_metadata(monkeypatch):
         agent_id=7,
         card_url="https://remote.example.com/.well-known/agent-card.json",
         remote_agent_id="https://remote.example.com/old",
-        remote_skill_id="skill-1",
-        remote_skill_name="Search",
         remote_agent_metadata={"name": "Old Agent"},
-        remote_skill_metadata={"id": "skill-1", "name": "Search"},
         sync_status="error",
         health_status="degraded",
         last_successful_refresh_at=None,
@@ -205,9 +202,7 @@ async def test_refresh_card_updates_cached_metadata(monkeypatch):
 
     assert refreshed is record
     assert record.remote_agent_id == "https://remote.example.com"
-    assert record.remote_skill_name == "Updated Search"
     assert record.remote_agent_metadata == card_snapshot
-    assert record.remote_skill_metadata == {"id": "skill-1", "name": "Updated Search"}
     assert record.sync_status == A2AService.SYNCED
     assert record.health_status == A2AService.HEALTHY
     assert record.last_refresh_error is None
@@ -218,7 +213,7 @@ async def test_refresh_card_updates_cached_metadata(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_refresh_card_marks_agent_invalid_when_selected_skill_disappears(monkeypatch):
+async def test_refresh_card_keeps_agent_healthy_when_advertised_skills_change(monkeypatch):
     card_snapshot = {
         "url": "https://remote.example.com",
         "name": "Remote Agent",
@@ -229,10 +224,7 @@ async def test_refresh_card_marks_agent_invalid_when_selected_skill_disappears(m
         agent_id=7,
         card_url="https://remote.example.com/.well-known/agent-card.json",
         remote_agent_id="https://remote.example.com",
-        remote_skill_id="skill-1",
-        remote_skill_name="Search",
         remote_agent_metadata={"name": "Old Agent"},
-        remote_skill_metadata={"id": "skill-1", "name": "Search"},
         sync_status="synced",
         health_status="healthy",
         last_successful_refresh_at=None,
@@ -252,11 +244,10 @@ async def test_refresh_card_marks_agent_invalid_when_selected_skill_disappears(m
 
     assert refreshed is record
     assert record.remote_agent_metadata == card_snapshot
-    assert record.remote_skill_metadata == {"id": "skill-1", "name": "Search"}
-    assert record.sync_status == A2AService.ERROR
-    assert record.health_status == A2AService.INVALID
-    assert "skill-1" in (record.last_refresh_error or "")
-    assert record.last_successful_refresh_at is None
+    assert record.sync_status == A2AService.SYNCED
+    assert record.health_status == A2AService.HEALTHY
+    assert record.last_refresh_error is None
+    assert record.last_successful_refresh_at is not None
     assert record.last_refresh_attempt_at is not None
     db.add.assert_called_once_with(record)
     db.commit.assert_called_once()
@@ -311,10 +302,7 @@ async def test_refresh_card_preserves_raw_authentication_metadata(monkeypatch):
         agent_id=7,
         card_url="https://remote.example.com/.well-known/agent.json",
         remote_agent_id="https://remote.example.com/old",
-        remote_skill_id="skill-1",
-        remote_skill_name="Search",
         remote_agent_metadata={"name": "Old Agent"},
-        remote_skill_metadata={"id": "skill-1", "name": "Search"},
         sync_status="error",
         health_status="degraded",
         last_successful_refresh_at=None,

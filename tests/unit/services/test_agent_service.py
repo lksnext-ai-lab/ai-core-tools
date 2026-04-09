@@ -336,10 +336,10 @@ class TestGetAgentDetail:
         agent.a2a_config = MagicMock(
             card_url="https://example.com/.well-known/agent-card.json",
             remote_agent_id="https://example.com/a2a",
-            remote_skill_id="translate",
-            remote_skill_name="Translate",
-            remote_agent_metadata={"name": "Remote Agent"},
-            remote_skill_metadata={"id": "translate", "name": "Translate"},
+            remote_agent_metadata={
+                "name": "Remote Agent",
+                "skills": [{"id": "translate", "name": "Translate"}],
+            },
             sync_status="synced",
             health_status="healthy",
             last_successful_refresh_at=None,
@@ -371,7 +371,7 @@ class TestGetAgentDetail:
         assert result is not None
         assert result.source_type == "a2a"
         assert result.a2a_config is not None
-        assert result.a2a_config.remote_skill_id == "translate"
+        assert result.a2a_config.advertised_skills == [{"id": "translate", "name": "Translate"}]
 
 
 # ---------------------------------------------------------------------------

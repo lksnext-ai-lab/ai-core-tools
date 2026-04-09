@@ -41,15 +41,12 @@ def test_export_agent_includes_sanitized_a2a_config():
     agent.a2a_config = SimpleNamespace(
         card_url="https://remote.example.com/.well-known/agent-card.json",
         remote_agent_id="https://remote.example.com",
-        remote_skill_id="skill-1",
-        remote_skill_name="Search",
         auth_config={
             "scheme_name": "remoteApiKey",
             "scheme_type": "apiKey",
             "api_key": "super-secret",
         },
-        remote_agent_metadata={"name": "Remote Agent"},
-        remote_skill_metadata={"id": "skill-1", "name": "Search"},
+        remote_agent_metadata={"name": "Remote Agent", "skills": [{"id": "skill-1", "name": "Search"}]},
         sync_status="synced",
         health_status="healthy",
         last_successful_refresh_at=None,
@@ -73,7 +70,6 @@ def test_export_agent_includes_sanitized_a2a_config():
 
     assert export_data.agent.source_type == "a2a"
     assert export_data.agent.a2a_config is not None
-    assert export_data.agent.a2a_config.remote_skill_id == "skill-1"
     assert export_data.agent.a2a_config.auth_config is not None
     assert export_data.agent.a2a_config.auth_config.api_key is None
 
@@ -111,14 +107,11 @@ def test_import_agent_restores_a2a_config_with_pending_health():
             a2a_config=ExportA2AConfigSchema(
                 card_url="https://remote.example.com/.well-known/agent-card.json",
                 remote_agent_id="https://remote.example.com",
-                remote_skill_id="skill-1",
-                remote_skill_name="Search",
                 auth_config=ExportA2AAuthConfigSchema(
                     scheme_name="remoteApiKey",
                     scheme_type="apiKey",
                 ),
-                remote_agent_metadata={"name": "Remote Agent"},
-                remote_skill_metadata={"id": "skill-1", "name": "Search"},
+                remote_agent_metadata={"name": "Remote Agent", "skills": [{"id": "skill-1", "name": "Search"}]},
                 sync_status="synced",
                 health_status="healthy",
             ),
@@ -141,7 +134,6 @@ def test_import_agent_restores_a2a_config_with_pending_health():
 
     assert created_agent.service_id is None
     assert created_a2a.agent_id == 101
-    assert created_a2a.remote_skill_id == "skill-1"
     assert created_a2a.health_status == "pending"
     assert created_a2a.last_successful_refresh_at is None
     assert created_a2a.last_refresh_attempt_at is None
@@ -162,10 +154,7 @@ def test_import_agent_override_rejects_local_to_a2a_conversion():
             a2a_config=ExportA2AConfigSchema(
                 card_url="https://remote.example.com/.well-known/agent-card.json",
                 remote_agent_id="https://remote.example.com",
-                remote_skill_id="skill-1",
-                remote_skill_name="Search",
                 remote_agent_metadata={"name": "Remote Agent"},
-                remote_skill_metadata={"id": "skill-1", "name": "Search"},
                 sync_status="synced",
                 health_status="healthy",
             ),
@@ -202,10 +191,7 @@ def test_full_app_export_keeps_a2a_agents_without_local_ai_service():
                 a2a_config=ExportA2AConfigSchema(
                     card_url="https://remote.example.com/.well-known/agent-card.json",
                     remote_agent_id="https://remote.example.com",
-                    remote_skill_id="skill-1",
-                    remote_skill_name="Search",
                     remote_agent_metadata={"name": "Remote Agent"},
-                    remote_skill_metadata={"id": "skill-1", "name": "Search"},
                     sync_status="synced",
                     health_status="healthy",
                 ),

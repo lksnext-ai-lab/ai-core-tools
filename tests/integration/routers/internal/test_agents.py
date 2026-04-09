@@ -453,10 +453,7 @@ class TestRefreshA2ACard:
             agent_id=fake_agent.agent_id,
             card_url="https://remote.example.com/.well-known/agent-card.json",
             remote_agent_id="https://remote.example.com/old",
-            remote_skill_id="skill-1",
-            remote_skill_name="Search",
             remote_agent_metadata={"name": "Old Agent", "skills": [{"id": "skill-1", "name": "Search"}]},
-            remote_skill_metadata={"id": "skill-1", "name": "Search"},
             sync_status="error",
             health_status="unreachable",
         )
@@ -469,8 +466,6 @@ class TestRefreshA2ACard:
                 "name": "Remote Agent",
                 "skills": [{"id": "skill-1", "name": "Updated Search"}],
             }
-            record.remote_skill_metadata = {"id": "skill-1", "name": "Updated Search"}
-            record.remote_skill_name = "Updated Search"
             record.sync_status = "synced"
             record.health_status = "healthy"
             record.last_refresh_error = None
@@ -488,7 +483,7 @@ class TestRefreshA2ACard:
         data = response.json()
         assert data["source_type"] == "a2a"
         assert data["a2a_config"]["remote_agent_id"] == "https://remote.example.com"
-        assert data["a2a_config"]["remote_skill_name"] == "Updated Search"
+        assert data["a2a_config"]["advertised_skills"] == [{"id": "skill-1", "name": "Updated Search"}]
         assert data["a2a_config"]["health_status"] == "healthy"
         assert data["a2a_config"]["sync_status"] == "synced"
 

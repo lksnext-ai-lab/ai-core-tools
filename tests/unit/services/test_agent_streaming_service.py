@@ -13,7 +13,6 @@ def _make_a2a_agent() -> MagicMock:
     agent.name = "Remote Agent"
     agent.has_memory = True
     agent.a2a_config = MagicMock(
-        remote_skill_id="skill-9",
         card_url="https://example.com/.well-known/agent-card.json",
     )
     return agent

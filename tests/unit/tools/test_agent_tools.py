@@ -19,10 +19,7 @@ def _make_agent(name: str, *, prompt_template: str | None = None, a2a: bool = Fa
         agent.a2a_config = A2AAgent(
             card_url="https://example.com/.well-known/agent-card.json",
             remote_agent_id="https://example.com",
-            remote_skill_id="skill-1",
-            remote_skill_name=name,
             remote_agent_metadata={},
-            remote_skill_metadata={},
         )
     return agent
 
@@ -35,6 +32,48 @@ def test_build_agent_tool_returns_a2a_wrapper_for_imported_agent():
     assert isinstance(tool, agentTools.A2ATool)
     assert tool.name == "Say_Hello"
     assert tool.user_context == {"user_id": 7}
+
+
+def test_a2a_tool_description_is_composed_from_all_advertised_skills():
+    remote_agent = _make_agent("Remote Helper", a2a=True)
+    remote_agent.a2a_config.remote_agent_metadata = {
+        "skills": [
+            {
+                "id": "search",
+                "name": "Search",
+                "description": "Finds relevant information.",
+                "inputModes": ["text/plain", "application/pdf"],
+                "outputModes": ["text/markdown"],
+                "tags": ["research", "web"],
+                "examples": ["Find the latest release notes", "Summarize this attached PDF"],
+            },
+            {
+                "id": "summarize",
+                "name": "Summarize",
+                "description": "Condenses long content.",
+                "inputModes": ["text/plain"],
+                "outputModes": ["text/plain"],
+                "tags": ["summaries"],
+                "examples": ["Summarize this article"],
+            },
+        ],
+    }
+
+    tool = agentTools.A2ATool(remote_agent)
+
+    assert tool.description == (
+        "Advertised remote skills: "
+        "Search | description=Finds relevant information. | "
+        "input=text/plain, application/pdf | "
+        "output=text/markdown | "
+        "tags=research, web | "
+        "examples=Find the latest release notes; Summarize this attached PDF; "
+        "Summarize | description=Condenses long content. | "
+        "input=text/plain | "
+        "output=text/plain | "
+        "tags=summaries | "
+        "examples=Summarize this article"
+    )
 
 
 @pytest.mark.asyncio

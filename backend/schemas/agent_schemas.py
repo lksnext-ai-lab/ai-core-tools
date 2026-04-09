@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from models.agent import DEFAULT_AGENT_TEMPERATURE
@@ -24,10 +24,7 @@ class A2AAgentSourceConfigSchema(BaseModel):
     """Source linkage payload submitted when importing an A2A agent."""
 
     card_url: str
-    selected_skill_id: str
-    selected_skill_name: Optional[str] = None
     card_snapshot: Optional[Dict[str, Any]] = None
-    skill_snapshot: Optional[Dict[str, Any]] = None
     auth_config: Optional[A2AAgentAuthConfigSchema] = None
 
 
@@ -36,11 +33,9 @@ class A2AAgentDetailSchema(BaseModel):
 
     card_url: str
     remote_agent_id: Optional[str] = None
-    remote_skill_id: str
-    remote_skill_name: str
     auth_config: Optional[A2AAgentAuthConfigSchema] = None
     remote_agent_metadata: Dict[str, Any]
-    remote_skill_metadata: Dict[str, Any]
+    advertised_skills: List[Dict[str, Any]] = Field(default_factory=list)
     sync_status: str
     health_status: str
     last_successful_refresh_at: Optional[datetime] = None

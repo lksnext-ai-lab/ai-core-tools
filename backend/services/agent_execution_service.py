@@ -1248,9 +1248,8 @@ class AgentExecutionService:
         """
         if A2AService.is_a2a_agent(fresh_agent):
             logger.info(
-                "Routing non-streaming execution to A2A executor for agent_id=%s skill_id=%s",
+                "Routing non-streaming execution to A2A executor for agent_id=%s",
                 fresh_agent.agent_id,
-                getattr(getattr(fresh_agent, "a2a_config", None), "remote_skill_id", None),
             )
             executor = A2AExecutorService()
             return await executor.execute(

@@ -172,11 +172,8 @@ class ExportA2AConfigSchema(BaseModel):
 
     card_url: str
     remote_agent_id: Optional[str] = None
-    remote_skill_id: str
-    remote_skill_name: str
     auth_config: Optional[ExportA2AAuthConfigSchema] = None
     remote_agent_metadata: Dict[str, Any] = Field(default_factory=dict)
-    remote_skill_metadata: Dict[str, Any] = Field(default_factory=dict)
     sync_status: str
     health_status: str
     last_successful_refresh_at: Optional[datetime] = None

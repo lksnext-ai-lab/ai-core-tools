@@ -60,6 +60,58 @@ def _format_tool_prompt(agent: Agent, query: str) -> str:
     return query
 
 
+def _describe_a2a_agent_skills(agent: Agent) -> str:
+    """Build a tool description from all advertised A2A skills when available."""
+    a2a_config = getattr(agent, "a2a_config", None)
+    skills = A2AService.extract_advertised_skills(
+        getattr(a2a_config, "remote_agent_metadata", None)
+    )
+    if not skills:
+        return agent.description or "Remote agent tool"
+
+    described_skills = []
+    for skill in skills:
+        name = str(skill.get("name") or skill.get("id") or "").strip()
+        if not name:
+            continue
+        skill_details = [name]
+
+        description = str(skill.get("description") or "").strip()
+        if description:
+            skill_details.append(f"description={description}")
+
+        input_modes = skill.get("inputModes") or skill.get("input_modes") or []
+        if isinstance(input_modes, list) and input_modes:
+            normalized_inputs = [str(mode).strip() for mode in input_modes if str(mode).strip()]
+            if normalized_inputs:
+                skill_details.append(f"input={', '.join(normalized_inputs)}")
+
+        output_modes = skill.get("outputModes") or skill.get("output_modes") or []
+        if isinstance(output_modes, list) and output_modes:
+            normalized_outputs = [str(mode).strip() for mode in output_modes if str(mode).strip()]
+            if normalized_outputs:
+                skill_details.append(f"output={', '.join(normalized_outputs)}")
+
+        tags = skill.get("tags") or []
+        if isinstance(tags, list) and tags:
+            normalized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+            if normalized_tags:
+                skill_details.append(f"tags={', '.join(normalized_tags)}")
+
+        examples = skill.get("examples") or []
+        if isinstance(examples, list) and examples:
+            normalized_examples = [str(example).strip() for example in examples if str(example).strip()]
+            if normalized_examples:
+                skill_details.append(f"examples={'; '.join(normalized_examples)}")
+
+        described_skills.append(" | ".join(skill_details))
+
+    if not described_skills:
+        return agent.description or "Remote agent tool"
+
+    return "Advertised remote skills: " + "; ".join(described_skills)
+
+
 def _extract_agent_result_text(result: Any) -> str:
     """Normalize LangGraph/LangChain agent results into a plain string."""
     if isinstance(result, dict) and "messages" in result:
@@ -593,7 +645,7 @@ class A2ATool(BaseTool):
         self.user_context = user_context
         self.executor = A2AExecutorService()
         self.name = _tool_name_for_agent(agent)
-        self.description = agent.description or "Remote agent tool"
+        self.description = _describe_a2a_agent_skills(agent)
 
     async def _execute(self, query: str) -> str:
         formatted_prompt = _format_tool_prompt(self.agent, query)

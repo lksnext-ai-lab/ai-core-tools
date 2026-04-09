@@ -65,8 +65,6 @@ def _make_agent():
         a2a_config=SimpleNamespace(
             card_url="https://example.com/.well-known/agent-card.json",
             remote_agent_id="remote-agent-1",
-            remote_skill_id="skill-1",
-            remote_skill_name="Summarize",
             health_status="healthy",
             sync_status="synced",
         ),
@@ -128,7 +126,7 @@ async def test_execute_reports_direct_langsmith_trace_for_a2a(monkeypatch):
         "continuation_task_id": None,
     }
     assert root_trace["metadata"]["source_type"] == "a2a"
-    assert root_trace["metadata"]["remote_skill_id"] == "skill-1"
+    assert root_trace["metadata"]["remote_agent_id"] == "remote-agent-1"
     assert root_trace["outputs"] == {
         "response": "final remote reply",
         "response_length": len("final remote reply"),

@@ -17,7 +17,6 @@ interface Agent {
   source_type?: 'local' | 'a2a';
   has_memory?: boolean;
   a2a_config?: {
-    remote_skill_name: string;
     health_status: string;
   } | null;
   system_prompt?: string;

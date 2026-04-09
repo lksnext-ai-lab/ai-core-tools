@@ -115,9 +115,8 @@ class AgentStreamingService:
 
             if A2AService.is_a2a_agent(ctx.fresh_agent):
                 logger.info(
-                    "Routing streaming execution to A2A executor for agent_id=%s skill_id=%s conversation_id=%s",
+                    "Routing streaming execution to A2A executor for agent_id=%s conversation_id=%s",
                     ctx.fresh_agent.agent_id,
-                    getattr(getattr(ctx.fresh_agent, "a2a_config", None), "remote_skill_id", None),
                     ctx.effective_conv_id,
                 )
                 accumulated_content = ""

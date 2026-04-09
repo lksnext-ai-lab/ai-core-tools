@@ -80,8 +80,6 @@ class A2AExecutorService:
             "app_id": getattr(agent, "app_id", None),
             "remote_card_url": getattr(a2a_config, "card_url", None),
             "remote_agent_id": getattr(a2a_config, "remote_agent_id", None),
-            "remote_skill_id": getattr(a2a_config, "remote_skill_id", None),
-            "remote_skill_name": getattr(a2a_config, "remote_skill_name", None),
             "health_status": getattr(a2a_config, "health_status", None),
             "sync_status": getattr(a2a_config, "sync_status", None),
         }
@@ -102,10 +100,9 @@ class A2AExecutorService:
         memory_context: Optional[A2AMemoryContext] = None,
     ) -> A2AExecutionResult:
         logger.info(
-            "Starting A2A execute for agent_id=%s card_url=%s skill_id=%s message_len=%s attachment_count=%s",
+            "Starting A2A execute for agent_id=%s card_url=%s message_len=%s attachment_count=%s",
             agent.agent_id,
             getattr(agent.a2a_config, "card_url", None),
-            getattr(agent.a2a_config, "remote_skill_id", None),
             len(message or ""),
             len(attachment_files or []),
         )
@@ -184,9 +181,8 @@ class A2AExecutorService:
 
         if not final_result.text.strip():
             logger.warning(
-                "A2A execute finished with empty response for agent_id=%s skill_id=%s",
+                "A2A execute finished with empty response for agent_id=%s",
                 agent.agent_id,
-                getattr(agent.a2a_config, "remote_skill_id", None),
             )
         else:
             logger.info(
@@ -205,10 +201,9 @@ class A2AExecutorService:
         memory_context: Optional[A2AMemoryContext] = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         logger.info(
-            "Starting A2A stream for agent_id=%s card_url=%s skill_id=%s message_len=%s attachment_count=%s",
+            "Starting A2A stream for agent_id=%s card_url=%s message_len=%s attachment_count=%s",
             agent.agent_id,
             getattr(agent.a2a_config, "card_url", None),
-            getattr(agent.a2a_config, "remote_skill_id", None),
             len(message or ""),
             len(attachment_files or []),
         )
@@ -276,9 +271,8 @@ class A2AExecutorService:
                     yield {"type": "token", "data": {"content": final_text}}
                 elif not final_text.strip():
                     logger.warning(
-                        "A2A stream finished without content for agent_id=%s skill_id=%s",
+                        "A2A stream finished without content for agent_id=%s",
                         agent.agent_id,
-                        getattr(agent.a2a_config, "remote_skill_id", None),
                     )
                 else:
                     logger.info(
@@ -321,10 +315,6 @@ class A2AExecutorService:
 
         base_url, relative_card_path = A2AService.split_card_url(agent.a2a_config.card_url)
         timeout = httpx.Timeout(20.0, read=60.0)
-        request_metadata = {
-            "imported_skill_id": agent.a2a_config.remote_skill_id,
-            "imported_skill_name": agent.a2a_config.remote_skill_name,
-        }
 
         try:
             trace_cm = nullcontext()
@@ -341,7 +331,6 @@ class A2AExecutorService:
                             "message": message,
                             "base_url": base_url,
                             "relative_card_path": relative_card_path,
-                            "request_metadata": request_metadata,
                             "attachment_count": len(attachment_files or []),
                             "history_messages": len(memory_context.history) if memory_context else 0,
                             "continuation_task_id": (
@@ -386,9 +375,9 @@ class A2AExecutorService:
                         relative_card_path=relative_card_path,
                     )
                     logger.info(
-                        "Connected to remote A2A agent for agent_id=%s using skill_id=%s",
+                        "Connected to remote A2A agent for agent_id=%s remote_agent_id=%s",
                         agent.agent_id,
-                        agent.a2a_config.remote_skill_id,
+                        getattr(agent.a2a_config, "remote_agent_id", None),
                     )
 
                     async with client:
@@ -411,16 +400,13 @@ class A2AExecutorService:
                             latest_remote_state.get("remote_task_state"),
                         )
                         logger.info(
-                            "Sending A2A message for agent_id=%s skill_id=%s metadata=%s attachment_count=%s",
+                            "Sending A2A message for agent_id=%s attachment_count=%s",
                             agent.agent_id,
-                            agent.a2a_config.remote_skill_id,
-                            request_metadata,
                             max(len(request_message.parts) - 1, 0),
                         )
 
                         send_kwargs = self._build_send_message_kwargs(
                             client,
-                            request_metadata=request_metadata,
                             memory_context=memory_context,
                         )
                         async for response in client.send_message(request_message, **send_kwargs):
@@ -531,10 +517,9 @@ class A2AExecutorService:
                         }
         except Exception:
             logger.error(
-                "A2A execution failed for agent_id=%s card_url=%s skill_id=%s",
+                "A2A execution failed for agent_id=%s card_url=%s",
                 agent.agent_id,
                 getattr(agent.a2a_config, "card_url", None),
-                getattr(agent.a2a_config, "remote_skill_id", None),
                 exc_info=True,
             )
             raise
@@ -586,15 +571,11 @@ class A2AExecutorService:
         self,
         client: Any,
         *,
-        request_metadata: dict[str, Any],
         memory_context: Optional[A2AMemoryContext],
     ) -> dict[str, Any]:
         """Pass optional send configuration only when the SDK client supports it."""
         kwargs: dict[str, Any] = {}
         param_names, accepts_kwargs = self._get_callable_parameter_names(client.send_message)
-
-        if "request_metadata" in param_names or accepts_kwargs:
-            kwargs["request_metadata"] = request_metadata
 
         send_configuration = self._build_send_configuration(memory_context)
         if send_configuration is not None:

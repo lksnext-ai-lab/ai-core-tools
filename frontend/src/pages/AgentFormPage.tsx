@@ -29,11 +29,9 @@ type AgentSourceType = 'local' | 'a2a';
 interface A2AAgentConfig {
   card_url: string;
   remote_agent_id?: string;
-  remote_skill_id: string;
-  remote_skill_name: string;
   auth_config?: A2AAgentAuthConfig | null;
   remote_agent_metadata: Record<string, any>;
-  remote_skill_metadata: Record<string, any>;
+  advertised_skills?: AgentSkill[];
   sync_status: string;
   health_status: string;
   last_successful_refresh_at?: string | null;
@@ -103,10 +101,7 @@ interface AgentFormData {
   mcp_config_ids: number[];
   skill_ids: number[];
   a2a_card_url: string;
-  a2a_selected_skill_id: string;
-  a2a_selected_skill_name?: string;
   a2a_card_snapshot?: Record<string, any>;
-  a2a_skill_snapshot?: Record<string, any>;
   a2a_auth_config: A2AAgentAuthConfig;
   // OCR-specific fields
   vision_service_id?: number;
@@ -368,7 +363,6 @@ function AgentFormPage() {
     mcp_config_ids: [],
     skill_ids: [],
     a2a_card_url: '',
-    a2a_selected_skill_id: '',
     a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
@@ -434,10 +428,7 @@ function AgentFormPage() {
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
         a2a_card_url: response.a2a_config?.card_url || '',
-        a2a_selected_skill_id: response.a2a_config?.remote_skill_id || '',
-        a2a_selected_skill_name: response.a2a_config?.remote_skill_name || '',
         a2a_card_snapshot: response.a2a_config?.remote_agent_metadata || undefined,
-        a2a_skill_snapshot: response.a2a_config?.remote_skill_metadata || undefined,
         a2a_auth_config: response.a2a_config?.auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
@@ -551,13 +542,13 @@ function AgentFormPage() {
     }));
   };
 
-  const applyImportedA2ASkill = useCallback((card: AgentCard, skill: AgentSkill) => {
+  const applyImportedA2ACard = useCallback((card: AgentCard) => {
     setFormData(prev => ({
       ...prev,
       source_type: 'a2a',
       type: 'agent',
-      name: skill.name || card.name || prev.name,
-      description: skill.description || card.description || prev.description,
+      name: card.name || prev.name,
+      description: card.description || prev.description,
       has_memory: prev.has_memory,
       enable_code_interpreter: false,
       server_tools: [],
@@ -569,10 +560,7 @@ function AgentFormPage() {
       skill_ids: [],
       system_prompt: '',
       prompt_template: '',
-      a2a_selected_skill_id: skill.id,
-      a2a_selected_skill_name: skill.name,
       a2a_card_snapshot: card as Record<string, any>,
-      a2a_skill_snapshot: skill as Record<string, any>,
       a2a_auth_config: prev.a2a_auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
     }));
     setShowOutputParser(false);
@@ -586,10 +574,7 @@ function AgentFormPage() {
       setFormData(prev => ({
         ...prev,
         source_type: 'local',
-        a2a_selected_skill_id: '',
-        a2a_selected_skill_name: undefined,
         a2a_card_snapshot: undefined,
-        a2a_skill_snapshot: undefined,
         a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
       }));
       return;
@@ -649,36 +634,19 @@ function AgentFormPage() {
       });
 
       if (discovery.skills.length === 0) {
-        setA2aError('This A2A agent card does not expose any importable skills.');
         setFormData(prev => ({
           ...prev,
-          a2a_selected_skill_id: '',
-          a2a_selected_skill_name: undefined,
           a2a_card_snapshot: discovery.card as Record<string, any>,
-          a2a_skill_snapshot: undefined,
         }));
-        return;
       }
-
-      const selectedSkill =
-        discovery.skills.find((skill) => skill.id === formData.a2a_selected_skill_id) ||
-        discovery.skills[0];
-
-      applyImportedA2ASkill(discovery.card, selectedSkill);
+      applyImportedA2ACard(discovery.card);
     } catch (err) {
       setA2aDiscovery(null);
       setA2aError(err instanceof Error ? err.message : 'Failed to load the A2A agent card');
     } finally {
       setA2aLoading(false);
     }
-  }, [appId, applyImportedA2ASkill, formData.a2a_card_url, formData.a2a_selected_skill_id]);
-
-  const handleA2ASkillSelect = (skillId: string) => {
-    if (!a2aDiscovery) return;
-    const selectedSkill = a2aDiscovery.skills.find((skill) => skill.id === skillId);
-    if (!selectedSkill) return;
-    applyImportedA2ASkill(a2aDiscovery.card, selectedSkill);
-  };
+  }, [appId, applyImportedA2ACard, formData.a2a_card_url]);
 
   const handleRefreshA2ACard = useCallback(async () => {
     if (!appId || !agentId || Number.parseInt(agentId) === 0 || !agent?.a2a_config) {
@@ -702,7 +670,6 @@ function AgentFormPage() {
         refreshedConfig
         && savedConfig
         && formData.a2a_card_url === savedConfig.card_url
-        && formData.a2a_selected_skill_id === savedConfig.remote_skill_id,
       );
 
       if (refreshedConfig && shouldSyncVisibleA2AState) {
@@ -711,9 +678,7 @@ function AgentFormPage() {
         setA2aDiscovery(refreshedCard ? { card: refreshedCard, skills: refreshedSkills } : null);
         setFormData(prev => ({
           ...prev,
-          a2a_selected_skill_name: refreshedConfig.remote_skill_name || prev.a2a_selected_skill_name,
           a2a_card_snapshot: refreshedConfig.remote_agent_metadata || prev.a2a_card_snapshot,
-          a2a_skill_snapshot: refreshedConfig.remote_skill_metadata || prev.a2a_skill_snapshot,
         }));
       }
 
@@ -733,7 +698,6 @@ function AgentFormPage() {
     agentId,
     appId,
     formData.a2a_card_url,
-    formData.a2a_selected_skill_id,
   ]);
 
   // Marketplace handlers
@@ -831,18 +795,15 @@ function AgentFormPage() {
       text_system_prompt: formData.text_system_prompt,
         a2a_config: formData.source_type === 'a2a' ? {
           card_url: formData.a2a_card_url,
-          selected_skill_id: formData.a2a_selected_skill_id,
-          selected_skill_name: formData.a2a_selected_skill_name,
           card_snapshot: formData.a2a_card_snapshot,
-          skill_snapshot: formData.a2a_skill_snapshot,
           auth_config: formData.a2a_auth_config?.scheme_name ? formData.a2a_auth_config : undefined,
         } : undefined,
       app_id: Number.parseInt(appId),
     };
 
       if (formData.source_type === 'a2a') {
-        if (!formData.a2a_card_url || !formData.a2a_selected_skill_id) {
-          throw new Error('Load a public A2A agent card and select a skill before saving.');
+        if (!formData.a2a_card_url) {
+          throw new Error('Load a public A2A agent card before saving.');
         }
       }
 
@@ -893,7 +854,6 @@ function AgentFormPage() {
   ) || null;
   const effectiveA2ASecurityRequirements = getEffectiveA2ASecurityRequirements(
     effectiveA2ACard,
-    formData.a2a_selected_skill_id,
   );
   const showA2AAuthSection = (
     advertisedA2ASecuritySchemes.length > 0
@@ -1005,7 +965,7 @@ function AgentFormPage() {
                       <div>
                         <h4 className="text-sm font-semibold text-blue-900">Import Public A2A Agent</h4>
                         <p className="mt-1 text-sm text-blue-800">
-                          Load a public agent card through the backend, choose exactly one remote skill, and create a first-class MattinAI agent backed by that external capability.
+                          Load a public agent card through the backend, review the remote agent and its advertised capabilities, and create a first-class MattinAI agent backed by that external agent.
                         </p>
                       </div>
                       <button
@@ -1035,25 +995,7 @@ function AgentFormPage() {
 
                       {a2aDiscovery && (
                         <>
-                          <div>
-                            <label htmlFor="a2a_skill" className="block text-sm font-medium text-blue-900 mb-2">
-                              Remote Skill
-                            </label>
-                            <select
-                              id="a2a_skill"
-                              value={formData.a2a_selected_skill_id}
-                              onChange={(e) => handleA2ASkillSelect(e.target.value)}
-                              className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                            >
-                              {a2aDiscovery.skills.map((skill) => (
-                                <option key={skill.id} value={skill.id}>
-                                  {skill.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="rounded-xl border border-blue-200 bg-white p-4">
+                          <div className="md:col-span-2 rounded-xl border border-blue-200 bg-white p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Remote Agent</p>
                             <p className="mt-1 text-sm font-semibold text-gray-900">{a2aDiscovery.card.name}</p>
                             {a2aDiscovery.card.description && (
@@ -1061,9 +1003,22 @@ function AgentFormPage() {
                             )}
                             <div className="mt-3 flex flex-wrap gap-2 text-xs">
                               <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-800">
-                                {a2aDiscovery.skills.length} skill{a2aDiscovery.skills.length === 1 ? '' : 's'}
+                                {a2aDiscovery.skills.length} advertised skill{a2aDiscovery.skills.length === 1 ? '' : 's'}
                               </span>
                             </div>
+
+                            {a2aDiscovery.skills.length > 0 && (
+                              <div className="mt-4 space-y-3">
+                                {a2aDiscovery.skills.map((skill) => (
+                                  <div key={skill.id} className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                                    <p className="text-sm font-medium text-gray-900">{skill.name}</p>
+                                    {skill.description && (
+                                      <p className="mt-1 text-sm text-gray-600">{skill.description}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </>
                       )}
@@ -1351,7 +1306,9 @@ function AgentFormPage() {
                             <p className="font-medium text-gray-900">Saved external state</p>
                             <p className="mt-1">Health: {agent.a2a_config.health_status}</p>
                             <p>Sync: {agent.a2a_config.sync_status}</p>
-                            <p>Imported skill: {agent.a2a_config.remote_skill_name}</p>
+                            <p>
+                              Advertised skills: {((agent.a2a_config.advertised_skills || []) as AgentSkill[]).length}
+                            </p>
                             {agent.a2a_config.last_successful_refresh_at && (
                               <p>Last successful refresh: {new Date(agent.a2a_config.last_successful_refresh_at).toLocaleString()}</p>
                             )}
@@ -1426,7 +1383,7 @@ function AgentFormPage() {
               <div className="space-y-6">
                 {isA2AAgent ? (
                   <div className="rounded-2xl border border-blue-200 bg-blue-50 p-6 text-sm text-blue-900">
-                    Imported A2A agents execute through the selected remote skill. Local system prompts and prompt templates stay disabled so the imported agent remains faithful to the upstream capability, but conversational memory can still be enabled below so MattinAI can manage conversation threads and remote task continuity.
+                    Imported A2A agents execute through the remote A2A agent. Local system prompts and prompt templates stay disabled so the imported agent remains faithful to the upstream behavior, but conversational memory can still be enabled below so MattinAI can manage conversation threads and remote task continuity.
                   </div>
                 ) : (
                 <>
@@ -1477,7 +1434,7 @@ function AgentFormPage() {
             <div className="space-y-6">
               {isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
-                  External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter. The imported remote skill remains the execution backend, while conversational memory stays available as an optional MattinAI-managed layer.
+                  External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter. The imported remote agent remains the execution backend, while conversational memory stays available as an optional MattinAI-managed layer.
                 </div>
               )}
               {/* Configuration for regular local agents */}
@@ -1871,7 +1828,7 @@ function AgentFormPage() {
             <div className="space-y-6">
               {isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
-                  Most native MattinAI execution-shaping capabilities remain intentionally disabled for imported A2A agents. Conversational memory is the exception: when enabled, MattinAI manages the conversation thread while the selected external skill remains the execution backend.
+                  Most native MattinAI execution-shaping capabilities remain intentionally disabled for imported A2A agents. Conversational memory is the exception: when enabled, MattinAI manages the conversation thread while the external A2A agent remains the execution backend.
                 </div>
               )}
               {/* Tools Card - Only for regular agents */}

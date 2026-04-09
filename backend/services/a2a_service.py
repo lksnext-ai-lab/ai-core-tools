@@ -49,6 +49,19 @@ class A2AService:
     ERROR = "error"
 
     @staticmethod
+    def extract_advertised_skills(
+        card_snapshot: Optional[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not isinstance(card_snapshot, dict):
+            return []
+
+        skills = card_snapshot.get("skills")
+        if not isinstance(skills, list):
+            return []
+
+        return [skill for skill in skills if isinstance(skill, dict)]
+
+    @staticmethod
     def is_a2a_agent(agent: Any) -> bool:
         return bool(getattr(agent, "a2a_config", None))
 
@@ -454,27 +467,8 @@ class A2AService:
         existing_auth_config: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         card_url = source_config.get("card_url")
-        selected_skill_id = source_config.get("selected_skill_id")
-        if not selected_skill_id:
-            raise ValueError("An A2A skill must be selected")
-
         agent_card, card_snapshot = await A2AService._resolve_agent_card_with_snapshot(card_url)
-        selected_skill = next(
-            (skill for skill in agent_card.skills if skill.id == selected_skill_id),
-            None,
-        )
-        if selected_skill is None:
-            raise ValueError(
-                f"Selected A2A skill '{selected_skill_id}' is no longer present in the agent card"
-            )
-
-        submitted_skill_snapshot = source_config.get("skill_snapshot") or {}
-        snapshot_skill_id = submitted_skill_snapshot.get("id")
-        if snapshot_skill_id and snapshot_skill_id != selected_skill_id:
-            raise ValueError("Submitted A2A skill snapshot does not match the selected skill")
-
         now = datetime.utcnow()
-        skill_snapshot = selected_skill.model_dump(mode="json", exclude_none=True)
         advertised_schemes = A2AService.extract_security_schemes(card_snapshot)
         canonical_auth_config = A2AService._canonicalize_auth_config(
             source_config.get("auth_config"),
@@ -485,11 +479,8 @@ class A2AService:
         return {
             "card_url": card_url,
             "remote_agent_id": agent_card.url,
-            "remote_skill_id": selected_skill.id,
-            "remote_skill_name": selected_skill.name,
             "auth_config": canonical_auth_config,
             "remote_agent_metadata": card_snapshot,
-            "remote_skill_metadata": skill_snapshot,
             "sync_status": A2AService.SYNCED,
             "health_status": A2AService.HEALTHY,
             "last_successful_refresh_at": now,
@@ -530,28 +521,6 @@ class A2AService:
         record.remote_agent_metadata = card_snapshot
         record.documentation_url = getattr(agent_card, "documentation_url", None)
         record.icon_url = getattr(agent_card, "icon_url", None)
-
-        selected_skill = next(
-            (skill for skill in agent_card.skills if skill.id == record.remote_skill_id),
-            None,
-        )
-        if selected_skill is None:
-            record.sync_status = A2AService.ERROR
-            record.health_status = A2AService.INVALID
-            record.last_refresh_error = (
-                f"Selected A2A skill '{record.remote_skill_id}' is no longer present in the agent card"
-            )[:1000]
-            db.add(record)
-            db.commit()
-            logger.warning(
-                "Refreshed A2A card for agent %s but skill %s is no longer present",
-                record.agent_id,
-                record.remote_skill_id,
-            )
-            return record
-
-        record.remote_skill_name = selected_skill.name
-        record.remote_skill_metadata = selected_skill.model_dump(mode="json", exclude_none=True)
         record.sync_status = A2AService.SYNCED
         record.health_status = A2AService.HEALTHY
         record.last_successful_refresh_at = refresh_attempt_at
@@ -560,10 +529,9 @@ class A2AService:
         db.commit()
 
         logger.info(
-            "Refreshed A2A card for agent %s from %s (skill=%s)",
+            "Refreshed A2A card for agent %s from %s",
             record.agent_id,
             record.card_url,
-            record.remote_skill_id,
         )
         return record
 
@@ -571,11 +539,8 @@ class A2AService:
     def apply_source_config(record: A2AAgent, canonical_config: dict[str, Any]) -> A2AAgent:
         record.card_url = canonical_config["card_url"]
         record.remote_agent_id = canonical_config.get("remote_agent_id")
-        record.remote_skill_id = canonical_config["remote_skill_id"]
-        record.remote_skill_name = canonical_config["remote_skill_name"]
         record.auth_config = canonical_config.get("auth_config")
         record.remote_agent_metadata = canonical_config["remote_agent_metadata"]
-        record.remote_skill_metadata = canonical_config["remote_skill_metadata"]
         record.sync_status = canonical_config.get("sync_status", A2AService.SYNCED)
         record.health_status = canonical_config.get("health_status", A2AService.HEALTHY)
         record.last_successful_refresh_at = canonical_config.get("last_successful_refresh_at")
@@ -593,11 +558,11 @@ class A2AService:
         return {
             "card_url": record.card_url,
             "remote_agent_id": record.remote_agent_id,
-            "remote_skill_id": record.remote_skill_id,
-            "remote_skill_name": record.remote_skill_name,
             "auth_config": A2AService.mask_auth_config(record.auth_config),
             "remote_agent_metadata": record.remote_agent_metadata or {},
-            "remote_skill_metadata": record.remote_skill_metadata or {},
+            "advertised_skills": A2AService.extract_advertised_skills(
+                record.remote_agent_metadata
+            ),
             "sync_status": record.sync_status,
             "health_status": record.health_status,
             "last_successful_refresh_at": record.last_successful_refresh_at,
@@ -615,11 +580,8 @@ class A2AService:
         return {
             "card_url": record.card_url,
             "remote_agent_id": record.remote_agent_id,
-            "remote_skill_id": record.remote_skill_id,
-            "remote_skill_name": record.remote_skill_name,
             "auth_config": A2AService.sanitize_export_auth_config(record.auth_config),
             "remote_agent_metadata": record.remote_agent_metadata or {},
-            "remote_skill_metadata": record.remote_skill_metadata or {},
             "sync_status": record.sync_status,
             "health_status": record.health_status,
             "last_successful_refresh_at": record.last_successful_refresh_at,
