@@ -15,7 +15,12 @@ class A2ATask(Base):
     context_id = Column(String(255), nullable=False, index=True)
     app_id = Column(Integer, ForeignKey("App.app_id"), nullable=False, index=True)
     agent_id = Column(Integer, ForeignKey("Agent.agent_id"), nullable=False, index=True)
-    api_key_id = Column(Integer, ForeignKey("APIKey.key_id"), nullable=True, index=True)
+    api_key_id = Column(
+        Integer,
+        ForeignKey("APIKey.key_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     conversation_id = Column(Integer, ForeignKey("Conversation.conversation_id"), nullable=True, index=True)
     status = Column(String(64), nullable=False, default="submitted")
     task_payload = Column(JSON, nullable=False)

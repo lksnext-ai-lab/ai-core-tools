@@ -35,6 +35,7 @@
 - [Multimodal Video RAG](architecture/multimodal-rag.md) — Video analysis pipeline, audio/visual chunk splitting, and retrieval
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
 - [A2A Integration](ai/a2a-integration.md) — High-level design for exposing Mattin AI agents as A2A-compatible agents
+- [A2A TCK Remediation](ai/a2a-tck-remediation.md) — High-level design for fixing the real A2A TCK compatibility failures in task lifecycle, streaming, and discovery
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
 
 ### API Reference

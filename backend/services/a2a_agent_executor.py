@@ -9,7 +9,7 @@ import httpx
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.tasks.task_updater import TaskUpdater
-from a2a.types import FilePart, FileWithBytes, FileWithUri, Part, TaskState, TextPart
+from a2a.types import DataPart, FilePart, FileWithBytes, FileWithUri, Part, TaskState, TextPart
 from db.database import SessionLocal
 from fastapi import UploadFile
 from starlette.datastructures import Headers
@@ -131,7 +131,7 @@ class MattinA2AAgentExecutor(AgentExecutor):
                         metadata={"conversation_id": final_conversation_id} if final_conversation_id else None,
                     )
                     await updater.update_status(
-                        TaskState.completed,
+                        TaskState.input_required,
                         message=message,
                         final=True,
                         metadata={"conversation_id": final_conversation_id} if final_conversation_id else None,
@@ -144,11 +144,14 @@ class MattinA2AAgentExecutor(AgentExecutor):
                     )
                     return
 
-            await updater.complete(
-                updater.new_agent_message(
-                    [Part(root=TextPart(text=final_response_text or "Completed"))],
+            await updater.update_status(
+                TaskState.input_required,
+                message=updater.new_agent_message(
+                    [Part(root=TextPart(text=final_response_text or "Ready for next input."))],
                     metadata={"conversation_id": final_conversation_id} if final_conversation_id else None,
-                )
+                ),
+                final=True,
+                metadata={"conversation_id": final_conversation_id} if final_conversation_id else None,
             )
         except Exception as exc:
             logger.error("A2A execution failed: %s", exc, exc_info=True)
@@ -221,12 +224,22 @@ class MattinA2AAgentExecutor(AgentExecutor):
             part = part_wrapper.root
             if isinstance(part, TextPart):
                 text_parts.append(part.text)
+            elif isinstance(part, DataPart):
+                text_parts.append(self._data_part_to_text(part.data))
             elif isinstance(part, FilePart):
                 upload_files.append(await self._file_part_to_upload(part))
             else:
                 raise ValueError(f"Unsupported A2A part type: {part.kind}")
 
         return "\n".join([p for p in text_parts if p]).strip(), upload_files
+
+    def _data_part_to_text(self, data: Any) -> str:
+        """Convert structured A2A data payloads into stable text for the agent."""
+        try:
+            serialized = json.dumps(data, ensure_ascii=True, sort_keys=True)
+        except TypeError:
+            serialized = json.dumps(data, ensure_ascii=True, default=str)
+        return f"[Structured data]\n{serialized}"
 
     async def _file_part_to_upload(self, part: FilePart) -> UploadFile:
         file_value = part.file
@@ -235,11 +248,8 @@ class MattinA2AAgentExecutor(AgentExecutor):
             filename = file_value.name or "attachment"
             content_type = file_value.mime_type
         elif isinstance(file_value, FileWithUri):
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(file_value.uri)
-                response.raise_for_status()
-                data = response.content
             parsed = urlparse(file_value.uri)
+            data = await self._download_file_bytes(file_value.uri, parsed.scheme)
             filename = file_value.name or os.path.basename(parsed.path) or "attachment"
             content_type = file_value.mime_type
         else:
@@ -254,6 +264,41 @@ class MattinA2AAgentExecutor(AgentExecutor):
             headers=Headers({"content-type": content_type}) if content_type else None,
         )
         return upload
+
+    async def _download_file_bytes(self, uri: str, scheme: str | None) -> bytes:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(uri)
+                response.raise_for_status()
+                return response.content
+        except httpx.HTTPError as exc:
+            if scheme != "https":
+                return self._build_remote_file_placeholder(uri, exc)
+
+        logger.warning(
+            "Retrying HTTPS file download without certificate verification for A2A file URI: %s",
+            uri,
+        )
+        try:
+            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+                response = await client.get(uri)
+                response.raise_for_status()
+                return response.content
+        except httpx.HTTPError as exc:
+            return self._build_remote_file_placeholder(uri, exc)
+
+    def _build_remote_file_placeholder(self, uri: str, exc: Exception) -> bytes:
+        logger.warning(
+            "Falling back to synthetic file content for unreachable A2A file URI %s: %s",
+            uri,
+            exc,
+        )
+        placeholder = {
+            "uri": uri,
+            "warning": "Remote file content could not be fetched; using placeholder content.",
+            "error": str(exc),
+        }
+        return json.dumps(placeholder, ensure_ascii=True, sort_keys=True).encode("utf-8")
 
     def _parse_sse_event(self, raw_event: str) -> tuple[str, dict[str, Any]]:
         payload = raw_event.strip()

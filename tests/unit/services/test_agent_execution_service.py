@@ -11,7 +11,7 @@ connection, or LangGraph.
 import os
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import ANY, MagicMock, AsyncMock, patch
 from fastapi import HTTPException
 
 from services.agent_execution_service import AgentExecutionService
@@ -84,6 +84,13 @@ def make_context(agent=None, fresh_agent=None, **kwargs) -> AgentExecutionContex
         agent_id=1,
         agent=_agent,
         fresh_agent=_fresh_agent,
+        agent_name=_fresh_agent.name,
+        agent_type=_fresh_agent.type,
+        agent_has_memory=bool(_fresh_agent.has_memory),
+        output_parser_id=getattr(_fresh_agent, "output_parser_id", None),
+        agent_uses_system_ai_service=(
+            getattr(getattr(_fresh_agent, "ai_service", None), "app_id", "NOT_NULL") is None
+        ),
         enhanced_message="hello",
         image_files=[],
         session=None,
@@ -400,3 +407,107 @@ class TestFileSnapshotting:
             )
 
             mock_inject.assert_called_once_with("ok", [mock_file_ref])
+
+
+class TestFinalizeTurnAgentSelection:
+    @pytest.mark.asyncio
+    async def test_finalize_turn_uses_snapshotted_agent_fields_for_parsing_and_metadata(self):
+        detached_agent = make_agent(
+            agent_id=1,
+            has_memory=False,
+            agent_type="detached",
+            name="Detached Agent",
+        )
+        fresh_agent = make_agent(
+            agent_id=1,
+            has_memory=True,
+            agent_type="fresh",
+            name="Fresh Agent",
+        )
+        fresh_agent.output_parser_id = 42
+
+        svc, _ = make_service(agent=detached_agent, fresh_agent=fresh_agent)
+        ctx = make_context(
+            agent=detached_agent,
+            fresh_agent=fresh_agent,
+            processed_files=[{"filename": "note.txt"}],
+        )
+
+        with (
+            patch("tools.agentTools.parse_agent_response", return_value="parsed") as mock_parse,
+            patch.object(svc, "_update_request_count") as mock_update_count,
+        ):
+            result = await svc._finalize_turn(ctx, "raw response", db=MagicMock())
+
+        mock_parse.assert_called_once_with("raw response", output_parser_id=42)
+        mock_update_count.assert_called_once_with(1, ANY)
+        assert result["metadata"]["agent_name"] == "Fresh Agent"
+        assert result["metadata"]["agent_type"] == "fresh"
+        assert result["metadata"]["has_memory"] is True
+        assert result["metadata"]["files_processed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_finalize_turn_uses_snapshotted_ai_service_flag_for_usage_tracking(self):
+        detached_agent = make_agent(agent_id=1, has_memory=False)
+        fresh_agent = make_agent(agent_id=1, has_memory=False)
+        fresh_agent.ai_service = MagicMock(app_id=None)
+
+        svc, _ = make_service(agent=detached_agent, fresh_agent=fresh_agent)
+        ctx = make_context(
+            agent=detached_agent,
+            fresh_agent=fresh_agent,
+            agent_uses_system_ai_service=True,
+            user_context={"user_id": 7},
+        )
+
+        class _DetachedAIServiceAgent:
+            @property
+            def ai_service(self):
+                raise AssertionError("fresh_agent.ai_service should not be touched in finalize_turn")
+
+        ctx.fresh_agent = _DetachedAIServiceAgent()
+
+        with (
+            patch("tools.agentTools.parse_agent_response", return_value="parsed"),
+            patch.object(svc, "_update_request_count"),
+            patch("services.usage_tracking_service.UsageTrackingService.record_system_llm_call") as mock_record_usage,
+        ):
+            await svc._finalize_turn(ctx, "raw response", db=MagicMock())
+
+        mock_record_usage.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_finalize_turn_uses_snapshotted_conversation_id_for_updates(self):
+        detached_agent = make_agent(agent_id=1, has_memory=True)
+        fresh_agent = make_agent(agent_id=1, has_memory=True)
+
+        svc, _ = make_service(agent=detached_agent, fresh_agent=fresh_agent)
+        ctx = make_context(
+            agent=detached_agent,
+            fresh_agent=fresh_agent,
+            effective_conv_id=202,
+        )
+
+        class _DetachedConversation:
+            @property
+            def conversation_id(self):
+                raise AssertionError("ctx.conversation should not be touched in finalize_turn")
+
+        ctx.conversation = _DetachedConversation()
+
+        with (
+            patch("tools.agentTools.parse_agent_response", return_value="parsed"),
+            patch.object(svc, "_update_request_count"),
+            patch(
+                "services.conversation_service.ConversationService.increment_message_count"
+            ) as mock_increment_message_count,
+        ):
+            result = await svc._finalize_turn(ctx, "raw response", db=MagicMock())
+
+        mock_increment_message_count.assert_called_once_with(
+            db=ANY,
+            conversation_id=202,
+            last_message="parsed",
+            increment_by=2,
+        )
+        assert result["conversation_id"] == 202

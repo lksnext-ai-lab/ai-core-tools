@@ -1,18 +1,51 @@
 import base64
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import EventQueue
-from a2a.types import Message, MessageSendParams, Part, Role, TextPart, FilePart, FileWithBytes
+from a2a.types import (
+    DataPart,
+    FilePart,
+    FileWithBytes,
+    FileWithUri,
+    Message,
+    MessageSendParams,
+    Part,
+    Role,
+    TextPart,
+)
 
 from services.a2a_agent_executor import MattinA2AAgentExecutor
 
 
 class TestMattinA2AAgentExecutor:
     @pytest.mark.asyncio
-    async def test_execute_emits_completed_task_with_text_and_file_artifacts(self, monkeypatch):
+    async def test_extract_message_inputs_serializes_data_parts(self):
+        executor = MattinA2AAgentExecutor()
+
+        context = RequestContext(
+            request=MessageSendParams(
+                message=Message(
+                    message_id="msg-data",
+                    role=Role.user,
+                    parts=[
+                        Part(root=TextPart(text="Process this payload")),
+                        Part(root=DataPart(data={"key": "value", "count": 2})),
+                    ],
+                )
+            )
+        )
+
+        message_text, upload_files = await executor._extract_message_inputs(context)
+
+        assert message_text == 'Process this payload\n[Structured data]\n{"count": 2, "key": "value"}'
+        assert upload_files == []
+
+    @pytest.mark.asyncio
+    async def test_execute_emits_input_required_task_with_text_and_file_artifacts(self, monkeypatch):
         executor = MattinA2AAgentExecutor()
 
         fake_session = MagicMock()
@@ -125,5 +158,89 @@ class TestMattinA2AAgentExecutor:
         assert captured["file_references"] == ["resolved-file-ref"]
         assert any(getattr(event, "kind", None) == "artifact-update" for event in events)
         final_status = [event for event in events if getattr(event, "kind", None) == "status-update"][-1]
-        assert final_status.status.state.value == "completed"
+        assert final_status.status.state.value == "input-required"
         assert final_status.metadata["conversation_id"] == 321
+
+    @pytest.mark.asyncio
+    async def test_file_part_to_upload_retries_https_without_cert_verification(self, monkeypatch):
+        executor = MattinA2AAgentExecutor()
+
+        calls = []
+
+        class FakeResponse:
+            content = b"file-bytes"
+
+            def raise_for_status(self):
+                return None
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                calls.append(kwargs)
+                self.verify = kwargs.get("verify", True)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, uri):
+                if self.verify is False:
+                    return FakeResponse()
+                raise httpx.ConnectError("ssl failed")
+
+        monkeypatch.setattr("services.a2a_agent_executor.httpx.AsyncClient", FakeAsyncClient)
+
+        upload = await executor._file_part_to_upload(
+            FilePart(
+                file=FileWithUri(
+                    uri="https://example.com/test.txt",
+                    name="test.txt",
+                    mime_type="text/plain",
+                )
+            )
+        )
+
+        assert upload.filename == "test.txt"
+        assert len(calls) == 2
+        assert calls[0] == {"timeout": 30.0}
+        assert calls[1] == {"timeout": 30.0, "verify": False}
+
+    @pytest.mark.asyncio
+    async def test_file_part_to_upload_uses_placeholder_when_remote_uri_unreachable(self, monkeypatch):
+        executor = MattinA2AAgentExecutor()
+
+        class FailingResponse:
+            def raise_for_status(self):
+                request = httpx.Request("GET", "https://example.com/test.txt")
+                response = httpx.Response(404, request=request)
+                raise httpx.HTTPStatusError("not found", request=request, response=response)
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                self.verify = kwargs.get("verify", True)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, uri):
+                return FailingResponse()
+
+        monkeypatch.setattr("services.a2a_agent_executor.httpx.AsyncClient", FakeAsyncClient)
+
+        upload = await executor._file_part_to_upload(
+            FilePart(
+                file=FileWithUri(
+                    uri="https://example.com/test.txt",
+                    name="test.txt",
+                    mime_type="text/plain",
+                )
+            )
+        )
+
+        content = await upload.read()
+        assert upload.filename == "test.txt"
+        assert b"https://example.com/test.txt" in content

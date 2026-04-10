@@ -244,6 +244,13 @@ class AgentExecutionService:
             agent_id=agent_id,
             agent=agent,
             fresh_agent=fresh_agent,
+            agent_name=fresh_agent.name,
+            agent_type=fresh_agent.type,
+            agent_has_memory=bool(fresh_agent.has_memory),
+            output_parser_id=getattr(fresh_agent, "output_parser_id", None),
+            agent_uses_system_ai_service=(
+                getattr(getattr(fresh_agent, "ai_service", None), "app_id", "NOT_NULL") is None
+            ),
             enhanced_message=enhanced_message,
             image_files=image_files,
             session=session,
@@ -288,7 +295,6 @@ class AgentExecutionService:
 
         response = raw_response
         files_data: List[Dict[str, Any]] = []
-
         # 1 + 2. Sync output files and inject markers
         if ctx.working_dir:
             file_service = FileManagementService()
@@ -313,20 +319,22 @@ class AgentExecutionService:
                 ]
 
         # 3. Parse response
-        parsed_response = parse_agent_response(response, ctx.agent)
+        parsed_response = parse_agent_response(
+            response,
+            output_parser_id=ctx.output_parser_id,
+        )
 
-        # 4. Update request count
-        self._update_request_count(ctx.agent, db)
+        # 4. Update request count using the snapshotted primitive ID rather
+        # than an ORM instance that may be detached after async work/commits.
+        self._update_request_count(ctx.agent_id, db)
 
         # 5. Touch session
         if ctx.session:
             await self.session_service.touch_session(ctx.session.id)
 
         # 6. Record system LLM usage (SaaS mode — no-op for own-key services)
-        ai_svc = ctx.fresh_agent.ai_service
         if (
-            ai_svc is not None
-            and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
+            ctx.agent_uses_system_ai_service
             and db
             and ctx.user_context
             and ctx.user_context.get('user_id')
@@ -339,8 +347,9 @@ class AgentExecutionService:
                     "Failed to record system LLM usage: %s", _usage_exc, exc_info=True
                 )
 
-        # 7. Update conversation message count
-        if ctx.conversation:
+        # 7. Update conversation message count using the snapshotted
+        # conversation id rather than a possibly detached ORM instance.
+        if ctx.effective_conv_id:
             from services.conversation_service import ConversationService
 
             if isinstance(parsed_response, list):
@@ -370,7 +379,7 @@ class AgentExecutionService:
 
             ConversationService.increment_message_count(
                 db=db,
-                conversation_id=ctx.conversation.conversation_id,
+                conversation_id=ctx.effective_conv_id,
                 last_message=last_message_preview,
                 increment_by=2,
             )
@@ -378,14 +387,12 @@ class AgentExecutionService:
         return {
             "response": parsed_response,
             "agent_id": ctx.agent_id,
-            "conversation_id": (
-                ctx.conversation.conversation_id if ctx.conversation else None
-            ),
+            "conversation_id": ctx.effective_conv_id,
             "metadata": {
-                "agent_name": ctx.agent.name,
-                "agent_type": ctx.agent.type,
+                "agent_name": ctx.agent_name,
+                "agent_type": ctx.agent_type,
                 "files_processed": len(ctx.processed_files),
-                "has_memory": ctx.agent.has_memory,
+                "has_memory": ctx.agent_has_memory,
             },
             # Fields used by the streaming path to emit the done event
             "parsed_response": parsed_response,
@@ -432,8 +439,8 @@ class AgentExecutionService:
                 # Process PDF using existing tools
                 result = await self._process_pdf_with_ocr(agent, temp_pdf_path, db)
                 
-                # Update request count
-                self._update_request_count(agent, db)
+                # Update request count using the primitive agent ID.
+                self._update_request_count(agent.agent_id, db)
                 
                 if for_api:
                     # Public API: Return just the structured content (output parser result)
@@ -1090,6 +1097,6 @@ class AgentExecutionService:
         finally:
             temp_file.close()
     
-    def _update_request_count(self, agent: Agent, db: Session):
+    def _update_request_count(self, agent_id: int, db: Session):
         """Update agent request count"""
-        self.agent_execution_repo.update_agent_request_count(db, agent.agent_id) 
+        self.agent_execution_repo.update_agent_request_count(db, agent_id)

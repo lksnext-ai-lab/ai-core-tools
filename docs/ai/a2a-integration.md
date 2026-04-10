@@ -596,7 +596,7 @@ Mattin AI already has an app slug but no agent slug in the current model. Becaus
 Example shape:
 
 ```text
-/.well-known/a2a/apps/{app_slug}/agents/{agent_id}
+/.well-known/a2a/apps/{app_slug}/agents/{agent_id}/agent-card.json
 /a2a/v1/apps/{app_slug}/agents/{agent_id}
 /a2a/v1/id/{app_id}/agents/{agent_id}
 ```

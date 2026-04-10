@@ -24,6 +24,13 @@ class AgentExecutionContext:
     enhanced_message: str               # Text message after file-content injection
     image_files: List[Dict[str, Any]]   # Image file dicts extracted from processed_files
 
+    # Snapshotted agent fields safe to use after session close/commit
+    agent_name: str = ""
+    agent_type: str = ""
+    agent_has_memory: bool = False
+    output_parser_id: Optional[int] = None
+    agent_uses_system_ai_service: bool = False
+
     # Session / conversation
     session: Optional[Any] = None       # SessionManagementService session object
     conversation: Optional[Any] = None  # Conversation ORM instance (None when no memory)

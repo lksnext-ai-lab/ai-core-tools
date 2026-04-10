@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Share2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Share2, ClipboardCopy, Check } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -10,6 +10,7 @@ import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
 import type { AgentMCPUsage } from '../core/types';
+import { configService } from '../core/ConfigService';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 
@@ -227,6 +228,7 @@ function AgentFormPage() {
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [a2aExamplesText, setA2aExamplesText] = useState('');
+  const [a2aCardUrlCopied, setA2aCardUrlCopied] = useState(false);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -492,6 +494,21 @@ function AgentFormPage() {
   };
 
   const isNewAgent = Number.parseInt(agentId || '0') === 0;
+  const a2aCardUrl = !isNewAgent && appId
+    ? `${configService.getApiBaseUrl().replace(/\/$/, '')}/.well-known/a2a/id/${Number.parseInt(appId)}/agents/${Number.parseInt(agentId || '0')}/agent-card.json`
+    : '';
+
+  const handleCopyA2aCardUrl = async () => {
+    if (!a2aCardUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(a2aCardUrl);
+      setA2aCardUrlCopied(true);
+      globalThis.setTimeout(() => setA2aCardUrlCopied(false), 2000);
+    } catch (copyError) {
+      console.error('Failed to copy A2A card URL:', copyError);
+    }
+  };
 
   if (loading) {
     return (
@@ -1398,6 +1415,42 @@ function AgentFormPage() {
                 </div>
 
                 <div className={`${formData.a2a_enabled ? 'opacity-100' : 'opacity-60'} space-y-6`}>
+                  <div>
+                    <label htmlFor="a2a_card_url" className="block text-sm font-medium text-gray-700 mb-2">
+                      A2A Agent Card URL
+                    </label>
+                    {a2aCardUrl ? (
+                      <>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <input
+                            type="text"
+                            id="a2a_card_url"
+                            value={a2aCardUrl}
+                            readOnly
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-sm text-gray-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyA2aCardUrl()}
+                            className="inline-flex items-center justify-center px-4 py-3 border border-cyan-300 rounded-xl text-sm font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 transition-colors"
+                          >
+                            {a2aCardUrlCopied ? <Check className="w-4 h-4 mr-2" /> : <ClipboardCopy className="w-4 h-4 mr-2" />}
+                            {a2aCardUrlCopied ? 'Copied!' : 'Copy URL'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {formData.a2a_enabled
+                            ? 'External A2A clients can fetch this URL to discover the published Agent Card for this agent.'
+                            : 'This is the Agent Card URL for this agent. It becomes publicly discoverable once A2A exposure is enabled.'}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="px-4 py-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-600">
+                        Save the agent first to generate its A2A Agent Card URL.
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label htmlFor="a2a_name_override" className="block text-sm font-medium text-gray-700 mb-2">

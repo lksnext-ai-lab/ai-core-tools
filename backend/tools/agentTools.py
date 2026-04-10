@@ -310,13 +310,16 @@ def prepare_agent_config(agent):
     return config
 
 
-def parse_agent_response(response_text, agent):
+def parse_agent_response(response_text, agent=None, output_parser_id=None):
     """Helper function to parse agent response.
     
     In LangChain v1, structured output is returned in the 'structured_response' key
     of the agent result when response_format is used with create_agent.
     """
-    if agent.output_parser_id is not None:
+    if output_parser_id is None and agent is not None:
+        output_parser_id = getattr(agent, "output_parser_id", None)
+
+    if output_parser_id is not None:
         # If response is already a dict (from structured output), return it directly
         if isinstance(response_text, dict):
             return response_text
@@ -727,4 +730,3 @@ def get_retriever_tool(silo: Silo, search_params=None):
             document_prompt=document_prompt
         )
     return None
-
