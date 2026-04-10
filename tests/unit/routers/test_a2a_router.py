@@ -10,23 +10,6 @@ from routers import a2a as a2a_module
 
 class TestA2ARouter:
     @pytest.mark.asyncio
-    async def test_get_root_agent_card_delegates_to_configured_slug_agent(self, mocker):
-        request = MagicMock(spec=Request)
-        db = MagicMock()
-        mock_get_by_slug = mocker.patch.object(
-            a2a_module,
-            "get_agent_card_by_slug",
-            new=AsyncMock(return_value={"card": "ok"}),
-        )
-        mocker.patch.object(a2a_module, "ROOT_AGENT_CARD_APP_SLUG", "cluedo")
-        mocker.patch.object(a2a_module, "ROOT_AGENT_CARD_AGENT_ID", 2)
-
-        result = await a2a_module.get_root_agent_card(request=request, db=db)
-
-        assert result == {"card": "ok"}
-        mock_get_by_slug.assert_awaited_once_with("cluedo", 2, request, db)
-
-    @pytest.mark.asyncio
     async def test_get_agent_card_by_id_builds_public_payload(self, mocker):
         app = MagicMock(app_id=7, slug="workspace")
         agent = MagicMock(agent_id=11)

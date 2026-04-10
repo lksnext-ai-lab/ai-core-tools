@@ -77,35 +77,6 @@ class TestA2AIntegration:
             f"/a2a/v1/id/{fake_app.app_id}/agents/{fake_agent.agent_id}"
         )
 
-    def test_root_agent_card_maps_to_configured_slug_agent(
-        self,
-        client,
-        fake_app,
-        fake_agent,
-        db,
-        monkeypatch,
-    ):
-        from routers import a2a as a2a_router_module
-
-        fake_app.slug = "cluedo"
-        fake_agent.agent_id = 2
-        fake_agent.a2a_enabled = True
-        db.add(fake_app)
-        db.add(fake_agent)
-        db.flush()
-
-        monkeypatch.setattr(a2a_router_module, "ROOT_AGENT_CARD_APP_SLUG", "cluedo")
-        monkeypatch.setattr(a2a_router_module, "ROOT_AGENT_CARD_AGENT_ID", 2)
-
-        response = client.get("/.well-known/agent-card.json")
-
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["name"] == fake_agent.name
-        assert payload["url"].endswith(
-            f"/a2a/v1/apps/{fake_app.slug}/agents/{fake_agent.agent_id}"
-        )
-
     def test_message_send_supports_file_input_and_output_artifacts(
         self,
         client,

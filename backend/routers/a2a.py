@@ -29,8 +29,6 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 a2a_router = APIRouter()
-ROOT_AGENT_CARD_APP_SLUG = "cluedo"
-ROOT_AGENT_CARD_AGENT_ID = 2
 
 
 class MattinA2ACallContextBuilder(CallContextBuilder):
@@ -298,19 +296,6 @@ async def _handle_rpc_request(
     application = _build_application(request, app, agent, app_slug=app_slug, app_id=app_id)
     rpc_response = await application._handle_requests(request)
     return _normalize_stream_headers(rpc_response)
-
-
-@a2a_router.get("/.well-known/agent-card.json")
-async def get_root_agent_card(
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    return await get_agent_card_by_slug(
-        ROOT_AGENT_CARD_APP_SLUG,
-        ROOT_AGENT_CARD_AGENT_ID,
-        request,
-        db,
-    )
 
 
 @a2a_router.get("/.well-known/a2a/apps/{app_slug}/agents/{agent_id}/agent-card.json")
