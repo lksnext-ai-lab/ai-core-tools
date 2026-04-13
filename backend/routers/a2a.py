@@ -103,10 +103,14 @@ def _normalize_transport_part_aliases(payload):
     return normalized
 
 
-def _update_request_json_cache(request: Request, payload) -> None:
-    body = json.dumps(payload).encode("utf-8")
-    request._body = body
-    request._json = payload
+def _build_request_with_body(request: Request, payload) -> Request:
+    """Reconstruct a new Request with a normalized body via a receive callable."""
+    body_bytes = json.dumps(payload).encode("utf-8")
+
+    async def receive():
+        return {"type": "http.request", "body": body_bytes, "more_body": False}
+
+    return Request(request.scope, receive)
 
 
 def _resolve_enabled_agent_by_app_id(db: Session, app_id: int, agent_id: int) -> tuple[App, Agent]:
@@ -272,7 +276,7 @@ async def _handle_rpc_request(
     if body is not None:
         normalized_body = _normalize_transport_part_aliases(body)
         if normalized_body != body:
-            _update_request_json_cache(request, normalized_body)
+            request = _build_request_with_body(request, normalized_body)
             body = normalized_body
 
     if isinstance(body, dict) and body.get("method") in {
