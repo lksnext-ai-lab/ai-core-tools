@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Loader2, CheckCircle2, XCircle, Ban, RefreshCw, Eye, Link2, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -8,7 +9,7 @@ import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 
-interface URL {
+interface DomainUrl {
   url_id: number;
   url: string;
   created_at: string;
@@ -46,51 +47,51 @@ const formatDate = (dateString: string) => {
 };
 
 // Helper function to get URL status
-const getUrlStatus = (url: URL, reindexingUrls: Set<number>) => {
+const getUrlStatus = (url: DomainUrl, reindexingUrls: Set<number>): { text: string; badge: string; icon: ReactNode } => {
   if (reindexingUrls.has(url.url_id)) {
     return {
       text: 'Indexing...',
       badge: 'bg-blue-100 text-blue-800',
-      icon: '⏳'
+      icon: <Loader2 className="w-4 h-4 animate-spin" />
     };
   }
-  
+
   switch (url.status) {
     case 'indexed':
       return {
         text: 'Indexed',
         badge: 'bg-green-100 text-green-800',
-        icon: '✅'
+        icon: <CheckCircle2 className="w-4 h-4 text-green-500" />
       };
     case 'indexing':
       return {
         text: 'Indexing',
         badge: 'bg-blue-100 text-blue-800',
-        icon: '⏳'
+        icon: <Loader2 className="w-4 h-4 animate-spin" />
       };
     case 'rejected':
       return {
         text: 'Rejected',
         badge: 'bg-red-100 text-red-800',
-        icon: '❌'
+        icon: <XCircle className="w-4 h-4 text-red-500" />
       };
     case 'unindexed':
       return {
         text: 'Unindexed',
         badge: 'bg-gray-100 text-gray-600',
-        icon: '🚫'
+        icon: <Ban className="w-4 h-4 text-red-500" />
       };
     case 'pending':
       return {
         text: 'Pending',
         badge: 'bg-yellow-100 text-yellow-800',
-        icon: '⏸️'
+        icon: <Loader2 className="w-4 h-4" />
       };
     default:
       return {
         text: 'Not Indexed',
         badge: 'bg-gray-100 text-gray-800',
-        icon: '⚪'
+        icon: <Ban className="w-4 h-4 text-gray-400" />
       };
   }
 };
@@ -123,7 +124,7 @@ const ErrorView: React.FC<{ error: string; onBack: () => void }> = ({ error, onB
 // Component for empty URL state
 const EmptyUrlsView: React.FC<{ onAddUrl: () => void; canEdit: boolean }> = ({ onAddUrl, canEdit }) => (
   <div className="text-center py-12">
-    <div className="text-gray-400 text-6xl mb-4">🔗</div>
+    <div className="mb-4"><Link2 className="w-12 h-12 text-gray-300" /></div>
     <h3 className="text-lg font-medium text-gray-900 mb-2">No URLs yet</h3>
     <p className="text-gray-500 mb-6">Add your first URL to start indexing content</p>
     {canEdit && (
@@ -144,7 +145,7 @@ const DomainDetailPage: React.FC = () => {
   const canEdit = hasMinRole(AppRole.EDITOR);
   
   const [domain, setDomain] = useState<DomainDetail | null>(null);
-  const [urls, setUrls] = useState<URL[]>([]);
+  const [urls, setUrls] = useState<DomainUrl[]>([]);
   const [loading, setLoading] = useState(true);
   const [urlsLoading, setUrlsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,17 +157,17 @@ const DomainDetailPage: React.FC = () => {
   
   // Delete URL modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [urlToDelete, setUrlToDelete] = useState<URL | null>(null);
+  const [urlToDelete, setUrlToDelete] = useState<DomainUrl | null>(null);
   const [deletingUrl, setDeletingUrl] = useState(false);
   
   // Unindex URL modal
   const [showUnindexModal, setShowUnindexModal] = useState(false);
-  const [urlToUnindex, setUrlToUnindex] = useState<URL | null>(null);
+  const [urlToUnindex, setUrlToUnindex] = useState<DomainUrl | null>(null);
   const [unindexingUrl, setUnindexingUrl] = useState(false);
   
   // Reject URL modal
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [urlToReject, setUrlToReject] = useState<URL | null>(null);
+  const [urlToReject, setUrlToReject] = useState<DomainUrl | null>(null);
   const [rejectingUrl, setRejectingUrl] = useState(false);
   
   // Content preview modal
@@ -182,17 +183,10 @@ const DomainDetailPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (appId && domainId) {
-      loadDomain();
-      loadUrls();
-    }
-  }, [appId, domainId]);
-
-  const loadDomain = async () => {
+  const loadDomain = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiService.getDomain(parseInt(appId!), parseInt(domainId!));
+      const data = await apiService.getDomain(Number.parseInt(appId!), Number.parseInt(domainId!));
       setDomain(data);
       setError(null);
     } catch (err) {
@@ -201,12 +195,12 @@ const DomainDetailPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appId, domainId]);
 
-  const loadUrls = async () => {
+  const loadUrls = useCallback(async () => {
     try {
       setUrlsLoading(true);
-      const data = await apiService.getDomainUrls(parseInt(appId!), parseInt(domainId!));
+      const data = await apiService.getDomainUrls(Number.parseInt(appId!), Number.parseInt(domainId!));
       setUrls(data || []);
     } catch (err) {
       console.error('Error loading URLs:', err);
@@ -214,26 +208,33 @@ const DomainDetailPage: React.FC = () => {
     } finally {
       setUrlsLoading(false);
     }
-  };
+  }, [appId, domainId]);
+
+  useEffect(() => {
+    if (appId && domainId) {
+      void loadDomain();
+      void loadUrls();
+    }
+  }, [appId, domainId, loadDomain, loadUrls]);
 
   const handleAddUrl = async () => {
     if (!newUrl.trim() || !appId || !domainId) return;
     
     try {
       setAddingUrl(true);
-      await apiService.addUrlToDomain(parseInt(appId), parseInt(domainId), { url: newUrl.trim() });
+      await apiService.addUrlToDomain(Number.parseInt(appId), Number.parseInt(domainId), { url: newUrl.trim() });
       setNewUrl('');
       setShowAddUrlModal(false);
       await loadUrls(); // Reload URLs
     } catch (err) {
       console.error('Error adding URL:', err);
-      alert('Failed to add URL');
+      setErrorMessage('Failed to add URL');
     } finally {
       setAddingUrl(false);
     }
   };
 
-  const handleDeleteUrl = (url: URL) => {
+  const handleDeleteUrl = (url: DomainUrl) => {
     setUrlToDelete(url);
     setShowDeleteModal(true);
   };
@@ -243,7 +244,7 @@ const DomainDetailPage: React.FC = () => {
     
     try {
       setDeletingUrl(true);
-      await apiService.deleteUrlFromDomain(parseInt(appId), parseInt(domainId), urlToDelete.url_id);
+      await apiService.deleteUrlFromDomain(Number.parseInt(appId), Number.parseInt(domainId), urlToDelete.url_id);
       setUrls(urls.filter(u => u.url_id !== urlToDelete.url_id));
       setShowDeleteModal(false);
       setUrlToDelete(null);
@@ -263,7 +264,7 @@ const DomainDetailPage: React.FC = () => {
     
     try {
       setReindexingUrls(prev => new Set(prev).add(urlId));
-      const response = await apiService.reindexUrl(parseInt(appId), parseInt(domainId), urlId);
+      const response = await apiService.reindexUrl(Number.parseInt(appId), Number.parseInt(domainId), urlId);
       await loadUrls(); // Reload to get updated timestamps
       
       // Show success message
@@ -289,7 +290,7 @@ const DomainDetailPage: React.FC = () => {
     }
   };
 
-  const handleUnindexUrl = async (url: URL) => {
+  const handleUnindexUrl = async (url: DomainUrl) => {
     if (!appId || !domainId) return;
     
     setUrlToUnindex(url);
@@ -301,7 +302,7 @@ const DomainDetailPage: React.FC = () => {
     
     try {
       setUnindexingUrl(true);
-      await apiService.unindexUrl(parseInt(appId), parseInt(domainId), urlToUnindex.url_id);
+      await apiService.unindexUrl(Number.parseInt(appId), Number.parseInt(domainId), urlToUnindex.url_id);
       await loadUrls(); // Reload to get updated status
       setShowUnindexModal(false);
       setUrlToUnindex(null);
@@ -316,7 +317,7 @@ const DomainDetailPage: React.FC = () => {
     }
   };
 
-  const handleRejectUrl = async (url: URL) => {
+  const handleRejectUrl = async (url: DomainUrl) => {
     if (!appId || !domainId) return;
     
     setUrlToReject(url);
@@ -328,7 +329,7 @@ const DomainDetailPage: React.FC = () => {
     
     try {
       setRejectingUrl(true);
-      await apiService.rejectUrl(parseInt(appId), parseInt(domainId), urlToReject.url_id);
+      await apiService.rejectUrl(Number.parseInt(appId), Number.parseInt(domainId), urlToReject.url_id);
       await loadUrls(); // Reload to get updated status
       setShowRejectModal(false);
       setUrlToReject(null);
@@ -348,7 +349,7 @@ const DomainDetailPage: React.FC = () => {
     
     try {
       setReindexingDomain(true);
-      await apiService.reindexDomain(parseInt(appId), parseInt(domainId));
+      await apiService.reindexDomain(Number.parseInt(appId), Number.parseInt(domainId));
       await loadUrls(); // Reload to get updated timestamps
       
       // Show success message
@@ -363,7 +364,7 @@ const DomainDetailPage: React.FC = () => {
     }
   };
 
-  const handleViewContent = async (url: URL) => {
+  const handleViewContent = async (url: DomainUrl) => {
     if (!appId || !domainId) return;
     
     try {
@@ -371,7 +372,7 @@ const DomainDetailPage: React.FC = () => {
       setShowContentModal(true);
       setUrlContent(null);
       
-      const content = await apiService.getUrlContent(parseInt(appId), parseInt(domainId), url.url_id);
+      const content = await apiService.getUrlContent(Number.parseInt(appId), Number.parseInt(domainId), url.url_id);
       setUrlContent(content);
     } catch (err) {
       console.error('Error loading content:', err);
@@ -408,12 +409,28 @@ const DomainDetailPage: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-900">{domain.name}</h1>
               <p className="text-gray-600">{domain.description}</p>
             </div>
-            <button
-              onClick={() => navigate(`/apps/${appId}/domains`)}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-            >
-              Back to Domains
-            </button>
+            <div className="flex items-center gap-3">
+              {canEdit && (
+                <button
+                  onClick={() => { void handleReindexDomain(); }}
+                  disabled={reindexingDomain}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg flex items-center"
+                >
+                  {reindexingDomain ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Reindex Domain
+                </button>
+              )}
+              <button
+                onClick={() => navigate(`/apps/${appId}/domains`)}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+              >
+                Back to Domains
+              </button>
+            </div>
           </div>
 
           {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
@@ -510,35 +527,35 @@ const DomainDetailPage: React.FC = () => {
                               {
                                 label: 'View Content',
                                 onClick: () => void handleViewContent(url),
-                                icon: '👁️',
+                                icon: <Eye className="w-4 h-4" />,
                                 variant: 'success'
                               },
                               ...(canEdit ? [
                                 {
                                   label: 'Reindex URL',
                                   onClick: () => void handleReindexUrl(url.url_id),
-                                  icon: reindexingUrls.has(url.url_id) ? '⏳' : '🔄',
+                                  icon: reindexingUrls.has(url.url_id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />,
                                   variant: 'primary' as const,
                                   disabled: reindexingUrls.has(url.url_id)
                                 },
                                 {
                                   label: 'Unindex URL',
                                   onClick: () => void handleUnindexUrl(url),
-                                  icon: reindexingUrls.has(url.url_id) ? '⏳' : '🚫',
+                                  icon: reindexingUrls.has(url.url_id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />,
                                   variant: 'warning' as const,
                                   disabled: reindexingUrls.has(url.url_id)
                                 },
                                 {
                                   label: 'Reject URL',
                                   onClick: () => void handleRejectUrl(url),
-                                  icon: reindexingUrls.has(url.url_id) ? '⏳' : '❌',
+                                  icon: reindexingUrls.has(url.url_id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />,
                                   variant: 'danger' as const,
                                   disabled: reindexingUrls.has(url.url_id)
                                 },
                                 {
                                   label: 'Delete URL',
                                   onClick: () => handleDeleteUrl(url),
-                                  icon: '🗑️',
+                                  icon: <Trash2 className="w-4 h-4" />,
                                   variant: 'danger' as const
                                 }
                               ] : [])

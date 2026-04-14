@@ -4,10 +4,10 @@ Provides real-time rate limiting metrics for admin dashboard.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Annotated
 
-from models.app import App
 from db.database import get_db
+from services.app_service import AppService
 from services.rate_limit_service import rate_limit_service
 from utils.logger import get_logger
 
@@ -16,8 +16,8 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-@router.get("/")
-async def get_apps_usage_stats(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+@router.get("/", responses={500: {"description": "Internal server error"}})
+async def get_apps_usage_stats(db: Annotated[Session, Depends(get_db)]) -> List[Dict[str, Any]]:
     """
     Get usage statistics for all apps to display stress levels.
     
@@ -26,7 +26,7 @@ async def get_apps_usage_stats(db: Session = Depends(get_db)) -> List[Dict[str, 
     """
     try:
         # Get all apps with their rate limits
-        apps = db.query(App).all()
+        apps = AppService(db).get_all_apps()
         
         usage_stats = []
         
@@ -58,10 +58,10 @@ async def get_apps_usage_stats(db: Session = Depends(get_db)) -> List[Dict[str, 
         )
 
 
-@router.get("/{app_id}")
+@router.get("/{app_id}", responses={404: {"description": "App not found"}, 500: {"description": "Internal server error"}})
 async def get_app_usage_stats(
     app_id: int, 
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)]
 ) -> Dict[str, Any]:
     """
     Get usage statistics for a specific app.
@@ -74,7 +74,7 @@ async def get_app_usage_stats(
     """
     try:
         # Get app
-        app = db.query(App).filter(App.app_id == app_id).first()
+        app = AppService(db).get_app(app_id)
         if not app:
             raise HTTPException(
                 status_code=404,

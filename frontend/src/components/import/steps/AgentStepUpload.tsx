@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent } from 'react';
+import { FolderOpen } from 'lucide-react';
 import Alert from '../../ui/Alert';
 import type { AgentImportPreview } from '../../../types/import';
 import {
@@ -19,7 +20,7 @@ function AgentStepUpload({
   preview,
   isValidating,
   validationError,
-}: Props) {
+}: Readonly<Props>) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -27,48 +28,56 @@ function AgentStepUpload({
     if (f) onFileSelect(f);
   };
 
-  const inventoryItems = preview
-    ? [
-        preview.ai_service && {
-          label: 'AI Service',
-          icon: COMPONENT_TYPE_ICONS.ai_service,
-          name: preview.ai_service.component_name,
-        },
-        preview.silo && {
-          label: 'Silo',
-          icon: COMPONENT_TYPE_ICONS.silo,
-          name: preview.silo.component_name,
-        },
-        preview.output_parser && {
-          label: 'Output Parser',
-          icon: COMPONENT_TYPE_ICONS.output_parser,
-          name: preview.output_parser.component_name,
-        },
-        preview.mcp_configs.length > 0 && {
-          label: `MCP Configs (${preview.mcp_configs.length})`,
-          icon: COMPONENT_TYPE_ICONS.mcp_config,
-          name: preview.mcp_configs
-            .map((m) => m.component_name)
-            .join(', '),
-        },
-        preview.agent_tools.length > 0 && {
-          label: `Agent Tools (${preview.agent_tools.length})`,
-          icon: COMPONENT_TYPE_ICONS.agent,
-          name: preview.agent_tools
-            .map((t) => t.component_name)
-            .join(', '),
-        },
-      ].filter(Boolean)
-    : [];
+  type InventoryItem = { label: string; icon: string; name: string };
+
+  const inventoryItems = (
+    preview
+      ? [
+          preview.ai_service && {
+            label: 'AI Service',
+            icon: COMPONENT_TYPE_ICONS.ai_service,
+            name: preview.ai_service.component_name,
+          },
+          preview.silo && {
+            label: 'Silo',
+            icon: COMPONENT_TYPE_ICONS.silo,
+            name: preview.silo.component_name,
+          },
+          preview.output_parser && {
+            label: 'Output Parser',
+            icon: COMPONENT_TYPE_ICONS.output_parser,
+            name: preview.output_parser.component_name,
+          },
+          preview.mcp_configs.length > 0 && {
+            label: `MCP Configs (${preview.mcp_configs.length})`,
+            icon: COMPONENT_TYPE_ICONS.mcp_config,
+            name: preview.mcp_configs
+              .map((m) => m.component_name)
+              .join(', '),
+          },
+          preview.agent_tools.length > 0 && {
+            label: `Agent Tools (${preview.agent_tools.length})`,
+            icon: COMPONENT_TYPE_ICONS.agent,
+            name: preview.agent_tools
+              .map((t) => t.component_name)
+              .join(', '),
+          },
+        ]
+      : []
+  ).filter((item): item is InventoryItem => Boolean(item));
 
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label
+          htmlFor="agent-export-file-input"
+          className="block text-sm font-medium text-gray-700 mb-2"
+        >
           Select Export File
         </label>
         <input
           ref={fileInputRef}
+          id="agent-export-file-input"
           type="file"
           accept=".json,application/json"
           onChange={handleFileChange}
@@ -80,7 +89,7 @@ function AgentStepUpload({
           disabled={isValidating}
           className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
         >
-          <span className="mr-2">📁</span>
+          <FolderOpen className="w-5 h-5 mr-2" />
           {file ? 'Change File' : 'Select JSON File'}
         </button>
         {file && (
@@ -128,7 +137,7 @@ function AgentStepUpload({
                 Bundled Components
               </p>
               <div className="space-y-1">
-                {inventoryItems.map((item: any) => (
+                {inventoryItems.map((item) => (
                   <div
                     key={item.label}
                     className="flex items-center text-sm text-blue-800"
@@ -149,8 +158,8 @@ function AgentStepUpload({
               type="warning"
               message={
                 <ul className="list-disc list-inside space-y-1">
-                  {preview.global_warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
+                  {preview.global_warnings.map((w) => (
+                    <li key={w}>{w}</li>
                   ))}
                 </ul>
               }

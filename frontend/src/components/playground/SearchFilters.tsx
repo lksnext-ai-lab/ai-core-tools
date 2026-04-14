@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 
 export type MetadataOperator = '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte';
 export type SupportedDbType = 'PGVECTOR' | 'QDRANT';
@@ -46,7 +47,7 @@ const FILTER_OPERATOR_MAPPINGS: Record<SupportedDbType, Record<MetadataOperator,
 };
 
 function normalizeDbType(dbType?: string): SupportedDbType {
-  if (dbType && dbType.toUpperCase() === 'QDRANT') {
+  if (dbType?.toUpperCase() === 'QDRANT') {
     return 'QDRANT';
   }
   return DEFAULT_DB_TYPE;
@@ -105,10 +106,8 @@ function buildQdrantFilter(filters: PreparedFilter[], logicalOperator: '$and' | 
         });
         break;
       default:
-        targetList.push({
-          key,
-          match: { value },
-        });
+        // Unknown operator: fall back to match filter
+        targetList.push({ key, match: { value } });
     }
   });
 
@@ -129,11 +128,11 @@ function buildQdrantFilter(filters: PreparedFilter[], logicalOperator: '$and' | 
 function convertMetadataValue(fieldType: string, rawValue: string): unknown {
   switch (fieldType) {
     case 'int': {
-      const parsed = parseInt(rawValue, 10);
+      const parsed = Number.parseInt(rawValue, 10);
       return Number.isNaN(parsed) ? rawValue : parsed;
     }
     case 'float': {
-      const parsed = parseFloat(rawValue);
+      const parsed = Number.parseFloat(rawValue);
       return Number.isNaN(parsed) ? rawValue : parsed;
     }
     case 'bool':
@@ -182,7 +181,7 @@ export function SearchFilters({
   dbType,
   disabled = false,
   onFilterMetadataChange,
-}: SearchFiltersProps) {
+}: Readonly<SearchFiltersProps>) {
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [filterOperators, setFilterOperators] = useState<Record<string, MetadataOperator>>({});
   const [logicalOperator, setLogicalOperator] = useState<'$and' | '$or'>('$and');
@@ -230,7 +229,7 @@ export function SearchFilters({
     <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-700">
-          <span className="mr-2" aria-hidden="true">🔍</span>{' '}
+          <Search className="w-4 h-4 mr-2 inline-block" aria-hidden="true" />
           Filter by Metadata
         </h3>
         <div className="flex items-center gap-2">

@@ -1,3 +1,5 @@
+import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Loader2 } from 'lucide-react';
+
 export interface PanelFile {
   id: string;
   filename: string;
@@ -16,14 +18,26 @@ interface AttachedFilesPanelProps {
   title?: string;
 }
 
-function getFileIcon(fileType?: string): string {
+function getStatusClassName(status?: string): string {
+  if (status === 'ready') return 'bg-green-100 text-green-700';
+  if (status === 'error') return 'bg-red-100 text-red-700';
+  return 'bg-yellow-100 text-yellow-700';
+}
+
+function getExtractableLabel(fileType?: string, hasExtractableContent?: boolean): string {
+  if (fileType === 'image') return 'Vision ready';
+  if (hasExtractableContent) return 'Text extracted';
+  return 'No text';
+}
+
+function getFileIcon(fileType?: string) {
   switch (fileType) {
-    case 'pdf': return '📄';
-    case 'image': return '🖼️';
-    case 'text': return '📝';
-    case 'document': return '📑';
-    case 'output': return '⬇️';
-    default: return '📁';
+    case 'pdf': return <FileText className="w-4 h-4 text-gray-500" />;
+    case 'image': return <Image className="w-4 h-4 text-gray-500" />;
+    case 'text': return <FileType className="w-4 h-4 text-gray-500" />;
+    case 'document': return <FileText className="w-4 h-4 text-gray-500" />;
+    case 'output': return <ArrowDown className="w-4 h-4 text-gray-500" />;
+    default: return <FolderOpen className="w-4 h-4 text-gray-500" />;
   }
 }
 
@@ -39,11 +53,11 @@ export default function AttachedFilesPanel({
       {/* Header */}
       <div className="p-3 border-b">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-          <span>📎</span>
+          <Paperclip className="w-4 h-4" />
           <span>{title}</span>
           {files.length > 0 && (
             <span className="ml-auto text-xs text-gray-400">
-              {files.length} file{files.length !== 1 ? 's' : ''}
+              {files.length} file{files.length === 1 ? '' : 's'}
             </span>
           )}
         </h3>
@@ -60,7 +74,9 @@ export default function AttachedFilesPanel({
 
         {!isLoading && files.length === 0 && (
           <div className="py-6 text-center text-gray-400">
-            <div className="text-2xl mb-2">📎</div>
+            <div className="flex justify-center mb-2">
+              <Paperclip className="w-6 h-6" />
+            </div>
             <p className="text-xs">No files attached yet</p>
             <p className="text-xs mt-1 text-gray-300">Use the attach button to upload</p>
           </div>
@@ -72,7 +88,7 @@ export default function AttachedFilesPanel({
             className="flex items-start gap-2 bg-gray-50 rounded border border-gray-200 px-2 py-2 hover:border-gray-300 transition-colors"
           >
             {/* Icon */}
-            <span className="text-base shrink-0 mt-0.5">{getFileIcon(file.file_type)}</span>
+            <span className="shrink-0 mt-0.5">{getFileIcon(file.file_type)}</span>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
@@ -90,18 +106,14 @@ export default function AttachedFilesPanel({
                 )}
                 {file.processing_status && file.file_type !== 'output' && (
                   <span
-                    className={`text-xs px-1 py-0.5 rounded-full shrink-0 ${
-                      file.processing_status === 'ready'
-                        ? 'bg-green-100 text-green-700'
-                        : file.processing_status === 'error'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-yellow-100 text-yellow-700'
+                    className={`inline-flex items-center gap-0.5 text-xs px-1 py-0.5 rounded-full shrink-0 ${
+                      getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {file.processing_status === 'ready' && '✓ Ready'}
-                    {file.processing_status === 'error' && '✗ Error'}
-                    {file.processing_status === 'uploaded' && '⏳ Uploaded'}
-                    {file.processing_status === 'processing' && '⏳ Processing'}
+                    {file.processing_status === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
+                    {file.processing_status === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
+                    {file.processing_status === 'uploaded' && <><Loader2 className="w-3 h-3 animate-spin" /> Uploaded</>}
+                    {file.processing_status === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
                   </span>
                 )}
               </div>
@@ -111,7 +123,7 @@ export default function AttachedFilesPanel({
                   <>
                     {file.file_size_display && <span>·</span>}
                     <span className={file.has_extractable_content || file.file_type === 'image' ? 'text-green-600' : 'text-gray-400'}>
-                      {file.file_type === 'image' ? 'Vision ready' : file.has_extractable_content ? 'Text extracted' : 'No text'}
+                      {getExtractableLabel(file.file_type, file.has_extractable_content)}
                     </span>
                   </>
                 )}

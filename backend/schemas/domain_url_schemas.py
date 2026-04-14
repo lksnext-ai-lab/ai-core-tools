@@ -10,7 +10,7 @@ class DomainListItemSchema(BaseModel):
     name: str
     description: str
     base_url: str
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     url_count: int = 0
     silo_id: Optional[int] = None
     vector_db_type: Optional[str] = None
@@ -27,7 +27,7 @@ class DomainDetailSchema(BaseModel):
     content_tag: str
     content_class: str
     content_id: str
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     silo_id: Optional[int] = None
     url_count: int = 0
     vector_db_type: Optional[str] = None
@@ -58,7 +58,7 @@ class URLListItemSchema(BaseModel):
     """Schema for URL list items"""
     url_id: int
     url: str
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     status: Optional[str] = None
     
@@ -70,7 +70,7 @@ class URLDetailSchema(BaseModel):
     url_id: int
     url: str
     domain_id: int
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     status: Optional[str] = None
     

@@ -1,7 +1,40 @@
 ---
 name: git-github
 description: Expert in Git version control and GitHub workflows using Git and GitHub CLI (gh). Handles branching, commits, issues, pull requests, releases, and repository management.
-tools: [execute, read, edit, search,]
+tools: [execute, read, edit, search]
+handoffs:
+  - label: "Return to @backend-expert"
+    agent: backend-expert
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @react-expert"
+    agent: react-expert
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @oss-manager"
+    agent: oss-manager
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @docs-manager"
+    agent: docs-manager
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @test-expert"
+    agent: test-expert
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @alembic-expert"
+    agent: alembic-expert
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @version-bumper"
+    agent: version-bumper
+    prompt: "Git operations completed. Please review the result above and continue or conclude your workflow."
+    send: false
+  - label: "Return to @conductor"
+    agent: conductor
+    prompt: "@git-github has completed its step. Summary of what was done:\n\n<briefly describe: branch, commit SHA, PR URL, or release created>\n\nPlease update the Mission Context and tell me the next step."
+    send: false
 ---
 
 # Git & GitHub Agent

@@ -1,6 +1,5 @@
-export const getProviderBadgeColor = (provider: string) => {
-  const p = provider || '';
-  const normalized = p.toLowerCase();
+export const getProviderBadgeColor = (provider = '') => {
+  const normalized = provider.toLowerCase();
   const map: Record<string, string> = {
     'openai': 'bg-green-100 text-green-800',
     'azure': 'bg-blue-100 text-blue-800',

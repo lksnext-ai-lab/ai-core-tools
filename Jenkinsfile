@@ -11,7 +11,6 @@ pipeline {
         KUBE_NAMESPACE = "test"
         KUBE_CONFIG = '/home/jenkins/.kube/config'
         IMAGE_KUBECTL = "registry.lksnext.com/bitnami/kubectl:latest"
-        IMAGE_VERSION_BUMP = "registry.lksnext.com/devsecops/python-version-bumper:0.0.12"
         INTERNAL_LKS_DOCKER_REGISTRY_URL = "172.20.133.198:8086"
 
         //Sonar Related
@@ -20,12 +19,9 @@ pipeline {
         SONAR_BRANCH = "develop"
         IMAGE_SONARSCANNER = 'registry.lksnext.com/devsecops/custom-sonarscanner-cli:1.0'
         IMAGE_NODE = "registry.lksnext.com/devsecops/node-22:2.0"
-        GIT_CREDENTIAL = credentials('814b38ca-a572-4188-9c47-ee75ca443903')
     }
     
     stages {
-
-        
         stage('Docker login') {
             steps {
                 script {
@@ -35,36 +31,73 @@ pipeline {
             }
         }
         
-        stage('Version Bump') {
+        stage('Run Tests') {
             steps {
                 script {
-                    echo "Debugging credentials..."
-                    echo "GIT_CREDENTIAL exists: ${GIT_CREDENTIAL != null}"
-                    echo "GIT_CREDENTIAL length: ${GIT_CREDENTIAL.length()}"
-                    echo "GIT_CREDENTIAL type: ${GIT_CREDENTIAL.getClass().getName()}"
-                    
-                    // Split credentials and check parts
-                    def credParts = GIT_CREDENTIAL.split(':')
-                    echo "Number of credential parts: ${credParts.length}"
-                    if (credParts.length >= 2) {
-                        echo "Username part exists: ${credParts[0] != null}"
-                        echo "Username length: ${credParts[0].length()}"
-                        echo "Password part exists: ${credParts[1] != null}"
-                        echo "Password length: ${credParts[1].length()}"
+                    // Start ephemeral test database (tmpfs — no persistent data)
+                    sh '''
+                        docker run -d --name mattin-test-db \
+                            -e POSTGRES_DB=test_db \
+                            -e POSTGRES_USER=test_user \
+                            -e POSTGRES_PASSWORD=test_pass \
+                            -e "POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C" \
+                            -p 5433:5432 \
+                            --tmpfs /var/lib/postgresql/data \
+                            pgvector/pgvector:pg17
+                    '''
 
-                    }
-                    
-                    def username = credParts[0]
-                    def password = credParts[1]
-                    
-                    sh """
+                    // Wait for database to be ready
+                    sh '''
+                        echo "Waiting for test database..."
+                        ready=0
+                        for i in $(seq 1 30); do
+                            if docker exec mattin-test-db pg_isready -U test_user -d test_db; then
+                                ready=1
+                                break
+                            fi
+                            sleep 2
+                        done
+                        if [ "$ready" -ne 1 ]; then
+                            echo "Test database did not become ready in time."
+                            exit 1
+                        fi
+                        echo "Test database is ready."
+                    '''
+
+                    // Build test runner image
+                    sh "docker build --no-cache -f backend/Dockerfile.test -t mattin-test-runner ."
+
+                    // Run tests with JUnit XML and coverage output
+                    sh '''
+                        mkdir -p test-results
                         docker run --rm \
-                        -v "\$(pwd)":/app \
-                        -e GITLAB_CREDENTIAL_USER=${username} \
-                        -e GITLAB_CREDENTIAL_PASSWORD=${password} \
-                        -e TEST=testAAAABC \
-                        $IMAGE_VERSION_BUMP
-                    """
+                            --network host \
+                            -e TEST_DATABASE_URL=postgresql://test_user:test_pass@localhost:5433/test_db \
+                            -e SQLALCHEMY_DATABASE_URI=postgresql://test_user:test_pass@localhost:5433/test_db \
+                            -e AICT_LOGIN=FAKE \
+                            -e SECRET_KEY=test-secret-key-32chars-minimum-ok \
+                            -e AICT_OMNIADMINS=admin@test.com \
+                            -e AICT_MODE=SELF-HOSTED \
+                            -e FRONTEND_URL=http://localhost:5173 \
+                            -e REPO_BASE_FOLDER=/tmp/test_repos \
+                            -v "$(pwd)/test-results:/app/test-results" \
+                            mattin-test-runner \
+                            pytest -v \
+                                --junitxml=/app/test-results/junit.xml \
+                                --cov=backend \
+                                --cov-report=xml:/app/test-results/coverage.xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Collect test results for Jenkins UI
+                    junit allowEmptyResults: true, testResults: 'test-results/junit.xml'
+
+                    // Cleanup test infrastructure
+                    sh 'docker stop mattin-test-db || true'
+                    sh 'docker rm mattin-test-db || true'
+                    sh 'docker rmi mattin-test-runner || true'
                 }
             }
         }
@@ -128,7 +161,8 @@ pipeline {
                         -Dsonar.projectBaseDir=/app \
                         -Dsonar.sources=/app \
                         -Dsonar.branch.name=$SONAR_BRANCH \
-                        -Dsonar.python.version=3.12
+                        -Dsonar.python.version=3.12 \
+                        -Dsonar.python.coverage.reportPaths=test-results/coverage.xml
                     '''
                 }
             }
@@ -398,16 +432,4 @@ pipeline {
             deleteDir()
         }
     }
-}
-
-def incrementVersion(String version, String type) {
-    def parts = version.split("\\.")
-    if (type == "major") {
-        return "${parts[0].toInteger() + 1}.0.0"
-    } else if (type == "minor") {
-        return "${parts[0]}.${parts[1].toInteger() + 1}.0"
-    } else if (type == "patch") {
-        return "${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
-    }
-    return version
 }

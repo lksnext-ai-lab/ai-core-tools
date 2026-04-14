@@ -14,13 +14,11 @@ import {
   getSelectionImpact,
 } from '../../../utils/dependencyGraph';
 
-type ComponentKey = string; // "type:name"
-
 interface Props {
   preview: AppImportPreview;
-  selection: Record<ComponentKey, boolean>;
+  selection: Record<string, boolean>;
   onSelectionChange: (
-    selection: Record<ComponentKey, boolean>
+    selection: Record<string, boolean>
   ) => void;
 }
 
@@ -44,7 +42,7 @@ function AppStepSelect({
   preview,
   selection,
   onSelectionChange,
-}: Props) {
+}: Readonly<Props>) {
   const graph = buildDependencyGraph(preview.dependencies);
 
   const categories: CategoryConfig[] = [
@@ -169,27 +167,27 @@ function AppStepSelect({
     (key: string, selected: boolean) => {
       const updated = { ...selection };
 
-      if (!selected) {
-        // Deselecting: cascade mandatory dependents
-        const impact = getDeselectionImpact(
-          graph,
-          key,
-          selection
-        );
-        updated[key] = false;
-        for (const k of impact.autoDeselect) {
-          updated[k] = false;
-        }
-      } else {
-        // Selecting: auto-select mandatory deps
-        const impact = getSelectionImpact(
-          graph,
-          key,
-          selection
-        );
-        updated[key] = true;
-        for (const k of impact.autoSelect) {
-          updated[k] = true;
+if (selected) {
+      // Selecting: auto-select mandatory deps
+      const impact = getSelectionImpact(
+        graph,
+        key,
+        selection
+      );
+      updated[key] = true;
+      for (const k of impact.autoSelect) {
+        updated[k] = true;
+      }
+    } else {
+      // Deselecting: cascade mandatory dependents
+      const impact = getDeselectionImpact(
+        graph,
+        key,
+        selection
+      );
+      updated[key] = false;
+      for (const k of impact.autoDeselect) {
+        updated[k] = false;
         }
       }
 

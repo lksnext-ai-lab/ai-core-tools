@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bot, MessageCircle, Store, ArrowRight, Check, X } from 'lucide-react';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -85,7 +86,7 @@ export default function MarketplaceHomePage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-        <ErrorState error={error} onRetry={() => window.location.reload()} />
+        <ErrorState error={error} onRetry={() => globalThis.location.reload()} />
       </div>
     );
   }
@@ -107,8 +108,8 @@ export default function MarketplaceHomePage() {
           className="w-full text-left bg-white rounded-2xl shadow-sm border border-blue-200 p-6 hover:border-blue-400 hover:shadow-md transition-all duration-200 group"
         >
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center text-3xl shrink-0 group-hover:bg-blue-200 transition-colors duration-200">
-              🏪
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors duration-200">
+              <Store className="w-7 h-7 text-blue-600" aria-hidden="true" />
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-semibold text-gray-900 group-hover:text-blue-700 transition-colors duration-200">
@@ -118,9 +119,7 @@ export default function MarketplaceHomePage() {
                 Discover and chat with AI agents published by your organisation
               </p>
             </div>
-            <span className="text-gray-400 text-xl group-hover:text-blue-500 transition-colors duration-200" aria-hidden="true">
-              →
-            </span>
+            <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" aria-hidden="true" />
           </div>
         </button>
 
@@ -131,7 +130,7 @@ export default function MarketplaceHomePage() {
           {conversations.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl" aria-hidden="true">💬</span>
+                <MessageCircle className="w-8 h-8 text-gray-400" aria-hidden="true" />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
               <p className="text-gray-500 text-sm mb-6">
@@ -142,12 +141,12 @@ export default function MarketplaceHomePage() {
                 onClick={() => navigate('/marketplace')}
                 className="inline-flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors duration-200"
               >
-                <span className="mr-2" aria-hidden="true">🏪</span>
+                <Store className="w-4 h-4 mr-2" aria-hidden="true" />
                 Browse Agents
               </button>
             </div>
           ) : (
-            <ul className="space-y-3" role="list">
+            <ul className="space-y-3">
               {conversations.map((conv) => (
                 <li key={conv.conversation_id} className="flex items-center gap-2">
                   <button
@@ -166,7 +165,7 @@ export default function MarketplaceHomePage() {
                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                           />
                         ) : (
-                          <span className="text-lg" aria-hidden="true">🤖</span>
+                          <Bot className="w-5 h-5 text-blue-400" aria-hidden="true" />
                         )}
                       </div>
 
@@ -190,9 +189,7 @@ export default function MarketplaceHomePage() {
                         )}
                       </div>
 
-                      <span className="text-gray-300 group-hover:text-blue-400 transition-colors duration-200" aria-hidden="true">
-                        ›
-                      </span>
+                      <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors duration-200" aria-hidden="true" />
                     </div>
                   </button>
 
@@ -207,7 +204,9 @@ export default function MarketplaceHomePage() {
                         : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
                     }`}
                   >
-                    {confirmDeleteId === conv.conversation_id ? '✓' : '✕'}
+                    {confirmDeleteId === conv.conversation_id
+                      ? <Check className="w-4 h-4" />
+                      : <X className="w-4 h-4" />}
                   </button>
                 </li>
               ))}
@@ -220,9 +219,9 @@ export default function MarketplaceHomePage() {
               <button
                 type="button"
                 onClick={() => navigate('/marketplace')}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
               >
-                Browse more agents →
+                Browse more agents <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}

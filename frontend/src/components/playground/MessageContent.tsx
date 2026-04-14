@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import InlineFileImage from './InlineFileImage';
 import InlineFileDownload from './InlineFileDownload';
 
@@ -60,12 +61,40 @@ function formatJson(jsonStr: string): React.ReactNode {
 function MarkdownCode({ className, children, ...props }: any) {
   const match = /language-(\w+)/.exec(className || '');
   const isInline = !match;
-  return !isInline ? (
-    <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto">
-      <code className={className} {...props}>{children}</code>
-    </pre>
-  ) : (
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    const text = typeof children === 'string' ? children : String(children);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return isInline ? (
     <code className="bg-gray-100 px-1 py-0.5 rounded text-sm" {...props}>{children}</code>
+  ) : (
+    <div className="relative group">
+      <button
+        onClick={handleCopy}
+        aria-label="Copy code"
+        className="absolute top-2 right-2 p-1.5 rounded-md bg-gray-700/50 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+      >
+        {copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        )}
+      </button>
+      <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 pr-12 rounded-lg overflow-x-auto">
+        <code className={className} {...props}>{children}</code>
+      </pre>
+    </div>
   );
 }
 
@@ -130,18 +159,18 @@ function MarkdownBlockquote({ children, ...props }: any) {
 
 function MarkdownTable({ children, ...props }: any) {
   return (
-    <div className="overflow-x-auto mb-4">
-      <table className="min-w-full border border-gray-300" {...props}>{children}</table>
+    <div className="overflow-x-auto mb-4 rounded-lg overflow-hidden">
+      <table className="min-w-full border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden" {...props}>{children}</table>
     </div>
   );
 }
 
 function MarkdownTh({ children, ...props }: any) {
-  return <th className="border border-gray-300 px-4 py-2 bg-gray-100 font-semibold" {...props}>{children}</th>;
+  return <th className="border border-gray-200 dark:border-gray-700 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold" {...props}>{children}</th>;
 }
 
 function MarkdownTd({ children, ...props }: any) {
-  return <td className="border border-gray-300 px-4 py-2" {...props}>{children}</td>;
+  return <td className="border border-gray-200 dark:border-gray-700 px-4 py-2" {...props}>{children}</td>;
 }
 
 const markdownComponents: Record<string, React.ComponentType<any>> = {
@@ -169,7 +198,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
       );
     }
 
-    const stringContent = content;
+    const stringContent = content as string;
 
     const hasFileMarkers = stringContent.includes('](file://');
 
@@ -177,9 +206,10 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
       return formatJson(stringContent);
     } else if (hasFileMarkers || isMarkdown(stringContent)) {
       return (
-        <div className="prose prose-sm max-w-none">
+        <div className="prose prose-sm dark:prose-invert max-w-none">
           <ReactMarkdown
             components={markdownComponents}
+            remarkPlugins={[remarkGfm]}
             urlTransform={(url) => url}
           >
             {stringContent}
@@ -193,7 +223,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
 
   return (
     <ResolveFileUrlContext.Provider value={resolveFileUrl}>
-      <div className="text-gray-800">
+      <div className="text-gray-800 dark:text-gray-200">
         {renderedContent}
       </div>
     </ResolveFileUrlContext.Provider>

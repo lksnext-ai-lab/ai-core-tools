@@ -146,25 +146,18 @@ class TestCreateRepository:
     def test_create_repository_with_silo_link(
         self, client, fake_app, owner_headers, db
     ):
-        """Repository can be linked to a silo for vectorization."""
-        db.flush()
-        from tests.factories import SiloFactory, configure_factories
-
-        configure_factories(db)
-        silo = SiloFactory(app_id=fake_app.app_id)
+        """Repository creation automatically creates an associated silo."""
         db.flush()
 
         response = client.post(
             f"/internal/apps/{fake_app.app_id}/repositories/0",
-            json=repository_payload(
-                name="Vectorized Repo",
-                silo_id=silo.silo_id,
-            ),
+            json=repository_payload(name="Vectorized Repo"),
             headers=owner_headers,
         )
         assert response.status_code in (200, 201)
         data = response.json()
-        assert data.get("silo_id") == silo.silo_id
+        # Repository service always creates a new silo automatically
+        assert data.get("silo_id") is not None
 
     def test_create_repository_requires_editor_role(
         self, client, fake_app, auth_headers, db

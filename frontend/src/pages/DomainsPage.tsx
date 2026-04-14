@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Globe, Link2, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -41,7 +42,7 @@ function DomainsPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getDomains(parseInt(appId));
+      const response = await apiService.getDomains(Number.parseInt(appId));
       console.log('Domains API response:', response); // Debug log
       setDomains(response || []); // Response is the array directly, not response.data
     } catch (err) {
@@ -62,7 +63,7 @@ function DomainsPage() {
     if (!domainToDelete || !appId) return;
     
     try {
-      await apiService.deleteDomain(parseInt(appId), domainToDelete.domain_id);
+      await apiService.deleteDomain(Number.parseInt(appId), domainToDelete.domain_id);
       setDomains(domains.filter(d => d.domain_id !== domainToDelete.domain_id));
       setShowDeleteModal(false);
       setDomainToDelete(null);
@@ -144,7 +145,7 @@ function DomainsPage() {
               <div className="flex items-center">
                 <div className="flex-shrink-0 h-10 w-10">
                   <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <span className="text-purple-600 text-lg">🌐</span>
+                    <Globe className="w-5 h-5 text-purple-600" />
                   </div>
                 </div>
                 <div className="ml-4">
@@ -192,20 +193,20 @@ function DomainsPage() {
                   {
                     label: 'URLs',
                     onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/detail`),
-                    icon: '🔗',
+                    icon: <Link2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
                       label: 'Edit',
                       onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
-                      icon: '✏️',
+                      icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
                       label: 'Delete',
                       onClick: () => handleDeleteDomain(domain),
-                      icon: '🗑️',
+                      icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
                     }
                   ] : [])
@@ -215,7 +216,7 @@ function DomainsPage() {
             )
           }
         ]}
-        emptyIcon="🌐"
+        emptyIcon={<Globe className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Domains Yet"
         emptySubMessage="Create your first domain to start extracting content from websites."
         loading={loading}

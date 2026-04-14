@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 
 interface EmbeddingService {
   service_id: number;
   name: string;
+  is_system?: boolean;
 }
 
 interface VectorDbOption {
@@ -198,7 +200,7 @@ function DomainFormPage() {
             onClick={() => navigate(`/apps/${appId}/domains`)}
             className="text-gray-600 hover:text-gray-900 px-3 py-1 rounded-md hover:bg-gray-100"
           >
-            ← Back to Domains
+            <ArrowLeft className="w-4 h-4 mr-1 inline-block" /> Back to Domains
           </button>
         </div>
       </div>
@@ -269,7 +271,7 @@ function DomainFormPage() {
             <option value="">Select an embedding service</option>
             {embeddingServices.map((service) => (
               <option key={service.service_id} value={service.service_id}>
-                {service.name}
+                {service.is_system ? `[System] ${service.name}` : service.name}
               </option>
             ))}
           </select>

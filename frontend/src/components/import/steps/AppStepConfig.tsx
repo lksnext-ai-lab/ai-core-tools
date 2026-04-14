@@ -32,7 +32,7 @@ function AppStepConfig({
   hasConflict,
   conflictMode,
   onConflictModeChange,
-}: Props) {
+}: Readonly<Props>) {
   return (
     <div className="space-y-4">
       <div>
@@ -61,6 +61,7 @@ function AppStepConfig({
             {MODES.map((m) => (
               <label
                 key={m.value}
+                aria-label={m.label}
                 className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer ${
                   conflictMode === m.value
                     ? 'border-blue-400 bg-blue-50'

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Search, Info } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchFilters from '../components/playground/SearchFilters';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
@@ -47,14 +48,14 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
   const loadRepositoryInfo = async () => {
     try {
-      const repositoryData = await apiService.getRepository(parseInt(appId!), parseInt(repositoryId!));
+      const repositoryData = await apiService.getRepository(Number.parseInt(appId!), Number.parseInt(repositoryId!));
       setRepository(repositoryData);
       
       // The metadata_fields should already be included in the repository response from the backend
       // If not available and there's a silo_id, we can try to load it separately
       if (!repositoryData.metadata_fields?.length && repositoryData.silo_id) {
         try {
-          const siloData = await apiService.getSilo(parseInt(appId!), repositoryData.silo_id);
+          const siloData = await apiService.getSilo(Number.parseInt(appId!), repositoryData.silo_id);
           setRepository(prev => ({
             ...prev!,
             metadata_fields: siloData.metadata_fields || []
@@ -83,8 +84,8 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
       // Use the repository search API with filters
       const response = await apiService.searchRepositoryDocuments(
-        parseInt(appId!), 
-        parseInt(repositoryId!), 
+        Number.parseInt(appId!), 
+        Number.parseInt(repositoryId!), 
         query,
         10,
         searchFilters
@@ -126,7 +127,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
               onClick={handleGoBack}
               className="text-gray-500 hover:text-gray-700 transition-colors"
             >
-              ← Back
+              <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back
             </button>
             <h1 className="text-3xl font-bold text-gray-900">Repository Search</h1>
           </div>
@@ -171,7 +172,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
                 {searching ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 ) : (
-                  <span>🔍</span>
+                  <Search className="w-4 h-4" />
                 )}
                 Search
               </button>
@@ -196,7 +197,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
           
           <div className="space-y-4">
             {results.map((result, index) => {
-              const uniqueKey = `${result.metadata.source}-${result.metadata.page ?? 'no-page'}-${result.page_content.substring(0, 30).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')}`;
+              const uniqueKey = `${result.metadata.source}-${result.metadata.page ?? 'no-page'}-${result.page_content.substring(0, 30).replaceAll(/\s+/g, '-').replaceAll(/[^a-zA-Z0-9-]/g, '')}`;
               return (
               <div key={uniqueKey} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-2">
@@ -238,7 +239,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
       {!searching && results.length === 0 && hasSearched && (
         <div className="bg-white shadow rounded-lg p-6">
           <div className="text-center">
-            <span className="text-gray-400 text-4xl mb-4">🔍</span>
+            <Search className="w-10 h-10 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
             <p className="text-gray-600">
               {query ? 
@@ -254,7 +255,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-blue-400 text-xl">ℹ️</span>
+            <Info className="w-5 h-5 text-blue-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-blue-800">

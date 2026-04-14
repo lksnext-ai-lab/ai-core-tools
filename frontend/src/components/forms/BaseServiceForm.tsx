@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import FormActions from './FormActions';
 import { apiService } from '../../services/api';
 import Alert from '../ui/Alert';
@@ -69,8 +70,10 @@ function BaseServiceForm({
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [apiKeyChanged, setApiKeyChanged] = useState(false);
 
   const isEditing = !!service && service.service_id !== 0;
+  const MASKED_KEY_PREFIX = '****';
 
   // Initialize form with existing service data
   useEffect(() => {
@@ -83,11 +86,15 @@ function BaseServiceForm({
         api_key: service.api_key === 'CHANGE_ME' ? '' : (service.api_key || ''),
         base_url: service.base_url || ''
       });
+      setApiKeyChanged(false);
     }
   }, [service]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'api_key') {
+      setApiKeyChanged(true);
+    }
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -116,7 +123,7 @@ function BaseServiceForm({
     try {
       let result;
       if (serviceType === 'AI') {
-        result = await apiService.testAIServiceConnectionWithConfig(parseInt(appId), formData);
+        result = await apiService.testAIServiceConnectionWithConfig(Number.parseInt(appId), formData);
       } else {
         // Embedding service test not implemented yet
         result = { status: 'error', message: 'Testing not supported for this service type yet' };
@@ -153,7 +160,13 @@ function BaseServiceForm({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(formData);
+      const submitData = { ...formData };
+      // If editing and api_key was not changed, send the original masked value
+      // so the backend knows to preserve the existing key
+      if (isEditing && !apiKeyChanged && service) {
+        submitData.api_key = service.api_key || MASKED_KEY_PREFIX;
+      }
+      await onSubmit(submitData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -164,12 +177,15 @@ function BaseServiceForm({
   const currentProviderDefaults = formData.provider ? getProviderDefaults(formData.provider) : null;
 
   const isApiKeyRequired = formData.provider !== 'Custom' && formData.provider !== 'Ollama' && formData.provider !== 'GoogleCloud';
-  const isValid = 
-    formData.name.trim() !== '' && 
-    formData.provider !== '' && 
-    formData.model_name.trim() !== '' && 
+  const hasValidApiKey = isEditing
+    ? (!apiKeyChanged || formData.api_key.trim() !== '' || !isApiKeyRequired)
+    : (!isApiKeyRequired || formData.api_key.trim() !== '');
+  const isValid =
+    formData.name.trim() !== '' &&
+    formData.provider !== '' &&
+    formData.model_name.trim() !== '' &&
     formData.base_url.trim() !== '' &&
-    (!isApiKeyRequired || formData.api_key.trim() !== '');
+    hasValidApiKey;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -291,6 +307,15 @@ function BaseServiceForm({
             name="api_key"
             value={formData.api_key}
             onChange={handleChange}
+            onFocus={() => {
+              if (!apiKeyChanged && formData.api_key.startsWith(MASKED_KEY_PREFIX)) {
+                setFormData(prev => ({ ...prev, api_key: '' }));
+                setApiKeyChanged(true);
+              }
+            }}
+            autoComplete="off"
+            data-lpignore="true"
+            data-form-type="other"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder={formData.provider === 'GoogleCloud' ? '{"type":"service_account","project_id":...}' : 'sk-...'}
             required={formData.provider !== 'Custom' && formData.provider !== 'Ollama'}
@@ -348,7 +373,7 @@ function BaseServiceForm({
           <div className={`p-3 rounded-lg border ${testResult.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <span className="text-xl">{testResult.status === 'success' ? '✅' : '❌'}</span>
+                {testResult.status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
               </div>
               <div className="ml-3 w-full">
                 <h3 className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>

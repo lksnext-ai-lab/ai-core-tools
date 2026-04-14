@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
+import { AlertTriangle, CheckCircle2, Lightbulb, Brain, MessageCircle } from 'lucide-react';
 import { apiService } from '../../services/api';
 
 interface PromptModalProps {
@@ -26,7 +27,7 @@ function PromptModal({
   initialSystemPrompt = '', 
   initialPromptTemplate = '',
   onPromptUpdate 
-}: PromptModalProps) {
+}: Readonly<PromptModalProps>) {
   const [promptData, setPromptData] = useState<PromptData>({
     system_prompt: initialSystemPrompt,
     prompt_template: initialPromptTemplate
@@ -96,27 +97,35 @@ function PromptModal({
     onClose();
   };
 
-  const tabs = [
+  const tabs: Array<{ id: 'system' | 'template'; label: string; description: string; icon: ReactNode }> = [
     {
       id: 'system' as const,
       label: 'System Prompt',
       description: 'Agent behavior and capabilities',
-      icon: '🧠'
+      icon: <Brain className="w-4 h-4" />
     },
     {
       id: 'template' as const,
       label: 'Template Prompt',
       description: 'User interaction template',
-      icon: '💬'
+      icon: <MessageCircle className="w-4 h-4" />
     }
   ];
 
   if (!isOpen) return null;
 
+  const promptTypeLabel = activeTab === 'system' ? 'System' : 'Template';
+  const saveLabel = saving ? 'Saving...' : `Save ${promptTypeLabel} Prompt`;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleClose}></div>
+      <button
+        type="button"
+        aria-label="Close modal"
+        className="fixed inset-0 w-full bg-black bg-opacity-50 transition-opacity cursor-default"
+        onClick={handleClose}
+      />
       
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
@@ -206,7 +215,7 @@ function PromptModal({
             {error && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <div className="flex items-center">
-                  <span className="text-red-600 mr-2">⚠️</span>
+                  <AlertTriangle className="w-5 h-5 text-yellow-500 mr-2 shrink-0" />
                   <p className="text-red-800">{error}</p>
                 </div>
               </div>
@@ -215,7 +224,7 @@ function PromptModal({
             {success && (
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <div className="flex items-center">
-                  <span className="text-green-600 mr-2">✅</span>
+                  <CheckCircle2 className="w-5 h-5 text-green-500 mr-2 shrink-0" />
                   <p className="text-green-800">{success}</p>
                 </div>
               </div>
@@ -223,7 +232,7 @@ function PromptModal({
 
             {/* Help Text */}
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="text-sm font-medium text-blue-800 mb-2">💡 Tips for Writing Effective Prompts</h4>
+              <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-2"><Lightbulb className="w-4 h-4 text-yellow-500" /> Tips for Writing Effective Prompts</h4>
               <ul className="text-sm text-blue-700 space-y-1">
                 <li>• Be specific about the agent's role and capabilities</li>
                 <li>• Include examples of expected behavior</li>
@@ -251,7 +260,7 @@ function PromptModal({
                 disabled={saving}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {saving ? 'Saving...' : `Save ${activeTab === 'system' ? 'System' : 'Template'} Prompt`}
+                {saveLabel}
               </button>
             </div>
           </div>

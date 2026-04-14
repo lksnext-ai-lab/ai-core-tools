@@ -15,6 +15,7 @@ interface EmbeddingService {
   name: string;
   provider?: string;
   model_name?: string;
+  is_system?: boolean;
 }
 
 interface VectorDbOption {
@@ -52,8 +53,8 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
-    const appIdNumber = parseInt(appId, 10);
-    const repositoryIdNumber = parseInt(repositoryId, 10);
+    const appIdNumber = Number.parseInt(appId, 10);
+    const repositoryIdNumber = Number.parseInt(repositoryId, 10);
 
     if (Number.isNaN(appIdNumber) || Number.isNaN(repositoryIdNumber)) {
       return;
@@ -115,7 +116,7 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
-    const appIdNumber = parseInt(appId, 10);
+    const appIdNumber = Number.parseInt(appId, 10);
     if (Number.isNaN(appIdNumber)) {
       setError('Invalid application context');
       return;
@@ -138,7 +139,7 @@ const RepositoryFormPage: React.FC = () => {
     }
 
     const normalizedVectorDbType = formData.vector_db_type.toUpperCase();
-    const repositoryIdNumber = repositoryId ? parseInt(repositoryId, 10) : 0;
+    const repositoryIdNumber = repositoryId ? Number.parseInt(repositoryId, 10) : 0;
     if (!isNewRepository && Number.isNaN(repositoryIdNumber)) {
       setError('Invalid repository context');
       return;
@@ -275,7 +276,7 @@ const RepositoryFormPage: React.FC = () => {
                 value={formData.embedding_service_id || ''}
                 onChange={(e) => setFormData({ 
                   ...formData, 
-                  embedding_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined 
+                  embedding_service_id: e.target.value ? Number.parseInt(e.target.value, 10) : undefined 
                 })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
@@ -283,7 +284,7 @@ const RepositoryFormPage: React.FC = () => {
                 <option value="">Select an embedding service</option>
                 {embeddingServices.map((service) => (
                   <option key={service.service_id} value={service.service_id}>
-                    {service.provider && service.model_name
+                    {service.is_system ? '[System] ' : ''}{service.provider && service.model_name
                       ? `${service.name} (${service.provider} - ${service.model_name})`
                       : service.name}
                   </option>

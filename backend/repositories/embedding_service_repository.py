@@ -26,6 +26,11 @@ class EmbeddingServiceRepository:
     def get_all(db: Session) -> List[EmbeddingService]:
         """Get all embedding services"""
         return db.query(EmbeddingService).all()
+
+    @staticmethod
+    def get_system_services(db: Session) -> List[EmbeddingService]:
+        """Return all EmbeddingService records with app_id IS NULL (system/platform services)."""
+        return db.query(EmbeddingService).filter(EmbeddingService.app_id.is_(None)).all()
     
     @staticmethod
     def create(db: Session, embedding_service: EmbeddingService) -> EmbeddingService:

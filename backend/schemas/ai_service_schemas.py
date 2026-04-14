@@ -9,12 +9,13 @@ class AIServiceListItemSchema(BaseModel):
     """Schema for AI service list items"""
     service_id: int
     name: str
-    provider: Optional[str]
+    provider: Optional[str] = None
     model_name: str
     supports_video: bool = False
     created_at: Optional[datetime]
     needs_api_key: bool = False
-    
+    is_system: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -22,7 +23,7 @@ class AIServiceDetailSchema(BaseModel):
     """Schema for detailed AI service information"""
     service_id: int
     name: str
-    provider: Optional[str]
+    provider: Optional[str] = None
     model_name: str
     api_key: str
     base_url: str

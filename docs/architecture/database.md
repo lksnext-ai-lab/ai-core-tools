@@ -28,6 +28,7 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 | `sub` | String(255) | OIDC subject identifier |
 | `role` | String(45) | Global role (omniadmin, user, guest) |
 | `create_date` | DateTime | Account creation timestamp |
+| `is_active` | Boolean | Whether the user account is active (default `true`). Inactive users cannot log in or call the API. |
 
 **Relationships**:
 - `owned_apps` → List of apps owned by this user
@@ -241,6 +242,28 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 
 **Category values**: `customer_support`, `education`, `research_analysis`, `content_creation`, `development_tools`, `business_finance`, `health_wellness`, `other`
 
+### AgentMarketplaceRating
+
+**Table**: `AgentMarketplaceRating`  
+**Purpose**: One star rating (1–5) per user per marketplace agent profile. Users may only rate agents they have had at least one marketplace conversation with.
+
+| Column | Type | Description |
+|--------|------|--------------|
+| `id` | Integer (PK) | Unique rating identifier |
+| `profile_id` | Integer (FK → AgentMarketplaceProfile, CASCADE) | Rated agent profile |
+| `user_id` | Integer (FK → User, CASCADE) | User who submitted the rating |
+| `rating` | Integer | Star rating value (1–5) |
+| `created_at` | DateTime | When the rating was first submitted |
+| `updated_at` | DateTime | When the rating was last updated |
+
+**Unique constraint**: `(profile_id, user_id)` — one rating per user per agent.
+
+**Relationships**:
+- `profile` → `AgentMarketplaceProfile` (the rated agent)
+- `user` → `User` who made the rating
+
+**Notes**: Submitting a second rating for the same agent updates the existing record rather than creating a new one. The profile's `rating_avg` and `rating_count` are recalculated atomically on each upsert.
+
 ### EmbeddingService
 
 **Table**: `EmbeddingService`  
@@ -357,6 +380,31 @@ Provides common fields and methods for AIService and EmbeddingService.
 - `parent` → Parent folder
 - `children` → Child folders
 - `resources` → Files in this folder
+
+### SystemSetting
+
+**Table**: `system_settings`  
+**Purpose**: Platform-wide configuration settings managed by OMNIADMIN users. Values are resolved in order: **environment variable → database override → default** (from `system_defaults.yaml`).
+
+| Column | Type | Description |
+|--------|------|--------------|
+| `key` | String(100) (PK) | Unique setting identifier |
+| `value` | Text (nullable) | Database override value (null = use default) |
+| `type` | String(20) | Value type: `string`, `integer`, `boolean`, `float`, `json`, `string_list` |
+| `category` | String(50) | UI grouping category (e.g., `marketplace`, `general`, `limits`) |
+| `description` | String(500) | Human-readable description of the setting |
+| `updated_at` | DateTime | When the value was last changed |
+
+**Notes**:
+- Environment variable names follow the pattern `AICT_SETTING_<KEY_UPPERCASE>` (e.g., `AICT_SETTING_MARKETPLACE_CALL_QUOTA`).
+- The defaults file `backend/system_defaults.yaml` defines all valid keys, their types, categories, and fallback values.
+- Settings are managed via the Admin API (`GET/PUT/DELETE /internal/admin/settings/{key}`).
+
+**Built-in settings**:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `marketplace_call_quota` | integer | `0` | Max marketplace API calls per user per month. `0` = unlimited. |
 
 ## Content Models
 

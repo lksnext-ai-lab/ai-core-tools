@@ -8,15 +8,15 @@ class MediaResponse(BaseModel):
     media_id: int
     name: str
     source_type: str
-    source_url: Optional[str]
-    duration: Optional[float]
-    language: Optional[str]
+    source_url: Optional[str] = None
+    duration: Optional[float] = None  # Duration in seconds for audio/video
+    language: Optional[str] = None  # Detected language for text media
     status: str
     processing_mode: Optional[str] = 'basic'
     error_message: Optional[str]
     create_date: datetime
-    processed_at: Optional[datetime]
-    folder_id: Optional[int]
+    processed_at: Optional[datetime] = None
+    folder_id: Optional[int] = None
 
 class MediaListResponse(BaseModel):
     media: List[MediaResponse]
@@ -33,5 +33,5 @@ class MediaUploadResponse(BaseModel):
 class MediaStatusResponse(BaseModel):
     media_id: int
     status: str
-    error_message: Optional[str]
-    processed_at: Optional[datetime]
+    error_message: Optional[str] = None
+    processed_at: Optional[datetime] = None

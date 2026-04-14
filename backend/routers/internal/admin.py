@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Annotated, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -20,21 +20,27 @@ logger = get_logger(__name__)
 
 router = APIRouter(tags=["admin"])
 
+USER_NOT_FOUND = "User not found"
 
-def require_admin(auth_context: AuthContext = Depends(get_current_user_oauth)):
+
+def require_admin(auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)]):
     """Dependency to require admin access"""
     if not is_omniadmin(auth_context.identity.email):
         raise HTTPException(status_code=403, detail="Admin access required")
     return auth_context
 
 
-@router.get("/users", response_model=UserListResponse)
+@router.get(
+    "/users",
+    response_model=UserListResponse,
+    responses={500: {"description": "Internal server error"}},
+)
 async def list_users(
-    page: int = Query(1, ge=1, description="Page number"),
-    per_page: int = Query(10, ge=1, le=100, description="Users per page"),
-    search: Optional[str] = Query(None, description="Search query for name or email"),
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100, description="Users per page")] = 10,
+    search: Annotated[Optional[str], Query(description="Search query for name or email")] = None,
 ):
     """List all users with pagination and optional search"""
     try:
@@ -56,17 +62,24 @@ async def list_users(
         raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}")
 
 
-@router.get("/users/{user_id}", response_model=UserDetailResponse)
+@router.get(
+    "/users/{user_id}",
+    response_model=UserDetailResponse,
+    responses={
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def get_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get detailed user information"""
     try:
         user = UserService.get_user_by_id_with_relations(db, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
         return UserDetailResponse(
             user_id=user.user_id,
@@ -83,17 +96,23 @@ async def get_user(
         raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
 
 
-@router.delete("/users/{user_id}")
+@router.delete(
+    "/users/{user_id}",
+    responses={
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def delete_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Delete a user and all associated data"""
     try:
         user = UserService.get_user_by_id(db, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
         success = UserService.delete_user(db, user_id)
         if not success:
@@ -106,11 +125,17 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
 
-@router.post("/users/{user_id}/activate")
+@router.post(
+    "/users/{user_id}/activate",
+    responses={
+        400: {"description": "Bad request"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def activate_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Activate a user account"""
     try:
@@ -128,11 +153,17 @@ async def activate_user(
         raise HTTPException(status_code=500, detail=f"Error activating user: {str(e)}")
 
 
-@router.post("/users/{user_id}/deactivate")
+@router.post(
+    "/users/{user_id}/deactivate",
+    responses={
+        400: {"description": "Bad request"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def deactivate_user(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Deactivate a user account"""
     try:
@@ -150,11 +181,18 @@ async def deactivate_user(
         raise HTTPException(status_code=500, detail=f"Error deactivating user: {str(e)}")
 
 
-@router.post("/users/{user_id}/reset-marketplace-quota", response_model=MarketplaceQuotaResetResponse)
+@router.post(
+    "/users/{user_id}/reset-marketplace-quota",
+    response_model=MarketplaceQuotaResetResponse,
+    responses={
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def reset_user_marketplace_quota(
     user_id: int,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Reset a user's current month marketplace quota to 0.
@@ -170,7 +208,7 @@ async def reset_user_marketplace_quota(
         # Get the target user and validate exists
         user = UserService.get_user_by_id(db, user_id)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
         # Get current usage before reset
         previous_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)
@@ -213,10 +251,14 @@ async def reset_user_marketplace_quota(
         raise HTTPException(status_code=500, detail=f"Error resetting marketplace quota: {str(e)}")
 
 
-@router.get("/stats", response_model=SystemStatsResponse)
+@router.get(
+    "/stats",
+    response_model=SystemStatsResponse,
+    responses={500: {"description": "Internal server error"}},
+)
 async def get_system_stats(
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Get system-wide statistics"""
     try:
@@ -248,10 +290,14 @@ async def get_system_stats(
         raise HTTPException(status_code=500, detail=f"Error retrieving system stats: {str(e)}")
 
 
-@router.get("/settings", response_model=list[SystemSettingRead])
+@router.get(
+    "/settings",
+    response_model=list[SystemSettingRead],
+    responses={500: {"description": "Internal server error"}},
+)
 async def list_settings(
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """List all system settings with resolved values and metadata"""
     try:
@@ -263,12 +309,20 @@ async def list_settings(
         raise HTTPException(status_code=500, detail=f"Error retrieving system settings: {str(e)}")
 
 
-@router.put("/settings/{key}", response_model=SystemSettingRead)
+@router.put(
+    "/settings/{key}",
+    response_model=SystemSettingRead,
+    responses={
+        404: {"description": "Setting not found"},
+        422: {"description": "Validation error"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def update_setting(
     key: str,
     update: SystemSettingUpdate,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Update a system setting value"""
     try:
@@ -293,11 +347,17 @@ async def update_setting(
         raise HTTPException(status_code=500, detail=f"Error updating setting: {str(e)}")
 
 
-@router.delete("/settings/{key}")
+@router.delete(
+    "/settings/{key}",
+    responses={
+        404: {"description": "Setting not found"},
+        500: {"description": "Internal server error"},
+    },
+)
 async def reset_setting(
     key: str,
-    auth_context: AuthContext = Depends(require_admin),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Reset a system setting to its default value"""
     try:
@@ -309,4 +369,333 @@ async def reset_setting(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error resetting setting '{key}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error resetting setting: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error resetting setting: {str(e)}")
+
+
+# ==================== SAAS ADMIN ENDPOINTS ====================
+# These endpoints are always registered but guarded by OMNIADMIN requirement.
+# SaaS-specific functionality is a no-op / returns empty data in self-managed mode.
+
+from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
+from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
+from schemas.ai_service_schemas import AIServiceListItemSchema, CreateUpdateAIServiceSchema
+from schemas.embedding_service_schemas import (
+    EmbeddingServiceListItemSchema,
+    EmbeddingServiceDetailSchema,
+    CreateUpdateEmbeddingServiceSchema,
+    SystemEmbeddingServiceImpactSchema,
+)
+from typing import List
+
+
+@router.get("/saas/users", response_model=List[UserAdminRead])
+async def list_saas_users(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all users with tier, billing status, and usage stats (OMNIADMIN only)."""
+    from models.user import User
+    from repositories.subscription_repository import SubscriptionRepository
+    from repositories.usage_record_repository import UsageRecordRepository
+    from repositories.tier_config_repository import TierConfigRepository
+
+    users = db.query(User).order_by(User.create_date.desc()).all()
+    sub_repo = SubscriptionRepository(db)
+    usage_repo = UsageRecordRepository(db)
+    tier_repo = TierConfigRepository(db)
+    result = []
+    for user in users:
+        sub = sub_repo.get_by_user_id(user.user_id)
+        tier = "free"
+        billing_status = "none"
+        stripe_customer_id = None
+        if sub:
+            tier = sub.admin_override_tier or (sub.tier.value if sub.tier else "free")
+            billing_status = sub.billing_status.value if sub.billing_status else "none"
+            stripe_customer_id = sub.stripe_customer_id
+
+        usage = usage_repo.get_current(user.user_id)
+        call_count = usage.call_count if usage else 0
+        call_limit = tier_repo.get_limit(tier, "llm_calls")
+        owned_apps = db.query(App).filter(App.owner_id == user.user_id).count()
+
+        result.append(UserAdminRead(
+            user_id=user.user_id,
+            email=user.email or "",
+            name=user.name,
+            is_active=user.is_active,
+            auth_method=getattr(user, 'auth_method', 'oidc'),
+            email_verified=getattr(user, 'email_verified', True),
+            tier=tier,
+            billing_status=billing_status,
+            stripe_customer_id=stripe_customer_id,
+            call_count=call_count,
+            call_limit=call_limit,
+            owned_apps_count=owned_apps,
+        ))
+    return result
+
+
+@router.put("/saas/users/{user_id}/tier")
+async def override_user_tier(
+    user_id: int,
+    body: TierOverrideRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Manually override a user's subscription tier (OMNIADMIN only)."""
+    from repositories.subscription_repository import SubscriptionRepository
+    from services.freeze_service import FreezeService
+
+    sub_repo = SubscriptionRepository(db)
+    sub = sub_repo.get_by_user_id(user_id)
+    if not sub:
+        sub = sub_repo.create(user_id)
+
+    sub_repo.set_admin_override(user_id, body.tier)
+    db.commit()
+
+    # Recalculate freeze state based on new effective tier
+    try:
+        FreezeService.apply_freeze(db, user_id, body.tier)
+        db.commit()
+    except Exception as exc:
+        logger.error("FreezeService failed after tier override for user %s: %s", user_id, exc)
+
+    return {"message": f"Tier overridden to '{body.tier}' for user {user_id}"}
+
+
+@router.get("/saas/tier-config", response_model=List[TierConfigRead])
+async def get_tier_config(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Return all tier limit configuration entries (OMNIADMIN only)."""
+    from repositories.tier_config_repository import TierConfigRepository
+    repo = TierConfigRepository(db)
+    return repo.get_all()
+
+
+@router.put("/saas/tier-config")
+async def update_tier_config(
+    body: TierConfigUpdate,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create or update a tier limit configuration entry (OMNIADMIN only)."""
+    from repositories.tier_config_repository import TierConfigRepository
+    repo = TierConfigRepository(db)
+    row = repo.upsert(body.tier, body.resource_type, body.limit_value)
+    db.commit()
+    return {"id": row.id, "tier": row.tier, "resource_type": row.resource_type, "limit_value": row.limit_value}
+
+
+@router.get("/system-ai-services", response_model=List[AIServiceListItemSchema])
+async def list_system_ai_services(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all platform-level AI Services (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceService
+    services = AIServiceRepository.get_system_services(db)
+    return [AIServiceService._to_list_item(svc, is_system=True) for svc in services]
+
+
+@router.post("/system-ai-services", response_model=AIServiceListItemSchema, status_code=201)
+async def create_system_ai_service(
+    body: CreateUpdateAIServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create a new platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
+    from models.ai_service import AIService
+    from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceService
+    from datetime import datetime
+
+    svc = AIService()
+    svc.app_id = None  # NULL = system/platform service
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name  # model name stored in description
+    svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc.create_date = datetime.now()
+    svc = AIServiceRepository.create(db, svc)
+    return AIServiceService._to_list_item(svc, is_system=True)
+
+
+@router.put("/system-ai-services/{service_id}", response_model=AIServiceListItemSchema)
+async def update_system_ai_service(
+    service_id: int,
+    body: CreateUpdateAIServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceService
+    from utils.secret_utils import is_masked_key
+
+    svc = AIServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System AI service not found")
+
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name
+    if not is_masked_key(body.api_key):
+        svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc = AIServiceRepository.update(db, svc)
+    return AIServiceService._to_list_item(svc, is_system=True)
+
+
+@router.delete("/system-ai-services/{service_id}", status_code=204)
+async def delete_system_ai_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.ai_service_repository import AIServiceRepository
+
+    svc = AIServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System AI service not found")
+    AIServiceRepository.delete(db, svc)
+
+
+@router.get("/system-embedding-services", response_model=List[EmbeddingServiceDetailSchema])
+async def list_system_embedding_services(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all platform-level Embedding Services (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from utils.secret_utils import mask_api_key
+    services = EmbeddingServiceRepository.get_system_services(db)
+    return [
+        EmbeddingServiceDetailSchema(
+            service_id=svc.service_id,
+            name=svc.name,
+            provider=svc.provider,
+            model_name=svc.description or "",
+            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
+            base_url=svc.endpoint or "",
+            created_at=svc.create_date,
+        )
+        for svc in services
+    ]
+
+
+@router.post("/system-embedding-services", response_model=EmbeddingServiceListItemSchema, status_code=201)
+async def create_system_embedding_service(
+    body: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create a new platform-level Embedding Service (OMNIADMIN only)."""
+    from models.embedding_service import EmbeddingService
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from services.embedding_service_service import EmbeddingServiceService
+    from datetime import datetime
+
+    svc = EmbeddingService()
+    svc.app_id = None  # NULL = system/platform service
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name  # model name stored in description
+    svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc.create_date = datetime.now()
+    svc = EmbeddingServiceRepository.create(db, svc)
+    return EmbeddingServiceService._to_list_item(svc, is_system=True)
+
+
+@router.put("/system-embedding-services/{service_id}", response_model=EmbeddingServiceListItemSchema)
+async def update_system_embedding_service(
+    service_id: int,
+    body: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a platform-level Embedding Service (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from services.embedding_service_service import EmbeddingServiceService
+    from utils.secret_utils import is_masked_key
+
+    svc = EmbeddingServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System embedding service not found")
+
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.description = body.model_name
+    if not is_masked_key(body.api_key):
+        svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc = EmbeddingServiceRepository.update(db, svc)
+    return EmbeddingServiceService._to_list_item(svc, is_system=True)
+
+
+@router.get("/system-embedding-services/{service_id}/impact", response_model=SystemEmbeddingServiceImpactSchema)
+async def get_system_embedding_service_impact(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get deletion impact for a platform-level Embedding Service (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from schemas.embedding_service_schemas import AffectedSiloSchema
+    from models.silo import Silo
+    from models.app import App
+
+    svc = EmbeddingServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System embedding service not found")
+
+    rows = db.query(Silo, App).join(App, Silo.app_id == App.app_id).filter(
+        Silo.embedding_service_id == service_id
+    ).all()
+
+    affected_silos = [
+        AffectedSiloSchema(
+            silo_id=silo.silo_id,
+            silo_name=silo.name,
+            app_id=app.app_id,
+            app_name=app.name,
+        )
+        for silo, app in rows
+    ]
+    affected_apps_count = len({s.app_id for s in affected_silos})
+
+    return SystemEmbeddingServiceImpactSchema(
+        service_id=svc.service_id,
+        service_name=svc.name,
+        affected_silos_count=len(affected_silos),
+        affected_apps_count=affected_apps_count,
+        affected_silos=affected_silos,
+    )
+
+
+@router.delete("/system-embedding-services/{service_id}", status_code=204)
+async def delete_system_embedding_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a platform-level Embedding Service (OMNIADMIN only)."""
+    from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from models.silo import Silo
+
+    svc = EmbeddingServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail="System embedding service not found")
+
+    # Nullify references in silos before deleting
+    db.query(Silo).filter(Silo.embedding_service_id == service_id).update(
+        {Silo.embedding_service_id: None}, synchronize_session='fetch'
+    )
+    EmbeddingServiceRepository.delete(db, svc)

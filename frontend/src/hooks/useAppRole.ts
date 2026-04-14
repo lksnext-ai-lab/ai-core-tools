@@ -19,7 +19,7 @@ export function useAppRole(appId: string | undefined) {
       }
 
       try {
-        const app = await apiService.getApp(parseInt(appId));
+        const app = await apiService.getApp(Number.parseInt(appId));
         // Cast the string from API to AppRole, defaulting to GUEST if invalid
         const role = Object.values(AppRole).includes(app.user_role as AppRole) 
           ? (app.user_role as AppRole) 

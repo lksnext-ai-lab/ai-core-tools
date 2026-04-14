@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Bot, ClipboardList, BarChart2, Download, Eye } from 'lucide-react';
 import { apiService } from '../../services/api';
 import MessageContent from './MessageContent';
 
@@ -105,7 +106,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
     a.download = `${result.originalFile.name.replace(/\.[^/.]+$/, '')}_result.txt`;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
     URL.revokeObjectURL(url);
   };
 
@@ -115,7 +116,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="p-4 border-b bg-gray-50 rounded-t-lg">
           <h3 className="text-lg font-semibold text-gray-900">
-            <span className="mr-2">🤖</span>
+            <Bot className="w-5 h-5 mr-2 inline-block" />
             Playground OCR: {agentName}
           </h3>
         </div>
@@ -128,7 +129,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
           {outputParser && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <h4 className="text-sm font-medium text-blue-900 mb-2">
-                <span className="mr-2">📋</span>
+                <ClipboardList className="w-4 h-4 mr-2 inline-block" />
                 Formato de salida: {outputParser.name}
               </h4>
               {outputParser.description && (
@@ -138,8 +139,8 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
                 <div>
                   <h5 className="text-xs font-medium text-blue-800 mb-2">Campos de salida:</h5>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    {outputParser.fields.map((field, index) => (
-                      <div key={index} className="bg-white p-2 rounded border text-xs">
+                    {outputParser.fields.map((field) => (
+                      <div key={field.name} className="bg-white p-2 rounded border text-xs">
                         <div className="font-medium text-blue-900">{field.name}</div>
                         <div className="text-blue-600">
                           <code className="text-xs">{field.type}</code>
@@ -161,7 +162,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="p-4 border-b bg-gray-50 rounded-t-lg">
           <h4 className="text-md font-medium text-gray-900">
-            <span className="mr-2">📄</span>
+            <ClipboardList className="w-4 h-4 mr-2 inline-block" />
             Procesar PDF
           </h4>
         </div>
@@ -197,7 +198,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
                 <div className="border rounded-lg overflow-hidden">
                   <div className="p-3 bg-gray-50 border-b">
                     <h5 className="text-sm font-medium text-gray-900">
-                      <span className="mr-2">👁️</span>
+                      <Eye className="w-4 h-4 mr-2 inline-block" />
                       Vista previa del documento
                     </h5>
                   </div>
@@ -232,7 +233,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h5 className="text-md font-medium text-gray-900">
-                  <span className="mr-2">📊</span>
+                  <BarChart2 className="w-4 h-4 mr-2 inline-block" />
                   Resultados del procesamiento
                 </h5>
                 {results.length > 0 && (
@@ -265,7 +266,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
                       onClick={() => downloadResult(result)}
                       className="text-blue-600 hover:text-blue-700 text-sm"
                     >
-                      📥 Descargar
+                      <Download className="w-4 h-4 inline-block mr-1" />Descargar
                     </button>
                   </div>
 
@@ -274,11 +275,7 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
                     <div className="mb-3">
                       <h6 className="font-medium text-gray-700 mb-2">Datos estructurados:</h6>
                       <div className="bg-white p-3 rounded border">
-                        <MessageContent content={
-                          typeof result.result.content === 'object' 
-                            ? result.result.content 
-                            : result.result.content
-                        } />
+                        <MessageContent content={result.result.content} />
                       </div>
                     </div>
                   )}

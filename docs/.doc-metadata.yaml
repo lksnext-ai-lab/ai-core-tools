@@ -5,20 +5,24 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "91a003b1cc0ccc4dcb5843300e90e7bb8b438d75"
-last_synced_date: "2026-03-03T00:00:00+00:00"
+last_synced_commit: "manual-scan-2026-03-30"  # Update to actual HEAD SHA: git log --format="%H" -1
+last_synced_date: "2026-03-30T00:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
     - "docs/index.md"
-    - "docs/README.md"
+    - "docs/reference/environment-variables.md"
+    - "docs/architecture/backend.md"
     - "docs/api/internal-api.md"
+    - "docs/architecture/database.md"
+    - "docs/guides/marketplace.md"
     - "docs/.doc-metadata.yaml"
   files_created:
-    - "docs/guides/app-export-import.md"
+    - "docs/guides/saas-mode.md"
+    - "docs/guides/platform-chatbot.md"
   files_deleted: []
   commits_covered: null
-  commit_range: "c11bee4..91a003b"
-  notes: "Documented app export/import endpoints, preview flow, and data inclusion/exclusion; added guide and index entries. Commit count not computed in this docs-only update."
+  commit_range: "91a003b..HEAD"
+  notes: "Merged two parallel doc sync operations. (1) SaaS mode: new saas-mode.md and platform-chatbot.md guides, SaaS env vars (AICT_DEPLOYMENT_MODE, STRIPE_*, EMAIL_*, SMTP_*), backend.md updates for SaaS services/repos/models. (2) Marketplace/Admin: AgentMarketplaceRating and SystemSetting DB models, User.is_active field, Admin API user activation/deactivation, system stats, system settings CRUD with resolution chain, fixed quota reset response schema, marketplace file attachment endpoints (upload/list/delete/download)."

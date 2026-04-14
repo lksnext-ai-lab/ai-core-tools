@@ -14,6 +14,7 @@ class RateLimitState:
     remaining: int
     reset_epoch: int
     limit: int
+    exceeded: bool = False
 
 
 class RateLimitService:
@@ -72,7 +73,8 @@ class RateLimitService:
                 return RateLimitState(
                     remaining=0,
                     reset_epoch=reset_epoch,
-                    limit=max_per_minute
+                    limit=max_per_minute,
+                    exceeded=True,
                 )
             
             # Consume one request

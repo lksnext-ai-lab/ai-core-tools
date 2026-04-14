@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union
 
 # ==================== CHAT SCHEMAS ====================
 

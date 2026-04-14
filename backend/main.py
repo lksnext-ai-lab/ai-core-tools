@@ -55,6 +55,7 @@ from lks_idprovider_fastapi.dependencies import get_default_provider
 
 from utils.logger import get_logger
 from utils.auth_config import AuthConfig
+from deployment_mode import is_saas_mode, validate_saas_env
 
 logger = get_logger(__name__)
 
@@ -65,6 +66,19 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan (startup and shutdown)"""
     # Startup
     try:
+        # Validate SaaS mode environment variables early (before anything else)
+        if is_saas_mode():
+            validate_saas_env()
+            logger.info("SaaS mode: environment validation passed")
+            # Seed default tier configs
+            from db.database import SessionLocal
+            from services.tier_config_seeder import seed_default_tier_configs
+            _db = SessionLocal()
+            try:
+                seed_default_tier_configs(_db)
+            finally:
+                _db.close()
+
         # Load authentication configuration
         AuthConfig.load_config()
         

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store } from 'lucide-react';
 import { apiService } from '../services/api';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
@@ -109,7 +110,7 @@ const OutputParserField = ({
         onChange={(e) =>
           handleInputChange(
             'output_parser_id',
-            e.target.value ? parseInt(e.target.value) : undefined
+            e.target.value ? Number.parseInt(e.target.value) : undefined
           )
         }
         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
@@ -124,6 +125,18 @@ const OutputParserField = ({
     )}
   </div>
 );
+
+function getPageTitle(type: string, isNewAgent: boolean): string {
+  if (type === 'ocr_agent') return 'Agente OCR';
+  if (isNewAgent) return 'Create Agent';
+  return 'Edit Agent';
+}
+
+function getPageDescription(type: string, isNewAgent: boolean, agentName?: string): string {
+  if (type === 'ocr_agent') return 'Configure OCR agent for document processing';
+  if (isNewAgent) return 'Configure a new AI agent with advanced capabilities';
+  return `Modify agent: ${agentName}`;
+}
 
 function AgentFormPage() {
   const { appId, agentId } = useParams();
@@ -143,7 +156,7 @@ function AgentFormPage() {
     return (
       <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6">
         <div className="flex items-start">
-          <span className="text-amber-500 text-xl mr-3">⚠️</span>
+          <AlertTriangle className="w-5 h-5 text-amber-500 mr-3 shrink-0" />
           <div className="flex-1">
             <h4 className="text-sm font-semibold text-amber-900 mb-2">No AI Services Configured</h4>
             <p className="text-sm text-amber-800 mb-3">
@@ -154,7 +167,7 @@ function AgentFormPage() {
               onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
               className="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
             >
-              <span className="mr-2">⚙️</span>
+              <Settings className="w-4 h-4 mr-2" />
               {' '}
               Configure AI Services
             </button>
@@ -215,7 +228,7 @@ function AgentFormPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getAgent(parseInt(appId), parseInt(agentId));
+      const response = await apiService.getAgent(Number.parseInt(appId), Number.parseInt(agentId));
       setAgent(response);
 
       // Initialize form data
@@ -248,20 +261,17 @@ function AgentFormPage() {
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
 
-      // Load MCP usage for existing agents
-      if (parseInt(agentId) !== 0) {
+      // Load MCP usage and marketplace profile for existing agents
+      if (Number.parseInt(agentId) !== 0) {
         try {
-          const usage = await apiService.getAgentMCPUsage(parseInt(appId), parseInt(agentId));
+          const usage = await apiService.getAgentMCPUsage(Number.parseInt(appId), Number.parseInt(agentId));
           setMcpUsage(usage);
         } catch (usageErr) {
           console.error('Error loading MCP usage:', usageErr);
         }
-      }
 
-      // Load marketplace profile for existing agents
-      if (parseInt(agentId) !== 0) {
         try {
-          const profile = await apiService.getAgentMarketplaceProfile(parseInt(appId), parseInt(agentId));
+          const profile = await apiService.getAgentMarketplaceProfile(Number.parseInt(appId), Number.parseInt(agentId));
           setMarketplaceProfile({
             display_name: profile.display_name || null,
             short_description: profile.short_description || null,
@@ -325,14 +335,14 @@ function AgentFormPage() {
 
   // Marketplace handlers
   const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
-    if (!appId || !agentId || parseInt(agentId) === 0) return;
+    if (!appId || !agentId || Number.parseInt(agentId) === 0) return;
     const previous = marketplaceVisibility;
     setMarketplaceVisibility(visibility);
     setShowMarketplace(visibility !== 'unpublished');
     try {
       await apiService.updateAgentMarketplaceVisibility(
-        parseInt(appId),
-        parseInt(agentId),
+        Number.parseInt(appId),
+        Number.parseInt(agentId),
         visibility,
       );
     } catch (err) {
@@ -353,14 +363,14 @@ function AgentFormPage() {
   );
 
   const handleSaveMarketplaceProfile = useCallback(async () => {
-    if (!appId || !agentId || parseInt(agentId) === 0) return;
+    if (!appId || !agentId || Number.parseInt(agentId) === 0) return;
 
     setSavingMarketplace(true);
     setMarketplaceSuccess(null);
     try {
       const saved = await apiService.updateAgentMarketplaceProfile(
-        parseInt(appId),
-        parseInt(agentId),
+        Number.parseInt(appId),
+        Number.parseInt(agentId),
         marketplaceProfile,
       );
       setMarketplaceProfile({
@@ -413,15 +423,15 @@ function AgentFormPage() {
         vision_service_id: formData.vision_service_id,
         vision_system_prompt: formData.vision_system_prompt,
         text_system_prompt: formData.text_system_prompt,
-        app_id: parseInt(appId)
+        app_id: Number.parseInt(appId)
       };
 
-      if (parseInt(agentId) === 0) {
+      if (Number.parseInt(agentId) === 0) {
         // Creating new agent
-        await apiService.createAgent(parseInt(appId), 0, submitData);
+        await apiService.createAgent(Number.parseInt(appId), 0, submitData);
       } else {
         // Updating existing agent
-        await apiService.updateAgent(parseInt(appId), parseInt(agentId), submitData);
+        await apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData);
       }
 
       // Navigate back to agents list
@@ -447,25 +457,8 @@ function AgentFormPage() {
     );
   }
 
-  // Extract page title logic
-  let pageTitle: string;
-  if (formData.type === 'ocr_agent') {
-    pageTitle = 'Agente OCR';
-  } else if (isNewAgent) {
-    pageTitle = 'Create Agent';
-  } else {
-    pageTitle = 'Edit Agent';
-  }
-
-  // Extract page description logic
-  let pageDescription: string;
-  if (formData.type === 'ocr_agent') {
-    pageDescription = 'Configure OCR agent for document processing';
-  } else if (isNewAgent) {
-    pageDescription = 'Configure a new AI agent with advanced capabilities';
-  } else {
-    pageDescription = `Modify agent: ${agent?.name}`;
-  }
+  const pageTitle = getPageTitle(formData.type, isNewAgent);
+  const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
 
   const tabs: TabItem[] = [
     { id: 'basic', label: 'Basic' },
@@ -492,7 +485,7 @@ function AgentFormPage() {
             onClick={() => navigate(`/apps/${appId}/agents`)}
             className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-gray-700 shadow-sm border border-gray-200 transition-all duration-200"
           >
-            <span className="mr-2">←</span>
+            <ArrowLeft className="w-4 h-4 mr-2" />
             {' '}
             Back to Agents
           </button>
@@ -523,7 +516,7 @@ function AgentFormPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                  <span className="text-blue-600 text-lg">📝</span>
+                  <FileText className="w-5 h-5 text-blue-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
               </div>
@@ -554,8 +547,8 @@ function AgentFormPage() {
                     onChange={(e) => handleInputChange('type', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   >
-                    <option value="agent">🤖 AI Agent</option>
-                    <option value="ocr_agent">📄 OCR Agent</option>
+                    <option value="agent">AI Agent</option>
+                    <option value="ocr_agent">OCR Agent</option>
                   </select>
                 </div>
 
@@ -581,7 +574,7 @@ function AgentFormPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                  <span className="text-purple-600 text-lg">💬</span>
+                  <MessageSquare className="w-5 h-5 text-purple-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Prompts & Instructions</h3>
               </div>
@@ -613,7 +606,7 @@ function AgentFormPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     placeholder="Template for user interactions (must include {question})..."
                   />
-                  <p className="text-xs text-gray-500 mt-2">💡 The template must include {'{question}'} to work properly</p>
+                  <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
 
                 {/* Memory Management - Conditional */}
@@ -621,7 +614,7 @@ function AgentFormPage() {
                   <div className="border-t border-gray-200 pt-6">
                     <div className="flex items-center mb-6">
                       <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-                        <span className="text-indigo-600 text-lg">🧠</span>
+                        <Brain className="w-5 h-5 text-indigo-600" />
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
@@ -631,7 +624,7 @@ function AgentFormPage() {
 
                     <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
                       <div className="flex items-start">
-                        <span className="text-indigo-500 text-lg mr-3">ℹ️</span>
+                        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
                         <div>
                           <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
                           <p className="text-xs text-indigo-700 mt-1">
@@ -690,7 +683,7 @@ function AgentFormPage() {
                           min="1"
                           max="50"
                           value={formData.memory_summarize_threshold}
-                          onChange={(e) => handleInputChange('memory_summarize_threshold', parseInt(e.target.value))}
+                          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
@@ -700,7 +693,7 @@ function AgentFormPage() {
                     </div>
 
                     <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2">📊 Configuración Actual:</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div>
                           <span className="text-gray-600">Mensajes:</span>
@@ -731,7 +724,7 @@ function AgentFormPage() {
                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                     <div className="flex items-center mb-6">
                       <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center mr-4">
-                        <span className="text-orange-600 text-lg">⚙️</span>
+                        <Settings className="w-5 h-5 text-orange-600" />
                       </div>
                       <h3 className="text-xl font-semibold text-gray-900">Configuration</h3>
                     </div>
@@ -747,7 +740,7 @@ function AgentFormPage() {
                         <select
                           id="ai_service"
                           value={formData.service_id || ''}
-                          onChange={(e) => handleInputChange('service_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                          onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                           required
                         >
@@ -767,7 +760,7 @@ function AgentFormPage() {
                         <select
                           id="silo"
                           value={formData.silo_id || ''}
-                          onChange={(e) => handleInputChange('silo_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                          onChange={(e) => handleInputChange('silo_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                           <option value="">Select Knowledge Base</option>
@@ -791,7 +784,7 @@ function AgentFormPage() {
                             max="2"
                             step="0.1"
                             value={formData.temperature}
-                            onChange={(e) => handleInputChange('temperature', parseFloat(e.target.value))}
+                            onChange={(e) => handleInputChange('temperature', Number.parseFloat(e.target.value))}
                             className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                           />
                           <span className="text-sm font-medium text-gray-600 w-12">
@@ -819,7 +812,7 @@ function AgentFormPage() {
                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                     <div className="flex items-center mb-6">
                       <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                        <span className="text-green-600 text-lg">⚡</span>
+                        <Zap className="w-5 h-5 text-green-600" />
                       </div>
                       <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
                     </div>
@@ -831,7 +824,7 @@ function AgentFormPage() {
                           <span className="text-amber-500 text-xl mr-3">!</span>
                           <div className="flex-1">
                             <h4 className="text-sm font-semibold text-amber-900 mb-2">
-                              This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length !== 1 ? 's' : ''}
+                              This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
                             </h4>
                             <p className="text-sm text-amber-800 mb-2">
                               Unmarking this agent as a tool will make it unavailable in the following MCP servers:
@@ -886,7 +879,7 @@ function AgentFormPage() {
                           <p className="text-xs text-gray-500">Can be used by other agents</p>
                           {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
                             <p className="text-xs text-purple-600 mt-1">
-                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length !== 1 ? 's' : ''}
+                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
                             </p>
                           )}
                         </div>
@@ -934,28 +927,28 @@ function AgentFormPage() {
                         {[
                           {
                             id: 'web_search',
-                            icon: '🔍',
+                            icon: <Search className="w-4 h-4" />,
                             label: 'Web Search',
                             description: 'Real-time internet search',
                             providers: ['OpenAI', 'Anthropic', 'Google', 'Azure'],
                           },
                           {
                             id: 'image_generation',
-                            icon: '🖼️',
+                            icon: <Image className="w-4 h-4" />,
                             label: 'Image Generation',
                             description: 'Generate images with DALL-E',
                             providers: ['OpenAI', 'Azure'],
                           },
                           {
                             id: 'code_interpreter',
-                            icon: '💻',
+                            icon: <Terminal className="w-4 h-4" />,
                             label: 'Code Interpreter',
                             description: 'Provider-sandboxed code execution',
                             providers: ['OpenAI', 'Anthropic', 'Azure'],
                           },
                           {
                             id: 'file_search',
-                            icon: '📂',
+                            icon: <FolderSearch className="w-4 h-4" />,
                             label: 'File Search',
                             description: 'Vector search over uploaded files',
                             providers: ['OpenAI', 'Azure'],
@@ -965,7 +958,7 @@ function AgentFormPage() {
                           const toggle = () => handleInputChange(
                             'server_tools',
                             active
-                              ? formData.server_tools.filter(t => t !== tool.id)
+                              ? formData.server_tools.filter(t => t === tool.id)
                               : [...formData.server_tools, tool.id]
                           );
                           return (
@@ -998,8 +991,8 @@ function AgentFormPage() {
                           );
                         })}
                       </div>
-                      <p className="text-xs text-amber-600 mt-3">
-                        ⚠ Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API).
+                      <p className="text-xs text-amber-600 mt-3 flex items-start gap-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API).
                         Unsupported tools for the selected provider are silently ignored.
                       </p>
                     </div>
@@ -1012,7 +1005,7 @@ function AgentFormPage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                      <span className="text-blue-600 text-lg">📄</span>
+                      <FileText className="w-5 h-5 text-blue-600" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
                   </div>
@@ -1028,7 +1021,7 @@ function AgentFormPage() {
                       <select
                         id="vision_service"
                         value={formData.vision_service_id || ''}
-                        onChange={(e) => handleInputChange('vision_service_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                        onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       >
                         <option value="">-- Seleccionar modelo de visión --</option>
@@ -1061,7 +1054,7 @@ function AgentFormPage() {
                       <select
                         id="text_service"
                         value={formData.service_id || ''}
-                        onChange={(e) => handleInputChange('service_id', e.target.value ? parseInt(e.target.value) : undefined)}
+                        onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       >
                         <option value="">-- Seleccionar modelo de texto --</option>
@@ -1108,7 +1101,7 @@ function AgentFormPage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
-                      <span className="text-yellow-600 text-lg">🔧</span>
+                      <Wrench className="w-5 h-5 text-yellow-600" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">Available Tools</h3>
                   </div>
@@ -1146,7 +1139,7 @@ function AgentFormPage() {
                   {formData.tool_ids.length > 0 && (
                     <div className="mt-4 p-4 bg-blue-50 rounded-xl">
                       <p className="text-sm text-blue-800">
-                        <span className="font-medium">{formData.tool_ids.length}</span> tool{formData.tool_ids.length !== 1 ? 's' : ''} selected
+                        <span className="font-medium">{formData.tool_ids.length}</span> tool{formData.tool_ids.length === 1 ? '' : 's'} selected
                       </p>
                     </div>
                   )}
@@ -1158,7 +1151,7 @@ function AgentFormPage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                      <span className="text-purple-600 text-lg">🔌</span>
+                      <Plug className="w-5 h-5 text-purple-600" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">MCP Servers</h3>
                     <div className="ml-3 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
@@ -1170,7 +1163,7 @@ function AgentFormPage() {
                     <>
                       <div className="mb-4 p-4 bg-purple-50 rounded-xl">
                         <div className="flex items-start">
-                          <span className="text-purple-500 text-lg mr-3">ℹ️</span>
+                          <Info className="w-5 h-5 text-purple-500 mr-3 shrink-0" />
                           <div>
                             <p className="text-sm text-purple-800 font-medium">What are MCP Servers?</p>
                             <p className="text-xs text-purple-700 mt-1">
@@ -1214,7 +1207,7 @@ function AgentFormPage() {
                       {formData.mcp_config_ids.length > 0 && (
                         <div className="mt-4 p-4 bg-purple-50 rounded-xl">
                           <p className="text-sm text-purple-800">
-                            <span className="font-medium">{formData.mcp_config_ids.length}</span> MCP server{formData.mcp_config_ids.length !== 1 ? 's' : ''} selected
+                            <span className="font-medium">{formData.mcp_config_ids.length}</span> MCP server{formData.mcp_config_ids.length === 1 ? '' : 's'} selected
                           </p>
                         </div>
                       )}
@@ -1222,7 +1215,7 @@ function AgentFormPage() {
                   ) : (
                     <div className="text-center py-8">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <span className="text-gray-400 text-2xl">🔌</span>
+                        <Plug className="w-8 h-8 text-gray-400" />
                       </div>
                       <h4 className="text-lg font-medium text-gray-900 mb-2">No MCP Servers Available</h4>
                       <p className="text-gray-500 mb-4">
@@ -1233,7 +1226,7 @@ function AgentFormPage() {
                         onClick={() => navigate(`/apps/${appId}/settings/mcp-configs`)}
                         className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
                       >
-                        <span className="mr-2">⚙️</span>
+                        <Settings className="w-4 h-4 mr-2" />
                         {' '}Configure MCP Servers
                       </button>
                     </div>
@@ -1247,7 +1240,7 @@ function AgentFormPage() {
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-                        <span className="mr-3">🎯</span>
+                        <Target className="w-5 h-5 mr-3" />
                         {' '}Skills
                       </h3>
                       <p className="text-gray-600 mt-1">Assign specialized behaviors that the agent can activate on-demand</p>
@@ -1292,7 +1285,7 @@ function AgentFormPage() {
                       {formData.skill_ids.length > 0 && (
                         <div className="mt-4 p-4 bg-purple-50 rounded-xl">
                           <p className="text-sm text-purple-800">
-                            <span className="font-medium">{formData.skill_ids.length}</span> skill{formData.skill_ids.length !== 1 ? 's' : ''} selected.
+                            <span className="font-medium">{formData.skill_ids.length}</span> skill{formData.skill_ids.length === 1 ? '' : 's'} selected.
                             The agent will have a <code className="bg-purple-100 px-1 rounded">load_skill</code> tool to activate these skills.
                           </p>
                         </div>
@@ -1301,7 +1294,7 @@ function AgentFormPage() {
                   ) : (
                     <div className="text-center py-8">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <span className="text-gray-400 text-2xl">🎯</span>
+                        <Target className="w-8 h-8 text-gray-400" />
                       </div>
                       <h4 className="text-lg font-medium text-gray-900 mb-2">No Skills Available</h4>
                       <p className="text-gray-500 mb-4">
@@ -1312,7 +1305,7 @@ function AgentFormPage() {
                         onClick={() => navigate(`/apps/${appId}/skills`)}
                         className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
                       >
-                        <span className="mr-2">🎯</span>
+                        <Target className="w-4 h-4 mr-2" />
                         {' '}Manage Skills
                       </button>
                     </div>
@@ -1327,7 +1320,7 @@ function AgentFormPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 mb-8">
               <div className="flex items-center mb-6">
                 <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                  <span className="text-blue-600 text-lg" aria-hidden="true">🏪</span>
+                  <Store className="w-5 h-5 text-blue-600" aria-hidden="true" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Marketplace Publishing</h3>
               </div>
@@ -1335,7 +1328,7 @@ function AgentFormPage() {
               {/* New agent: prompt user to save first */}
               {isNewAgent ? (
                 <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
-                  <span aria-hidden="true">ℹ️</span>
+                  <Info className="w-4 h-4 shrink-0" aria-hidden="true" />
                   <span>Save the agent first to configure marketplace publishing.</span>
                 </div>
               ) : (

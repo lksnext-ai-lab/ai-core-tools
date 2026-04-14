@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Eye, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
@@ -29,7 +30,7 @@ function MCPServersPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getMCPServers(parseInt(appId));
+      const response = await apiService.getMCPServers(Number.parseInt(appId));
       setServers(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load MCP servers');
@@ -47,7 +48,7 @@ function MCPServersPage() {
     if (!appId) return;
 
     try {
-      await apiService.deleteMCPServer(parseInt(appId), serverId);
+      await apiService.deleteMCPServer(Number.parseInt(appId), serverId);
       setServers(servers.filter(s => s.server_id !== serverId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete MCP server');
@@ -233,20 +234,20 @@ function MCPServersPage() {
                     {
                       label: 'View Details',
                       onClick: () => navigate(`/apps/${appId}/mcp-servers/${server.server_id}`),
-                      icon: '(i)',
+                      icon: <Eye className="w-4 h-4" />,
                       variant: 'primary'
                     },
                     ...(canEdit ? [
                       {
                         label: 'Edit',
                         onClick: () => navigate(`/apps/${appId}/mcp-servers/${server.server_id}/edit`),
-                        icon: '*',
+                        icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary' as const
                       },
                       {
                         label: 'Delete',
                         onClick: () => { void handleDelete(server.server_id); },
-                        icon: 'x',
+                        icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger' as const
                       }
                     ] : [])

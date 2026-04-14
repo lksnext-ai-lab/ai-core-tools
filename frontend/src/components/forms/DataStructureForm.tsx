@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BarChart2 } from 'lucide-react';
 import FieldManager from './FieldManager';
 import FormActions from './FormActions';
 
@@ -9,6 +10,7 @@ interface FieldDefinition {
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;
+  _key?: string;
 }
 
 interface DataStructureFormData {
@@ -49,7 +51,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       setFormData({
         name: dataStructure.name || '',
         description: dataStructure.description || '',
-        fields: dataStructure.fields || []
+        fields: (dataStructure.fields || []).map(f => ({ ...f, _key: Math.random().toString(36).slice(2) }))
       });
     }
   }, [dataStructure]);
@@ -74,7 +76,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       return 'Data structure name is required';
     }
 
-    const namePattern = /^[a-zA-Z0-9_]+$/;
+    const namePattern = /^\w+$/;
     if (!namePattern.test(formData.name)) {
       return 'Name can only contain letters, numbers, and underscores';
     }
@@ -112,8 +114,10 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       return;
     }
 
-    // Filter out empty fields
-    const cleanedFields = formData.fields.filter(field => field.name.trim());
+    // Filter out empty fields and strip internal _key
+    const cleanedFields = formData.fields
+      .filter(field => field.name.trim())
+      .map(({ _key: _k, ...rest }) => rest);
 
     try {
       setIsSubmitting(true);
@@ -192,7 +196,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-purple-400 text-xl">📊</span>
+            <BarChart2 className="w-4 h-4 text-purple-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-purple-800">

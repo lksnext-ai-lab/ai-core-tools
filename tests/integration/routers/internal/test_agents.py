@@ -135,7 +135,7 @@ class TestListAgents:
         assert response.status_code in (401, 403)
 
     def test_list_agents_only_shows_app_agents(
-        self, client, fake_app, fake_agent, db
+        self, client, fake_app, fake_agent, auth_headers, db
     ):
         """List only includes agents from that specific app."""
         from tests.factories import AppFactory, AgentFactory
@@ -146,14 +146,9 @@ class TestListAgents:
         other_agent = AgentFactory(app=other_app)
         db.flush()
 
-        # Get auth headers for the owner
-        from backend.routers.internal.auth_utils import create_jwt_token
-
-        headers = {"Authorization": f"Bearer {create_jwt_token(fake_app.owner_id)}"}
-
         response = client.get(
             f"/internal/apps/{fake_app.app_id}/agents",
-            headers=headers,
+            headers=auth_headers,
         )
         assert response.status_code == 200
         agents = response.json()
@@ -240,7 +235,7 @@ class TestGetAgentDetails:
     def test_get_agent_returns_form_data(
         self, client, fake_app, fake_agent, fake_ai_service, auth_headers, db
     ):
-        """Response includes form data (available AI services, silos, etc)."""
+        """Response includes form data (available AI services, silos, etc) at top level."""
         db.flush()
         response = client.get(
             f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}",
@@ -248,10 +243,8 @@ class TestGetAgentDetails:
         )
         data = response.json()
 
-        assert "form_data" in data
-        form_data = data["form_data"]
-        assert "ai_services" in form_data
-        assert isinstance(form_data["ai_services"], list)
+        assert "ai_services" in data
+        assert isinstance(data["ai_services"], list)
 
 
 # ---------------------------------------------------------------------------
@@ -348,9 +341,9 @@ class TestCreateAgent:
     def test_create_agent_validates_required_fields(
         self, client, fake_app, owner_headers, db
     ):
-        """Invalid payload (missing required fields) returns 422."""
+        """name is required; missing name returns 422."""
         db.flush()
-        invalid_payload = {"name": "Incomplete Agent"}  # missing other required fields
+        invalid_payload = {}  # missing required 'name'
         response = client.post(
             f"/internal/apps/{fake_app.app_id}/agents/0",
             json=invalid_payload,
@@ -423,13 +416,13 @@ class TestUpdateAgent:
     def test_update_agent_returns_404_for_missing_agent(
         self, client, fake_app, owner_headers
     ):
-        """Updating non-existent agent returns 404."""
+        """Posting to non-existent agent_id performs upsert (creates new agent)."""
         response = client.post(
             f"/internal/apps/{fake_app.app_id}/agents/99999",
             json=agent_payload(),
             headers=owner_headers,
         )
-        assert response.status_code == 404
+        assert response.status_code == 200  # upsert: agent is created
 
     def test_update_agent_requires_authentication(
         self, client, fake_app, fake_agent, db

@@ -2,6 +2,15 @@
 name: docs-manager
 description: Expert in managing project documentation in the docs/ folder. Maintains index, TOC, sections, and tracks documentation freshness against git commits. Can self-describe its capabilities.
 tools: [read, edit]
+handoffs:
+  - label: "Commit with @git-github"
+    agent: git-github
+    prompt: "Please commit the files that @docs-manager just created or modified. Review the conversation above for the exact file list and suggested commit message."
+    send: false
+  - label: "Return to @conductor"
+    agent: conductor
+    prompt: "@docs-manager has completed its step. Summary of what was done:\n\n<briefly describe: docs files created/modified, sections updated, any issues>\n\nPlease update the Mission Context and tell me the next step."
+    send: false
 ---
 
 # Documentation Manager Agent

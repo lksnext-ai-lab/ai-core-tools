@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, Trash2, Search, Info } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchFilters from '../components/playground/SearchFilters';
 import type {
@@ -56,7 +57,7 @@ function SiloPlaygroundPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getSilo(parseInt(appId), parseInt(siloId));
+      const response = await apiService.getSilo(Number.parseInt(appId), Number.parseInt(siloId));
       setSilo(response);
       setSystemDBConfig(response.vector_db_type ? response.vector_db_type.toUpperCase() : DEFAULT_DB_TYPE);
     } catch (err) {
@@ -78,8 +79,8 @@ function SiloPlaygroundPage() {
       setSearchResults([]);
       setHasSearched(true);
       const response = await apiService.searchSiloDocuments(
-        parseInt(appId), 
-        parseInt(siloId), 
+        Number.parseInt(appId), 
+        Number.parseInt(siloId), 
         searchQuery,
         10,
         filterMetadata
@@ -113,7 +114,7 @@ function SiloPlaygroundPage() {
       return;
     }
     
-    if (!window.confirm('Are you sure you want to delete this document from the silo? This action cannot be undone.')) {
+    if (!globalThis.confirm('Are you sure you want to delete this document from the silo? This action cannot be undone.')) {
       return;
     }
 
@@ -122,8 +123,8 @@ function SiloPlaygroundPage() {
       
       // Delete using document ID
       await apiService.deleteSiloDocuments(
-        parseInt(appId),
-        parseInt(siloId),
+        Number.parseInt(appId),
+        Number.parseInt(siloId),
         [result.id]  // Pass as array of IDs
       );
       
@@ -157,7 +158,7 @@ function SiloPlaygroundPage() {
       <div className="space-y-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
             <div>
               <h3 className="text-sm font-medium text-red-800">Error Loading Silo</h3>
               <p className="text-sm text-red-600 mt-1">{error}</p>
@@ -179,7 +180,7 @@ function SiloPlaygroundPage() {
       <div className="space-y-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex">
-            <span className="text-yellow-400 text-xl mr-3">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-yellow-400 mr-3 shrink-0" />
             <div>
               <h3 className="text-sm font-medium text-yellow-800">Silo Not Found</h3>
               <p className="text-sm text-yellow-600 mt-1">The requested silo could not be found.</p>
@@ -212,7 +213,7 @@ function SiloPlaygroundPage() {
           onClick={handleBack}
           className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
         >
-          ← Back to Silos
+          <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
         </button>
       </div>
 
@@ -286,7 +287,7 @@ function SiloPlaygroundPage() {
         {searchError && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex">
-              <span className="text-red-400 text-xl mr-3">⚠️</span>
+              <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
               <div>
                 <h3 className="text-sm font-medium text-red-800">Search Error</h3>
                 <p className="text-sm text-red-600 mt-1">{searchError}</p>
@@ -340,7 +341,7 @@ function SiloPlaygroundPage() {
                               Deleting...
                             </span>
                           ) : (
-                            '🗑️ Delete'
+                              <span className="flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</span>
                           )}
                         </button>
                       )}
@@ -375,7 +376,7 @@ function SiloPlaygroundPage() {
       {!isSearching && searchResults.length === 0 && hasSearched && !searchError && (
         <div className="bg-white shadow rounded-lg p-6">
           <div className="text-center">
-            <span className="text-gray-400 text-4xl mb-4">🔍</span>
+            <Search className="w-10 h-10 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
             <p className="text-gray-600">
               {searchQuery ? 
@@ -391,7 +392,7 @@ function SiloPlaygroundPage() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <span className="text-blue-400 text-xl">ℹ️</span>
+            <Info className="w-5 h-5 text-blue-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-sm font-medium text-blue-800">

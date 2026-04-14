@@ -10,7 +10,7 @@ class MCPConfigListItemSchema(BaseModel):
     config_id: int
     name: str
     description: Optional[str] = ""
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -22,7 +22,7 @@ class MCPConfigDetailSchema(BaseModel):
     description: Optional[str] = ""
     config: str  # JSON string containing the full MCP server configuration
     ssl_verify: bool = True
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from db.database import get_db
 # Import services
 from services.app_collaboration_service import AppCollaborationService
 from services.app_service import AppService
+from services.user_service import UserService
 
 # Import schemas and auth
 from schemas.apps_schemas import (
@@ -34,6 +35,37 @@ def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     return AppService(db), AppCollaborationService(db)
 
 
+def _serialize_user_summary(user) -> Optional[dict]:
+    """Convert a user object into the nested schema shape."""
+    if not user:
+        return None
+
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "name": user.name,
+    }
+
+
+def _build_collaborator_detail_schema(db: Session, app_id: int, collaboration) -> CollaboratorDetailSchema:
+    """Build collaborator detail response using service-layer user lookups."""
+    user_data = UserService.get_user_by_id(db, collaboration.user_id)
+    inviter_data = UserService.get_user_by_id(db, collaboration.invited_by)
+
+    return CollaboratorDetailSchema(
+        id=collaboration.id,
+        app_id=app_id,
+        user_id=collaboration.user_id,
+        role=collaboration.role.value,
+        status=collaboration.status.value,
+        invited_by=collaboration.invited_by,
+        invited_at=collaboration.invited_at,
+        accepted_at=collaboration.accepted_at,
+        user=_serialize_user_summary(user_data),
+        inviter=_serialize_user_summary(inviter_data),
+    )
+
+
 # ==================== COLLABORATION MANAGEMENT ====================
 
 @collaboration_router.get("/", 
@@ -41,10 +73,10 @@ def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
                            tags=["Collaboration"],
                            response_model=List[CollaboratorListItemSchema])
 async def list_collaborators(
-    app_id: int, 
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("viewer")),
-    db: Session = Depends(get_db)
+    app_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
     List all collaborators for a specific app.
@@ -95,9 +127,9 @@ async def list_collaborators(
 async def invite_collaborator(
     app_id: int,
     invitation_data: InviteCollaboratorSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Invite a user to collaborate on an app.
@@ -126,31 +158,8 @@ async def invite_collaborator(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to send invitation"
             )
-        
-        from models.user import User
-        user_data = db.query(User).filter(User.user_id == collaboration.user_id).first()
-        inviter_data = db.query(User).filter(User.user_id == collaboration.invited_by).first()
-        
-        return CollaboratorDetailSchema(
-            id=collaboration.id,
-            app_id=app_id,
-            user_id=collaboration.user_id,
-            role=collaboration.role.value,
-            status=collaboration.status.value,
-            invited_by=collaboration.invited_by,
-            invited_at=collaboration.invited_at,
-            accepted_at=collaboration.accepted_at,
-            user={
-                "user_id": user_data.user_id,
-                "email": user_data.email,
-                "name": user_data.name
-            } if user_data else None,
-            inviter={
-                "user_id": inviter_data.user_id,
-                "email": inviter_data.email,
-                "name": inviter_data.name
-            } if inviter_data else None
-        )
+
+        return _build_collaborator_detail_schema(db, app_id, collaboration)
         
     except ValueError as e:
         raise HTTPException(
@@ -174,9 +183,9 @@ async def update_collaborator_role(
     app_id: int,
     user_id: int,
     role_data: UpdateCollaboratorRoleSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Update a collaborator's role.
@@ -220,9 +229,9 @@ async def update_collaborator_role(
 async def remove_collaborator(
     app_id: int,
     user_id: int,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    role: AppRole = Depends(require_min_role("administrator")),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
     Remove a collaborator from an app.
@@ -267,8 +276,8 @@ async def remove_collaborator(
 async def respond_to_invitation(
     collaboration_id: int,
     response_data: InvitationResponseSchema,
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Accept or decline a collaboration invitation.
@@ -310,8 +319,8 @@ async def respond_to_invitation(
                          tags=["Collaboration"],
                          response_model=List[CollaboratorListItemSchema])
 async def get_my_invitations(
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Get all pending collaboration invitations for the current user.

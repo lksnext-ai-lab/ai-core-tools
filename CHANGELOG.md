@@ -13,6 +13,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.4.0] - 2026-03-30
+
+### Added
+
+- **Platform Chatbot Widget**: Platform-wide chatbot widget with follow-up suggestions, surfaced as a persistent `PlatformChatbotWidget` overlay available across all app pages.
+- **Platform Chatbot Components**: Added `PlatformChatbotWidget`, `Button`, and `Panel` React components to the frontend component library.
+- **Platform Chatbot Context**: Added `PlatformChatbotContext` providing session and conversation history management for the platform chatbot.
+- **Platform Chatbot API Integration**: Added platform chatbot API methods to `ApiService`; new internal router registered at `/internal/platform-chatbot` with config and chat endpoints; `PlatformChatbotConfigResponse` and `PlatformChatbotChatRequest` Pydantic schemas.
+- **Platform Chatbot System Config**: Added `platform_chatbot_agent_id` field to `system_defaults.yaml` to designate the system-level chatbot agent.
+- **SaaS Embedding Services**: System embedding services are now included in the Domain and Repository selectors in SaaS mode, making shared infrastructure available to tenant workflows.
+- **SaaS Mode Improvements**: Various SaaS mode, marketplace, and admin-panel improvements introduced in the SaaS mode feature branch.
+
+### Changed
+
+- **Agent Execution Pipeline**: Unified the streaming and non-streaming agent execution paths into a single pipeline, eliminating code duplication and improving maintainability.
+- **Platform Chatbot Panel**: Simplified `PlatformChatbotPanel` — extracted an `unescape` helper function and fixed abort-controller cleanup on unmount.
+- **Documentation**: Updated API reference, architecture guides, and integration docs to reflect user activation flows, system settings, marketplace file handling, and new database models.
+
+### Fixed
+
+- **LLM Usage Tracking in Streaming**: System LLM usage is now correctly tracked in the streaming execution path, which had previously been omitted.
+- **SaaS Mode Bug Fixes**: Addressed multiple SaaS mode issues identified during PR review, including edge cases in marketplace and admin flows.
+
+## [0.3.18] - 2026-03-11
+
+### Added
+
+- **Marketplace Call Quota Enforcement**: Added per-user call quota tracking and enforcement for marketplace agents, including `MarketplaceUsageTracking` table, `MarketplaceQuotaService`, and quota enforcement on the marketplace conversation chat route.
+- **OMNIADMIN Quota Reset**: Added endpoint for OMNIADMIN users to reset marketplace call quotas for any user.
+- **Marketplace Quota UI**: Added quota usage display in chat UI, call usage section on user profile page, and Reset Quota action in admin user list.
+- **GFM Table Support**: Added `remark-gfm` plugin for GitHub Flavored Markdown table rendering in chat messages.
+
+### Changed
+
+- **Chat Bubble Layout**: Removed max-width constraint on message bubbles for better content display.
+
+### Fixed
+
+- **Non-conversational Agents**: Fixed `NoneType` iterable error when middleware returns `None` for non-conversational agents.
+- **Silo Validation (Security)**: Validated that silo belongs to app in public API document endpoints to prevent cross-app data access.
+- **Quota Enforcement**: Enforced marketplace call quota checks on the agent chat route.
+
 ## [0.3.17] - 2026-03-08
 
 ### Added

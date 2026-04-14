@@ -35,7 +35,7 @@ interface FolderNodeProps {
   selectedFolderId?: number;
   openDropdown: number | null;
   onToggleDropdown: (folderId: number, e: React.MouseEvent) => void;
-  dropdownRefs: React.MutableRefObject<{ [key: number]: HTMLDivElement | null }>;
+  dropdownRefs: React.RefObject<{ [key: number]: HTMLDivElement | null }>;
   canEdit?: boolean;
 }
 
@@ -56,53 +56,65 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   const isSelected = selectedFolderId === folder.folder_id;
   const folderPath = folder.folder_path || folder.name;
 
+  let expandIcon: React.ReactNode = <span className="w-3 h-3" />;
+  if (hasChildren) {
+    if (isExpanded) {
+      expandIcon = (
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      );
+    } else {
+      expandIcon = (
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+        </svg>
+      );
+    }
+  }
+
   return (
     <div className="select-none">
       <div className="relative">
         <div
-          className={`flex items-center p-2 rounded-md cursor-pointer hover:bg-gray-100 transition-colors ${
+          className={`flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors ${
             isSelected ? 'bg-blue-100 text-blue-800' : ''
           }`}
           style={{ paddingLeft: `${level * 16 + 8}px` }}
-          onClick={() => onSelect(folder.folder_id, folderPath)}
         >
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onToggle(folder.folder_id);
             }}
-            className="mr-2 text-gray-500 hover:text-gray-700 w-4 h-4 flex items-center justify-center"
+            className="mr-2 text-gray-500 hover:text-gray-700 w-4 h-4 flex items-center justify-center flex-shrink-0"
           >
-            {hasChildren ? (
-              isExpanded ? (
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              )
-            ) : (
-              <span className="w-3 h-3"></span>
+            {expandIcon}
+          </button>
+
+          <button
+            type="button"
+            className="flex items-center flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+            onClick={() => onSelect(folder.folder_id, folderPath)}
+          >
+            <svg className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+            </svg>
+
+            <span className="flex-1 text-sm truncate">{folder.name}</span>
+
+            {folder.resource_count > 0 && (
+              <span className="text-xs text-gray-500 ml-2">
+                ({folder.resource_count})
+              </span>
             )}
           </button>
-          
-          <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-          </svg>
-          
-          <span className="flex-1 text-sm truncate">{folder.name}</span>
-          
-          {folder.resource_count > 0 && (
-            <span className="text-xs text-gray-500 ml-2">
-              ({folder.resource_count})
-            </span>
-          )}
 
           {/* Dropdown Menu Button */}
           {canEdit && (
             <button
+              type="button"
               onClick={(e) => onToggleDropdown(folder.folder_id, e)}
               className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
               title="Folder actions"
@@ -272,12 +284,13 @@ const FolderTree: React.FC<FolderTreeProps> = ({
     console.log('FolderTree: handleAction called', { action, folder });
     closeDropdown();
     switch (action) {
-      case 'create':
+      case 'create': {
         // For root folder (folder_id = 0), pass undefined to create at root level
         const parentId = folder.folder_id === 0 ? undefined : folder.folder_id;
         console.log('FolderTree: calling onFolderCreate with parentId:', parentId);
         onFolderCreate?.(parentId);
         break;
+      }
       case 'rename':
         console.log('FolderTree: calling onFolderRename');
         onFolderRename?.(folder.folder_id, folder.name);
@@ -312,19 +325,25 @@ const FolderTree: React.FC<FolderTreeProps> = ({
         {/* Root folder option */}
         <div className="relative">
           <div
-            className={`flex items-center p-2 rounded-md cursor-pointer hover:bg-gray-100 transition-colors mb-2 ${
+            className={`flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors mb-2 ${
               selectedFolderId === null ? 'bg-blue-100 text-blue-800' : ''
             }`}
-            onClick={() => onFolderSelect(null, '')}
           >
-            <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-            </svg>
-            <span className="text-sm font-medium">Repository Root</span>
+            <button
+              type="button"
+              className="flex items-center flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+              onClick={() => onFolderSelect(null, '')}
+            >
+              <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+              </svg>
+              <span className="text-sm font-medium">Repository Root</span>
+            </button>
 
             {/* Dropdown Menu Button for Root */}
             {canEdit && (
               <button
+                type="button"
                 onClick={(e) => toggleDropdown(0, e)}
                 className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
                 title="Root folder actions"

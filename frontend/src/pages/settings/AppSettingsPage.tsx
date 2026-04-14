@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { Check, AlertTriangle, Tag, BarChart2, Info } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 import { useAppRole } from '../../hooks/useAppRole';
@@ -22,12 +23,9 @@ function AppSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [langsmithKeyChanged, setLangsmithKeyChanged] = useState(false);
+  const [originalLangsmithKey, setOriginalLangsmithKey] = useState('');
 
-  // App slug state (separate from main form since it uses different endpoint)
-  const [slugData, setSlugData] = useState({
-    slug: '',
-    mcp_base_url: ''
-  });
   const [slugInput, setSlugInput] = useState('');
   const [savingSlug, setSavingSlug] = useState(false);
   const [slugSaved, setSlugSaved] = useState(false);
@@ -47,14 +45,17 @@ function AppSettingsPage() {
     try {
       setLoading(true);
       setError(null);
-      const app = await apiService.getApp(parseInt(appId));
+      const app = await apiService.getApp(Number.parseInt(appId));
+      const langsmithKey = app.langsmith_api_key || '';
       setFormData({
         name: app.name || '',
-        langsmith_api_key: app.langsmith_api_key || '',
+        langsmith_api_key: langsmithKey,
         agent_rate_limit: app.agent_rate_limit || 0,
         max_file_size_mb: app.max_file_size_mb || 0,
         agent_cors_origins: app.agent_cors_origins || ''
       });
+      setOriginalLangsmithKey(langsmithKey);
+      setLangsmithKeyChanged(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load app data');
       console.error('Error loading app data:', err);
@@ -67,11 +68,7 @@ function AppSettingsPage() {
     if (!appId) return;
 
     try {
-      const data = await apiService.getAppSlugInfo(parseInt(appId));
-      setSlugData({
-        slug: data.slug || '',
-        mcp_base_url: data.mcp_base_url || ''
-      });
+      const data = await apiService.getAppSlugInfo(Number.parseInt(appId));
       setSlugInput(data.slug || '');
     } catch (err) {
       console.error('Error loading slug data:', err);
@@ -86,11 +83,7 @@ function AppSettingsPage() {
     setSlugError(null);
 
     try {
-      const data = await apiService.updateAppSlug(parseInt(appId), slugInput.trim());
-      setSlugData({
-        slug: data.slug || '',
-        mcp_base_url: data.mcp_base_url || ''
-      });
+      const data = await apiService.updateAppSlug(Number.parseInt(appId), slugInput.trim());
       setSlugInput(data.slug || '');
       setSlugSaved(true);
       setTimeout(() => setSlugSaved(false), 3000);
@@ -110,9 +103,9 @@ function AppSettingsPage() {
     setError(null);
 
     try {
-      await apiService.updateApp(parseInt(appId), {
+      await apiService.updateApp(Number.parseInt(appId), {
         name: formData.name,
-        langsmith_api_key: formData.langsmith_api_key,
+        langsmith_api_key: langsmithKeyChanged ? formData.langsmith_api_key : originalLangsmithKey,
         agent_rate_limit: formData.agent_rate_limit,
         max_file_size_mb: formData.max_file_size_mb,
         agent_cors_origins: formData.agent_cors_origins
@@ -128,10 +121,14 @@ function AppSettingsPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb') 
-      ? parseInt(e.target.value) || 0 
+    const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb')
+      ? Number.parseInt(e.target.value) || 0
       : e.target.value;
-    
+
+    if (e.target.name === 'langsmith_api_key') {
+      setLangsmithKeyChanged(true);
+    }
+
     setFormData(prev => ({
       ...prev,
       [e.target.name]: newValue
@@ -205,7 +202,7 @@ function AppSettingsPage() {
                       type="text"
                       id="slug"
                       value={slugInput}
-                      onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      onChange={(e) => setSlugInput(e.target.value.toLowerCase().replaceAll(/[^a-z0-9-]/g, ''))}
                       disabled={!canEdit}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       placeholder="my-app"
@@ -230,7 +227,7 @@ function AppSettingsPage() {
                   </p>
                   {slugSaved && (
                     <p className="mt-1 text-sm text-green-600 flex items-center">
-                      <span className="mr-1">✓</span> Slug saved successfully
+                      <Check className="w-4 h-4 mr-1" /> Slug saved successfully
                     </p>
                   )}
                   {slugError && (
@@ -249,9 +246,18 @@ function AppSettingsPage() {
                     name="langsmith_api_key"
                     value={formData.langsmith_api_key}
                     onChange={handleChange}
+                    onKeyDown={(e) => {
+                      if (!langsmithKeyChanged && formData.langsmith_api_key.startsWith('****') && e.key.length === 1) {
+                        setFormData(prev => ({ ...prev, langsmith_api_key: '' }));
+                        setLangsmithKeyChanged(true);
+                      }
+                    }}
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     disabled={!canEdit}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter Langsmith API key"
+                    placeholder={!langsmithKeyChanged && originalLangsmithKey ? 'Leave empty to keep current key' : 'Enter Langsmith API key'}
                   />
                   <p className="mt-1 text-sm text-gray-500">
                     Your Langsmith API key for monitoring and tracing
@@ -326,7 +332,7 @@ function AppSettingsPage() {
                 <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex">
                     <div className="flex-shrink-0">
-                      <span className="text-red-400 text-xl">⚠️</span>
+                      <AlertTriangle className="w-5 h-5 text-red-400" />
                     </div>
                     <div className="ml-3">
                       <h3 className="text-sm font-medium text-red-800">
@@ -346,8 +352,7 @@ function AppSettingsPage() {
                   <div className="flex items-center">
                     {saved && (
                       <div className="flex items-center text-green-600">
-                        <span className="mr-2">✓</span>
-                        {' '}Settings saved successfully
+                        <Check className="w-4 h-4 mr-1" /> Settings saved successfully
                       </div>
                     )}
                   </div>
@@ -372,7 +377,7 @@ function AppSettingsPage() {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <span className="text-gray-400 text-xl">🏷️</span>
+                  <Tag className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-gray-800">
@@ -393,7 +398,7 @@ function AppSettingsPage() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <span className="text-blue-400 text-xl">📊</span>
+                  <BarChart2 className="w-5 h-5 text-blue-400" />
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-blue-800">
@@ -413,7 +418,7 @@ function AppSettingsPage() {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <span className="text-gray-400 text-xl">ℹ️</span>
+                  <Info className="w-5 h-5 text-gray-400" />
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-gray-800">

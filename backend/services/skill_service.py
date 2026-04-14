@@ -62,6 +62,10 @@ class SkillService:
     ) -> Optional[Skill]:
         """Create a new skill or update an existing one"""
         if skill_id == 0:
+            # Enforce per-app skill limit before creation (SaaS mode only)
+            from services.tier_enforcement_service import TierEnforcementService
+            TierEnforcementService.check_resource_limit(db, app_id, 'skills')
+
             # Create new skill
             skill = Skill()
             skill.app_id = app_id

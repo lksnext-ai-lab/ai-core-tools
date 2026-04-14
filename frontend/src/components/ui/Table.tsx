@@ -1,7 +1,9 @@
 import React, { type ReactNode } from 'react';
+import { FileText } from 'lucide-react';
 
 export interface TableColumn<T = any> {
   readonly header: string;
+  readonly headerContent?: ReactNode;
   readonly accessor?: keyof T | ((row: T) => ReactNode);
   readonly className?: string;
   readonly headerClassName?: string;
@@ -14,7 +16,7 @@ export interface TableProps<T = any> {
   readonly keyExtractor: (row: T) => string | number;
   readonly emptyMessage?: string;
   readonly emptySubMessage?: string;
-  readonly emptyIcon?: string;
+  readonly emptyIcon?: ReactNode;
   readonly loading?: boolean;
   readonly onRowClick?: (row: T) => void;
   readonly rowClassName?: string | ((row: T) => string);
@@ -27,7 +29,7 @@ function Table<T = any>({
   keyExtractor,
   emptyMessage = 'No data found',
   emptySubMessage,
-  emptyIcon = '📄',
+  emptyIcon = <FileText className="w-10 h-10 text-gray-300" />,
   loading = false,
   onRowClick,
   rowClassName = 'hover:bg-gray-50',
@@ -79,7 +81,7 @@ function Table<T = any>({
                     'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
                   }
                 >
-                  {column.header}
+                  {column.headerContent ?? column.header}
                 </th>
               ))}
             </tr>

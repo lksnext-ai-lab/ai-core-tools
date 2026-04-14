@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bot, BookOpen } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { StarRating } from './StarRating';
 import { apiService } from '../../services/api';
@@ -59,7 +60,7 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
               className="w-full h-full object-cover rounded-lg"
             />
           ) : (
-            <span className="text-2xl" aria-hidden="true">🤖</span>
+            <Bot className="w-5 h-5 text-blue-400" aria-hidden="true" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -79,10 +80,10 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
       <div className="flex items-center gap-3 mb-3 text-xs text-gray-500">
         <div className="flex items-center gap-1">
           <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="sm" />
-          {agent.rating_avg !== null ? (
-            <span>{agent.rating_avg.toFixed(1)} ({agent.rating_count})</span>
-          ) : (
+          {agent.rating_avg === null ? (
             <span className="text-gray-400">No ratings</span>
+          ) : (
+            <span>{agent.rating_avg.toFixed(1)} ({agent.rating_count})</span>
           )}
         </div>
         {agent.conversation_count > 0 && (
@@ -104,7 +105,7 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
           />
         )}
         {agent.has_knowledge_base && (
-          <Badge label="Knowledge" variant="success" icon="📚" />
+          <Badge label="Knowledge" variant="success" icon={<BookOpen className="w-3 h-3" />} />
         )}
         {agent.tags?.slice(0, 3).map((tag) => (
           <Badge key={tag} label={tag} variant="default" />

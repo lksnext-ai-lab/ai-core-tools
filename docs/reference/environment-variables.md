@@ -44,7 +44,7 @@ DATABASE_HOST=postgres  # Service name in docker-compose
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC` or `FAKE` |
+| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC`, `FAKE`, or `LOCAL` |
 | `SECRET_KEY` | Yes | — | Session encryption key (256-bit) |
 | `AICT_OMNIADMINS` | No | — | Comma-separated emails of superusers |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
@@ -63,6 +63,13 @@ JWT_EXPIRATION_HOURS=24
 ```bash
 AICT_LOGIN=FAKE
 SECRET_KEY=dev-secret-key
+```
+
+**SaaS mode** (LOCAL — email+password):
+```bash
+AICT_LOGIN=LOCAL
+AICT_DEPLOYMENT_MODE=saas
+SECRET_KEY=your-256-bit-secret-key-here
 ```
 
 ### LLM API Keys
@@ -165,6 +172,41 @@ AICT_MODE=SELF-HOSTED
 REPO_BASE_FOLDER=./data/repositories
 TMP_BASE_FOLDER=./data/tmp
 ```
+
+### SaaS Mode
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_DEPLOYMENT_MODE` | No | `self_managed` | Deployment mode: `self_managed` or `saas` |
+| `STRIPE_API_KEY` | SaaS | — | Stripe secret key (`sk_test_...` for dev, `sk_live_...` for prod) |
+| `STRIPE_WEBHOOK_SECRET` | SaaS | — | Stripe webhook signing secret (`whsec_...`) |
+| `STRIPE_PRICE_ID_STARTER` | SaaS | — | Stripe Price ID for the Starter plan |
+| `STRIPE_PRICE_ID_PRO` | SaaS | — | Stripe Price ID for the Pro plan |
+| `EMAIL_FROM` | SaaS | — | Sender address for transactional emails |
+| `SMTP_HOST` | SaaS | `localhost` | SMTP server host |
+| `SMTP_PORT` | SaaS | `587` | SMTP server port |
+| `SMTP_USER` | No | — | SMTP username (optional) |
+| `SMTP_PASS` | No | — | SMTP password (optional) |
+
+> **Note**: Variables marked **SaaS** are required only when `AICT_DEPLOYMENT_MODE=saas`. The application will refuse to start if any are missing.
+
+**Example (local dev / SaaS test)**:
+```bash
+AICT_DEPLOYMENT_MODE=saas
+
+# Stripe test keys
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID_STARTER=price_starter_test
+STRIPE_PRICE_ID_PRO=price_pro_test
+
+# Email
+EMAIL_FROM=noreply@yourdomain.com
+SMTP_HOST=localhost
+SMTP_PORT=587
+```
+
+See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 
 ### CORS Configuration
 

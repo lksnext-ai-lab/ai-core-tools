@@ -43,6 +43,34 @@ class FolderService:
             List of root Folder instances
         """
         return FolderRepository.get_by_repository_id(db, repository_id)
+
+    @staticmethod
+    def get_root_folders_with_counts(repository_id: int, db: Session) -> List[Dict[str, Any]]:
+        """
+        Get root folders plus subfolder/resource counts for list rendering.
+
+        Args:
+            repository_id: Repository ID
+            db: Database session
+
+        Returns:
+            List of dictionaries with folder and count metadata
+        """
+        root_folders = FolderRepository.get_by_repository_id(db, repository_id)
+        result = []
+
+        for folder in root_folders:
+            subfolder_count = len(FolderRepository.get_subfolders(db, folder.folder_id))
+            resource_count = len(folder.resources)
+            result.append(
+                {
+                    "folder": folder,
+                    "subfolder_count": subfolder_count,
+                    "resource_count": resource_count,
+                }
+            )
+
+        return result
     
     @staticmethod
     def get_folder_tree(repository_id: int, db: Session) -> List[Dict[str, Any]]:

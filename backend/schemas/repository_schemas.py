@@ -17,7 +17,7 @@ class RepositoryListItemSchema(BaseModel):
     name: str
     type: Optional[str] = None
     status: Optional[str] = None
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     resource_count: int
     vector_db_type: Optional[str] = None
     
@@ -30,7 +30,7 @@ class RepositoryDetailSchema(BaseModel):
     name: str
     type: Optional[str] = None
     status: Optional[str] = None
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
     resources: List[Dict[str, Any]]
     folders: List[Dict[str, Any]] = []
     embedding_services: List[Dict[str, Any]]

@@ -10,7 +10,8 @@ class SkillListItemSchema(BaseModel):
     skill_id: int
     name: str
     description: Optional[str] = ""
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
+    is_frozen: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,7 +22,8 @@ class SkillDetailSchema(BaseModel):
     name: str
     description: Optional[str] = ""
     content: str  # Markdown instructions for the skill
-    created_at: Optional[datetime]
+    created_at: Optional[datetime] = None
+    is_frozen: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

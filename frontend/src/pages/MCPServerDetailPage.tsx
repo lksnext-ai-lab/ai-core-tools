@@ -27,7 +27,7 @@ function MCPServerDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getMCPServer(parseInt(appId), parseInt(serverId));
+      const response = await apiService.getMCPServer(Number.parseInt(appId), Number.parseInt(serverId));
       setServer(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load MCP server');
@@ -45,7 +45,7 @@ function MCPServerDetailPage() {
     if (!appId || !serverId) return;
 
     try {
-      await apiService.deleteMCPServer(parseInt(appId), parseInt(serverId));
+      await apiService.deleteMCPServer(Number.parseInt(appId), Number.parseInt(serverId));
       navigate(`/apps/${appId}/mcp-servers`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete MCP server');
@@ -240,9 +240,9 @@ function MCPServerDetailPage() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <p className="block text-sm font-medium text-gray-700 mb-1">
               Primary Endpoint (slug-based)
-            </label>
+            </p>
             <div className="flex items-center space-x-2">
               <code className="flex-1 p-3 bg-gray-100 rounded-lg text-sm font-mono break-all">
                 {server.endpoint_url}
@@ -258,9 +258,9 @@ function MCPServerDetailPage() {
 
           {server.endpoint_url_by_id && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <p className="block text-sm font-medium text-gray-700 mb-1">
                 Fallback Endpoint (ID-based)
-              </label>
+              </p>
               <div className="flex items-center space-x-2">
                 <code className="flex-1 p-3 bg-gray-100 rounded-lg text-sm font-mono break-all">
                   {server.endpoint_url_by_id}

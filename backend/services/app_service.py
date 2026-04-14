@@ -23,6 +23,10 @@ class AppService:
         """Get apps where user is an accepted collaborator"""
         return self.app_repo.get_collaborated_apps(user_id)
 
+    def get_all_apps(self) -> List[App]:
+        """Get all apps."""
+        return self.app_repo.get_all()
+
     def get_apps(self, user_id: int) -> List[App]:
         """Get all apps for a specific user (owned + collaborated) ordered by creation date"""
         return self.collaboration_repo.get_user_accessible_apps(user_id)
@@ -31,15 +35,23 @@ class AppService:
         """Get a specific app by ID"""
         return self.app_repo.get_by_id(app_id)
     
-    def create_or_update_app(self, app_data: dict) -> App:
-        """Create a new app or update an existing one"""
+    def create_or_update_app(self, app_data: dict, user_id: int = None) -> App:
+        """Create a new app or update an existing one.
+
+        In SaaS mode, enforces the per-user app limit before creation.
+        """
         app_id = app_data.get('app_id')
-        
+
         if app_id:
             app = self.app_repo.get_by_id(app_id)
             if app:
                 return self.app_repo.update(app, app_data)
-        
+
+        # Enforce app limit (SaaS mode only, no-op in self-managed)
+        if user_id is not None:
+            from services.tier_enforcement_service import TierEnforcementService
+            TierEnforcementService.check_app_limit(self.db, user_id)
+
         # Create new app
         return self.app_repo.create(app_data)
     

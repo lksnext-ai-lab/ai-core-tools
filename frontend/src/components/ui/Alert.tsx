@@ -1,5 +1,6 @@
 
- import React, { type ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
+import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 
 interface AlertProps {
   type: 'success' | 'error' | 'warning' | 'info';
@@ -12,7 +13,6 @@ interface AlertProps {
 const alertStyles = {
   success: {
     container: 'bg-green-50 border-green-200',
-    icon: '✅',
     iconColor: 'text-green-400',
     titleColor: 'text-green-800',
     messageColor: 'text-green-600',
@@ -20,7 +20,6 @@ const alertStyles = {
   },
   error: {
     container: 'bg-red-50 border-red-200',
-    icon: '⚠️',
     iconColor: 'text-red-400',
     titleColor: 'text-red-800',
     messageColor: 'text-red-600',
@@ -28,7 +27,6 @@ const alertStyles = {
   },
   warning: {
     container: 'bg-yellow-50 border-yellow-200',
-    icon: '⚠️',
     iconColor: 'text-yellow-400',
     titleColor: 'text-yellow-800',
     messageColor: 'text-yellow-600',
@@ -36,7 +34,6 @@ const alertStyles = {
   },
   info: {
     container: 'bg-blue-50 border-blue-200',
-    icon: 'ℹ️',
     iconColor: 'text-blue-400',
     titleColor: 'text-blue-800',
     messageColor: 'text-blue-600',
@@ -44,12 +41,19 @@ const alertStyles = {
   },
 };
 
-const Alert: React.FC<AlertProps> = ({ 
-  type, 
-  title, 
-  message, 
+const alertIcons = {
+  success: <CheckCircle2 className="w-5 h-5" />,
+  error: <AlertTriangle className="w-5 h-5" />,
+  warning: <AlertTriangle className="w-5 h-5" />,
+  info: <Info className="w-5 h-5" />,
+};
+
+const Alert: React.FC<AlertProps> = ({
+  type,
+  title,
+  message,
   onDismiss,
-  className = '' 
+  className = ''
 }) => {
   const styles = alertStyles[type];
   const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
@@ -57,14 +61,14 @@ const Alert: React.FC<AlertProps> = ({
   return (
     <div className={`${styles.container} border rounded-lg p-4 ${className}`}>
       <div className="flex">
-        <span className={`${styles.iconColor} text-xl mr-3`}>{styles.icon}</span>
+        <span className={`${styles.iconColor} mr-3 shrink-0`}>{alertIcons[type]}</span>
         <div className="flex-1">
           <h3 className={`text-sm font-medium ${styles.titleColor}`}>
             {title || defaultTitle}
           </h3>
           <p className={`text-sm ${styles.messageColor} mt-1`}>{message}</p>
           {onDismiss && (
-            <button 
+            <button
               onClick={onDismiss}
               className={`mt-2 text-sm ${styles.buttonColor} underline`}
             >

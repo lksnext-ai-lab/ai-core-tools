@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AlertTriangle, FolderOpen, Gamepad2, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -36,7 +37,7 @@ const RepositoriesPage: React.FC = () => {
   const loadRepositories = async () => {
     try {
       setLoading(true);
-      const data = await apiService.getRepositories(parseInt(appId!));
+      const data = await apiService.getRepositories(Number.parseInt(appId!));
       setRepositories(data);
       setError(null);
     } catch (err) {
@@ -68,7 +69,7 @@ const RepositoriesPage: React.FC = () => {
     if (!repositoryToDelete) return;
 
     try {
-      await apiService.deleteRepository(parseInt(appId!), repositoryToDelete.repository_id);
+      await apiService.deleteRepository(Number.parseInt(appId!), repositoryToDelete.repository_id);
       setRepositories(repositories.filter(r => r.repository_id !== repositoryToDelete.repository_id));
       setShowDeleteModal(false);
       setRepositoryToDelete(null);
@@ -114,7 +115,7 @@ const RepositoriesPage: React.FC = () => {
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
-            <span className="text-red-400 text-xl mr-3">⚠️</span>
+            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
             <div>
               <h3 className="text-sm font-medium text-red-800">Error Loading Repositories</h3>
               <p className="text-sm text-red-600 mt-1">{error}</p>
@@ -145,6 +146,7 @@ const RepositoriesPage: React.FC = () => {
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
           >
             <span className="mr-2">+</span>
+            {' '}
             Create Repository
           </button>
         )}
@@ -167,7 +169,7 @@ const RepositoriesPage: React.FC = () => {
               >
                 <div className="flex-shrink-0 h-10 w-10">
                   <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <span className="text-green-600 text-lg">📁</span>
+                    <FolderOpen className="w-5 h-5 text-green-600" />
                   </div>
                 </div>
                 <div className="ml-4">
@@ -199,27 +201,27 @@ const RepositoriesPage: React.FC = () => {
                     {
                       label: 'Manage Resources',
                       onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`),
-                      icon: '📁',
+                      icon: <FolderOpen className="w-4 h-4" />,
                       variant: 'success' as const
                     }
                   ] : []),
                   {
                     label: 'Playground',
                     onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`),
-                    icon: '🎮',
+                    icon: <Gamepad2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
                       label: 'Edit',
                       onClick: () => handleEditRepository(repository.repository_id),
-                      icon: '✏️',
+                      icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
                       label: 'Delete',
                       onClick: () => handleDeleteRepository(repository),
-                      icon: '🗑️',
+                      icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
                     }
                   ] : [])
@@ -229,7 +231,7 @@ const RepositoriesPage: React.FC = () => {
             )
           }
         ]}
-        emptyIcon="📁"
+        emptyIcon={<FolderOpen className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Repositories Yet"
         emptySubMessage="Create your first repository to start organizing and searching documents."
         loading={loading}

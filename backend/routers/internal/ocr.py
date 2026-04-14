@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from typing import Optional
+from typing import Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
@@ -14,15 +14,27 @@ logger = get_logger(__name__)
 ocr_router = APIRouter(tags=["Internal OCR"])
 
 
-@ocr_router.post("/{agent_id}/process",
-                 summary="Process OCR",
-                 tags=["Internal OCR"],
-                 response_model=OCRResponseSchema)
+@ocr_router.post(
+    "/{agent_id}/process",
+    summary="Process OCR",
+    tags=["Internal OCR"],
+    response_model=OCRResponseSchema,
+    responses={
+        500: {
+            "description": "OCR processing failed",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "OCR processing failed"}
+                }
+            },
+        }
+    },
+)
 async def process_ocr_internal(
     agent_id: int,
-    pdf_file: UploadFile = File(...),
-    auth_context: AuthContext = Depends(get_current_user_oauth),
-    db: Session = Depends(get_db)
+    pdf_file: Annotated[UploadFile, File(...)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)]
 ):
     """
     Internal API: Process OCR for playground (OAuth authentication)
@@ -35,7 +47,7 @@ async def process_ocr_internal(
         }
         
         # Use unified service layer
-        execution_service = AgentExecutionService(db)
+        execution_service = AgentExecutionService()
         result = await execution_service.execute_agent_ocr(
             agent_id=agent_id,
             pdf_file=pdf_file,

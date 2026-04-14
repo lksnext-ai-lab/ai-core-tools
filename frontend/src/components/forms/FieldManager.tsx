@@ -5,6 +5,7 @@ interface FieldDefinition {
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;
+  _key?: string;
 }
 
 interface FieldManagerProps {
@@ -14,13 +15,14 @@ interface FieldManagerProps {
   maxFields?: number;
 }
 
-function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: FieldManagerProps) {
+function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Readonly<FieldManagerProps>) {
   const fieldTypes = [
     { value: 'str', name: 'String' },
     { value: 'int', name: 'Integer' },
     { value: 'float', name: 'Float' },
     { value: 'bool', name: 'Boolean' },
     { value: 'date', name: 'Date' },
+    { value: 'dict', name: 'Dictionary (JSON Object)' },
     { value: 'list', name: 'List' },
     { value: 'parser', name: 'Parser Reference' }
   ];
@@ -29,6 +31,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
     if (fields.length >= maxFields) return;
     
     const newField: FieldDefinition = {
+      _key: Math.random().toString(36).slice(2),
       name: '',
       type: 'str',
       description: ''
@@ -67,7 +70,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
   };
 
   const validateFieldName = (name: string): boolean => {
-    const pattern = /^[a-zA-Z0-9_]+$/;
+    const pattern = /^\w+$/;
     return pattern.test(name);
   };
 
@@ -77,6 +80,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
     { value: 'float', name: 'Float' },
     { value: 'bool', name: 'Boolean' },
     { value: 'date', name: 'Date' },
+    { value: 'dict', name: 'Dictionary (JSON Object)' },
     { value: 'parser', name: 'Parser Reference' }
   ];
 
@@ -117,7 +121,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {fields.map((field, index) => (
-                <tr key={index} className="hover:bg-gray-50">
+                <tr key={field._key} className="hover:bg-gray-50">
                   <td className="px-6 py-4 align-top">
                     <input
                       type="text"
@@ -155,12 +159,13 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
                       {/* Parser Reference Selector */}
                       {field.type === 'parser' && (
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                          <label htmlFor={`parser_ref_${index}`} className="block text-xs font-medium text-gray-700 mb-1">
                             Reference Parser:
                           </label>
                           <select
+                            id={`parser_ref_${index}`}
                             value={field.parser_id || ''}
-                            onChange={(e) => updateField(index, { parser_id: parseInt(e.target.value) || undefined })}
+                            onChange={(e) => updateField(index, { parser_id: Number.parseInt(e.target.value) || undefined })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="">Select parser...</option>
@@ -176,10 +181,11 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
                       {/* List Type Selectors */}
                       {field.type === 'list' && (
                         <div className="space-y-2">
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                          <label htmlFor={`list_item_type_${index}`} className="block text-xs font-medium text-gray-700 mb-1">
                             List Item Type:
                           </label>
                           <select
+                            id={`list_item_type_${index}`}
                             value={field.list_item_type || 'str'}
                             onChange={(e) => updateField(index, { list_item_type: e.target.value })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -193,12 +199,13 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Fi
                           
                           {field.list_item_type === 'parser' && (
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                              <label htmlFor={`list_item_parser_${index}`} className="block text-xs font-medium text-gray-700 mb-1">
                                 List Item Parser:
                               </label>
                               <select
+                                id={`list_item_parser_${index}`}
                                 value={field.list_item_parser_id || ''}
-                                onChange={(e) => updateField(index, { list_item_parser_id: parseInt(e.target.value) || undefined })}
+                                onChange={(e) => updateField(index, { list_item_parser_id: Number.parseInt(e.target.value) || undefined })}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                               >
                                 <option value="">Select parser...</option>

@@ -19,6 +19,23 @@ class MediaRepository:
         return db.query(Media).filter(Media.repository_id == repository_id).all()
 
     @staticmethod
+    def list_by_repository_and_folder(
+        repository_id: int,
+        folder_id: Optional[int],
+        db: Session,
+    ) -> List[Media]:
+        """List media for a repository with optional folder filtering."""
+        query = db.query(Media).filter(Media.repository_id == repository_id)
+
+        if folder_id is not None:
+            if folder_id == 0:
+                query = query.filter(Media.folder_id.is_(None))
+            else:
+                query = query.filter(Media.folder_id == folder_id)
+
+        return query.order_by(Media.create_date.desc()).all()
+
+    @staticmethod
     def commit(db: Session) -> None:
         """
         Commit the current transaction

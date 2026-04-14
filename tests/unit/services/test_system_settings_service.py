@@ -186,9 +186,14 @@ class TestCastBoolean:
     def test_truthy_values(self, raw):
         assert SystemSettingsService._cast_value(raw, "boolean", "k") is True
 
-    @pytest.mark.parametrize("raw", ["false", "False", "0", "no", "NO", "", None])
+    @pytest.mark.parametrize("raw", ["false", "False", "0", "no", "NO"])
     def test_falsy_values(self, raw):
         assert SystemSettingsService._cast_value(raw, "boolean", "k") is False
+
+    @pytest.mark.parametrize("raw", ["", None])
+    def test_invalid_boolean_values(self, raw):
+        with pytest.raises(ValueError):
+            SystemSettingsService._cast_value(raw, "boolean", "k")
 
 
 class TestCastJson:

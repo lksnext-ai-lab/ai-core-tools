@@ -321,7 +321,7 @@ import { AdminRoute } from '@lksnext/ai-core-tools-base';
 
 ```bash
 # Authentication mode
-AICT_LOGIN=OIDC  # or FAKE
+AICT_LOGIN=OIDC  # or FAKE (dev) or LOCAL (SaaS email+password)
 
 # OAuth Provider (if OIDC mode)
 OAUTH_PROVIDER=ENTRAID  # or GOOGLE

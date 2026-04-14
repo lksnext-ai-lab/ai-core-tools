@@ -33,7 +33,7 @@ function AgentImportStepper({
   isOpen,
   onClose,
   onImportComplete,
-}: Props) {
+}: Readonly<Props>) {
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<
@@ -80,24 +80,23 @@ function AgentImportStepper({
 
   // Load available AI services on open
   useEffect(() => {
-    if (isOpen) {
-      loadAIServices();
-    }
-  }, [isOpen, appId]);
+    if (!isOpen) return;
 
-  const loadAIServices = async () => {
-    try {
-      const services = await apiService.getAIServices(appId);
-      setAvailableAIServices(
-        services.map((svc: any) => ({
-          id: svc.service_id,
-          name: svc.name,
-        }))
-      );
-    } catch {
-      // Non-critical - user can still import bundled
-    }
-  };
+    const loadAIServices = async () => {
+      try {
+        const services = await apiService.getAIServices(appId);
+        setAvailableAIServices(
+          (services as Array<{ service_id: number; name: string }>).map(
+            (svc) => ({ id: svc.service_id, name: svc.name })
+          )
+        );
+      } catch {
+        // Non-critical - user can still import bundled
+      }
+    };
+
+    loadAIServices();
+  }, [isOpen, appId]);
 
   const handleFileSelect = useCallback(
     async (selectedFile: File) => {
@@ -124,9 +123,9 @@ function AgentImportStepper({
         if (!result.ai_service) {
           setUseExistingAIService(true);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         setValidationError(
-          err?.message || 'Failed to validate export file'
+          err instanceof Error ? err.message : 'Failed to validate export file'
         );
       } finally {
         setIsValidating(false);
@@ -233,9 +232,9 @@ function AgentImportStepper({
           result: 'error',
         }));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setImportError(
-        err?.message || 'Import failed unexpectedly'
+        err instanceof Error ? err.message : 'Import failed unexpectedly'
       );
       setStepStatuses((prev) => ({
         ...prev,
@@ -283,6 +282,7 @@ function AgentImportStepper({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close"
               className="text-gray-400 hover:text-gray-600 text-xl leading-none"
             >
               &times;

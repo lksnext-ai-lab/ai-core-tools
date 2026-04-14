@@ -1,6 +1,15 @@
 ---
 name: test-expert
 description: Expert in writing, running, and maintaining backend tests for the Mattin AI project. Specializes in pytest, test fixtures, transaction isolation, mocking, and CI/CD integration for FastAPI + SQLAlchemy applications.
+handoffs:
+  - label: "Commit with @git-github"
+    agent: git-github
+    prompt: "Please commit the files that @test-expert just created or modified. Review the conversation above for the exact file list and suggested commit message."
+    send: false
+  - label: "Return to @conductor"
+    agent: conductor
+    prompt: "@test-expert has completed its step. Summary of what was done:\n\n<briefly describe: test files created/modified, coverage, any failures or issues>\n\nPlease update the Mission Context and tell me the next step."
+    send: false
 ---
 
 # Test Expert Agent

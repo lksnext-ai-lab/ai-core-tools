@@ -31,7 +31,7 @@ export function FormField({
   helpText,
   className = '',
   inputClassName = ''
-}: FormFieldProps) {
+}: Readonly<FormFieldProps>) {
   return (
     <div className={className}>
       <label 
@@ -102,7 +102,7 @@ export function FormTextArea({
   rows = 3,
   className = '',
   textareaClassName = ''
-}: FormTextAreaProps) {
+}: Readonly<FormTextAreaProps>) {
   return (
     <div className={className}>
       <label 
@@ -171,7 +171,7 @@ export function FormSelect({
   helpText,
   className = '',
   selectClassName = ''
-}: FormSelectProps) {
+}: Readonly<FormSelectProps>) {
   return (
     <div className={className}>
       <label 
@@ -236,7 +236,7 @@ export function FormCheckbox({
   disabled = false,
   helpText,
   className = ''
-}: FormCheckboxProps) {
+}: Readonly<FormCheckboxProps>) {
   return (
     <div className={`flex items-start ${className}`}>
       <div className="flex items-center h-5">
