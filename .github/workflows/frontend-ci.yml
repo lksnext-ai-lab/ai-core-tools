@@ -39,7 +39,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/lksnext-ai-lab/ia-core-tools-frontend
+          images: ghcr.io/lksnext-ai-lab/mattinai-frontend
           tags: |
             type=ref,event=branch
             type=ref,event=pr
