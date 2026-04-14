@@ -23,12 +23,14 @@ This document explains the architecture, configuration, and chunk structure of t
 
 ## Overview
 
-When a media file (uploaded video or YouTube URL) is added to a repository, Mattin AI processes it through a pipeline that converts it into searchable vector embeddings. There are two processing modes:
+When a media file (uploaded video or YouTube URL) is added to a repository, Mattin AI processes it through a pipeline that converts it into searchable vector embeddings. The pipeline has two modes depending on repository configuration:
 
-| Mode | What is indexed | Chunks per time range | Cost |
-|------|----------------|----------------------|------|
-| **Basic** | Audio transcript only | 1 (audio) | Low — only Whisper API |
-| **Multimodal** | Audio transcript + visual descriptions | Up to 2 (audio + visual) | Higher — Whisper + Gemini |
+| Mode | Trigger | What is indexed | Chunks per time range | Cost |
+|------|---------|----------------|----------------------|------|
+| **Basic** | Repository has no Video Analysis Service | Audio transcript only | 1 (audio) | Low — only Whisper API |
+| **Multimodal** | Repository has a Video Analysis Service configured | Audio transcript + visual descriptions | Up to 2 (audio + visual) | Higher — Whisper + Gemini |
+
+Multimodal analysis activates **automatically** when the repository has a `Video Analysis Service` configured — no per-upload toggle is needed.
 
 In **multimodal mode**, for each time window (e.g. 0:00–0:30) the system produces **two independent chunks**:
 
@@ -72,22 +74,24 @@ For **GoogleCloud** (Vertex AI):
 
 ### 2. Configure services at the repository level
 
-The recommended approach is to configure the transcription and video AI services **once at the repository level**. All media uploaded to that repository will inherit these settings automatically.
+All AI service configuration is done **once at the repository level**. There is no per-upload service selection — every media file in the repository uses these settings.
 
 In the repository create/edit form:
 
-- **Transcription Service (Whisper)** — Select the Whisper-compatible AI Service. All media in this repository will use this service by default.
-- **Video Analysis Service (Gemini)** — Select the video-capable AI Service. When set, media uploaded in multimodal mode will use this service automatically. Leave empty to disable visual analysis for the repository.
+- **Transcription Service (Whisper)** — Required. All media in this repository will use this service for audio transcription.
+- **Video Analysis Service (Gemini)** — Optional. When set, **all media uploaded to this repository** will automatically go through visual analysis. Leave empty for audio-only processing.
+
+> Multimodal mode is repository-wide: if a Video Analysis Service is configured, every uploaded video/audio file will be processed with both Whisper and Gemini.
 
 ### 3. Upload media
 
-When uploading a media file (or adding a YouTube URL), set:
+When uploading a media file (or adding a YouTube URL), the only configurable parameters are:
 
-- **Processing Mode**: `multimodal` to enable visual analysis, `basic` for audio-only.
-- **Transcription Service** *(optional)* — Overrides the repository default for this media only.
-- **Video Analysis Service** *(optional)* — Overrides the repository default for this media only.
+- **Folder** *(optional)* — Target folder within the repository.
+- **Language** *(optional)* — Force transcription language (e.g., `es`, `en`). Leave empty for auto-detection.
+- **Chunking parameters** — See table below.
 
-> If the repository has a transcription or video service configured, the upload form shows the repository default and allows skipping the individual selection. If no repository default exists, selecting a service at upload time is required.
+> The upload form shows which services the repository will use (read-only), so you can confirm the configuration before uploading.
 
 ### Chunking parameters
 
@@ -112,43 +116,44 @@ Video Input (upload or YouTube URL)
       │         ▼
       │    Create time-based audio chunks
       │         │
-      │    ┌────┴─────┐
-      │    │ basic?   │─── yes ──► Index audio chunks
-      │    └────┬─────┘
-      │         │ no (multimodal)
-      │         ▼
-      └──► Send video to Gemini
-                  │
-                  │  chunk-aligned prompt:
-                  │  describe THESE time ranges
-                  ▼
-           Visual descriptions
-           (one per audio chunk)
-                  │
-                  ▼
-         split_audio_visual_chunks()
-                  │
-        ┌─────────┴──────────┐
-        ▼                    ▼
-   Audio chunks         Visual chunks
-   chunk_type=          chunk_type=
-   'audio'              'visual'
-        │                    │
-        └─────────┬──────────┘
-                  ▼
-           Index all chunks
-           in vector store
+      │    ┌────┴──────────────────────────────┐
+      │    │ repo has video_ai_service_id?      │
+      │    └────┬──────────────────────────────┘
+      │         │ no              │ yes
+      │         │                 ▼
+      │         │          status: analyzing_video
+      │         │                 │
+      │         │          Send video to Gemini
+      │         │          (chunk-aligned prompt)
+      │         │                 │
+      │         │          Visual descriptions
+      │         │          (one per audio chunk)
+      │         │                 │
+      │         │          split_audio_visual_chunks()
+      │         │                 │
+      │         │      ┌──────────┴──────────┐
+      │         │      ▼                     ▼
+      │         │  Audio chunks         Visual chunks
+      │         │  chunk_type=          chunk_type=
+      │         │  'audio'              'visual'
+      │         │      │                     │
+      │         │      └──────────┬──────────┘
+      │         │                 │
+      │         ▼                 ▼
+      └────────────► Index all chunks in vector store
 ```
 
 ### Step-by-step
 
-1. **Download** — If the source is a YouTube URL, the video is downloaded with `yt-dlp`.
-2. **Extract audio** — The video is converted to normalized audio using `pydub`/`ffmpeg`.
-3. **Transcribe** — Audio is sent to Whisper for speech-to-text transcription with timestamps.
+1. **Download** — If the source is a YouTube URL, the video is downloaded with `yt-dlp`. Status: `downloading`.
+2. **Extract audio** — The video is converted to normalized audio using `pydub`/`ffmpeg`. Status: `processing`.
+3. **Transcribe** — Audio is sent to Whisper for speech-to-text transcription with timestamps. Status: `transcribing`.
 4. **Create audio chunks** — Transcript segments are grouped into time-window chunks (30–120s, configurable).
-5. **Analyze video** *(multimodal only)* — The full video is sent to Gemini with a **chunk-aligned prompt**: the model is asked to describe visual content for the exact time ranges of each audio chunk.
+5. **Analyze video** *(if repository has a Video Analysis Service)* — The full video is sent to Gemini with a **chunk-aligned prompt**: the model is asked to describe visual content for the exact time ranges of each audio chunk. Status: `analyzing_video`.
 6. **Split into audio + visual chunks** *(multimodal only)* — For each time range, two independent chunks are produced: one with the transcript text, one with the visual description.
-7. **Index** — All chunks are embedded and stored in the vector database (PGVector or Qdrant).
+7. **Index** — All chunks are embedded and stored in the vector database (PGVector or Qdrant). Status: `indexing` → `ready`.
+
+> **Media status states**: `pending` → `downloading` *(YouTube only)* → `processing` → `transcribing` → `analyzing_video` *(multimodal only)* → `indexing` → `ready` / `error`
 
 ### Chunk-aligned prompting
 
@@ -195,8 +200,9 @@ Both chunk types share the same metadata fields:
 | `duration` | `30.0` | Chunk duration in seconds |
 | `media_id` | `42` | Source media ID |
 | `repository_id` | `7` | Parent repository ID |
-| `processing_mode` | `multimodal` | `basic` or `multimodal` |
+| `processing_mode` | `basic` | *(Legacy field — may not reflect actual processing performed; always stored as `basic` regardless. Check `chunk_type` instead.)* |
 | `name` | `"tutorial.mp4"` | Media file name |
+| `file_type` | `.mp4` | File extension of the source media file |
 | `source_type` | `youtube` | `upload` or `youtube` |
 | `source_url` | `https://...` | YouTube URL (if applicable) |
 | `language` | `en` | Detected language |
@@ -247,9 +253,9 @@ Both providers use `ChatGoogleGenerativeAI` from `langchain-google-genai` v4.x w
 
 ## Frequently Asked Questions
 
-### Does multimodal mode slow down processing?
+### Does video analysis slow down processing?
 
-Yes. The video analysis step adds processing time because the video must be uploaded/sent to Gemini and processed before descriptions are returned. For the `Google` provider there is an additional polling wait while Google's servers process the file. Audio transcription runs first and is unaffected.
+Yes. When a repository has a Video Analysis Service configured, the video analysis step adds processing time because the video must be uploaded/sent to Gemini and processed before descriptions are returned. For the `Google` provider there is an additional polling wait while Google's servers process the file. Audio transcription runs first and is unaffected.
 
 ### What happens if video analysis fails?
 
@@ -263,8 +269,8 @@ No. Only `Google` and `GoogleCloud` providers support video analysis. The `suppo
 
 Depends on chunking configuration. With defaults (30–120s windows):
 
-- **Basic mode**: ~5–20 audio chunks.
-- **Multimodal mode**: up to ~10–40 chunks (audio + visual for each time range that has visual content).
+- **Without a Video Analysis Service**: ~5–20 audio chunks.
+- **With a Video Analysis Service configured**: up to ~10–40 chunks (audio + visual for each time range that has visual content).
 
 ### Can the agent combine audio and visual chunks from the same time range?
 
