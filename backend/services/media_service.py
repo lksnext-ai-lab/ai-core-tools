@@ -35,7 +35,6 @@ class MediaService:
         repository_id: int,
         files: List[UploadFile],
         folder_id: Optional[int],
-        transcription_service_id: Optional[int],
         db: Session,
         background_tasks: BackgroundTasks, 
         user_context,
@@ -43,8 +42,6 @@ class MediaService:
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
-        processing_mode: Optional[str] = 'basic',
-        video_service_id: Optional[int] = None
     ) -> Tuple[List[Media], List[dict]]:
         """
         Upload multiple media files
@@ -65,15 +62,12 @@ class MediaService:
                     file=file,
                     repository_id=repository_id,
                     folder_id=folder_id,
-                    transcription_service_id=transcription_service_id,
                     db=db,
                     background_tasks=background_tasks, 
                     forced_language=forced_language,
                     chunk_min_duration=chunk_min_duration,
                     chunk_max_duration=chunk_max_duration,
                     chunk_overlap=chunk_overlap,
-                    processing_mode=processing_mode,
-                    video_service_id=video_service_id
                 )
                 created_media.append(media)
             except Exception as e:
@@ -239,15 +233,12 @@ class MediaService:
         file: UploadFile,
         repository_id: int,
         folder_id: Optional[int],
-        transcription_service_id: Optional[int],
         db: Session,
         background_tasks: BackgroundTasks,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
-        processing_mode: Optional[str] = 'basic',
-        video_service_id: Optional[int] = None
     ) -> Media:
         """Create media from uploaded file"""
         file_extension = os.path.splitext(file.filename)[1].lower()
@@ -262,12 +253,9 @@ class MediaService:
             name=name,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,  
             source_type='upload',
             status='pending',
             forced_language=forced_language,
-            processing_mode=processing_mode or 'basic',
-            video_service_id=video_service_id,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap
@@ -302,15 +290,12 @@ class MediaService:
         url: str,
         repository_id: int,
         folder_id: Optional[int],
-        transcription_service_id: Optional[int],
         db: Session,
         background_tasks: BackgroundTasks,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
-        processing_mode: Optional[str] = 'basic',
-        video_service_id: Optional[int] = None
     ) -> Media:
         """Create media from YouTube URL"""
         import re
@@ -343,13 +328,10 @@ class MediaService:
             name=name,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             source_type='youtube',
             source_url=url,
             status='pending',
             forced_language=forced_language,
-            processing_mode=processing_mode or 'basic',
-            video_service_id=video_service_id,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap

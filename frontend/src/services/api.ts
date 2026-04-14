@@ -851,7 +851,7 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }, transcriptionServiceId?: number, processingMode?: string, videoServiceId?: number) {
+  }) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     
@@ -859,30 +859,18 @@ class ApiService {
     
     if (folderId !== undefined && folderId !== null) {
       formData.append('folder_id', folderId.toString());
-      console.log('API: Added folder_id to FormData:', folderId);
-    } else {
-      console.log('API: No folder_id provided or folderId is null/undefined');
     }
     
-    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
     if (config?.forced_language) formData.append('forced_language', config.forced_language);
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
     if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
-    if (processingMode) formData.append('processing_mode', processingMode);
-    if (videoServiceId) formData.append('video_service_id', videoServiceId.toString());
 
     const token = this.getAuthToken();
-    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
         
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('API: Authorization header set for upload');
-    } else {
-      console.log('API: WARNING - No token found for upload request');
     }
-
-    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
 
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media`, {
       method: 'POST',
@@ -896,35 +884,23 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }, transcriptionServiceId?: number, processingMode?: string, videoServiceId?: number) {
+  }) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     const token = this.getAuthToken();
-    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
 
     formData.append('url', url);
     if (folderId !== undefined && folderId !== null) {
       formData.append('folder_id', folderId.toString());
-      console.log('API: Added folder_id to FormData:', folderId);
-    } else {
-      console.log('API: No folder_id provided or folderId is null/undefined');
     }
-    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
     if (config?.forced_language) formData.append('forced_language', config.forced_language);
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
     if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
-    if (processingMode) formData.append('processing_mode', processingMode);
-    if (videoServiceId) formData.append('video_service_id', videoServiceId.toString());
         
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('API: Authorization header set for upload');
-    } else {
-      console.log('API: WARNING - No token found for upload request');
     }
-
-    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
 
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/youtube`, {
       method: 'POST',

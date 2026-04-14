@@ -11,6 +11,7 @@ interface SystemAIService {
   api_key: string;
   base_url: string;
   is_system: boolean;
+  supports_video: boolean;
   created_at: string;
   available_providers: Array<{ value: string; name: string }>;
 }

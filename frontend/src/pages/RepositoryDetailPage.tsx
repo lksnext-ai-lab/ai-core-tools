@@ -149,9 +149,6 @@ const RepositoryDetailPage: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const pollingIntervalsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
-  const [selectedTranscriptionServiceId, setSelectedTranscriptionServiceId] = useState<number | null>(null);
-  const [enableMultimodal, setEnableMultimodal] = useState(false);
-  const [selectedVideoServiceId, setSelectedVideoServiceId] = useState<number | null>(null);
   const [mediaConfig, setMediaConfig] = useState({
     forced_language: '',
     chunk_min_duration: 30,
@@ -294,9 +291,6 @@ const RepositoryDetailPage: React.FC = () => {
           mediaFiles,
           selectedFolderId || undefined,
           mediaConfig,
-          selectedTranscriptionServiceId || undefined,
-          enableMultimodal ? 'multimodal' : 'basic',
-          enableMultimodal ? selectedVideoServiceId || undefined : undefined
         );
         
         if (result.failed_files?.length > 0) {
@@ -312,17 +306,12 @@ const RepositoryDetailPage: React.FC = () => {
           youtubeUrl,
           selectedFolderId || undefined,
           mediaConfig,
-          selectedTranscriptionServiceId || undefined,
-          enableMultimodal ? 'multimodal' : 'basic',
-          enableMultimodal ? selectedVideoServiceId || undefined : undefined
         );
       }
       
       setShowMediaUploadModal(false);
       setMediaFiles([]);
       setYoutubeUrl('');
-      setEnableMultimodal(false);
-      setSelectedVideoServiceId(null);
       await loadRepository(false);
     } catch (err: any) {
       setError(err.message || 'Failed to upload media');
@@ -671,7 +660,6 @@ const RepositoryDetailPage: React.FC = () => {
 
               <button
                 onClick={() => {
-                  setSelectedTranscriptionServiceId(null);
                   setShowMediaUploadModal(true);
                 }}
                 disabled={uploading}
@@ -1190,7 +1178,6 @@ const RepositoryDetailPage: React.FC = () => {
           setShowMediaUploadModal(false);
           setMediaFiles([]);
           setYoutubeUrl('');
-          setSelectedTranscriptionServiceId(null);
         }}
         title="Upload Media"
       >
@@ -1252,40 +1239,27 @@ const RepositoryDetailPage: React.FC = () => {
           <div className="border-t pt-4">
             <h3 className="font-medium mb-3">Processing Options</h3>
             
+            {/* Repository AI Services (read-only info) */}
+            <div className="mb-3 space-y-2">
+              {repository?.transcription_service_id ? (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2 flex items-center gap-2">
+                  <span>🎙️</span>
+                  <span>Transcription: <strong>{repository.ai_services?.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</strong></span>
+                </div>
+              ) : (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                  ⚠️ No transcription service configured. Please set one in the repository settings before uploading media.
+                </div>
+              )}
+              {repository?.video_ai_service_id && (
+                <div className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded p-2 flex items-center gap-2">
+                  <span>🎬</span>
+                  <span>Video Analysis: <strong>{repository.ai_services?.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</strong> (multimodal enabled)</span>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Transcription Service
-                  {!repository?.transcription_service_id && <span className="text-red-500 ml-1">*</span>}
-                </label>
-                {!repository?.ai_services || repository.ai_services.length === 0 ? (
-                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                    No transcription services available. Please create an AI service.
-                  </div>
-                ) : (
-                  <>
-                    {repository.transcription_service_id && (
-                      <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mb-1">
-                        🎙️ Repository default: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `#${repository.transcription_service_id}`}
-                      </p>
-                    )}
-                    <select
-                      value={selectedTranscriptionServiceId || ''}
-                      onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                    >
-                      <option value="">
-                        {repository.transcription_service_id ? '— Use repository default —' : '-- Select a Transcription Service --'}
-                      </option>
-                      {repository.ai_services.map(service => (
-                        <option key={service.service_id} value={service.service_id}>
-                          {service.name}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                )}
-              </div>
 
               <div>
                 <label htmlFor="media-language-select" className="block text-sm text-gray-700 mb-1">Language (optional)</label>
@@ -1344,72 +1318,6 @@ const RepositoryDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Multimodal Analysis */}
-          <div className="border-t pt-4">
-            <div className="flex items-center space-x-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <input
-                type="checkbox"
-                id="enable_multimodal"
-                checked={enableMultimodal}
-                onChange={(e) => {
-                  setEnableMultimodal(e.target.checked);
-                  if (!e.target.checked) setSelectedVideoServiceId(null);
-                }}
-                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-              />
-              <div>
-                <label htmlFor="enable_multimodal" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  🎬 Enable Multimodal Analysis
-                </label>
-                <p className="text-xs text-gray-500">
-                  Analyze video content visually using a Video-LLM (additional processing time and cost)
-                </p>
-              </div>
-            </div>
-
-            {enableMultimodal && (
-              <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Video Analysis Service
-                  {!repository?.video_ai_service_id && <span className="text-red-500 ml-1">*</span>}
-                </label>
-                {(() => {
-                  const videoServices = repository?.ai_services?.filter((s: any) => s.supports_video) || [];
-                  if (videoServices.length === 0 && !repository?.video_ai_service_id) {
-                    return (
-                      <div className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
-                        No video-capable AI services found. Mark an AI service as "Video Analysis Capable" in Settings.
-                      </div>
-                    );
-                  }
-                  return (
-                    <>
-                      {repository?.video_ai_service_id && (
-                        <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mb-1">
-                          🎬 Repository default: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `#${repository.video_ai_service_id}`}
-                        </p>
-                      )}
-                      <select
-                        value={selectedVideoServiceId || ''}
-                        onChange={(e) => setSelectedVideoServiceId(e.target.value ? parseInt(e.target.value) : null)}
-                        className="w-full px-3 py-2 border rounded-md text-sm"
-                      >
-                        <option value="">
-                          {repository?.video_ai_service_id ? '— Use repository default —' : '-- Select a Video Service --'}
-                        </option>
-                        {videoServices.map((service: any) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
@@ -1421,9 +1329,8 @@ const RepositoryDetailPage: React.FC = () => {
             <button
               onClick={handleMediaUpload}
               disabled={
-                (!selectedTranscriptionServiceId && !repository?.transcription_service_id) ||
-                (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl) ||
-                (enableMultimodal && !selectedVideoServiceId && !repository?.video_ai_service_id)
+                !repository?.transcription_service_id ||
+                (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl)
               }
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
             >

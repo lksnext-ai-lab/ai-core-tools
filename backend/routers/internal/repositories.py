@@ -387,16 +387,14 @@ async def upload_media(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
     folder_id: Annotated[Optional[int], Form()] = None,
-    transcription_service_id: Annotated[Optional[int], Form()] = None,
     forced_language: Annotated[Optional[str], Form()] = None,
     chunk_min_duration: Annotated[Optional[int], Form()] = None,
     chunk_max_duration: Annotated[Optional[int], Form()] = None,
     chunk_overlap: Annotated[Optional[int], Form()] = None,
-    processing_mode: Annotated[Optional[str], Form()] = 'basic',
-    video_service_id: Annotated[Optional[int], Form()] = None,
 ):
     """
-    Upload video/audio files for transcription and indexing
+    Upload video/audio files for transcription and indexing.
+    AI services (transcription, video analysis) are configured at repository level.
 
     Supported formats:
     - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
@@ -407,8 +405,6 @@ async def upload_media(
     - chunk_min_duration: Minimum chunk duration in seconds (default: 30)
     - chunk_max_duration: Maximum chunk duration in seconds (default: 120)
     - chunk_overlap: Overlap between chunks in seconds (default: 0, recommended: 5-10)
-    - processing_mode: 'basic' (audio only) or 'multimodal' (audio + video analysis)
-    - video_service_id: AI service with video capabilities (required when processing_mode is 'multimodal')
     """
     user_id = auth_context.identity.id
     logger.info(f"Upload media - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}, files: {len(files)}")
@@ -418,7 +414,6 @@ async def upload_media(
             repository_id=repository_id,
             files=files,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             user_context=auth_context,
@@ -426,8 +421,6 @@ async def upload_media(
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap,
-            processing_mode=processing_mode,
-            video_service_id=video_service_id
         )
 
         return MediaUploadResponse(
@@ -444,20 +437,19 @@ async def add_youtube_video(
     app_id: int,
     background_tasks: BackgroundTasks,
     repository_id: int,
-    url: str = Form(...),
-    folder_id: Optional[int] = Form(None),
-    transcription_service_id: Optional[int] = Form(None),
-    forced_language: Optional[str] = Form(None),
-    chunk_min_duration: Optional[int] = Form(None),
-    chunk_max_duration: Optional[int] = Form(None),
-    chunk_overlap: Optional[int] = Form(None),
-    processing_mode: Optional[str] = Form('basic'),
-    video_service_id: Optional[int] = Form(None),
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(get_current_user_oauth)
+    url: Annotated[str, Form(...)],
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    folder_id: Annotated[Optional[int], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
-    Add YouTube video for transcription and indexing
+    Add YouTube video for transcription and indexing.
+    AI services (transcription, video analysis) are configured at repository level.
 
     The video will be:
     1. Downloaded from YouTube
@@ -472,8 +464,6 @@ async def add_youtube_video(
     - chunk_min_duration: Minimum chunk duration in seconds (default: 30)
     - chunk_max_duration: Maximum chunk duration in seconds (default: 120)
     - chunk_overlap: Overlap between chunks in seconds (default: 0, recommended: 5-10)
-    - processing_mode: 'basic' (audio only) or 'multimodal' (audio + video analysis)
-    - video_service_id: AI service with video capabilities (required when processing_mode is 'multimodal')
     """
     user_id = auth_context.identity.id
     logger.info(f"Add YouTube video - app_id: {app_id}, repository_id: {repository_id}, user_id: {user_id}, url: {url}")
@@ -483,15 +473,12 @@ async def add_youtube_video(
             url=url,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap,
-            processing_mode=processing_mode,
-            video_service_id=video_service_id
         )
 
         return MediaResponse(**media.__dict__)

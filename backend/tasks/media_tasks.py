@@ -35,18 +35,18 @@ def process_media_task_sync(media_id: int):
         
         logger.info(f"Starting processing for media {media_id} ({media.source_type})")
         
-        # Resolve effective service IDs: Media override > Repository fallback
-        effective_transcription_id = media.transcription_service_id or (
+        # Resolve service IDs from repository configuration
+        effective_transcription_id = (
             media.repository.transcription_service_id if media.repository else None
         )
-        effective_video_service_id = media.video_service_id or (
+        effective_video_service_id = (
             media.repository.video_ai_service_id if media.repository else None
         )
         
         if not effective_transcription_id:
             raise ValueError(
-                f"No transcription service configured for media {media_id} "
-                f"(neither on media nor on repository {media.repository_id})"
+                f"No transcription service configured on repository {media.repository_id}. "
+                f"Please configure a transcription service in the repository settings."
             )
         
         logger.info(
@@ -101,8 +101,8 @@ def process_media_task_sync(media_id: int):
         logger.info(f"Created {len(chunks_data)} chunks (in-memory) for media {media_id}")
         logger.info(f"First chunk sample: {chunks_data[0] if chunks_data else 'NO CHUNKS'}")
 
-        # Step 4b: Multimodal video analysis (if enabled)
-        if media.processing_mode == 'multimodal' and effective_video_service_id:
+        # Step 4b: Multimodal video analysis (if repository has a video service configured)
+        if effective_video_service_id:
             try:
                 media.status = 'analyzing_video'
                 db.commit()
