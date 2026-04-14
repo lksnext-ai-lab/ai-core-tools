@@ -10,7 +10,6 @@ class Media(Base):
     repository_id = Column(Integer, ForeignKey('Repository.repository_id'), nullable=False)
     folder_id = Column(Integer, ForeignKey('Folder.folder_id'), nullable=True)
     transcription_service_id = Column(Integer, ForeignKey('AIService.service_id'), nullable=True)
-    video_service_id = Column(Integer, ForeignKey('AIService.service_id'), nullable=True)
     name = Column(String(255), nullable=False)
     source_type = Column(String(45), nullable=False)  # 'upload' | 'youtube'
     source_url = Column(String(500), nullable=True)
