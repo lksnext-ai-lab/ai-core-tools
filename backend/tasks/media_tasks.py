@@ -35,6 +35,25 @@ def process_media_task_sync(media_id: int):
         
         logger.info(f"Starting processing for media {media_id} ({media.source_type})")
         
+        # Resolve effective service IDs: Media override > Repository fallback
+        effective_transcription_id = media.transcription_service_id or (
+            media.repository.transcription_service_id if media.repository else None
+        )
+        effective_video_service_id = media.video_service_id or (
+            media.repository.video_ai_service_id if media.repository else None
+        )
+        
+        if not effective_transcription_id:
+            raise ValueError(
+                f"No transcription service configured for media {media_id} "
+                f"(neither on media nor on repository {media.repository_id})"
+            )
+        
+        logger.info(
+            f"Media {media_id} effective services — "
+            f"transcription: {effective_transcription_id}, video: {effective_video_service_id}"
+        )
+
         # Step 1: Download if YouTube
         if media.source_type == 'youtube':
             media.status = 'downloading'
@@ -60,7 +79,7 @@ def process_media_task_sync(media_id: int):
         transcription = TranscriptionService.transcribe_audio(
             audio_path,
             language=media.forced_language,  # Use forced language if specified
-            ai_service_id=media.transcription_service_id,
+            ai_service_id=effective_transcription_id,
             db=db
         )
         
@@ -83,7 +102,7 @@ def process_media_task_sync(media_id: int):
         logger.info(f"First chunk sample: {chunks_data[0] if chunks_data else 'NO CHUNKS'}")
 
         # Step 4b: Multimodal video analysis (if enabled)
-        if media.processing_mode == 'multimodal' and media.video_service_id:
+        if media.processing_mode == 'multimodal' and effective_video_service_id:
             try:
                 media.status = 'analyzing_video'
                 db.commit()
@@ -91,7 +110,7 @@ def process_media_task_sync(media_id: int):
                 logger.info(f"Starting chunk-aligned multimodal video analysis for media {media_id}")
                 visual_segments = VideoAnalysisService.analyze_video(
                     video_path=media.file_path,
-                    ai_service_id=media.video_service_id,
+                    ai_service_id=effective_video_service_id,
                     db=db,
                     chunks=chunks_data
                 )

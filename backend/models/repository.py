@@ -18,6 +18,13 @@ class Repository(Base):
                            back_populates='repositories',
                            foreign_keys=[app_id])
     
+    # AI service configuration (centralized for all media in this repository)
+    transcription_service_id = Column(Integer, ForeignKey('AIService.service_id'), nullable=True)
+    video_ai_service_id = Column(Integer, ForeignKey('AIService.service_id'), nullable=True)
+
+    transcription_service = relationship('AIService', foreign_keys=[transcription_service_id])
+    video_ai_service = relationship('AIService', foreign_keys=[video_ai_service_id])
+
     resources = relationship('Resource', lazy=True)
     folders = relationship('Folder', back_populates='repository', cascade='all, delete-orphan')
     media = relationship('Media', back_populates='repository', cascade='all, delete-orphan')
@@ -48,7 +55,9 @@ class Repository(Base):
             'status': self.status,
             'vector_db_type': vector_db_type,
             'app_id': self.app_id,
-            'silo_id': self.silo_id
+            'silo_id': self.silo_id,
+            'transcription_service_id': self.transcription_service_id,
+            'video_ai_service_id': self.video_ai_service_id
         }
         
         if include_relationships:

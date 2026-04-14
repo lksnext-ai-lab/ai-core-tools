@@ -32,6 +32,7 @@
 ### AI & LLM
 - [LLM Integration](ai/llm-integration.md) — Supported LLM providers, configuration, and structured output
 - [RAG & Vector Stores](ai/rag-vector-stores.md) — Silo system, vector database backends (PGVector, Qdrant), and retrieval
+- [Multimodal Video RAG](architecture/multimodal-rag.md) — Video analysis pipeline, audio/visual chunk splitting, and retrieval
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
 

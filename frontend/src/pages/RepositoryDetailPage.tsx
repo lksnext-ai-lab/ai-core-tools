@@ -39,6 +39,8 @@ interface RepositoryDetail {
     supports_video?: boolean;
   }>;
   media: Media[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
 }
 
   interface Media {
@@ -616,6 +618,20 @@ const RepositoryDetailPage: React.FC = () => {
           <p className="text-gray-600">
             Created {formatDate(repository.created_at)} • {repository.resources.length} files
           </p>
+          {(repository.transcription_service_id || repository.video_ai_service_id) && (
+            <p className="text-sm text-gray-500 mt-1">
+              {repository.transcription_service_id && (
+                <span className="inline-flex items-center gap-1 mr-3">
+                  🎙️ <span>Transcription: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</span>
+                </span>
+              )}
+              {repository.video_ai_service_id && (
+                <span className="inline-flex items-center gap-1">
+                  🎬 <span>Video AI: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</span>
+                </span>
+              )}
+            </p>
+          )}
           
           {/* Breadcrumb Navigation */}
           <div className="mt-2 flex items-center text-sm text-gray-600">
@@ -1239,24 +1255,36 @@ const RepositoryDetailPage: React.FC = () => {
             
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transcription Service *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Transcription Service
+                  {!repository?.transcription_service_id && <span className="text-red-500 ml-1">*</span>}
+                </label>
                 {!repository?.ai_services || repository.ai_services.length === 0 ? (
                   <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
                     No transcription services available. Please create an AI service.
                   </div>
                 ) : (
-                  <select
-                    value={selectedTranscriptionServiceId || ''}
-                    onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  >
-                    <option value="">-- Select a Transcription Service --</option>
-                    {repository.ai_services.map(service => (
-                      <option key={service.service_id} value={service.service_id}>
-                        {service.name}
+                  <>
+                    {repository.transcription_service_id && (
+                      <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mb-1">
+                        🎙️ Repository default: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `#${repository.transcription_service_id}`}
+                      </p>
+                    )}
+                    <select
+                      value={selectedTranscriptionServiceId || ''}
+                      onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    >
+                      <option value="">
+                        {repository.transcription_service_id ? '— Use repository default —' : '-- Select a Transcription Service --'}
                       </option>
-                    ))}
-                  </select>
+                      {repository.ai_services.map(service => (
+                        <option key={service.service_id} value={service.service_id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </select>
+                  </>
                 )}
               </div>
 
@@ -1338,10 +1366,13 @@ const RepositoryDetailPage: React.FC = () => {
 
             {enableMultimodal && (
               <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Video Analysis Service *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Video Analysis Service
+                  {!repository?.video_ai_service_id && <span className="text-red-500 ml-1">*</span>}
+                </label>
                 {(() => {
                   const videoServices = repository?.ai_services?.filter((s: any) => s.supports_video) || [];
-                  if (videoServices.length === 0) {
+                  if (videoServices.length === 0 && !repository?.video_ai_service_id) {
                     return (
                       <div className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
                         No video-capable AI services found. Mark an AI service as "Video Analysis Capable" in Settings.
@@ -1349,18 +1380,27 @@ const RepositoryDetailPage: React.FC = () => {
                     );
                   }
                   return (
-                    <select
-                      value={selectedVideoServiceId || ''}
-                      onChange={(e) => setSelectedVideoServiceId(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                    >
-                      <option value="">-- Select a Video Service --</option>
-                      {videoServices.map((service: any) => (
-                        <option key={service.service_id} value={service.service_id}>
-                          {service.name}
+                    <>
+                      {repository?.video_ai_service_id && (
+                        <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 mb-1">
+                          🎬 Repository default: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `#${repository.video_ai_service_id}`}
+                        </p>
+                      )}
+                      <select
+                        value={selectedVideoServiceId || ''}
+                        onChange={(e) => setSelectedVideoServiceId(e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full px-3 py-2 border rounded-md text-sm"
+                      >
+                        <option value="">
+                          {repository?.video_ai_service_id ? '— Use repository default —' : '-- Select a Video Service --'}
                         </option>
-                      ))}
-                    </select>
+                        {videoServices.map((service: any) => (
+                          <option key={service.service_id} value={service.service_id}>
+                            {service.name}
+                          </option>
+                        ))}
+                      </select>
+                    </>
                   );
                 })()}
               </div>
@@ -1378,9 +1418,9 @@ const RepositoryDetailPage: React.FC = () => {
             <button
               onClick={handleMediaUpload}
               disabled={
-                selectedTranscriptionServiceId === null ||
+                (!selectedTranscriptionServiceId && !repository?.transcription_service_id) ||
                 (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl) ||
-                (enableMultimodal && !selectedVideoServiceId)
+                (enableMultimodal && !selectedVideoServiceId && !repository?.video_ai_service_id)
               }
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
             >

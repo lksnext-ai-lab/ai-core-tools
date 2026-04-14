@@ -270,7 +270,9 @@ class RepositoryService:
                 vector_db_type='PGVECTOR',
                 vector_db_options=vector_db_options,
                 media=[],
-                ai_services=ai_services
+                ai_services=ai_services,
+                transcription_service_id=None,
+                video_ai_service_id=None
             )
         
         # Existing repository
@@ -372,7 +374,9 @@ class RepositoryService:
             vector_db_type=vector_db_type,
             vector_db_options=vector_db_options,
             media=media_list,
-            ai_services=ai_services
+            ai_services=ai_services,
+            transcription_service_id=repo.transcription_service_id,
+            video_ai_service_id=repo.video_ai_service_id
         )
 
     @staticmethod
@@ -422,6 +426,8 @@ class RepositoryService:
             repo.type = repo_data.type
             repo.status = repo_data.status or 'active'
             repo.create_date = datetime.now()
+            repo.transcription_service_id = repo_data.transcription_service_id
+            repo.video_ai_service_id = repo_data.video_ai_service_id
             
             # Use RepositoryService to create repository with silo
             repo = RepositoryService.create_repository(
@@ -445,6 +451,10 @@ class RepositoryService:
                 repo.type = repo_data.type
             if repo_data.status is not None:
                 repo.status = repo_data.status
+            if repo_data.transcription_service_id is not None:
+                repo.transcription_service_id = repo_data.transcription_service_id
+            if repo_data.video_ai_service_id is not None:
+                repo.video_ai_service_id = repo_data.video_ai_service_id
             repo = RepositoryService.update_repository(
                 repo,
                 repo_data.embedding_service_id,
