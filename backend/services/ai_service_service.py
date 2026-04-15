@@ -32,6 +32,7 @@ class AIServiceService:
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",  # description stores model name
+            supports_video=service.supports_video or False,
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
@@ -39,25 +40,12 @@ class AIServiceService:
 
     @staticmethod
     def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIServiceListItemSchema]:
-        """Get all AI services for a specific app"""
-        ai_services = AIServiceRepository.get_by_app_id(db, app_id)
-        
-        result = []
-        for service in ai_services:
-            needs_api_key = (
-                not service.api_key
-                or service.api_key == PLACEHOLDER_API_KEY
-            )
-            result.append(AIServiceListItemSchema(
-                service_id=service.service_id,
-                name=service.name,
-                provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-                model_name=service.description or "",  # Use description as model info
-                supports_video=service.supports_video or False,
-                created_at=service.create_date,
-                needs_api_key=needs_api_key,
-            ))
-        
+        """Get all AI services for a specific app, including platform-level system services."""
+        app_services = AIServiceRepository.get_by_app_id(db, app_id)
+        system_services = AIServiceRepository.get_system_services(db)
+
+        result = [AIServiceService._to_list_item(svc, is_system=False) for svc in app_services]
+        result += [AIServiceService._to_list_item(svc, is_system=True) for svc in system_services]
         return result
     
     @staticmethod
