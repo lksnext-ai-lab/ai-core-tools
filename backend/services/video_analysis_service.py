@@ -206,6 +206,7 @@ class VideoAnalysisService:
                     'end_time': chunk.get('end_time', 0),
                     'text': visual_desc,
                     'chunk_type': 'visual',
+                    'chunk_index': i,
                 }
                 result.append(visual_chunk)
 
