@@ -31,6 +31,7 @@ from utils.config import get_app_config
 logger = get_logger(__name__)
 
 _IMAGE_FILE_TYPES = {"image"}
+_AGENT_NOT_FOUND = "Agent not found"
 
 
 def _inject_file_markers(text: str, files: list) -> str:
@@ -138,7 +139,7 @@ class AgentExecutionService:
         # 1. Fetch agent (lightweight — no relationships)
         agent = self.agent_service.get_agent(db, agent_id)
         if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
+            raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
 
         # 2. Access validation
         await self._validate_agent_access(agent, user_context)
@@ -487,7 +488,7 @@ class AgentExecutionService:
             # Get agent
             agent = self.agent_service.get_agent(db, agent_id)
             if not agent:
-                raise HTTPException(status_code=404, detail="Agent not found")
+                raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
             
             # Validate user has access to this agent
             await self._validate_agent_access(agent, user_context)
@@ -558,7 +559,7 @@ class AgentExecutionService:
             # Get agent
             agent = self.agent_service.get_agent(db, agent_id)
             if not agent:
-                raise HTTPException(status_code=404, detail="Agent not found")
+                raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
             
             # Validate user has access to this agent
             await self._validate_agent_access(agent, user_context)
@@ -645,7 +646,6 @@ class AgentExecutionService:
         # TODO: Implement proper access validation
         # For now, just log the validation
         logger.info(f"Validating access for agent {agent.agent_id} with context {user_context}")
-        pass
     
     async def _process_files_for_agent(self, files: List[UploadFile], agent: Agent) -> List[Dict]:
         """Process files for agent consumption using existing PDF tools"""
@@ -677,7 +677,7 @@ class AgentExecutionService:
         
         return processed_files
     
-    def _process_single_file(self, temp_path: str, filename: str) -> Dict:
+    def _process_single_file(self, temp_path: str, filename: str) -> Optional[Dict]:
         """Synchronous file processing - called in thread pool"""
         try:
             if filename.lower().endswith('.pdf'):
@@ -716,10 +716,11 @@ class AgentExecutionService:
         """Synchronous OCR processing - called in thread pool"""
         try:
             # Re-load agent with all relationships
-            agent = self.agent_execution_repo.get_ocr_agent_with_relationships(db, agent.agent_id)
+            ocr_agent_id = agent.agent_id
+            agent = self.agent_execution_repo.get_ocr_agent_with_relationships(db, ocr_agent_id)
             
             if not agent:
-                raise Exception(f"Agent {agent.agent_id} not found")
+                raise ValueError(f"Agent {ocr_agent_id} not found")
             
             # Get output parser if configured - this is CRITICAL for structured output
             pydantic_class = None
@@ -755,7 +756,7 @@ class AgentExecutionService:
                     try:
                         text_model = get_llm(agent, is_vision=False)
                         if text_model:
-                            logger.info(f"Processing text with LLM and output parser")
+                            logger.info("Processing text with LLM and output parser")
                             # Use the output parser to structure the data
                             structured_data = get_data_from_extracted_text(
                                 text_content,
@@ -803,7 +804,7 @@ class AgentExecutionService:
                         # Get vision model
                         vision_model = get_llm(agent, is_vision=True)
                         if not vision_model:
-                            raise Exception("Vision model not found")
+                            raise ValueError("Vision model not found")
                         
                         # Extract text from image
                         vision_result = extract_text_from_image(
@@ -820,7 +821,7 @@ class AgentExecutionService:
                         # Clean up image file
                         try:
                             os.remove(image_path)
-                        except (OSError, FileNotFoundError):
+                        except OSError:
                             pass
                             
                     except Exception as e:

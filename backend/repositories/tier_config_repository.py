@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from models.tier_config import TierConfig
-from datetime import datetime
+from datetime import datetime, timezone
 from utils.logger import get_logger
 import yaml
 import os
@@ -91,7 +91,7 @@ class TierConfigRepository:
         )
         if row:
             row.limit_value = limit_value
-            row.updated_at = datetime.utcnow()
+            row.updated_at = datetime.now(timezone.utc)
         else:
             row = TierConfig(tier=tier, resource_type=resource_type, limit_value=limit_value)
             self.db.add(row)

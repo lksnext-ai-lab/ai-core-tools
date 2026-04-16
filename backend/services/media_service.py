@@ -157,10 +157,10 @@ class MediaService:
                 # Rollback: move files back if partially completed
                 if media_moved:
                     shutil.move(new_media_path, old_media_path)
-                    logger.warning(f"Rolled back media file move")
+                    logger.warning("Rolled back media file move")
                 if audio_moved:
                     shutil.move(new_audio_path, old_audio_path)
-                    logger.warning(f"Rolled back audio file move")
+                    logger.warning("Rolled back audio file move")
                 raise ValueError(f"Failed to move files: {str(e)}")
         
             # Update database
@@ -193,7 +193,7 @@ class MediaService:
         app_id: int,
         repository_id: int,
         db: Session
-    ) -> None:
+    ) -> bool:
         """Delete media by ID"""
 
         logger.info(f"Delete media service called - app_id: {app_id}, repository_id: {repository_id}, media_id: {media_id}")

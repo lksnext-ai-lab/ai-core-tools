@@ -198,7 +198,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
       );
     }
 
-    const stringContent = content as string;
+    const stringContent = content;
 
     const hasFileMarkers = stringContent.includes('](file://');
 
