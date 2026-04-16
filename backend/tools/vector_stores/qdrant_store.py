@@ -153,6 +153,74 @@ class QdrantStore(VectorStoreInterface):
         ids = vector_store.add_documents(documents)
         logger.info(f"Successfully added {len(ids)} documents with embeddings to collection {collection_name}")
     
+    # Top-level keys that identify an already-formatted Qdrant native filter
+    _QDRANT_NATIVE_KEYS: frozenset = frozenset({'must', 'should', 'must_not', 'min_should'})
+
+    _PGVECTOR_TO_QDRANT_OPERATOR: Dict[str, str] = {
+        '$eq': 'match',
+        '$ne': 'must_not_match',
+        '$gt': 'gt',
+        '$gte': 'gte',
+        '$lt': 'lt',
+        '$lte': 'lte',
+    }
+
+    _QDRANT_METADATA_PREFIX = 'metadata.'
+
+    def _is_qdrant_native_filter(self, filter_dict: Dict[str, Any]) -> bool:
+        """
+        Return True if filter_dict is already in Qdrant native format.
+
+        Qdrant native filters use only the clause keys: must, should, must_not, min_should.
+        PGVector-style filters use field names as keys with operator dicts as values.
+        """
+        return bool(filter_dict) and all(key in self._QDRANT_NATIVE_KEYS for key in filter_dict)
+
+    def _translate_pgvector_filter_to_qdrant(self, filter_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Translate a PGVector-style filter dict to Qdrant native filter format.
+
+        PGVector format:  {"field": {"$op": value}, ...}
+        Qdrant format:    {"must": [...], "must_not": [...]}
+
+        Supported operators: $eq, $ne, $gt, $gte, $lt, $lte
+        """
+        must: List[Dict[str, Any]] = []
+        must_not: List[Dict[str, Any]] = []
+
+        for field_name, condition in filter_dict.items():
+            if not isinstance(condition, dict):
+                # Plain equality shorthand: {"field": value}
+                must.append({
+                    'key': f'{self._QDRANT_METADATA_PREFIX}{field_name}',
+                    'match': {'value': condition},
+                })
+                continue
+
+            for operator, value in condition.items():
+                native_op = self._PGVECTOR_TO_QDRANT_OPERATOR.get(operator)
+                if native_op is None:
+                    logger.warning(f"Unknown filter operator '{operator}' for Qdrant; skipping field '{field_name}'")
+                    continue
+
+                key = f'{self._QDRANT_METADATA_PREFIX}{field_name}'
+
+                if native_op == 'must_not_match':
+                    must_not.append({'key': key, 'match': {'value': value}})
+                elif native_op == 'match':
+                    must.append({'key': key, 'match': {'value': value}})
+                else:
+                    # range operators: gt, gte, lt, lte
+                    must.append({'key': key, 'range': {native_op: value}})
+
+        qdrant_filter: Dict[str, Any] = {}
+        if must:
+            qdrant_filter['must'] = must
+        if must_not:
+            qdrant_filter['must_not'] = must_not
+
+        return qdrant_filter
+
     def delete_documents(
         self, 
         collection_name: str, 
@@ -170,6 +238,8 @@ class QdrantStore(VectorStoreInterface):
         Note: 
             If ids is a dict (metadata filter), we first search for matching
             documents and then delete them by their IDs.
+            The filter dict uses PGVector-style operators ($eq, $ne, etc.) and
+            is automatically translated to the Qdrant native filter format.
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
         
@@ -182,10 +252,17 @@ class QdrantStore(VectorStoreInterface):
                 logger.warning("No valid metadata filter provided for Qdrant deletion; skipping")
                 return
 
+            # Auto-detect filter format: pass Qdrant-native filters through unchanged,
+            # translate PGVector-style filters ($eq, $ne, etc.) to Qdrant format.
+            if self._is_qdrant_native_filter(ids):
+                qdrant_filter = ids
+            else:
+                qdrant_filter = self._translate_pgvector_filter_to_qdrant(ids)
+
             # Search and get IDs
             results = self.client.scroll(
                 collection_name=collection_name,
-                scroll_filter=ids,
+                scroll_filter=qdrant_filter,
                 limit=1000,
                 with_payload=False,
                 with_vectors=False
