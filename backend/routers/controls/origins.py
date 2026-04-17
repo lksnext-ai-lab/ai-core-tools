@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 
 
 def enforce_allowed_origins(
-    app_id: int,
+    app_id: str,
     request: Request,
     db: Session = Depends(get_db)
 ) -> None:
@@ -22,7 +22,7 @@ def enforce_allowed_origins(
     FastAPI dependency to enforce allowed origins for per-app CORS validation.
     
     Args:
-        app_id: The app identifier from the URL path
+        app_id: The app identifier from the URL path (integer ID or slug)
         request: FastAPI request object to check origin header
         db: Database session
         
@@ -30,8 +30,11 @@ def enforce_allowed_origins(
         HTTPException: 403 if origin is not allowed
     """
     try:
-        # Load app to get allowed origins
-        app = db.query(App).filter(App.app_id == app_id).first()
+        # Load app to get allowed origins (supports both integer ID and slug)
+        if app_id.isdigit():
+            app = db.query(App).filter(App.app_id == int(app_id)).first()
+        else:
+            app = db.query(App).filter(App.slug == app_id).first()
         if not app:
             logger.warning(f"App {app_id} not found for origin validation")
             return

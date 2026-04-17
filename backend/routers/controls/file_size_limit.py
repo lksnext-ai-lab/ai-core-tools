@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 def enforce_file_size_limit(
-    app_id: int,
+    app_id: str,
     request: Request,
     db: Session = Depends(get_db)
 ) -> None:
@@ -24,7 +24,7 @@ def enforce_file_size_limit(
     Validates the total request payload size using Content-Length header.
     
     Args:
-        app_id: The app identifier from the URL path
+        app_id: The app identifier from the URL path (integer ID or slug)
         request: FastAPI request object
         db: Database session
         
@@ -32,8 +32,11 @@ def enforce_file_size_limit(
         HTTPException: 413 Payload Too Large if request exceeds limit
     """
     try:
-        # Load app to get file size limit
-        app = db.query(App).filter(App.app_id == app_id).first()
+        # Load app to get file size limit (supports both integer ID and slug)
+        if app_id.isdigit():
+            app = db.query(App).filter(App.app_id == int(app_id)).first()
+        else:
+            app = db.query(App).filter(App.slug == app_id).first()
         if not app:
             logger.warning(f"App {app_id} not found for file size validation")
             return

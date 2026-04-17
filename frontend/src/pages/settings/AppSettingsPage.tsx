@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, AlertTriangle, Tag, BarChart2, Info } from 'lucide-react';
+import { Check, AlertTriangle, Tag, BarChart2, Info, Zap } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 import { useAppRole } from '../../hooks/useAppRole';
@@ -17,7 +17,8 @@ function AppSettingsPage() {
     langsmith_api_key: '',
     agent_rate_limit: 0,
     max_file_size_mb: 0,
-    agent_cors_origins: ''
+    agent_cors_origins: '',
+    enable_openai_api: false
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,7 +53,8 @@ function AppSettingsPage() {
         langsmith_api_key: langsmithKey,
         agent_rate_limit: app.agent_rate_limit || 0,
         max_file_size_mb: app.max_file_size_mb || 0,
-        agent_cors_origins: app.agent_cors_origins || ''
+        agent_cors_origins: app.agent_cors_origins || '',
+        enable_openai_api: app.enable_openai_api || false
       });
       setOriginalLangsmithKey(langsmithKey);
       setLangsmithKeyChanged(false);
@@ -108,7 +110,8 @@ function AppSettingsPage() {
         langsmith_api_key: langsmithKeyChanged ? formData.langsmith_api_key : originalLangsmithKey,
         agent_rate_limit: formData.agent_rate_limit,
         max_file_size_mb: formData.max_file_size_mb,
-        agent_cors_origins: formData.agent_cors_origins
+        agent_cors_origins: formData.agent_cors_origins,
+        enable_openai_api: formData.enable_openai_api
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -123,6 +126,8 @@ function AppSettingsPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb')
       ? Number.parseInt(e.target.value) || 0
+      : e.target.type === 'checkbox'
+      ? e.target.checked
       : e.target.value;
 
     if (e.target.name === 'langsmith_api_key') {
@@ -325,6 +330,26 @@ function AppSettingsPage() {
                     Comma-separated list of allowed origins for CORS requests to your agents.
                   </p>
                 </div>
+
+                {/* Enable OpenAI-compatible API */}
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="enable_openai_api"
+                      name="enable_openai_api"
+                      checked={formData.enable_openai_api}
+                      onChange={handleChange}
+                      disabled={!canEdit}
+                      className="form-checkbox h-5 w-5 text-blue-600 rounded disabled:cursor-not-allowed"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Enable OpenAI-compatible API</span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Allow external applications to interact with your agents using the OpenAI API format. 
+                    When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.
+                  </p>
+                </div>
               </div>
 
               {/* Error Display */}
@@ -409,6 +434,35 @@ function AppSettingsPage() {
                       Langsmith provides monitoring, tracing, and debugging capabilities for your AI agents.
                       Connect your Langsmith account to track agent performance and troubleshoot issues.
                     </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* OpenAI-compatible API Info */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <Zap className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-purple-800">
+                    About OpenAI-compatible API
+                  </h3>
+                  <div className="mt-2 text-sm text-purple-700">
+                    <p className="mb-2">
+                      When enabled, your agents can be accessed through OpenAI-compatible API endpoints. 
+                      This allows integration with third-party tools and clients that expect OpenAI API format.
+                    </p>
+                    <p className="mb-2">
+                      <strong>Impact of this setting:</strong>
+                    </p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Enables compatibility with OpenAI-compatible clients and SDKs</li>
+                      <li>Provides standard chat completion endpoints</li>
+                      <li>Allows seamless integration with tools expecting OpenAI API interface</li>
+                      <li>Does not affect your existing internal APIs or agent functionality</li>
+                    </ul>
                   </div>
                 </div>
               </div>
