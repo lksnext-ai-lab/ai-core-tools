@@ -1081,15 +1081,15 @@ class ApiService {
   }
 
   async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
-    return this.request(`/internal/apps/${appId}/repositories/0`, {
+    return this.request(`/internal/apps/${appId}/repositories/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number }) {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }

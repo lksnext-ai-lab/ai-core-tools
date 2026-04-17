@@ -19,6 +19,7 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields
 )
+from utils.vector_db_immutability import assert_vector_db_type_immutable
 from schemas.silo_schemas import SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema
 from repositories.silo_repository import SiloRepository
 from services.folder_service import FolderService
@@ -214,15 +215,9 @@ class SiloService:
                 if not silo:
                     raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
                 logger.info(f"Updating existing silo {silo_id}")
-                if (
-                    requested_vector_db_type is not None
-                    and silo.vector_db_type is not None
-                    and requested_vector_db_type != silo.vector_db_type.upper()
-                ):
-                    raise ValidationError(
-                        "vector_db_type cannot be changed after a silo has been created. "
-                        "Delete and recreate the silo to use a different vector database."
-                    )
+                assert_vector_db_type_immutable(
+                    silo.vector_db_type, requested_vector_db_type, "silo"
+                )
             else:
                 # Enforce per-app silo limit before creation (SaaS mode only)
                 app_id = silo_data.get('app_id')
