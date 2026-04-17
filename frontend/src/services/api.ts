@@ -1372,7 +1372,6 @@ class ApiService {
 
   async createDomain(
     appId: number,
-    domainId: number,
     data: {
       name: string;
       description?: string;
@@ -1384,7 +1383,7 @@ class ApiService {
       vector_db_type?: string;
     }
   ) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
+    return this.request(`/internal/apps/${appId}/domains/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1401,7 +1400,6 @@ class ApiService {
       content_class?: string;
       content_id?: string;
       embedding_service_id?: number;
-      vector_db_type?: string;
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
