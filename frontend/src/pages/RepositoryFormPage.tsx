@@ -319,7 +319,7 @@ const RepositoryFormPage: React.FC = () => {
                 ))}
               </select>
               <p className="text-sm text-gray-500 mt-1">
-                Default transcription service for all media in this repository. Can be overridden per upload.
+                Transcription service used for all media uploads in this repository.
               </p>
             </div>
           )}
