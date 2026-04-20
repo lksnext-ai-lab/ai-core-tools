@@ -53,7 +53,6 @@ function BaseServiceForm({
   onCancel,
   providers,
   getProviderDefaults,
-  formTitle,
   serviceType,
   needsApiKey = false
 }: Readonly<BaseServiceFormProps>) {
@@ -68,7 +67,7 @@ function BaseServiceForm({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<any>(null);
+  const [testResult, setTestResult] = useState<{ status: string; message: string; response?: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [apiKeyChanged, setApiKeyChanged] = useState(false);
 
