@@ -14,7 +14,7 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields
 )
-from utils.vector_db_immutability import assert_vector_db_type_immutable
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from tools.vector_store_factory import VectorStoreFactory
 logger = get_logger(__name__)
 
@@ -310,10 +310,7 @@ class DomainService:
             if silo:
                 # Enforce immutability before touching vector_db_type
                 assert_vector_db_type_immutable(silo.vector_db_type, vector_db_type, "domain")
-
-                if embedding_service_id is not None:
-                    silo.embedding_service_id = embedding_service_id
-                    logger.info(f"Updating embedding service for silo {domain.silo_id} to service {embedding_service_id}")
+                assert_embedding_service_immutable(silo.embedding_service_id, embedding_service_id, "domain")
 
                 # vector_db_type is immutable — only default-fill if the stored value is empty
                 if not silo.vector_db_type:

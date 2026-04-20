@@ -34,6 +34,7 @@ from db.database import get_db
 # Import logger
 from utils.logger import get_logger
 from utils.error_handlers import ValidationError
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from tools.vector_store_factory import VectorStoreFactory
 from fastapi import File, UploadFile
 from typing import Optional
@@ -303,9 +304,15 @@ async def update_domain(
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
-    Update an existing domain. Note: vector_db_type cannot be changed after creation.
+    Update an existing domain. Note: vector_db_type and embedding_service_id cannot be changed after creation.
     """
     try:
+        raw_body = await request.json()
+        existing_domain = DomainService.get_domain(domain_id, db)
+        if existing_domain and existing_domain.silo:
+            assert_vector_db_type_immutable(existing_domain.silo.vector_db_type, raw_body.get('vector_db_type'), "domain")
+            assert_embedding_service_immutable(existing_domain.silo.embedding_service_id, raw_body.get('embedding_service_id'), "domain")
+
         data = {
             'domain_id': domain_id,
             'name': domain_data.name,
@@ -317,7 +324,7 @@ async def update_domain(
             'app_id': app_id,
             'vector_db_type': None  # immutable — not accepted on update
         }
-        updated_domain_id = DomainService.create_or_update_domain(data, domain_data.embedding_service_id, db)
+        updated_domain_id = DomainService.create_or_update_domain(data, None, db)
         return await get_domain(app_id, updated_domain_id, request, db, auth_context, role)
     except HTTPException:
         raise

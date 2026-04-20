@@ -53,14 +53,13 @@ class CreateDomainSchema(BaseModel):
 
 
 class UpdateDomainSchema(BaseModel):
-    """Schema for updating an existing domain (vector_db_type is immutable after creation)"""
+    """Schema for updating an existing domain (vector_db_type and embedding_service_id are immutable after creation)"""
     name: str
     description: Optional[str] = ""
     base_url: str
     content_tag: Optional[str] = "body"
     content_class: Optional[str] = ""
     content_id: Optional[str] = ""
-    embedding_service_id: Optional[int] = None
 
 
 # Backward-compatible alias

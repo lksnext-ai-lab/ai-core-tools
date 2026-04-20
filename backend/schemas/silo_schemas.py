@@ -52,12 +52,11 @@ class CreateSiloSchema(BaseModel):
 
 
 class UpdateSiloSchema(BaseModel):
-    """Schema for updating an existing silo (vector_db_type is immutable after creation)"""
+    """Schema for updating an existing silo (vector_db_type and embedding_service_id are immutable after creation)"""
     name: str
     description: Optional[str] = None
     type: Optional[str] = None
     output_parser_id: Optional[int] = None
-    embedding_service_id: Optional[int] = None
 
 
 # Kept for backward compatibility with the public API router

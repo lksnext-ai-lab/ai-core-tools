@@ -19,6 +19,7 @@ from schemas.export_schemas import SiloExportFileSchema
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 from utils.error_handlers import ValidationError
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 
 from db.database import get_db
 
@@ -229,6 +230,7 @@ async def create_silo(
                   tags=["Silos"],
                   response_model=SiloDetailSchema)
 async def update_silo(
+    request: Request,
     app_id: int,
     silo_id: int,
     silo_data: UpdateSiloSchema,
@@ -237,11 +239,17 @@ async def update_silo(
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
-    Update an existing silo. Note: vector_db_type cannot be changed after creation.
+    Update an existing silo. Note: vector_db_type and embedding_service_id cannot be changed after creation.
     """
     _validate_silo_app_ownership(silo_id, app_id, db)
 
     try:
+        raw_body = await request.json()
+        existing_silo = SiloService.get_silo(silo_id, db)
+        if existing_silo:
+            assert_vector_db_type_immutable(existing_silo.vector_db_type, raw_body.get('vector_db_type'), "silo")
+            assert_embedding_service_immutable(existing_silo.embedding_service_id, raw_body.get('embedding_service_id'), "silo")
+
         silo = SiloService.create_or_update_silo_router(app_id, silo_id, silo_data, db)
         logger.info(f"Silo updated successfully: {silo.silo_id}")
         return await get_silo(app_id, silo.silo_id, auth_context, db, role)

@@ -19,7 +19,7 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields
 )
-from utils.vector_db_immutability import assert_vector_db_type_immutable
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from schemas.silo_schemas import SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema
 from repositories.silo_repository import SiloRepository
 from services.folder_service import FolderService
@@ -218,6 +218,9 @@ class SiloService:
                 assert_vector_db_type_immutable(
                     silo.vector_db_type, requested_vector_db_type, "silo"
                 )
+                assert_embedding_service_immutable(
+                    silo.embedding_service_id, silo_data.get('embedding_service_id'), "silo"
+                )
             else:
                 # Enforce per-app silo limit before creation (SaaS mode only)
                 app_id = silo_data.get('app_id')
@@ -241,8 +244,8 @@ class SiloService:
                 if silo_type == SiloType.REPO:
                     silo.metadata_definition_id = 0
 
-            # Set embedding service if provided
-            if silo_data.get('embedding_service_id'):
+            # Set embedding service on creation only — immutable after creation
+            if not silo_id and silo_data.get('embedding_service_id'):
                 silo.embedding_service_id = silo_data['embedding_service_id']
             
             # Handle metadata definition (output parser) - explicitly handle None to clear it
@@ -1228,7 +1231,7 @@ class SiloService:
             'app_id': app_id,
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,
-            'embedding_service_id': silo_data.embedding_service_id,
+            'embedding_service_id': getattr(silo_data, 'embedding_service_id', None),
             'vector_db_type': getattr(silo_data, 'vector_db_type', None)
         }
         

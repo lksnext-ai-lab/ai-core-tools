@@ -976,7 +976,7 @@ class ApiService {
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; embedding_service_id?: number; fixed_metadata?: boolean; status?: string }) {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string }) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -1399,7 +1399,6 @@ class ApiService {
       content_tag?: string;
       content_class?: string;
       content_id?: string;
-      embedding_service_id?: number;
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {

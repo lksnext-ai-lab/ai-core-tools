@@ -170,7 +170,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       setIsSubmitting(true);
       setError(null);
       const payload = isEditing
-        ? (({ vector_db_type: _ignored, ...rest }) => rest)(formData)
+        ? (({ vector_db_type: _vdb, embedding_service_id: _esi, ...rest }) => rest)(formData)
         : { ...formData, vector_db_type: formData.vector_db_type!.toUpperCase() };
       await onSubmit(payload);
     } catch (err) {
@@ -277,8 +277,8 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 value={formData.embedding_service_id?.toString() || ''}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                disabled={isSubmitting}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled={isSubmitting || isEditing}
               >
                 <option value="">Select an embedding service</option>
                 {embeddingServices.map((service) => (
@@ -287,9 +287,15 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-sm text-gray-500">
-                Required: Choose the embedding service for vector generation.
-              </p>
+              {isEditing ? (
+                <p className="mt-1 text-sm text-amber-600">
+                  The embedding service cannot be changed after a silo is created.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-500">
+                  Required: Choose the embedding service for vector generation.
+                </p>
+              )}
             </div>
 
             {/* Vector Database */}

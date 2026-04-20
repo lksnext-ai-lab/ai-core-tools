@@ -130,7 +130,7 @@ function DomainFormPage() {
       if (isNewDomain) {
         await apiService.createDomain(numericAppId, formData);
       } else {
-        const { vector_db_type: _omit, ...updatePayload } = formData;
+        const { vector_db_type: _vdb, embedding_service_id: _esi, ...updatePayload } = formData;
         await apiService.updateDomain(numericAppId, domainIdNum, updatePayload);
       }
       
@@ -266,8 +266,9 @@ function DomainFormPage() {
               const value = e.target.value;
               handleInputChange('embedding_service_id', value ? Number.parseInt(value, 10) : undefined);
             }}
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
+            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            required={isNewDomain}
+            disabled={!isNewDomain}
           >
             <option value="">Select an embedding service</option>
             {embeddingServices.map((service) => (
@@ -279,6 +280,11 @@ function DomainFormPage() {
           {embeddingServices.length === 0 && (
             <p className="text-sm text-red-600 mt-1">
               No embedding services available. Please create one first.
+            </p>
+          )}
+          {!isNewDomain && (
+            <p className="text-sm text-amber-600 mt-1">
+              The embedding service cannot be changed after a domain is created.
             </p>
           )}
         </div>
