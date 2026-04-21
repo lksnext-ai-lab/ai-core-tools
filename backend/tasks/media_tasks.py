@@ -121,11 +121,15 @@ def process_media_task_sync(media_id: int):
                 chunks_data = VideoAnalysisService.split_audio_visual_chunks(
                     chunks_data, visual_segments
                 )
-                
+
+                media.processing_mode = 'multimodal'
+                db.commit()
                 logger.info(f"Split into {len(chunks_data)} audio+visual chunks for media {media_id}")
                 
             except Exception as e:
                 logger.warning(f"Video analysis failed for media {media_id}, continuing with audio-only chunks: {str(e)}")
+                media.processing_mode = 'basic'
+                db.commit()
                 # Don't fail the entire pipeline — continue with audio-only chunks
 
         # Step 5: Index chunks directly without creating DB rows
