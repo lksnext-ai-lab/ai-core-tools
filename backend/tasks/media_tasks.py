@@ -137,8 +137,9 @@ def process_media_task_sync(media_id: int):
         db.commit()
 
         for idx, chunk_data in enumerate(chunks_data):
-            # enrich with index and optional chunk_id (no DB id available)
-            chunk_data['chunk_index'] = idx
+            # Preserve chunk_index set by split_audio_visual_chunks so audio/visual
+            # pairs from the same time window share the same index for retrieval correlation.
+            chunk_data.setdefault('chunk_index', idx)
             SiloService.index_media_chunk(chunk_data, media, db)
 
         logger.info(f"Indexed {len(chunks_data)} chunks for media {media_id}")
