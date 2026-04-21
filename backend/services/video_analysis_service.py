@@ -18,11 +18,14 @@ logger = logging.getLogger(__name__)
 
 # Maximum video size in bytes for supported providers
 PROVIDER_MAX_SIZE = {
-    'Google': 2 * 1024 * 1024 * 1024,       # 2GB
-    'GoogleCloud': 2 * 1024 * 1024 * 1024,  # 2GB (Vertex AI)
+    'Google': 2 * 1024 * 1024 * 1024,   # 2GB — uses Files API (streamed upload)
+    'GoogleCloud': 50 * 1024 * 1024,     # 50MB — inline base64; larger files require GCS URI support
 }
 
 SUPPORTED_VIDEO_PROVIDERS = ('Google', 'GoogleCloud')
+
+# Maximum seconds to wait for Gemini Files API to finish processing an uploaded video
+GEMINI_PROCESSING_TIMEOUT_SECONDS = 300
 
 VIDEO_ANALYSIS_PROMPT = """Analyze this video and describe what happens visually in chronological segments.
 
@@ -119,6 +122,11 @@ class VideoAnalysisService:
         max_size = PROVIDER_MAX_SIZE[provider]
         
         if file_size > max_size:
+            if provider == 'GoogleCloud':
+                raise ValueError(
+                    f"Video file too large for Vertex AI inline mode ({file_size / (1024*1024):.1f}MB, max {max_size // (1024*1024)}MB). "
+                    f"Inline base64 encoding is limited to avoid OOM; GCS URI support is not yet implemented."
+                )
             raise ValueError(
                 f"Video file too large ({file_size / (1024*1024):.1f}MB). "
                 f"Max for {provider}: {max_size / (1024*1024):.0f}MB"
@@ -268,9 +276,17 @@ def _analyze_with_gemini(ai_service, video_path: str, prompt: str = VIDEO_ANALYS
         logger.info(f"Uploading video to Gemini Files API: {video_path}")
         video_file = client.files.upload(file=video_path)
 
+        poll_interval = 5
+        elapsed = 0
         while video_file.state.name == "PROCESSING":
-            logger.info("Waiting for Gemini to process video...")
-            time.sleep(5)
+            if elapsed >= GEMINI_PROCESSING_TIMEOUT_SECONDS:
+                raise ValueError(
+                    f"Gemini video processing timed out after {GEMINI_PROCESSING_TIMEOUT_SECONDS}s "
+                    f"(file: {video_file.name})"
+                )
+            logger.info(f"Waiting for Gemini to process video... ({elapsed}s elapsed)")
+            time.sleep(poll_interval)
+            elapsed += poll_interval
             video_file = client.files.get(name=video_file.name)
 
         if video_file.state.name == "FAILED":
