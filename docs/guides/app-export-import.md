@@ -170,14 +170,14 @@ A curated demo workspace JSON is available at `scripts/demo-app.json`. It can be
 
 | Entity Type | Count | Highlights |
 |-------------|-------|------------|
-| AI Services | 4 | OpenAI, Anthropic, Ollama (local), Azure OpenAI |
+| AI Services | 2 | OpenAI, Ollama (local) |
 | Embedding Services | 2 | OpenAI, Ollama (local) |
 | Output Parsers | 2 | Structured Summary, Q&A with Confidence |
-| MCP Configs | 1 | External tool server (placeholder) |
+| MCP Configs | 1 | AWS Docs Search (placeholder) |
 | Silos | 1 | PGVector-backed knowledge base |
 | Repositories | 1 | File-based document store (empty — upload files after import) |
 | Domains | 1 | Web scraping source (placeholder URL) |
-| Agents | 8 | FAQ, RAG KB, conversational (memory), structured output, tool sub-agent, orchestrator, OCR (dual-LLM), Azure |
+| Agents | 6 | RAG KB, conversational (memory), structured output, tool sub-agent, MCP integration, OCR (dual-LLM) |
 
 ### Import the demo
 
@@ -189,7 +189,7 @@ Cookie: session=...
 Content-Type: multipart/form-data
 
 file=@scripts/demo-app.json
-api_keys_json={"Demo OpenAI GPT-5.4":"sk-...","Demo Anthropic Claude":"sk-ant-..."}
+api_keys_json={"Demo OpenAI GPT-5.4":"sk-..."}
 ```
 
 Or from the frontend: **Apps → Import App → select `demo-app.json` → provide API keys → Import**.

@@ -61,7 +61,7 @@ docker-compose up -d
 
 ### Try the Demo App
 
-A pre-built demo workspace is available at `scripts/demo-app.json`. Import it to get a fully configured workspace with 8 agents, RAG, structured output, agent composition, OCR, and more — no manual setup required.
+A pre-built demo workspace is available at `scripts/demo-app.json`. Import it to get a fully configured workspace with 6 agents, RAG, structured output, MCP integration, OCR, and more — no manual setup required.
 
 From the UI: **Apps → Import App → select `demo-app.json` → provide your API keys → Import**.
 
