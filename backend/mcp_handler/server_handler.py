@@ -54,7 +54,7 @@ class MCPServerHandler:
         self.api_key_id = api_key_id
         self.agent_execution_service = AgentExecutionService()
 
-    def _get_mcp_server(self, session: Session) -> Optional[MCPServer]:
+    def x_get_mcp_server(self, session: Session) -> Optional[MCPServer]:
         """Load the MCP server with a fresh session"""
         from repositories.mcp_server_repository import MCPServerRepository
         return MCPServerRepository.get_by_id_and_app_id(session, self.server_id, self.app_id)

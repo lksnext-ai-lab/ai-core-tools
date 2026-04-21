@@ -356,7 +356,7 @@ class TestUpdateApp:
         """Only OWNER can update app (EDITOR/VIEWER cannot)."""
         # TODO: Add proper role validation when implemented
         db.flush()
-        response = client.put(
+        client.put(
             f"/internal/apps/{fake_app.app_id}",
             json=app_payload(name="Attempt"),
             headers=auth_headers,
@@ -455,7 +455,7 @@ class TestDeleteApp:
         """Only OWNER can delete app."""
         # TODO: Add proper role validation when implemented
         db.flush()
-        response = client.delete(
+        client.delete(
             f"/internal/apps/{fake_app.app_id}",
             headers=auth_headers,
         )
