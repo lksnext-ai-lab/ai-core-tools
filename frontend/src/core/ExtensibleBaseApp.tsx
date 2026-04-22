@@ -101,7 +101,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
       headerTitle: config.headerProps?.title || config.name || 'AI Core Tools'
     },
     api: config.apiConfig ? {
-      baseUrl: config.apiConfig.baseUrl || 'http://localhost:8000',
+      baseUrl: config.apiConfig.baseUrl ?? 'http://localhost:8000',
       timeout: config.apiConfig.timeout || 30000,
       retries: config.apiConfig.retries || 3
     } : undefined,

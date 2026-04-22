@@ -970,15 +970,15 @@ class ApiService {
   }
 
   async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean }) {
-    return this.request(`/internal/apps/${appId}/silos/0`, {
+    return this.request(`/internal/apps/${appId}/silos/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean; status?: string }) {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string }) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1081,15 +1081,15 @@ class ApiService {
   }
 
   async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
-    return this.request(`/internal/apps/${appId}/repositories/0`, {
+    return this.request(`/internal/apps/${appId}/repositories/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number }) {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1372,7 +1372,6 @@ class ApiService {
 
   async createDomain(
     appId: number,
-    domainId: number,
     data: {
       name: string;
       description?: string;
@@ -1384,7 +1383,7 @@ class ApiService {
       vector_db_type?: string;
     }
   ) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
+    return this.request(`/internal/apps/${appId}/domains/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1400,8 +1399,6 @@ class ApiService {
       content_tag?: string;
       content_class?: string;
       content_id?: string;
-      embedding_service_id?: number;
-      vector_db_type?: string;
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {

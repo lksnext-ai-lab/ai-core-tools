@@ -18,14 +18,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-COMPOSE_FILE="docker-compose.yaml"
+COMPOSE_FILE="docker/docker-compose.yaml"
 PROFILE="test"
 DB_SERVICE="db_test"
 DB_CONTAINER="mattin-postgres-test"
 
 # --- Start test database ---------------------------------------------------
 echo "[test.sh] Starting test database..."
-docker compose --profile "$PROFILE" up -d "$DB_SERVICE"
+docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" up -d "$DB_SERVICE"
 
 echo "[test.sh] Waiting for test database to be healthy..."
 RETRIES=30
@@ -33,7 +33,7 @@ until docker exec "$DB_CONTAINER" pg_isready -U test_user -d test_db > /dev/null
     RETRIES=$((RETRIES - 1))
     if [ "$RETRIES" -le 0 ]; then
         echo "[test.sh] ERROR: Test database did not become ready in time."
-        docker compose --profile "$PROFILE" stop "$DB_SERVICE"
+        docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" stop "$DB_SERVICE"
         exit 1
     fi
     sleep 1
@@ -49,6 +49,6 @@ set -e
 
 # --- Cleanup ---------------------------------------------------------------
 echo "[test.sh] Stopping test database..."
-docker compose --profile "$PROFILE" stop "$DB_SERVICE"
+docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" stop "$DB_SERVICE"
 
 exit $EXIT_CODE

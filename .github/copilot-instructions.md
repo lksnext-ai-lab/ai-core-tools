@@ -344,7 +344,7 @@ uvicorn backend.main:app --reload --port 8000
 cd frontend && npm install && npm run dev
 
 # Full stack (Docker)
-docker-compose up -d
+cd docker && docker compose up -d --build    # App served at http://localhost/
 ```
 
 ### Testing
@@ -353,8 +353,11 @@ docker-compose up -d
 # Fast unit tests — no database needed
 pytest tests/unit/ -v
 
-# Start test DB, then run integration tests
-docker-compose --profile test up -d db_test
+# Integration tests with auto-managed test DB (ephemeral Postgres on port 5433)
+./scripts/test.sh -m integration
+
+# Or manually:
+docker compose -f docker/docker-compose.yaml --profile test up -d db_test
 pytest tests/integration/ -v
 
 # Full suite with coverage

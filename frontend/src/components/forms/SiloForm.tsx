@@ -112,16 +112,12 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       setOutputParsers(parsersResponse);
       setEmbeddingServices(servicesResponse);
 
-      // Fetch vector database options only when they are not provided by the silo payload
+      // Fetch vector database options only when they have not been set
       if (vectorDbOptions.length === 0) {
         const siloOptions = await apiService.getSiloOptions(appIdNumber);
         const availableVectorDbOptions: VectorDbOption[] = siloOptions.vector_db_options ?? [];
         setVectorDbOptions(availableVectorDbOptions);
-
-        setFormData(prev => ({
-          ...prev,
-          vector_db_type: availableVectorDbOptions[0]?.code || prev.vector_db_type || 'PGVECTOR'
-        }));
+        // Do NOT set vector_db_type here — let the silo initialization effect handle it
       }
 
       // Default embedding service for new silo when only one available
@@ -165,7 +161,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       return;
     }
 
-    if (!formData.vector_db_type) {
+    if (!isEditing && !formData.vector_db_type) {
       setError('Vector database selection is required');
       return;
     }
@@ -173,10 +169,10 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
     try {
       setIsSubmitting(true);
       setError(null);
-      await onSubmit({
-        ...formData,
-        vector_db_type: formData.vector_db_type.toUpperCase(),
-      });
+      const payload = isEditing
+        ? (({ vector_db_type: _vdb, embedding_service_id: _esi, ...rest }) => rest)(formData)
+        : { ...formData, vector_db_type: formData.vector_db_type!.toUpperCase() };
+      await onSubmit(payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save silo');
     } finally {
@@ -281,8 +277,8 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 value={formData.embedding_service_id?.toString() || ''}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                disabled={isSubmitting}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled={isSubmitting || isEditing}
               >
                 <option value="">Select an embedding service</option>
                 {embeddingServices.map((service) => (
@@ -291,9 +287,15 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-sm text-gray-500">
-                Required: Choose the embedding service for vector generation.
-              </p>
+              {isEditing ? (
+                <p className="mt-1 text-sm text-amber-600">
+                  The embedding service cannot be changed after a silo is created.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-500">
+                  Required: Choose the embedding service for vector generation.
+                </p>
+              )}
             </div>
 
             {/* Vector Database */}
@@ -306,9 +308,9 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 name="vector_db_type"
                 value={vectorDbOptions.length === 0 ? '' : formData.vector_db_type ?? ''}
                 onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                disabled={isSubmitting || vectorDbOptions.length === 0}
+                required={!isEditing}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled={isSubmitting || vectorDbOptions.length === 0 || isEditing}
               >
                 {vectorDbOptions.length === 0 && <option value="">No vector databases available</option>}
                 {vectorDbOptions.map((option) => (
@@ -317,7 +319,12 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                   </option>
                 ))}
               </select>
-              {vectorDbOptions.length === 0 ? (
+              {isEditing ? (
+                <p className="mt-1 text-sm text-gray-500 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  The vector database cannot be changed after a silo is created.
+                </p>
+              ) : vectorDbOptions.length === 0 ? (
                 <p className="mt-1 text-sm text-red-600">
                   No vector databases available. Configure a silo backend before proceeding.
                 </p>

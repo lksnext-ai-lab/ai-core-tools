@@ -1,0 +1,302 @@
+{
+  "metadata": {
+    "export_version": "1.0.0",
+    "export_date": "2026-04-20T00:00:00Z",
+    "exported_by": null,
+    "source_app_id": null
+  },
+  "app": {
+    "name": "MattinAI Demo App",
+    "agent_rate_limit": null,
+    "enable_langsmith": false
+  },
+  "ai_services": [
+    {
+      "name": "Demo OpenAI GPT-5.4",
+      "api_key": null,
+      "provider": "OpenAI",
+      "model_name": "gpt-5.4",
+      "endpoint": "https://api.openai.com/v1",
+      "description": "Primary LLM for most demo agents",
+      "api_version": null
+    },
+    {
+      "name": "Demo Ollama Local",
+      "api_key": null,
+      "provider": "CUSTOM",
+      "model_name": "llama3.2",
+      "endpoint": "http://localhost:11434",
+      "description": "Local/self-hosted model showcase (Ollama)",
+      "api_version": null
+    }
+  ],
+  "embedding_services": [
+    {
+      "name": "text-embedding-3-small",
+      "api_key": null,
+      "provider": "OpenAI",
+      "model_name": "text-embedding-3-small",
+      "endpoint": "https://api.openai.com/v1",
+      "description": "Vector embeddings for the demo Silo",
+      "api_version": null
+    },
+    {
+      "name": "nomic-embed-text",
+      "api_key": null,
+      "provider": "CUSTOM",
+      "model_name": "nomic-embed-text",
+      "endpoint": "http://localhost:11434",
+      "description": "Local embedding showcase",
+      "api_version": null
+    }
+  ],
+  "output_parsers": [
+    {
+      "name": "Structured_Summary",
+      "description": "Extracts structured summaries from text",
+      "fields": [
+        {
+          "name": "title",
+          "type": "str",
+          "description": "Title of the summarized content",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        },
+        {
+          "name": "summary",
+          "type": "str",
+          "description": "Concise summary of the content",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        },
+        {
+          "name": "key_points",
+          "type": "list",
+          "description": "Key points extracted from the content",
+          "parser_name": null,
+          "list_item_type": "str",
+          "list_item_parser_name": null
+        },
+        {
+          "name": "sentiment",
+          "type": "str",
+          "description": "Overall sentiment of the content",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        },
+        {
+          "name": "word_count",
+          "type": "int",
+          "description": "Approximate word count of the original content",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        }
+      ]
+    },
+    {
+      "name": "Q&A_with_Confidence",
+      "description": "Confidence-scored answers with source attribution",
+      "fields": [
+        {
+          "name": "question",
+          "type": "str",
+          "description": "The user's question",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        },
+        {
+          "name": "answer",
+          "type": "str",
+          "description": "The generated answer",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        },
+        {
+          "name": "confidence",
+          "type": "float",
+          "description": "Confidence score between 0 and 1",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        },
+        {
+          "name": "sources",
+          "type": "list",
+          "description": "Source references supporting the answer",
+          "parser_name": null,
+          "list_item_type": "str",
+          "list_item_parser_name": null
+        },
+        {
+          "name": "caveats",
+          "type": "str",
+          "description": "Caveats or limitations of the answer",
+          "parser_name": null,
+          "list_item_type": null,
+          "list_item_parser_name": null
+        }
+      ]
+    }
+  ],
+  "mcp_configs": [
+     {
+        "name": "AWS Doc Search MCP",
+        "description": "Example external MCP server connection — URL is a placeholder",
+        "config": "{\"aws-knowledge-mcp-server\": {\"url\": \"https://knowledge-mcp.global.api.aws\", \"transport\": \"http\"}}"
+    }
+  ],
+  "silos": [
+    {
+      "name": "Demo Knowledge Base",
+      "type": "CUSTOM",
+      "vector_db_type": "PGVECTOR",
+      "embedding_service_name": "text-embedding-3-small",
+      "metadata_definition_name": null,
+      "fixed_metadata": false,
+      "description": "Central vector store for all RAG demo agents"
+    }
+  ],
+  "repositories": [
+    {
+      "name": "Demo Documentation Repository",
+      "type": "files",
+      "silo_name": "Demo Knowledge Base"
+    }
+  ],
+  "domains": [
+    {
+      "name": "MattinAI Docs Website",
+      "description": "Web scraping source for documentation — URL is a placeholder",
+      "base_url": "https://github.com/lksnext-ai-lab/ai-core-tools",
+      "content_tag": "article",
+      "content_class": "main-content",
+      "content_id": null,
+      "silo_name": "Demo Knowledge Base",
+      "urls": []
+    }
+  ],
+  "agents": [
+    {
+      "name": "Demo Knowledge Base Agent",
+      "description": "RAG retrieval agent — uses vector silo for grounded answers",
+      "system_prompt": "You are a knowledge base assistant. Use only the provided context documents to answer questions. If the answer is not in the context, say so explicitly. Always cite the source document name when referencing information.",
+      "prompt_template": "{question}",
+      "service_name": "Demo OpenAI GPT-5.4",
+      "silo_name": "Demo Knowledge Base",
+      "output_parser_name": null,
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": false,
+      "memory_max_messages": 20,
+      "memory_max_tokens": null,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.3,
+      "vision_service_name": null,
+      "vision_system_prompt": null,
+      "text_system_prompt": null
+    },
+    {
+      "name": "Demo Conversational Assistant",
+      "description": "Memory-enabled conversational agent — demonstrates multi-turn context retention",
+      "system_prompt": "You are a helpful conversational assistant. Maintain context across the conversation and refer back to earlier messages when relevant. Be friendly and adaptive to the user's communication style.",
+      "prompt_template": "{question}",
+      "service_name": "Demo OpenAI GPT-5.4",
+      "silo_name": null,
+      "output_parser_name": null,
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": true,
+      "memory_max_messages": 20,
+      "memory_max_tokens": 4000,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.7,
+      "vision_service_name": null,
+      "vision_system_prompt": null,
+      "text_system_prompt": null
+    },
+    {
+      "name": "Demo Document Summarizer (Structured)",
+      "description": "Structured output agent — demonstrates OutputParser for JSON responses",
+      "system_prompt": "You are a document analysis agent. Given a document or passage, extract a structured summary following the output schema precisely. Be thorough but concise.",
+      "prompt_template": "{question}",
+      "service_name": "Demo OpenAI GPT-5.4",
+      "silo_name": "Demo Knowledge Base",
+      "output_parser_name": "Structured Summary",
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": false,
+      "memory_max_messages": 20,
+      "memory_max_tokens": null,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.2,
+      "vision_service_name": null,
+      "vision_system_prompt": null,
+      "text_system_prompt": null
+    },
+    {
+      "name": "Demo Intent Classifier (Tool)",
+      "description": "Tool sub-agent — used by the orchestrator via agent_tool_refs. Set is_tool=true after import.",
+      "system_prompt": "You are an intent classifier. Given a user message, classify its intent into one of: question, request, complaint, feedback, greeting, or other. Return a structured answer with your confidence score and reasoning.",
+      "prompt_template": "{question}",
+      "service_name": "Demo OpenAI GPT-5.4",
+      "silo_name": null,
+      "output_parser_name": "Q&A with Confidence",
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": false,
+      "memory_max_messages": 20,
+      "memory_max_tokens": null,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.1,
+      "vision_service_name": null,
+      "vision_system_prompt": null,
+      "text_system_prompt": null
+    },
+    {
+      "name": "AWS Doc Search Agent (MCP)",
+      "description": "AWS Doc Search agent — demonstrates external MCP tool usage. The MCP server is expected to handle the search logic and return relevant document excerpts.",
+      "system_prompt": "You are an AWS Doc Search agent. When given a query, use the connected AWS Docs Search MCP to retrieve relevant document excerpts. Use the retrieved information to answer the user's question. Always cite the source document name when referencing information.",
+      "prompt_template": "{question}",
+      "service_name": "Demo OpenAI GPT-5.4",
+      "output_parser_name": null,
+      "agent_mcp_refs": [
+        {
+          "mcp_name": "AWS Doc Search MCP"
+        }
+      ],
+      "has_memory": true,
+      "memory_max_messages": 30,
+      "memory_max_tokens": 6000,
+      "memory_summarize_threshold": 15,
+      "temperature": 0.5,
+      "vision_service_name": null,
+      "vision_system_prompt": null,
+      "text_system_prompt": null
+    },
+    {
+      "name": "Demo OCR Document Processor",
+      "description": "OCR agent — demonstrates dual-LLM pattern (vision + text) with structured output",
+      "system_prompt": null,
+      "prompt_template": null,
+      "service_name": "Demo OpenAI GPT-5.4",
+      "silo_name": null,
+      "output_parser_name": "Structured Summary",
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": false,
+      "memory_max_messages": 20,
+      "memory_max_tokens": null,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.2,
+      "vision_service_name": "Demo OpenAI GPT-5.4",
+      "vision_system_prompt": "Extract all visible text from each scanned page. Include headers, footers, captions, and table content. Preserve the reading order and paragraph structure.",
+      "text_system_prompt": "You are an OCR post-processor. Take the raw extracted text and structure it according to the output schema. Clean up OCR artifacts and normalize formatting."
+    }
+  ]
+}

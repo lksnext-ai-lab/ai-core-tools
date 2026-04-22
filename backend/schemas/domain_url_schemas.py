@@ -40,8 +40,8 @@ class DomainDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateDomainSchema(BaseModel):
-    """Schema for creating or updating a domain"""
+class CreateDomainSchema(BaseModel):
+    """Schema for creating a new domain (vector_db_type is settable on creation only)"""
     name: str
     description: Optional[str] = ""
     base_url: str
@@ -50,6 +50,20 @@ class CreateUpdateDomainSchema(BaseModel):
     content_id: Optional[str] = ""
     embedding_service_id: Optional[int] = None
     vector_db_type: Optional[str] = None
+
+
+class UpdateDomainSchema(BaseModel):
+    """Schema for updating an existing domain (vector_db_type and embedding_service_id are immutable after creation)"""
+    name: str
+    description: Optional[str] = ""
+    base_url: str
+    content_tag: Optional[str] = "body"
+    content_class: Optional[str] = ""
+    content_id: Optional[str] = ""
+
+
+# Backward-compatible alias
+CreateUpdateDomainSchema = CreateDomainSchema
 
 
 # ==================== URL SCHEMAS ====================

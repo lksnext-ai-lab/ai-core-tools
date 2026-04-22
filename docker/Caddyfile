@@ -1,0 +1,23 @@
+{
+	admin off
+	auto_https off
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	@backend path /internal/* /public/* /mcp/* /docs/* /scalar /openapi-internal.json /openapi-public.json /static/* /health
+
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}
