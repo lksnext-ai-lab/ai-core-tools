@@ -25,7 +25,8 @@ import type { LibraryConfig } from './core/types';
 const runtimeConfig = (globalThis as unknown as { __RUNTIME_CONFIG__?: Record<string, string> }).__RUNTIME_CONFIG__;
 
 const getConfig = (key: string, fallback: string = ''): string => {
-  return runtimeConfig?.[key] || import.meta.env[key] || fallback;
+  // Uses ?? so an explicit empty string (same-origin via reverse proxy) is respected.
+  return runtimeConfig?.[key] ?? import.meta.env[key] ?? fallback;
 };
 
 // Demo configuration for the base application

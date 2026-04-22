@@ -19,7 +19,7 @@ cat > "$CONFIG_FILE" <<EOF
 // Auto-generated runtime configuration
 // Generated at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 window.__RUNTIME_CONFIG__ = {
-  VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000}",
+  VITE_API_BASE_URL: "${VITE_API_BASE_URL-http://localhost:8000}",
   VITE_OIDC_ENABLED: "${VITE_OIDC_ENABLED:-false}",
   VITE_OIDC_AUTHORITY: "${VITE_OIDC_AUTHORITY:-}",
   VITE_OIDC_CLIENT_ID: "${VITE_OIDC_CLIENT_ID:-}",
@@ -30,7 +30,7 @@ window.__RUNTIME_CONFIG__ = {
 EOF
 
 echo "Runtime configuration:"
-echo "  - API URL: ${VITE_API_BASE_URL:-http://localhost:8000}"
+echo "  - API URL: ${VITE_API_BASE_URL-http://localhost:8000}"
 echo "  - OIDC Enabled: ${VITE_OIDC_ENABLED:-false}"
 
 if [ "${VITE_OIDC_ENABLED:-false}" = "true" ]; then
