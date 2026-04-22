@@ -75,6 +75,14 @@ Published images: `ghcr.io/lksnext-ai-lab/mattinai-{backend,frontend}`. See
 [docker/README.md](docker/README.md) for deployment details, primary login, and
 the path to HTTPS.
 
+### Try the Demo App
+
+A pre-built demo workspace is available at `scripts/demo-app.json`. Import it to get a fully configured workspace with 6 agents, RAG, structured output, MCP integration, OCR, and more — no manual setup required.
+
+From the UI: **Apps → Import App → select `demo-app.json` → provide your API keys → Import**.
+
+See [App Export and Import — Demo App](docs/guides/app-export-import.md#demo-app) for details.
+
 ### Docker Commands
 
 All commands run from the `docker/` directory.

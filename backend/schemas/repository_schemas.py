@@ -45,13 +45,25 @@ class RepositoryDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateRepositorySchema(BaseModel):
-    """Schema for creating or updating a repository"""
+class CreateRepositorySchema(BaseModel):
+    """Schema for creating a new repository (vector_db_type is settable on creation only)"""
     name: str
     type: Optional[str] = None
     status: Optional[str] = None
     embedding_service_id: Optional[int] = None
     vector_db_type: Optional[str] = None
+
+
+class UpdateRepositorySchema(BaseModel):
+    """Schema for updating an existing repository (vector_db_type is immutable after creation)"""
+    name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
+    embedding_service_id: Optional[int] = None
+
+
+# Backward-compatible alias used by internal callers that haven't been updated yet
+CreateUpdateRepositorySchema = CreateRepositorySchema
 
 
 class RepositorySearchSchema(BaseModel):

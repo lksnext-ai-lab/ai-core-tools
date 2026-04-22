@@ -162,6 +162,49 @@ api_keys_json={"GPT-4 Service":"sk-..."}
 - MCP configs are sanitized to remove auth tokens.
 - Vectors, file contents, and conversations are not exported.
 
+## Demo App
+
+A curated demo workspace JSON is available at `scripts/demo-app.json`. It can be imported to instantly set up a fully configured demo workspace showcasing all major platform features.
+
+### What's included
+
+| Entity Type | Count | Highlights |
+|-------------|-------|------------|
+| AI Services | 2 | OpenAI, Ollama (local) |
+| Embedding Services | 2 | OpenAI, Ollama (local) |
+| Output Parsers | 2 | Structured Summary, Q&A with Confidence |
+| MCP Configs | 1 | AWS Docs Search (placeholder) |
+| Silos | 1 | PGVector-backed knowledge base |
+| Repositories | 1 | File-based document store (empty — upload files after import) |
+| Domains | 1 | Web scraping source (placeholder URL) |
+| Agents | 6 | RAG KB, conversational (memory), structured output, tool sub-agent, MCP integration, OCR (dual-LLM) |
+
+### Import the demo
+
+Use the import endpoint or the UI import dialog:
+
+```http
+POST /internal/apps/import?conflict_mode=rename
+Cookie: session=...
+Content-Type: multipart/form-data
+
+file=@scripts/demo-app.json
+api_keys_json={"Demo OpenAI GPT-5.4":"sk-..."}
+```
+
+Or from the frontend: **Apps → Import App → select `demo-app.json` → provide API keys → Import**.
+
+### Post-import manual steps
+
+Some features are not supported by the import schema and must be configured manually after import:
+
+| Feature | Action |
+|---------|--------|
+| **Skills** | Create skills via the UI and link them to agents |
+| **`is_tool` flag** | Edit the "Demo Intent Classifier (Tool)" agent and enable `is_tool` |
+| **MCP Server** | Create an MCP server and attach the desired agents |
+| **API keys** | Supply real provider API keys (via `api_keys_json` during import or edit each service after import) |
+
 ## See Also
 
 - [Internal API](../api/internal-api.md)

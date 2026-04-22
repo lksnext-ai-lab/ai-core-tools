@@ -14,6 +14,7 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields
 )
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from tools.vector_store_factory import VectorStoreFactory
 logger = get_logger(__name__)
 
@@ -302,32 +303,23 @@ class DomainService:
         domain.content_id = domain_data.get('content_id', '').strip() or None
         
         updated_domain = DomainRepository.update(domain, db)
-        
-        # Update the associated silo's embedding service if provided
-        if domain.silo_id and embedding_service_id is not None:
-            logger.info(f"Updating embedding service for silo {domain.silo_id} to service {embedding_service_id}")
+
+        # Update the associated silo once (avoiding multiple fetches)
+        if domain.silo_id:
             silo = SiloService.get_silo(domain.silo_id, db)
             if silo:
-                silo.embedding_service_id = embedding_service_id
-                if vector_db_type:
-                    silo.vector_db_type = vector_db_type
-                elif not silo.vector_db_type:
+                # Enforce immutability before touching vector_db_type
+                assert_vector_db_type_immutable(silo.vector_db_type, vector_db_type, "domain")
+                assert_embedding_service_immutable(silo.embedding_service_id, embedding_service_id, "domain")
+
+                # vector_db_type is immutable — only default-fill if the stored value is empty
+                if not silo.vector_db_type:
                     silo.vector_db_type = 'PGVECTOR'
+
                 SiloRepository.update(silo, db)
-                logger.info(f"Successfully updated silo {domain.silo_id} embedding service")
+                logger.info(f"Successfully updated silo {domain.silo_id}")
             else:
                 logger.warning(f"Silo {domain.silo_id} not found for domain {domain_id}")
-
-        if domain.silo_id and vector_db_type and embedding_service_id is None:
-            silo = SiloService.get_silo(domain.silo_id, db)
-            if silo:
-                silo.vector_db_type = vector_db_type
-                SiloRepository.update(silo, db)
-        elif domain.silo_id and not vector_db_type:
-            silo = SiloService.get_silo(domain.silo_id, db)
-            if silo and not silo.vector_db_type:
-                silo.vector_db_type = 'PGVECTOR'
-                SiloRepository.update(silo, db)
         
         return updated_domain.domain_id
     
