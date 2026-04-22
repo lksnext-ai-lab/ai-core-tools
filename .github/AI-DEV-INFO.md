@@ -285,7 +285,7 @@ Files changed: frontend/src/components/..., frontend/src/pages/...
 **Commands**:
 ```bash
 pytest tests/unit/ -v                   # No DB needed — fast
-pytest tests/integration/ -v            # Requires docker-compose --profile test up -d db_test
+./scripts/test.sh -m integration         # Auto-manages ephemeral test DB
 pytest -k "test_name" -v -s            # Single test with output
 ```
 

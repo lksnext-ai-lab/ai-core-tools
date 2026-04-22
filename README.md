@@ -42,40 +42,58 @@ cd ai-core-tools
 
 ## Option 1: Docker Compose (Recommended)
 
-The fastest way to get started. Includes all services pre-configured.
+The fastest way to get started. Everything is served from the same origin via
+Caddy — no CORS, no port juggling. Two ways to obtain the images:
+
+- **Pull from GHCR** (fast, no source code needed) — for client servers and demos
+- **Build locally** (includes your code changes) — for development
 
 ```bash
-# 1. Copy environment file
+cd docker
+
+# 1. Copy environment template
 cp .env.example .env
 
-# 2. Edit .env with your API keys (see Configuration section)
+# 2. Edit .env — DATABASE_PASSWORD and SECRET_KEY are REQUIRED
+#    Also set IMAGE_TAG=<sha-xxxxxxx|develop> if you want to pin a version
 
-# 3. Start all services
-docker-compose up -d
+# 3a. Pull prebuilt images (recommended)
+docker compose pull backend frontend
+docker compose up -d
+
+#     — OR —
+
+# 3b. Build from source (for dev with local changes)
+docker compose up -d --build
 
 # 4. Wait ~30 seconds and access:
-#    - Frontend: http://localhost:3000
-#    - Backend:  http://localhost:8000
-#    - API Docs: http://localhost:8000/docs/internal
+#    - App:      http://localhost/
+#    - API Docs: http://localhost/docs/internal
 ```
+
+Published images: `ghcr.io/lksnext-ai-lab/mattinai-{backend,frontend}`. See
+[docker/README.md](docker/README.md) for deployment details, primary login, and
+the path to HTTPS.
 
 ### Docker Commands
 
+All commands run from the `docker/` directory.
+
 ```bash
 # View logs in real-time
-docker-compose logs -f
+docker compose logs -f
 
 # View logs for a specific service
-docker-compose logs -f backend
+docker compose logs -f backend
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Rebuild images (after code changes)
-docker-compose build --no-cache && docker-compose up -d
+docker compose up -d --build
 
 # Remove everything (including database data)
-docker-compose down -v
+docker compose down -v
 ```
 
 ---
@@ -120,8 +138,8 @@ pip install poetry
 poetry install
 
 # Configure environment variables
-cp .env.example .env
-# Edit .env: change DATABASE_HOST=localhost
+cp backend/.env.example backend/.env
+# Edit backend/.env: change DATABASE_HOST=localhost
 
 # Run migrations
 alembic upgrade head
@@ -276,9 +294,10 @@ The project consists of several main components:
 ### Clean and start fresh (Docker)
 
 ```bash
-docker-compose down -v
-docker-compose build --no-cache
-docker-compose up -d
+cd docker
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ---

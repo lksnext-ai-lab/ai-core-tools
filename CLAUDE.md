@@ -37,7 +37,9 @@ npm run lint
 
 ```bash
 # Start test DB (port 5433, separate from dev DB)
-docker-compose --profile test up -d db_test
+docker compose -f docker/docker-compose.yaml --profile test up -d db_test
+# Or use the helper that auto-manages the test DB lifecycle:
+./scripts/test.sh -m integration
 
 # Unit tests — no DB needed
 pytest tests/unit/ -v
@@ -56,12 +58,20 @@ Test DB connection: `postgresql://test_user:test_pass@localhost:5433/test_db`. C
 
 ### Docker
 
+Despliegue single-host con Caddy como reverse proxy. Mismo setup para dev local y servidores cliente — solo cambia el `.env`.
+
 ```bash
-docker-compose up -d
-docker-compose logs -f backend
-docker-compose build --no-cache && docker-compose up -d
-docker-compose down -v          # Stop and remove volumes
+cd docker
+cp .env.example .env             # Editar claves y AICT_OMNIADMINS
+docker compose up -d --build
+docker compose logs -f backend
+docker compose down -v           # Parar y borrar volúmenes
 ```
+
+- Único puerto publicado al host: 80 (Caddy). Back/front/Postgres/Qdrant solo en red interna.
+- Acceso: `http://localhost/` en local, `http://<ip-servidor>/` en cliente.
+- Swagger: `/docs/internal` y `/docs/public` desde el mismo origen.
+- Utilities aisladas (p. ej. Qdrant + web UI): `docker/utilities/`.
 
 ### Client Project Management
 

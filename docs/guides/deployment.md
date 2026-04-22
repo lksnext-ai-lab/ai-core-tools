@@ -23,71 +23,72 @@ Mattin AI can be deployed using:
 ```bash
 # 1. Clone repository
 git clone https://github.com/lksnext-ai-lab/ai-core-tools.git
-cd ai-core-tools
+cd ai-core-tools/docker
 
-# 2. Copy environment file
-cp .env.docker.example .env
+# 2. Copy environment template
+cp .env.example .env
 
-# 3. Edit .env with your API keys
+# 3. Edit .env — DATABASE_PASSWORD and SECRET_KEY are REQUIRED
 nano .env
 
-# 4. Start services
-docker-compose up -d
+# 4a. Pull prebuilt images from GHCR (fast path for clients/demos)
+docker compose pull backend frontend
+docker compose up -d
 
-# 5. Access services
-# Backend:  http://localhost:8000
-# Frontend: http://localhost:3000
-# Database: localhost:5432
+#     — or —
+
+# 4b. Build from source (for development with local changes)
+docker compose up -d --build
+
+# 5. Access
+# App:       http://localhost/
+# API Docs:  http://localhost/docs/internal
 ```
 
-### docker-compose.yaml
+### Image sources
 
-Main docker-compose file for local development:
+The `backend` and `frontend` services reference images published in GHCR:
+
+- `ghcr.io/lksnext-ai-lab/mattinai-backend:${IMAGE_TAG:-develop}`
+- `ghcr.io/lksnext-ai-lab/mattinai-frontend:${IMAGE_TAG:-develop}`
+
+Set `IMAGE_TAG` in `.env` to pin a specific commit (`sha-c1feaaf`) or channel
+(`develop`). The Dockerfiles are also referenced so `docker compose up --build`
+works for dev scenarios with local code changes.
+
+### docker/docker-compose.yaml
+
+The single source of truth for single-host deployments (local dev and client
+servers). Caddy sits in front as a reverse proxy.
 
 **Services**:
-- **postgres**: PostgreSQL 17 with pgvector extension
+- **caddy**: Reverse proxy — only service that publishes a port to the host (80)
 - **backend**: FastAPI application (Python 3.11)
-- **frontend**: React application (Node 20, Nginx)
+- **frontend**: React SPA behind Nginx
+- **postgres**: PostgreSQL 17 with pgvector extension
+- **qdrant**: Qdrant vector database
+- **db_test**: Ephemeral test DB (`--profile test` only, port 5433)
 
 **Key features**:
-- Health checks for all services
-- Volume persistence for database
+- Health checks for critical services
+- Volume persistence for postgres and qdrant
 - Auto-restart policies
-- Custom network for service communication
+- Only port 80 exposed — everything else internal to `mattin-network`
+- Same origin for front and back → no CORS
+- `DATABASE_PASSWORD` and `SECRET_KEY` enforced via `${VAR:?...}` — compose fails if missing
 
-**Ports**:
-- Backend: `8000:8000`
-- Frontend: `3000:80`
-- PostgreSQL: `5432:5432`
+### docker/utilities/qdrant-standalone/
 
-### docker-compose-qdrant.yaml
-
-Optional Qdrant vector database service:
+Isolated Qdrant + web UI for experimentation with the vector DB alone:
 
 ```bash
-docker-compose -f docker-compose-qdrant.yaml up -d
+docker compose -f docker/utilities/qdrant-standalone/docker-compose.yaml up -d
 ```
-
-**Adds**:
-- **qdrant**: Qdrant vector database
 
 **Ports**:
 - Qdrant REST API: `6333:6333`
 - Qdrant gRPC: `6334:6334`
-
-**Usage**: Set `VECTOR_DB_TYPE=QDRANT` in `.env`
-
-### docker-compose-dockerhub.yaml
-
-Pre-built images from Docker Hub (faster startup):
-
-```bash
-docker-compose -f docker-compose-dockerhub.yaml up -d
-```
-
-**Image**: `aritzglks/lks-next-ia-core-tools:latest`
-
-**Use case**: Quick deployments without local builds
+- Web UI: `6335:6335`
 
 ## Building Images
 

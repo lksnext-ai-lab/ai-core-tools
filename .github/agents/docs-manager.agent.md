@@ -282,7 +282,7 @@ When your task originates from a plan execution step file (`/plans/<slug>/execut
 - ❌ Does not create or modify database migrations
 - ❌ Does not manage agent, instruction, or skill files
 - ❌ Does not deploy or manage infrastructure
-- ❌ Does not modify configuration files (`.env`, `docker-compose.yaml`, `pyproject.toml`)
+- ❌ Does not modify configuration files (`.env`, `docker/docker-compose.yaml`, `pyproject.toml`)
 - ❌ Does not create or modify tests
 - ❌ Does not bump versions
 

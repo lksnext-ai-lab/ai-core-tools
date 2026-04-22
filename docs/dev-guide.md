@@ -15,7 +15,7 @@ alembic upgrade head
 ```
 
 
-docker-compose -f docker-compose.yaml --env-file .env up postgres
+docker compose -f docker/docker-compose.yaml --env-file .env up postgres
 
 ## Role Authorization
 

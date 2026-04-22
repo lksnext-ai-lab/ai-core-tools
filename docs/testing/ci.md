@@ -51,8 +51,11 @@ Before pushing, run the same checks locally:
 # Unit tests (fast — run these constantly)
 pytest tests/unit/ -v
 
-# Integration tests (needs test DB)
-docker-compose --profile test up -d db_test
+# Integration tests — auto-manages the ephemeral test DB
+./scripts/test.sh -m integration
+
+# Or manually:
+docker compose -f docker/docker-compose.yaml --profile test up -d db_test
 pytest tests/integration/ -v
 
 # Full suite with coverage
