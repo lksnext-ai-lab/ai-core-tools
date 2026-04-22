@@ -12,7 +12,8 @@ class MediaResponse(BaseModel):
     duration: Optional[float] = None  # Duration in seconds for audio/video
     language: Optional[str] = None  # Detected language for text media
     status: str
-    error_message: Optional[str] = None
+    processing_mode: Optional[str] = 'basic'
+    error_message: Optional[str]
     create_date: datetime
     processed_at: Optional[datetime] = None
     folder_id: Optional[int] = None

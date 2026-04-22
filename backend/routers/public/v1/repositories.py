@@ -308,7 +308,6 @@ async def upload_media(
     repo_id: int,
     background_tasks: BackgroundTasks,
     files: Annotated[List[UploadFile], File(...)],
-    transcription_service_id: Annotated[int, Form(...)],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
     folder_id: Annotated[Optional[int], Form()] = None,
@@ -319,6 +318,7 @@ async def upload_media(
 ):
     """
     Upload video/audio files for transcription and indexing.
+    The transcription and video analysis services are taken from the repository configuration.
 
     Supported formats:
     - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
@@ -336,7 +336,6 @@ async def upload_media(
             repository_id=repo_id,
             files=files,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             user_context=user_context,
@@ -389,7 +388,6 @@ async def add_youtube_video(
             url=request.url,
             repository_id=repo_id,
             folder_id=request.folder_id,
-            transcription_service_id=request.transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             forced_language=request.forced_language,

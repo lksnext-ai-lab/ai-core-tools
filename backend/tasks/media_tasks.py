@@ -2,6 +2,7 @@ from models.media import Media
 from db.database import SessionLocal
 from services.transcription_service import TranscriptionService
 from services.silo_service import SiloService
+from services.video_analysis_service import VideoAnalysisService
 from utils.logger import get_logger
 import os
 import yt_dlp
@@ -34,6 +35,25 @@ def process_media_task_sync(media_id: int):
         
         logger.info(f"Starting processing for media {media_id} ({media.source_type})")
         
+        # Resolve service IDs from repository configuration
+        effective_transcription_id = (
+            media.repository.transcription_service_id if media.repository else None
+        )
+        effective_video_service_id = (
+            media.repository.video_ai_service_id if media.repository else None
+        )
+        
+        if not effective_transcription_id:
+            raise ValueError(
+                f"No transcription service configured on repository {media.repository_id}. "
+                f"Please configure a transcription service in the repository settings."
+            )
+        
+        logger.info(
+            f"Media {media_id} effective services — "
+            f"transcription: {effective_transcription_id}, video: {effective_video_service_id}"
+        )
+
         # Step 1: Download if YouTube
         if media.source_type == 'youtube':
             media.status = 'downloading'
@@ -59,7 +79,7 @@ def process_media_task_sync(media_id: int):
         transcription = TranscriptionService.transcribe_audio(
             audio_path,
             language=media.forced_language,  # Use forced language if specified
-            ai_service_id=media.transcription_service_id,
+            ai_service_id=effective_transcription_id,
             db=db
         )
         
@@ -81,13 +101,45 @@ def process_media_task_sync(media_id: int):
         logger.info(f"Created {len(chunks_data)} chunks (in-memory) for media {media_id}")
         logger.info(f"First chunk sample: {chunks_data[0] if chunks_data else 'NO CHUNKS'}")
 
+        # Step 4b: Multimodal video analysis (if repository has a video service configured)
+        if effective_video_service_id:
+            try:
+                media.status = 'analyzing_video'
+                db.commit()
+                
+                logger.info(f"Starting chunk-aligned multimodal video analysis for media {media_id}")
+                visual_segments = VideoAnalysisService.analyze_video(
+                    video_path=media.file_path,
+                    ai_service_id=effective_video_service_id,
+                    db=db,
+                    chunks=chunks_data
+                )
+                
+                logger.info(f"Video analysis returned {len(visual_segments)} visual segments for media {media_id}")
+                
+                # Split into separate audio and visual chunks with matching time ranges
+                chunks_data = VideoAnalysisService.split_audio_visual_chunks(
+                    chunks_data, visual_segments
+                )
+
+                media.processing_mode = 'multimodal'
+                db.commit()
+                logger.info(f"Split into {len(chunks_data)} audio+visual chunks for media {media_id}")
+                
+            except Exception as e:
+                logger.warning(f"Video analysis failed for media {media_id}, continuing with audio-only chunks: {str(e)}")
+                media.processing_mode = 'basic'
+                db.commit()
+                # Don't fail the entire pipeline — continue with audio-only chunks
+
         # Step 5: Index chunks directly without creating DB rows
         media.status = 'indexing'
         db.commit()
 
         for idx, chunk_data in enumerate(chunks_data):
-            # enrich with index and optional chunk_id (no DB id available)
-            chunk_data['chunk_index'] = idx
+            # Preserve chunk_index set by split_audio_visual_chunks so audio/visual
+            # pairs from the same time window share the same index for retrieval correlation.
+            chunk_data.setdefault('chunk_index', idx)
             SiloService.index_media_chunk(chunk_data, media, db)
 
         logger.info(f"Indexed {len(chunks_data)} chunks for media {media_id}")

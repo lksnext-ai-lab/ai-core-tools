@@ -696,11 +696,13 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
 
         # Build metadata from chunk dict and media
+        chunk_type = chunk.get('chunk_type', 'audio')  # 'audio' or 'visual'
         metadata = {
             "repository_id": media.repository_id,
             "media_id": media.media_id,
             "silo_id": media.repository.silo_id,
             "content_type": "media_chunk",
+            "chunk_type": chunk_type,
             
             # Chunk-specific data
             "chunk_index": chunk.get('chunk_index'),
@@ -715,6 +717,7 @@ class SiloService:
             "language": media.language,
             "file_type": os.path.splitext(media.file_path)[1].lower() if media.file_path else None,
             "source": media.file_path,
+            "processing_mode": media.processing_mode or "basic",
             
             # Folder information
             "folder_id": media.folder_id,
@@ -741,8 +744,10 @@ class SiloService:
             metadata["folder_path"] = ""
 
         # Create Document and index
+        page_content = chunk.get('text', '')
+        
         doc = Document(
-            page_content=chunk.get('text', ''),
+            page_content=page_content,
             metadata=metadata
         )
 
