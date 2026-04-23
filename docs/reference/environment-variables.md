@@ -293,7 +293,7 @@ VITE_CLIENT_NAME=ACME Corp AI Platform
 
 ## Docker Variables
 
-Variables specific to `docker-compose.yaml`:
+Variables specific to `docker/docker-compose.yaml`:
 
 ### Port Mappings
 
