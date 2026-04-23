@@ -167,7 +167,7 @@ class TestMyService:
 5. **Write the happy path** test first — 200/201 with correct response body
 6. **Write auth/permission tests** — 401 (no auth), 403 (wrong role), 404 (missing resource)
 7. **Add test data** with `db.add(obj); db.flush()` inside tests as needed
-8. **Run** with the test DB: `docker-compose --profile test up -d db_test && pytest tests/integration/ -v`
+8. **Run** with the test DB: `./scripts/test.sh -m integration` (auto-manages ephemeral test DB)
 
 ```python
 # Template for an integration test
@@ -257,8 +257,11 @@ Key rules:
 # Fast unit tests — no database needed, run constantly
 pytest tests/unit/ -v
 
-# Integration tests — start the test DB first
-docker-compose --profile test up -d db_test
+# Integration tests — auto-manages an ephemeral test DB on port 5433
+./scripts/test.sh -m integration
+
+# Or manually:
+docker compose -f docker/docker-compose.yaml --profile test up -d db_test
 pytest tests/integration/ -v
 
 # Full suite with coverage report
@@ -289,7 +292,7 @@ open htmlcov/index.html
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | `ModuleNotFoundError` | Missing import or wrong `pythonpath` | Check `pyproject.toml` has `pythonpath = ["backend"]` |
-| `connection refused` | Test DB not running | `docker-compose --profile test up -d db_test` |
+| `connection refused` | Test DB not running | `./scripts/test.sh -m integration` or `docker compose -f docker/docker-compose.yaml --profile test up -d db_test` |
 | `AssertionError: assert 404 == 200` | Wrong URL or missing fixture data | Check path and that `db.flush()` was called |
 | `AssertionError: assert 401 == 200` | Auth fixture not used | Add `auth_headers` or `owner_headers` to the test |
 | `AssertionError: assert 403 == 200` | Wrong role level | Use `owner_headers` instead of `auth_headers` |

@@ -100,7 +100,7 @@ No necesita base de datos. Ideal para feedback rápido durante el desarrollo.
 
 ## Base de datos de test
 
-La BD de test es un contenedor PostgreSQL independiente, definido en `docker-compose.yaml` bajo el perfil `test`:
+La BD de test es un contenedor PostgreSQL independiente, definido en `docker/docker-compose.yaml` bajo el perfil `test`:
 
 | Propiedad | Valor |
 |-----------|-------|

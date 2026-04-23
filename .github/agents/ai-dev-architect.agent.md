@@ -553,7 +553,7 @@ This skill provides scoping strategies, the standard template, and conflict-chec
 - ❌ Does not write application code (delegates to domain-specific agents)
 - ❌ Does not make database schema changes
 - ❌ Does not deploy or manage infrastructure
-- ❌ Does not modify application configuration files (`.env`, `docker-compose.yaml`)
+- ❌ Does not modify application configuration files (`.env`, `docker/docker-compose.yaml`)
 - ❌ Does not bump versions (delegates to `@version-bumper`)
 
 ## Response Style

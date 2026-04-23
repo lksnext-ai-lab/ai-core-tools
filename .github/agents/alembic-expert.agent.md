@@ -350,7 +350,7 @@ The instruction file provides the baseline rules; this agent provides deeper exp
 
 - ❌ Does not implement SQLAlchemy models (delegates to `@backend-expert`)
 - ❌ Does not write service layer or API endpoint code
-- ❌ Does not manage application configuration (`.env`, `docker-compose.yaml`)
+- ❌ Does not manage application configuration (`.env`, `docker/docker-compose.yaml`)
 - ❌ Does not handle frontend code or React components
 - ❌ Does not deploy or manage infrastructure
 - ❌ Does not bump versions (delegates to `@version-bumper`)
