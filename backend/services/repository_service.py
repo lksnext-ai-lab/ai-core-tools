@@ -416,61 +416,20 @@ class RepositoryService:
                     detail=f"Unsupported vector_db_type '{candidate_type}'",
                 )
             normalized_vector_db_type = candidate_type or None
-        
-        if repository_id == 0:
-            # Create new repository
-            repo = Repository()
-            repo.app_id = app_id
-            repo.name = repo_data.name
-            repo.type = repo_data.type
-            repo.status = repo_data.status or 'active'
-            repo.create_date = datetime.now()
-            repo.transcription_service_id = repo_data.transcription_service_id
-            repo.video_ai_service_id = repo_data.video_ai_service_id
-            
-            # Use RepositoryService to create repository with silo
-            repo = RepositoryService.create_repository(
-                repo,
-                repo_data.embedding_service_id,
-                normalized_vector_db_type,
-                db
-            )
-        else:
-            # Update existing repository
-            repo = RepositoryRepository.get_by_id(db, repository_id)
-            if not repo:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Repository not found"
-                )
-            
-            # Update repository data
-            repo.name = repo_data.name
-            if repo_data.type is not None:
-                repo.type = repo_data.type
-            if repo_data.status is not None:
-                repo.status = repo_data.status
-            if repo_data.transcription_service_id is not None:
-                repo.transcription_service_id = repo_data.transcription_service_id
-            if repo_data.video_ai_service_id is not None:
-                repo.video_ai_service_id = repo_data.video_ai_service_id
-            repo = RepositoryService.update_repository(
-                repo,
-                repo_data.embedding_service_id,
-                normalized_vector_db_type,
-                db
-            )
 
+        repo = Repository()
+        repo.app_id = app_id
         repo.name = repo_data.name
-        if repo_data.type is not None:
-            repo.type = repo_data.type
-        if repo_data.status is not None:
-            repo.status = repo_data.status
+        repo.type = repo_data.type
+        repo.status = repo_data.status or 'active'
+        repo.create_date = datetime.now()
+        repo.transcription_service_id = repo_data.transcription_service_id
+        repo.video_ai_service_id = repo_data.video_ai_service_id
 
-        return RepositoryService.update_repository(
+        return RepositoryService.create_repository(
             repo,
             repo_data.embedding_service_id,
-            None,  # vector_db_type not accepted on update
+            normalized_vector_db_type,
             db,
         )
 
