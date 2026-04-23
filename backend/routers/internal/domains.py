@@ -17,6 +17,8 @@ from schemas.domain_url_schemas import (
     DomainListItemSchema,
     DomainDetailSchema,
     CreateUpdateDomainSchema,
+    CreateDomainSchema,
+    UpdateDomainSchema,
     URLListItemSchema,
     CreateURLSchema,
     URLActionResponseSchema
@@ -31,6 +33,8 @@ from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
+from utils.error_handlers import ValidationError
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from tools.vector_store_factory import VectorStoreFactory
 from fastapi import File, UploadFile
 from typing import Optional
@@ -247,27 +251,25 @@ async def get_domain(
     return domain_detail
 
 
-@domains_router.post("/{domain_id}",
-                     summary="Create or update domain",
+@domains_router.post("/",
+                     summary="Create domain",
                      tags=["Domains"],
-                     response_model=DomainDetailSchema)
-async def create_or_update_domain(
+                     response_model=DomainDetailSchema,
+                     status_code=status.HTTP_201_CREATED)
+async def create_domain(
     app_id: int,
-    domain_id: int,
-    domain_data: CreateUpdateDomainSchema,
+    domain_data: CreateDomainSchema,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
-    Create a new domain or update an existing one.
+    Create a new domain.
     """
-    
     try:
-        # Prepare domain data for service
         data = {
-            'domain_id': domain_id if domain_id != 0 else None,
+            'domain_id': None,
             'name': domain_data.name,
             'description': domain_data.description,
             'base_url': domain_data.base_url,
@@ -277,19 +279,60 @@ async def create_or_update_domain(
             'app_id': app_id,
             'vector_db_type': domain_data.vector_db_type
         }
-        
-        # Create or update domain using service
         created_domain_id = DomainService.create_or_update_domain(data, domain_data.embedding_service_id, db)
-        
-        # Return updated domain (reuse the GET logic)
         return await get_domain(app_id, created_domain_id, request, db, auth_context, role)
-        
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
-        logger.error(f"Error creating/updating domain: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating/updating domain: {str(e)}"
-        )
+        logger.error(f"Error creating domain: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@domains_router.put("/{domain_id}",
+                    summary="Update domain",
+                    tags=["Domains"],
+                    response_model=DomainDetailSchema)
+async def update_domain(
+    app_id: int,
+    domain_id: int,
+    domain_data: UpdateDomainSchema,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """
+    Update an existing domain. Note: vector_db_type and embedding_service_id cannot be changed after creation.
+    """
+    try:
+        raw_body = await request.json()
+        existing_domain = DomainService.get_domain(domain_id, db)
+        if existing_domain and existing_domain.silo:
+            assert_vector_db_type_immutable(existing_domain.silo.vector_db_type, raw_body.get('vector_db_type'), "domain")
+            assert_embedding_service_immutable(existing_domain.silo.embedding_service_id, raw_body.get('embedding_service_id'), "domain")
+
+        data = {
+            'domain_id': domain_id,
+            'name': domain_data.name,
+            'description': domain_data.description,
+            'base_url': domain_data.base_url,
+            'content_tag': domain_data.content_tag,
+            'content_class': domain_data.content_class,
+            'content_id': domain_data.content_id,
+            'app_id': app_id,
+            'vector_db_type': None  # immutable — not accepted on update
+        }
+        updated_domain_id = DomainService.create_or_update_domain(data, None, db)
+        return await get_domain(app_id, updated_domain_id, request, db, auth_context, role)
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating domain: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @domains_router.delete("/{domain_id}",

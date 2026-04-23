@@ -83,6 +83,8 @@ class AppRepository:
             app.max_file_size_mb = data['max_file_size_mb']
         if 'agent_cors_origins' in data:
             app.agent_cors_origins = data['agent_cors_origins']
+        if 'enable_openai_api' in data:
+            app.enable_openai_api = data['enable_openai_api']
         if 'onboarding_dismissed' in data:
             app.onboarding_dismissed = data['onboarding_dismissed']
     

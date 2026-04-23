@@ -128,7 +128,7 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
-    if (!formData.vector_db_type) {
+    if (isNewRepository && !formData.vector_db_type) {
       setError('Vector database selection is required');
       return;
     }
@@ -246,8 +246,9 @@ const RepositoryFormPage: React.FC = () => {
                   vector_db_type: e.target.value.toUpperCase(),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              required={isNewRepository}
+              disabled={!isNewRepository}
             >
               {vectorDbOptions.length === 0
                 ? (
@@ -260,9 +261,15 @@ const RepositoryFormPage: React.FC = () => {
                   ))
                 )}
             </select>
-            <p className="text-sm text-gray-500 mt-1">
-              Select where embeddings for this repository will be stored.
-            </p>
+            {isNewRepository ? (
+              <p className="text-sm text-gray-500 mt-1">
+                Select where embeddings for this repository will be stored.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-600 mt-1">
+                The vector database cannot be changed after a repository is created.
+              </p>
+            )}
           </div>
 
           {/* Embedding Service (only for new repositories) */}

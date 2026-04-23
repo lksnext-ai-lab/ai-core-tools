@@ -294,7 +294,7 @@ class TestCreateAgent:
         agent = response.json()
         assert agent["name"] == "Full Agent"
         assert agent["has_memory"] is True
-        assert agent["temperature"] == 0.5
+        assert agent["temperature"] == pytest.approx(0.5)
 
     def test_create_agent_as_tool(
         self, client, fake_app, fake_ai_service, owner_headers, db
@@ -319,7 +319,7 @@ class TestCreateAgent:
         """Creating agent requires EDITOR role (currently not validated)."""
         # TODO: Add proper role-based access control
         db.flush()
-        response = client.post(
+        client.post(
             f"/internal/apps/{fake_app.app_id}/agents/0",
             json=agent_payload(service_id=fake_ai_service.service_id),
             headers=auth_headers,
@@ -411,7 +411,7 @@ class TestUpdateAgent:
             headers=owner_headers,
         )
         assert response.status_code == 200
-        assert response.json()["temperature"] == new_temp
+        assert response.json()["temperature"] == pytest.approx(new_temp)
 
     def test_update_agent_returns_404_for_missing_agent(
         self, client, fake_app, owner_headers

@@ -1,7 +1,8 @@
 import hashlib
 
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from fastapi.security.api_key import APIKeyHeader
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional, Callable
 from pydantic import BaseModel
@@ -75,6 +76,25 @@ def get_api_key_auth(api_key: Optional[str] = Depends(api_key_header)):
             detail="API key required. Please provide X-API-KEY header."
         )
     return api_key
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+def get_openai_api_key_auth(
+    api_key_header_val: Optional[str] = Depends(api_key_header),
+    bearer: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme)
+) -> str:
+    """Auth dependency specifically for OpenAI endpoints, supporting Bearer tokens."""
+    # Try Bearer token first
+    if bearer and bearer.credentials:
+        return bearer.credentials
+    # Try X-API-KEY header as fallback
+    if api_key_header_val:
+        return api_key_header_val
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="API key required. Please provide Authorization: Bearer <API_KEY>."
+    )
 
 def validate_api_key_for_app(app_id: int, api_key: str, db: Session = None) -> APIKeyAuth:
     """

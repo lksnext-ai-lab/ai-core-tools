@@ -15,7 +15,8 @@ from services.output_parser_service import OutputParserService
 from repositories.repository_repository import RepositoryRepository
 from repositories.resource_repository import ResourceRepository
 from repositories.embedding_service_repository import EmbeddingServiceRepository
-from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema
+from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, CreateRepositorySchema, UpdateRepositorySchema
+from utils.vector_db_immutability import assert_vector_db_type_immutable
 from datetime import datetime
 from utils.logger import get_logger
 from tools.vector_store_factory import VectorStoreFactory
@@ -131,6 +132,9 @@ class RepositoryService:
         if repository.silo:
             if vector_db_type is not None:
                 normalized_type = vector_db_type.upper()
+                assert_vector_db_type_immutable(
+                    repository.silo.vector_db_type, normalized_type, "repository"
+                )
                 repository.silo.vector_db_type = normalized_type
             elif not repository.silo.vector_db_type:
                 repository.silo.vector_db_type = 'PGVECTOR'
@@ -388,26 +392,13 @@ class RepositoryService:
         )
 
     @staticmethod
-    def create_or_update_repository_router(
-        app_id: int, 
-        repository_id: int, 
-        repo_data: CreateUpdateRepositorySchema, 
-        db: Session
+    def create_repository_router(
+        app_id: int,
+        repo_data: CreateRepositorySchema,
+        db: Session,
     ) -> Repository:
         """
-        Create or update a repository - business logic from router
-        
-        Args:
-            app_id: Application ID
-            repository_id: Repository ID (0 for new repository)
-            repo_data: Repository data to create/update
-            db: Database session
-            
-        Returns:
-            Created or updated Repository instance
-            
-        Raises:
-            HTTPException: If repository not found (for updates)
+        Create a new repository — business logic called by POST / router endpoint.
         """
         from fastapi import HTTPException, status
 
@@ -416,13 +407,13 @@ class RepositoryService:
             if not isinstance(repo_data.vector_db_type, str):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="vector_db_type must be a string"
+                    detail="vector_db_type must be a string",
                 )
             candidate_type = repo_data.vector_db_type.strip().upper()
             if candidate_type and candidate_type not in VectorStoreFactory.IMPLEMENTED_TYPES:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Unsupported vector_db_type '{candidate_type}'"
+                    detail=f"Unsupported vector_db_type '{candidate_type}'",
                 )
             normalized_vector_db_type = candidate_type or None
         
@@ -469,8 +460,34 @@ class RepositoryService:
                 normalized_vector_db_type,
                 db
             )
-        
-        return repo
+
+        repo.name = repo_data.name
+        if repo_data.type is not None:
+            repo.type = repo_data.type
+        if repo_data.status is not None:
+            repo.status = repo_data.status
+
+        return RepositoryService.update_repository(
+            repo,
+            repo_data.embedding_service_id,
+            None,  # vector_db_type not accepted on update
+            db,
+        )
+
+    @staticmethod
+    def create_or_update_repository_router(
+        app_id: int,
+        repository_id: int,
+        repo_data: CreateUpdateRepositorySchema,
+        db: Session,
+    ) -> Repository:
+        """
+        Create or update a repository — kept for backward compatibility.
+        New callers should use create_repository_router / update_repository_router.
+        """
+        if repository_id == 0:
+            return RepositoryService.create_repository_router(app_id, repo_data, db)
+        return RepositoryService.update_repository_router(app_id, repository_id, repo_data, db)
 
     @staticmethod
     def delete_repository_router(repository_id: int, db: Session) -> bool:
