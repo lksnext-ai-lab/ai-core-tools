@@ -257,7 +257,15 @@ async def search_silo(
 
     try:
         result = SiloService.search_silo_documents_router(
-            silo_id, request.query, request.filter_metadata, db
+            silo_id,
+            request.query,
+            request.filter_metadata,
+            request.limit,
+            request.search_type,
+            request.score_threshold,
+            request.fetch_k,
+            request.lambda_mult,
+            db,
         )
 
         if result is None:

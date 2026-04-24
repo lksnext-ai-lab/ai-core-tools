@@ -1002,6 +1002,10 @@ class SiloService:
         query: str,
         filter_metadata: Optional[dict] = None,
         limit: Optional[int] = None,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
         db: Session = None,
     ) -> List[Document]:
         # Get silo within the session to ensure relationships are loaded
@@ -1021,11 +1025,15 @@ class SiloService:
             results_limit = MAX_SEARCH_LIMIT
 
         return _get_vector_store(silo).search_similar_documents(
-            collection_name, 
-            query, 
+            collection_name,
+            query,
             embedding_service=embedding_service,
             filter_metadata=filter_metadata or {},
-            k=results_limit
+            k=results_limit,
+            search_type=search_type,
+            score_threshold=score_threshold,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
         )
 
     @staticmethod
@@ -1034,6 +1042,10 @@ class SiloService:
         query: str,
         filter_metadata: Optional[dict] = None,
         limit: Optional[int] = None,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
         db: Session = None,
     ) -> List[Document]:
         """
@@ -1055,6 +1067,10 @@ class SiloService:
             query,
             filter_metadata,
             limit=limit,
+            search_type=search_type,
+            score_threshold=score_threshold,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
             db=db,
         )
 
@@ -1268,11 +1284,15 @@ class SiloService:
     
     @staticmethod
     def search_silo_documents_router(
-        silo_id: int, 
-        query: str, 
+        silo_id: int,
+        query: str,
         filter_metadata: Optional[Dict[str, Any]] = None,
         limit: Optional[int] = None,
-        db: Session = None
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
+        db: Session = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Search for documents in a silo using semantic search with optional metadata filtering
@@ -1284,11 +1304,15 @@ class SiloService:
         
         # Perform the search with metadata filtering
         results = SiloService.find_docs_in_collection(
-            silo_id, 
-            query, 
+            silo_id,
+            query,
             filter_metadata=filter_metadata,
             limit=limit,
-            db=db
+            search_type=search_type,
+            score_threshold=score_threshold,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
+            db=db,
         )
         
         # Convert results to response format
