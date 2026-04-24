@@ -1050,12 +1050,12 @@ class ApiService {
     return response.json();
   }
 
-  async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
+  async searchSiloDocuments(appId: number, siloId: number, query: string, limit?: number, filterMetadata?: Record<string, any>) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',
       body: JSON.stringify({
         query,
-        limit,
+        ...(limit !== undefined ? { limit } : {}),
         filter_metadata: filterMetadata
       }),
     });

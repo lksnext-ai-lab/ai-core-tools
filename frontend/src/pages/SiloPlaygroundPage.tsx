@@ -82,7 +82,7 @@ function SiloPlaygroundPage() {
         Number.parseInt(appId), 
         Number.parseInt(siloId), 
         searchQuery,
-        10,
+        undefined,
         filterMetadata
       );
       

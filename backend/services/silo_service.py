@@ -27,6 +27,7 @@ from services.folder_service import FolderService
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
 DEFAULT_SEARCH_LIMIT = 100
+MAX_SEARCH_LIMIT = 200
 
 logger = get_logger(__name__)
 
@@ -1011,6 +1012,8 @@ class SiloService:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
         results_limit = limit if limit and limit > 0 else DEFAULT_SEARCH_LIMIT
+        if results_limit > MAX_SEARCH_LIMIT:
+            results_limit = MAX_SEARCH_LIMIT
 
         return _get_vector_store(silo).search_similar_documents(
             collection_name, 

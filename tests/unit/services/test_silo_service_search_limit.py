@@ -65,3 +65,33 @@ def test_find_docs_in_collection_defaults_to_service_limit_when_limit_is_missing
         filter_metadata={},
         k=100,
     )
+
+
+def test_find_docs_in_collection_clamps_limit_to_max():
+    silo = _make_silo()
+    vector_store = MagicMock()
+    vector_store.search_similar_documents.return_value = []
+    db = MagicMock()
+
+    with patch("services.silo_service.SiloRepository.get_by_id", return_value=silo), patch(
+        "services.silo_service.SiloService.check_silo_collection_exists",
+        return_value=True,
+    ), patch(
+        "services.silo_service.SiloRepository.get_embedding_service_by_id",
+        return_value="embedding-service",
+    ), patch("services.silo_service._get_vector_store", return_value=vector_store):
+        SiloService.find_docs_in_collection(
+            silo_id=7,
+            query="invoice",
+            limit=5000,
+            db=db,
+        )
+
+    vector_store.search_similar_documents.assert_called_once_with(
+        "silo_7",
+        "invoice",
+        embedding_service="embedding-service",
+        filter_metadata={},
+        k=200,
+    )
+

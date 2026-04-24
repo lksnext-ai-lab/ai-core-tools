@@ -64,7 +64,12 @@ CreateUpdateSiloSchema = CreateSiloSchema
 
 
 class SiloSearchSchema(BaseModel):
-    """Schema for searching within a silo"""
+    """Schema for searching within a silo.
+
+    `limit` controls the maximum number of results returned. When omitted or
+    non-positive, the server applies `DEFAULT_SEARCH_LIMIT` (100). Values above
+    `MAX_SEARCH_LIMIT` (200) are clamped server-side.
+    """
     query: str
     limit: Optional[int] = None
     filter_metadata: Optional[Dict[str, Any]] = None
