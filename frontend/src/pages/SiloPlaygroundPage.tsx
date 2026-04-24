@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Trash2, Search, Info } from 'lucide-react';
 import { apiService } from '../services/api';
+import SearchControls, { type SearchControlsValue, DEFAULT_SEARCH_CONTROLS } from '../components/playground/SearchControls';
 import SearchFilters from '../components/playground/SearchFilters';
 import type {
   SearchFilterMetadataField,
@@ -42,6 +43,7 @@ function SiloPlaygroundPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filterMetadata, setFilterMetadata] = useState<Record<string, any> | undefined>(undefined);
+  const [searchControls, setSearchControls] = useState<SearchControlsValue>(DEFAULT_SEARCH_CONTROLS);
 
   // Load silo data
   useEffect(() => {
@@ -79,11 +81,17 @@ function SiloPlaygroundPage() {
       setSearchResults([]);
       setHasSearched(true);
       const response = await apiService.searchSiloDocuments(
-        Number.parseInt(appId), 
-        Number.parseInt(siloId), 
+        Number.parseInt(appId),
+        Number.parseInt(siloId),
         searchQuery,
-        undefined,
-        filterMetadata
+        searchControls.limit,
+        filterMetadata,
+        {
+          searchType: searchControls.searchType,
+          scoreThreshold: searchControls.searchType === 'similarity_score_threshold' ? searchControls.scoreThreshold : undefined,
+          fetchK: searchControls.searchType === 'mmr' ? searchControls.fetchK : undefined,
+          lambdaMult: searchControls.searchType === 'mmr' ? searchControls.lambdaMult : undefined,
+        },
       );
       
       // Extract _id from metadata and set as top-level id field
@@ -252,6 +260,13 @@ function SiloPlaygroundPage() {
             dbType={systemDBConfig}
             disabled={isSearching}
             onFilterMetadataChange={handleFilterMetadataChange}
+          />
+
+          <SearchControls
+            siloId={siloId ?? ''}
+            value={searchControls}
+            onChange={setSearchControls}
+            disabled={isSearching}
           />
 
           {/* Search Query */}

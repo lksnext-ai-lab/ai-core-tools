@@ -1050,13 +1050,29 @@ class ApiService {
     return response.json();
   }
 
-  async searchSiloDocuments(appId: number, siloId: number, query: string, limit?: number, filterMetadata?: Record<string, any>) {
+  async searchSiloDocuments(
+    appId: number,
+    siloId: number,
+    query: string,
+    limit?: number,
+    filterMetadata?: Record<string, any>,
+    searchOptions?: {
+      searchType?: string;
+      scoreThreshold?: number;
+      fetchK?: number;
+      lambdaMult?: number;
+    },
+  ) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',
       body: JSON.stringify({
         query,
         ...(limit !== undefined ? { limit } : {}),
-        filter_metadata: filterMetadata
+        filter_metadata: filterMetadata,
+        ...(searchOptions?.searchType && searchOptions.searchType !== 'similarity' ? { search_type: searchOptions.searchType } : {}),
+        ...(searchOptions?.scoreThreshold !== undefined ? { score_threshold: searchOptions.scoreThreshold } : {}),
+        ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
+        ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
       }),
     });
   }
