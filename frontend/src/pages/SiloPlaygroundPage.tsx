@@ -258,6 +258,9 @@ function SiloPlaygroundPage() {
             dbType={systemDBConfig}
             disabled={isSearching}
             onFilterMetadataChange={handleFilterMetadataChange}
+            appId={appId}
+            siloId={siloId}
+            siloStorageKey={siloId}
           />
 
           <SearchControls

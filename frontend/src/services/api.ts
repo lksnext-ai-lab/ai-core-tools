@@ -1088,6 +1088,20 @@ class ApiService {
     );
   }
 
+  async getSiloMetadataValues(
+    appId: number | string,
+    siloId: number | string,
+    field: string,
+    prefix?: string,
+    limit = 100,
+  ) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (prefix) params.set('prefix', prefix);
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/metadata/${encodeURIComponent(field)}/values?${params}`,
+    );
+  }
+
   async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/documents`, {
       method: 'DELETE',
