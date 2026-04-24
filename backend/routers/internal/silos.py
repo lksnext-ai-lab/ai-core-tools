@@ -348,43 +348,6 @@ async def export_silo(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
 
 
-# ==================== SILO PLAYGROUND ====================
-
-@silos_router.get("/{silo_id}/playground",
-                  summary="Get silo playground",
-                  tags=["Silos", "Playground"])
-async def silo_playground(
-    app_id: int,
-    silo_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
-):
-    """
-    Get silo playground interface for testing document search.
-    """
-    
-    _validate_silo_app_ownership(silo_id, app_id, db)
-    
-    try:
-        result = SiloService.get_silo_playground_info(silo_id, db)
-        if result is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=SILO_NOT_FOUND_MSG
-            )
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error accessing silo playground: {str(e)}"
-        )
-
-
 @silos_router.post("/{silo_id}/search",
                    summary="Search documents in silo",
                    tags=["Silos", "Playground"])

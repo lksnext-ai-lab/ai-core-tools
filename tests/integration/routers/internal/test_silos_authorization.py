@@ -2,7 +2,7 @@
 Security tests for silo endpoints authorization (BOLA/IDOR prevention).
 
 Validates:
-  - Users without a role on an app cannot access its silo playground, search, or delete
+  - Users without a role on an app cannot access its silo search or delete endpoints
   - Role requirements are enforced (viewer for read, editor for delete)
   - Cross-app access is denied
 """
@@ -123,36 +123,6 @@ def editor_headers(db, client, fake_app, fake_user):
 
 
 # ---------------------------------------------------------------------------
-# Test: require_min_role enforced on silo playground
-# ---------------------------------------------------------------------------
-
-class TestSiloPlaygroundAuthorization:
-    """GET /internal/apps/{app_id}/silos/{silo_id}/playground"""
-
-    def test_playground_requires_role(
-        self, client, fake_app, fake_silo, unrelated_user_headers, db
-    ):
-        """User without role on app gets 403 when accessing silo playground."""
-        db.flush()
-        response = client.get(
-            f"/internal/apps/{fake_app.app_id}/silos/{fake_silo.silo_id}/playground",
-            headers=unrelated_user_headers,
-        )
-        assert response.status_code == 403
-
-    def test_playground_accessible_by_owner(
-        self, client, fake_app, fake_silo, owner_headers, db
-    ):
-        """Owner can access silo playground."""
-        db.flush()
-        response = client.get(
-            f"/internal/apps/{fake_app.app_id}/silos/{fake_silo.silo_id}/playground",
-            headers=owner_headers,
-        )
-        assert response.status_code == 200
-
-
-# ---------------------------------------------------------------------------
 # Test: require_min_role enforced on silo search
 # ---------------------------------------------------------------------------
 
@@ -237,21 +207,6 @@ class TestSiloDeleteDocumentsAuthorization:
 
 class TestSiloCrossAppAccess:
     """Verify user can't access silos from an app they don't have access to."""
-
-    def test_playground_cross_app_denied(
-        self, client, auth_headers, setup_cross_app_silo, db
-    ):
-        """
-        auth_headers user (fake_user) has no role on other_app,
-        so accessing other_app's silo playground should return 403.
-        """
-        other_app, other_silo, _ = setup_cross_app_silo
-        db.flush()
-        response = client.get(
-            f"/internal/apps/{other_app.app_id}/silos/{other_silo.silo_id}/playground",
-            headers=auth_headers,
-        )
-        assert response.status_code == 403
 
     def test_search_cross_app_denied(
         self, client, auth_headers, setup_cross_app_silo, db

@@ -1259,25 +1259,6 @@ class SiloService:
         return SiloRepository.delete(silo_id, db)
     
     @staticmethod
-    def get_silo_playground_info(silo_id: int, db: Session) -> Optional[Dict[str, Any]]:
-        """
-        Get silo playground information
-        """
-        # Get silo info
-        silo = SiloService.get_silo(silo_id, db)
-        if not silo:
-            return None
-        
-        docs_count = SiloService.count_docs_in_silo(silo_id, db)
-        
-        return {
-            "silo_id": silo.silo_id,
-            "name": silo.name,
-            "docs_count": docs_count,
-            "message": "Silo playground - ready for document search testing"
-        }
-    
-    @staticmethod
     def search_silo_documents_router(
         silo_id: int, 
         query: str, 
