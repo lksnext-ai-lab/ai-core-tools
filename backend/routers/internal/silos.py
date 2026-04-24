@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, File, Query, Response
 from fastapi.responses import JSONResponse
 from typing import List, Annotated, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 import json
+import time
 
 from services.silo_service import SiloService
 from services.silo_export_service import SiloExportService
@@ -358,6 +359,7 @@ async def search_silo_documents(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    response: Response,
 ):
     """
     Search for documents in a silo using semantic search with optional metadata filtering.
@@ -370,6 +372,7 @@ async def search_silo_documents(
     try:
         logger.info(f"Getting silo {silo_id} for validation")
         
+        t0 = time.perf_counter()
         result = SiloService.search_silo_documents_router(
             silo_id,
             search_query.query,
@@ -381,6 +384,7 @@ async def search_silo_documents(
             search_query.lambda_mult,
             db,
         )
+        elapsed_ms = round((time.perf_counter() - t0) * 1000)
         
         if result is None:
             logger.error(f"Silo {silo_id} not found")
@@ -391,6 +395,7 @@ async def search_silo_documents(
         
         logger.info(f"Search completed, found {result['total_results']} results")
         logger.info(f"Returning {result['total_results']} results to frontend")
+        response.headers["X-Server-Time-Ms"] = str(elapsed_ms)
         return result
         
     except HTTPException:
