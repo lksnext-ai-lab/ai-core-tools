@@ -296,44 +296,83 @@ class QdrantStore(VectorStoreInterface):
         query: str,
         embedding_service=None,
         filter_metadata: Optional[Dict[str, Any]] = None,
-        k: int = 5
+        k: int = 5,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
     ) -> List[Document]:
         """
         Search for similar documents in Qdrant collection.
-        
+
         Args:
             collection_name: Name of the collection to search
             query: Query string or embedding vector
             embedding_service: Service to generate query embeddings
             filter_metadata: Optional metadata filters
             k: Number of results to return
-            
+            search_type: Search strategy — "similarity" (default),
+                "similarity_score_threshold", or "mmr".
+            score_threshold: Minimum relevance score for
+                "similarity_score_threshold" search.
+            fetch_k: Candidate pool size before MMR re-ranking (default: k*4).
+            lambda_mult: MMR diversity factor 0..1 (default: 0.5).
+
         Returns:
             List of Document objects with similarity scores in metadata
+            (_score=None for MMR results).
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
-        
-        # Handle empty queries
+
+        # Handle empty queries — always use similarity path
         if not query or (isinstance(query, str) and not query.strip()):
-            query = " "  # Use a space as minimal query
-        
-        # Perform similarity search with scores
+            query = " "
+
+        # Dispatch on search_type
+        if search_type == "mmr":
+            docs = vector_store.max_marginal_relevance_search(
+                query,
+                k=k,
+                filter=filter_metadata,
+                fetch_k=fetch_k if fetch_k else k * 4,
+                lambda_mult=lambda_mult if lambda_mult is not None else 0.5,
+            )
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': None},
+                )
+                for doc in docs
+            ]
+
+        if search_type == "similarity_score_threshold" and score_threshold is not None:
+            results_with_scores = vector_store.similarity_search_with_relevance_scores(
+                query,
+                k=k,
+                filter=filter_metadata,
+                score_threshold=score_threshold,
+            )
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        # Default: similarity search
         results_with_scores = vector_store.similarity_search_with_score(
             query,
             k=k,
             filter=filter_metadata
         )
-        
-        # Convert results to include score in metadata
-        results = []
-        for doc, score in results_with_scores:
-            new_doc = Document(
+        return [
+            Document(
                 page_content=doc.page_content,
-                metadata={**doc.metadata, '_score': score}
+                metadata={**doc.metadata, '_score': score},
             )
-            results.append(new_doc)
-        
-        return results
+            for doc, score in results_with_scores
+        ]
     
     def get_retriever(
         self,
@@ -341,26 +380,33 @@ class QdrantStore(VectorStoreInterface):
         embedding_service=None,
         search_params: Optional[Dict[str, Any]] = None,
         use_async: bool = False,
+        search_type: str = "similarity",
         **kwargs
     ) -> VectorStoreRetriever:
         """
         Get a LangChain retriever for Qdrant collection.
-        
+
         Args:
             collection_name: Name of the collection
             embedding_service: Service to generate embeddings
             search_params: Optional search parameters (filters, k, etc.)
             use_async: Whether to use async operations (note: may not be fully supported)
+            search_type: LangChain retriever search strategy — "similarity"
+                (default), "similarity_score_threshold", or "mmr".
             **kwargs: Additional arguments for retriever configuration
-            
+
         Returns:
             VectorStoreRetriever instance configured for this collection
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
-        
+
         if search_params is not None:
-            return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
-        return vector_store.as_retriever(**kwargs)
+            return vector_store.as_retriever(
+                search_type=search_type,
+                search_kwargs=search_params,
+                **kwargs
+            )
+        return vector_store.as_retriever(search_type=search_type, **kwargs)
 
     def collection_exists(self, collection_name: str) -> bool:
         try:

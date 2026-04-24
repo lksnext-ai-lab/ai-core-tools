@@ -86,21 +86,34 @@ class VectorStoreInterface(ABC):
         query: str,
         embedding_service=None,
         filter_metadata: Optional[Dict[str, Any]] = None,
-        k: int = 5
+        k: int = 5,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
     ) -> List[Document]:
         """
         Search for similar documents in the vector store.
-        
+
         Args:
             collection_name: Name of the collection/index to search
             query: Query string or embedding vector
             embedding_service: Service to generate query embeddings
             filter_metadata: Optional metadata filters
             k: Number of results to return (default: 5)
-            
+            search_type: Search strategy — "similarity" (default),
+                "similarity_score_threshold", or "mmr".
+            score_threshold: Minimum relevance score; used when
+                search_type="similarity_score_threshold".
+            fetch_k: Candidate pool size before MMR re-ranking; used when
+                search_type="mmr" (default: k*4).
+            lambda_mult: MMR diversity factor 0..1; used when search_type="mmr"
+                (default: 0.5).
+
         Returns:
             List of Document objects with similarity scores in metadata
-            
+            (_score=None for MMR results).
+
         Raises:
             Exception: If search fails
         """
@@ -113,21 +126,24 @@ class VectorStoreInterface(ABC):
         embedding_service=None,
         search_params: Optional[Dict[str, Any]] = None,
         use_async: bool = False,
+        search_type: str = "similarity",
         **kwargs
     ) -> VectorStoreRetriever:
         """
         Get a LangChain retriever for the vector store.
-        
+
         Args:
             collection_name: Name of the collection/index
             embedding_service: Service to generate embeddings
             search_params: Optional search parameters (filters, k, etc.)
             use_async: Whether to use async operations
+            search_type: LangChain retriever search strategy — "similarity"
+                (default), "similarity_score_threshold", or "mmr".
             **kwargs: Additional arguments for retriever configuration
-            
+
         Returns:
             VectorStoreRetriever instance
-            
+
         Raises:
             Exception: If retriever creation fails
         """

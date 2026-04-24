@@ -133,57 +133,108 @@ class PGVectorStore(VectorStoreInterface):
         query: str,
         embedding_service=None,
         filter_metadata: Optional[Dict[str, Any]] = None,
-        k: int = 5
+        k: int = 5,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
     ) -> List[Document]:
         """
         Search for similar documents in PGVector collection.
-        
+
         Args:
             collection_name: Name of the collection to search
             query: Query string or embedding vector
             embedding_service: Service to generate query embeddings
             filter_metadata: Optional metadata filters
             k: Number of results to return
-            
+            search_type: Search strategy — "similarity" (default),
+                "similarity_score_threshold", or "mmr".
+            score_threshold: Minimum relevance score for
+                "similarity_score_threshold" search.
+            fetch_k: Candidate pool size before MMR re-ranking (default: k*4).
+            lambda_mult: MMR diversity factor 0..1 (default: 0.5).
+
         Returns:
             List of Document objects with similarity scores and IDs in metadata
+            (_score=None for MMR results).
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
-        
-        # Handle empty queries by returning documents with just metadata filtering
+
+        # Handle empty queries and direct embedding vectors — always use similarity path
         if not query or (isinstance(query, str) and not query.strip()):
-            # For empty queries, use a space as minimal query
             results_with_scores = vector_store.similarity_search_with_score(
                 " ",
                 k=k,
                 filter=filter_metadata
             )
-        elif isinstance(query, (list, np.ndarray)):
-            # If we receive the embedding directly, use it
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score, '_id': doc.id},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        if isinstance(query, (list, np.ndarray)):
             results_with_scores = vector_store.similarity_search_with_score_by_vector(
                 embedding=query,
                 k=k,
                 filter=filter_metadata
             )
-        else:
-            # Normal text search with scores
-            results_with_scores = vector_store.similarity_search_with_score(
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score, '_id': doc.id},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        # Dispatch on search_type for normal text queries
+        if search_type == "mmr":
+            docs = vector_store.max_marginal_relevance_search(
                 query,
                 k=k,
-                filter=filter_metadata
+                filter=filter_metadata,
+                fetch_k=fetch_k if fetch_k else k * 4,
+                lambda_mult=lambda_mult if lambda_mult is not None else 0.5,
             )
-        
-        # Convert the results to include score and id in metadata
-        results = []
-        for doc, score in results_with_scores:
-            # Create a new Document with score AND id in metadata
-            new_doc = Document(
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': None, '_id': doc.id if doc.id else None},
+                )
+                for doc in docs
+            ]
+
+        if search_type == "similarity_score_threshold" and score_threshold is not None:
+            results_with_scores = vector_store.similarity_search_with_relevance_scores(
+                query,
+                k=k,
+                filter=filter_metadata,
+                score_threshold=score_threshold,
+            )
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score, '_id': doc.id},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        # Default: plain similarity search
+        results_with_scores = vector_store.similarity_search_with_score(
+            query,
+            k=k,
+            filter=filter_metadata
+        )
+        return [
+            Document(
                 page_content=doc.page_content,
-                metadata={**doc.metadata, '_score': score, '_id': doc.id}
+                metadata={**doc.metadata, '_score': score, '_id': doc.id},
             )
-            results.append(new_doc)
-            
-        return results
+            for doc, score in results_with_scores
+        ]
     
     def get_retriever(
         self,
@@ -191,26 +242,33 @@ class PGVectorStore(VectorStoreInterface):
         embedding_service=None,
         search_params: Optional[Dict[str, Any]] = None,
         use_async: bool = False,
+        search_type: str = "similarity",
         **kwargs
     ) -> VectorStoreRetriever:
         """
         Get a LangChain retriever for PGVector collection.
-        
+
         Args:
             collection_name: Name of the collection
             embedding_service: Service to generate embeddings
             search_params: Optional search parameters (filters, k, etc.)
             use_async: If True, uses async engine for async operations (e.g., in LangGraph)
+            search_type: LangChain retriever search strategy — "similarity"
+                (default), "similarity_score_threshold", or "mmr".
             **kwargs: Additional arguments to pass to as_retriever
-            
+
         Returns:
             VectorStoreRetriever instance configured for this collection
         """
         vector_store = self._get_vector_store(collection_name, embedding_service, use_async)
-        
+
         if search_params is not None:
-            return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
-        return vector_store.as_retriever(**kwargs)
+            return vector_store.as_retriever(
+                search_type=search_type,
+                search_kwargs=search_params,
+                **kwargs
+            )
+        return vector_store.as_retriever(search_type=search_type, **kwargs)
 
     def collection_exists(self, collection_name: str) -> bool:
         with self.engine.connect() as connection:

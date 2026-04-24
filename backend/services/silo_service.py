@@ -125,12 +125,17 @@ class SiloService:
                 
                 logger.debug(f"Merged search_kwargs: {merged_search_kwargs}")
             
+            # Extract search_type before passing search_kwargs — it must be a top-level
+            # kwarg to `as_retriever`, not nested inside search_kwargs.
+            retriever_search_type = merged_search_kwargs.pop("search_type", "similarity")
+
             # Use async engine with psycopg (not asyncpg) for async operations
             # psycopg supports async natively and handles multiple SQL statements properly
             return _get_vector_store(silo).get_retriever(
-                collection_name, 
-                silo.embedding_service, 
+                collection_name,
+                silo.embedding_service,
                 merged_search_kwargs,
+                search_type=retriever_search_type,
                 use_async=True  # Use async psycopg engine for LangGraph compatibility
             )
         except Exception as e:
