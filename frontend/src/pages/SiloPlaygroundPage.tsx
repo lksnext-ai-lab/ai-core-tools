@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Search, Info, Clock, History, Bot } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Search, Info, Clock, History, Bot, SplitSquareHorizontal } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchControls, { type SearchControlsValue, DEFAULT_SEARCH_CONTROLS } from '../components/playground/SearchControls';
 import SiloAPISnippets from '../components/playground/SiloAPISnippets';
@@ -31,6 +31,14 @@ interface QueryHistoryEntry {
   minContentLength: number | null;
   maxContentLength: number | null;
   timestamp: number;
+}
+
+interface PanelState {
+  query: string;
+  results: SearchResult[];
+  isSearching: boolean;
+  error: string | null;
+  clientMs: number | null;
 }
 
 function SiloPlaygroundPage() {
@@ -77,7 +85,12 @@ function SiloPlaygroundPage() {
   const [lastClientMs, setLastClientMs] = useState<number | null>(null);
   const [lastServerMs, setLastServerMs] = useState<number | null>(null);
   const [showAgentShortcut, setShowAgentShortcut] = useState(false);
-  const [appAgentsForSilo, setAppAgentsForSilo] = useState<Array<{ id: number; name: string }>>([]);
+  const [appAgentsForSilo, setAppAgentsForSilo] = useState<Array<{ id: number; name: string }>>([]); 
+
+  // A/B compare mode (FR-6.2)
+  const [compareMode, setCompareMode] = useState(false);
+  const [panelA, setPanelA] = useState<PanelState>({ query: '', results: [], isSearching: false, error: null, clientMs: null });
+  const [panelB, setPanelB] = useState<PanelState>({ query: '', results: [], isSearching: false, error: null, clientMs: null });
 
   // Load silo data
   useEffect(() => {
@@ -327,6 +340,40 @@ function SiloPlaygroundPage() {
     }
   }
 
+  async function searchPanel(
+    panelQuery: string,
+    setter: React.Dispatch<React.SetStateAction<PanelState>>,
+  ) {
+    if (!appId || !siloId) return;
+    setter((p) => ({ ...p, isSearching: true, error: null }));
+    try {
+      const t0 = performance.now();
+      const { data, serverMs: _serverMs } = await apiService.searchSiloDocumentsWithTiming(
+        Number.parseInt(appId),
+        Number.parseInt(siloId),
+        panelQuery,
+        searchControls.limit,
+        filterMetadata,
+        {
+          searchType: searchControls.searchType,
+          scoreThreshold: searchControls.searchType === 'similarity_score_threshold' ? searchControls.scoreThreshold : undefined,
+          fetchK: searchControls.searchType === 'mmr' ? searchControls.fetchK : undefined,
+          lambdaMult: searchControls.searchType === 'mmr' ? searchControls.lambdaMult : undefined,
+          minContentLength: minContentLength ?? undefined,
+          maxContentLength: maxContentLength ?? undefined,
+        },
+      );
+      const clientMs = Math.round(performance.now() - t0);
+      const resultsWithIds = ((data.results ?? []) as SearchResult[]).map((r: SearchResult) => ({
+        ...r,
+        id: r.metadata?._id as string | undefined,
+      }));
+      setter({ query: panelQuery, results: resultsWithIds, isSearching: false, error: null, clientMs });
+    } catch (err) {
+      setter((p) => ({ ...p, isSearching: false, error: err instanceof Error ? err.message : 'Search failed' }));
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -386,6 +433,80 @@ function SiloPlaygroundPage() {
     searchResults.length > 0
       ? Math.max(...searchResults.map((r) => r.score ?? 0))
       : 0;
+
+  const sharedIds = compareMode
+    ? new Set(
+        panelA.results
+          .map((r) => r.id)
+          .filter((id): id is string => Boolean(id) && panelB.results.some((r) => r.id === id)),
+      )
+    : new Set<string>();
+
+  function renderComparePanel(
+    label: string,
+    panel: PanelState,
+    setter: React.Dispatch<React.SetStateAction<PanelState>>,
+  ) {
+    const panelMax = panel.results.length > 0 ? Math.max(...panel.results.map((r) => r.score ?? 0)) : 0;
+    return (
+      <div className="bg-white shadow rounded-lg p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+            Panel {label}
+          </span>
+          {panel.clientMs !== null && (
+            <span className="text-xs text-gray-400">{panel.clientMs} ms</span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={panel.query}
+            onChange={(e) => setter((p) => ({ ...p, query: e.target.value }))}
+            onKeyDown={(e) => { if (e.key === 'Enter') void searchPanel(panel.query, setter); }}
+            placeholder="Enter query…"
+            className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            disabled={panel.isSearching}
+          />
+          <button
+            type="button"
+            onClick={() => void searchPanel(panel.query, setter)}
+            disabled={panel.isSearching}
+            className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded flex items-center gap-1"
+          >
+            {panel.isSearching && (
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+            )}
+            Search
+          </button>
+        </div>
+
+        {panel.error && <p className="text-xs text-red-600">{panel.error}</p>}
+
+        {panel.results.length === 0 && !panel.isSearching && (
+          <p className="text-xs text-gray-400 italic">No results yet. Run a search.</p>
+        )}
+
+        <div className="space-y-2 overflow-y-auto max-h-[60vh]">
+          {panel.results.map((result, idx) => {
+            const isShared = result.id ? sharedIds.has(result.id) : false;
+            return (
+              <div key={result.id ?? idx} className={isShared ? 'ring-2 ring-yellow-400 rounded-lg' : ''}>
+                <ResultCard
+                  result={result}
+                  index={idx}
+                  maxScore={panelMax}
+                  appId={appId ?? ''}
+                  siloId={siloId ?? ''}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -576,6 +697,19 @@ function SiloPlaygroundPage() {
                 )}
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => setCompareMode((v) => !v)}
+              className={`flex items-center gap-1 text-xs border rounded px-2 py-1 ${
+                compareMode
+                  ? 'border-yellow-500 text-yellow-700 bg-yellow-50'
+                  : 'border-gray-200 text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <SplitSquareHorizontal className="w-3.5 h-3.5" />
+              {compareMode ? 'Exit compare' : 'Compare'}
+            </button>
           </div>
         )}
 
@@ -649,8 +783,16 @@ function SiloPlaygroundPage() {
         )}
       </div>
 
-      {/* Search Results */}
-      {searchResults.length > 0 && (
+      {/* A/B compare mode */}
+      {compareMode && (
+        <div className="grid grid-cols-2 gap-4">
+          {renderComparePanel('A', panelA, setPanelA)}
+          {renderComparePanel('B', panelB, setPanelB)}
+        </div>
+      )}
+
+      {/* Search Results (single panel) */}
+      {!compareMode && searchResults.length > 0 && (
         <div className="bg-white shadow rounded-lg p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Search Results ({searchResults.length})
@@ -717,7 +859,7 @@ function SiloPlaygroundPage() {
       )}
 
       {/* Empty State */}
-      {!isSearching && searchResults.length === 0 && hasSearched && !searchError && (
+      {!compareMode && !isSearching && searchResults.length === 0 && hasSearched && !searchError && (
         <div className="bg-white shadow rounded-lg p-6">
           <div className="text-center">
             <Search className="w-10 h-10 text-gray-400 mx-auto mb-4" />
