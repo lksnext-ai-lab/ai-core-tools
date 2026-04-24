@@ -1077,6 +1077,17 @@ class ApiService {
     });
   }
 
+  async getSiloNeighbors(
+    appId: number | string,
+    siloId: number | string,
+    sourceType: string,
+    sourceId: string,
+  ) {
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/documents/neighbors?source_type=${encodeURIComponent(sourceType)}&source_id=${encodeURIComponent(sourceId)}`,
+    );
+  }
+
   async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/documents`, {
       method: 'DELETE',

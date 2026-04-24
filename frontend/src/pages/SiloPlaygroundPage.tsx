@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Trash2, Search, Info } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Search, Info } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchControls, { type SearchControlsValue, DEFAULT_SEARCH_CONTROLS } from '../components/playground/SearchControls';
 import SearchFilters from '../components/playground/SearchFilters';
@@ -8,6 +8,7 @@ import type {
   SearchFilterMetadataField,
   SupportedDbType,
 } from '../components/playground/SearchFilters';
+import ResultCard, { type SearchResult } from '../components/playground/ResultCard';
 
 // Define the Silo type
 interface Silo {
@@ -17,14 +18,6 @@ interface Silo {
   created_at?: string;
   docs_count: number;
   metadata_fields?: SearchFilterMetadataField[];
-}
-
-// Define the search result type
-interface SearchResult {
-  page_content: string;
-  metadata: Record<string, any>;
-  score?: number;
-  id?: string;  // Add document ID
 }
 
 const DEFAULT_DB_TYPE: SupportedDbType = 'PGVECTOR';
@@ -97,7 +90,7 @@ function SiloPlaygroundPage() {
       // Extract _id from metadata and set as top-level id field
       const resultsWithIds = (response.results || []).map((result: SearchResult) => ({
         ...result,
-        id: result.metadata?._id,  // Extract document ID from metadata
+        id: result.metadata?._id as string | undefined,  // Extract document ID from metadata
       }));
       setSearchResults(resultsWithIds);
     } catch (err) {
@@ -204,6 +197,11 @@ function SiloPlaygroundPage() {
       </div>
     );
   }
+
+  const maxScore =
+    searchResults.length > 0
+      ? Math.max(...searchResults.map((r) => r.score ?? 0))
+      : 0;
 
   return (
     <div className="space-y-6">
@@ -320,69 +318,18 @@ function SiloPlaygroundPage() {
           </h2>
           
           <div className="space-y-4">
-            {searchResults.map((result, index) => {
-              const resultKey = result.id
-                ?? result.metadata?._id
-                ?? `${result.page_content}-${result.score ?? 'no-score'}`;
-              return (
-                <div key={resultKey} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-500">
-                        Result #{index + 1}
-                      </span>
-                      {result.id && (
-                        <span className="text-xs text-gray-400" title={`Document ID: ${result.id}`}>
-                          (ID: {result.id.substring(0, 8)}...)
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {result.score && (
-                        <span className="text-sm text-gray-500">
-                          Score: {result.score.toFixed(3)}
-                        </span>
-                      )}
-                      {result.id && (
-                        <button
-                          onClick={() => handleDeleteDocument(result, index)}
-                          disabled={deletingId === result.id}
-                          className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Delete this document from silo"
-                        >
-                          {deletingId === result.id ? (
-                            <span className="flex items-center gap-1">
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
-                              Deleting...
-                            </span>
-                          ) : (
-                              <span className="flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</span>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">Content:</h3>
-                    <p className="text-gray-900 text-sm leading-relaxed">
-                      {result.page_content}
-                    </p>
-                  </div>
-
-                  {result.metadata && Object.keys(result.metadata).length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-700 mb-1">Metadata:</h3>
-                      <div className="bg-gray-50 rounded p-2">
-                        <pre className="text-xs text-gray-600 overflow-x-auto">
-                          {JSON.stringify(result.metadata, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {searchResults.map((result, index) => (
+              <ResultCard
+                key={result.id ?? `result-${index}`}
+                result={result}
+                index={index}
+                maxScore={maxScore}
+                onDelete={handleDeleteDocument}
+                isDeleting={deletingId === result.id}
+                appId={appId ?? ''}
+                siloId={siloId ?? ''}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -393,12 +340,22 @@ function SiloPlaygroundPage() {
           <div className="text-center">
             <Search className="w-10 h-10 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
-            <p className="text-gray-600">
-              {searchQuery ? 
-                "Try adjusting your search query or check if the silo contains documents." :
-                "Enter a search query to find documents, or leave empty to see all available documents."
-              }
-            </p>
+            <div className="text-sm text-gray-500 space-y-1 max-w-md mx-auto text-left">
+              {searchControls.searchType === 'similarity_score_threshold' && (
+                <p>⬇️ Try lowering the score threshold (currently {searchControls.scoreThreshold}).</p>
+              )}
+              {filterMetadata && Object.keys(filterMetadata).length > 0 && (
+                <p>🔍 Try removing or relaxing metadata filters.</p>
+              )}
+              {searchControls.limit < 20 && (
+                <p>⬆️ Try increasing Top K (currently {searchControls.limit}).</p>
+              )}
+              <p className="text-gray-400 mt-2">
+                {searchQuery
+                  ? 'No documents matched your query with the current settings.'
+                  : 'The silo may be empty or filters are too restrictive.'}
+              </p>
+            </div>
           </div>
         </div>
       )}
