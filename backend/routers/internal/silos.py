@@ -404,6 +404,32 @@ async def search_silo_documents(
         )
 
 
+@silos_router.get(
+    "/{silo_id}/documents/neighbors",
+    summary="Get neighboring chunks from same source document",
+    tags=["Silos"],
+)
+async def get_neighboring_chunks(
+    app_id: int,
+    silo_id: int,
+    source_type: Annotated[str, Query(..., description="'media' or 'resource'")],
+    source_id: Annotated[str, Query(..., description="The media_id or resource_id value")],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """
+    Return all chunks belonging to the same source document (media or resource),
+    ordered by their position (chunk_index for media, page for resources).
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    try:
+        chunks = SiloService.get_neighboring_chunks(silo_id, source_type, source_id, db)
+        return {"source_type": source_type, "source_id": source_id, "chunks": chunks, "total": len(chunks)}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @silos_router.delete("/{silo_id}/documents",
                      summary="Delete documents from silo by IDs",
                      tags=["Silos"])

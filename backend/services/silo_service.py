@@ -1332,3 +1332,48 @@ class SiloService:
             "total_results": len(response_results),
             "filter_metadata": filter_metadata
         }
+
+    @staticmethod
+    def get_neighboring_chunks(
+        silo_id: int,
+        source_type: str,
+        source_id: str,
+        db: Session = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Return all chunks from the same source document, ordered by position.
+
+        source_type: "media" or "resource"
+        source_id:   str value of media_id or resource_id (as stored in metadata)
+
+        Raises ValueError for unsupported source_type.
+        """
+        if source_type not in ("media", "resource"):
+            raise ValueError(f"Unsupported source_type '{source_type}'. Must be 'media' or 'resource'.")
+
+        if source_type == "media":
+            filter_metadata = {
+                "media_id": {"$eq": source_id},
+                "content_type": {"$eq": "media_chunk"},
+            }
+        else:
+            filter_metadata = {"resource_id": {"$eq": source_id}}
+
+        docs = SiloService.find_docs_in_collection(
+            silo_id,
+            "",
+            filter_metadata=filter_metadata,
+            limit=MAX_SEARCH_LIMIT,
+            db=db,
+        )
+
+        # Sort by position in the source document
+        if source_type == "media":
+            docs.sort(key=lambda d: d.metadata.get("chunk_index", 0))
+        else:
+            docs.sort(key=lambda d: d.metadata.get("page", d.metadata.get("chunk_index", 0)))
+
+        return [
+            {"page_content": doc.page_content, "metadata": doc.metadata, "score": None}
+            for doc in docs
+        ]
