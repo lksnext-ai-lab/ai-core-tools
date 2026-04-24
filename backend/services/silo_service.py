@@ -381,7 +381,13 @@ class SiloService:
             return 0
 
     @staticmethod
-    def count_docs_with_filter(silo_id: int, filter_metadata: Optional[dict] = None, db: Session = None) -> int:
+    def count_docs_with_filter(
+        silo_id: int,
+        filter_metadata: Optional[dict] = None,
+        db: Session = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
         """
         Count documents in a silo collection, optionally filtered by metadata.
         Returns 0 gracefully if the silo or collection does not exist.
@@ -392,9 +398,9 @@ class SiloService:
 
         db_type = _resolve_vector_db_type(silo)
         if db_type == "QDRANT":
-            return SiloService._count_docs_qdrant(silo_id, silo, filter_metadata)
+            return SiloService._count_docs_qdrant(silo_id, silo, filter_metadata, min_content_length, max_content_length)
         else:
-            return SiloService._count_docs_pgvector(silo_id, filter_metadata, db)
+            return SiloService._count_docs_pgvector(silo_id, filter_metadata, db, min_content_length, max_content_length)
 
     @staticmethod
     def _pgvector_filter_to_sql(filter_metadata: dict, params: dict) -> str:
@@ -414,7 +420,13 @@ class SiloService:
         return (" AND " + " AND ".join(conditions)) if conditions else ""
 
     @staticmethod
-    def _count_docs_pgvector(silo_id: int, filter_metadata: Optional[dict], db: Session) -> int:
+    def _count_docs_pgvector(
+        silo_id: int,
+        filter_metadata: Optional[dict],
+        db: Session,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
         """Count matching docs in PGVector using a direct SQL query on langchain_pg_embedding."""
         collection_name = COLLECTION_PREFIX + str(silo_id)
         params: dict = {"name": collection_name}
@@ -422,6 +434,13 @@ class SiloService:
         where_extra = ""
         if filter_metadata:
             where_extra = SiloService._pgvector_filter_to_sql(filter_metadata, params)
+
+        if min_content_length is not None:
+            where_extra += " AND LENGTH(e.document) >= :min_content_length"
+            params["min_content_length"] = min_content_length
+        if max_content_length is not None:
+            where_extra += " AND LENGTH(e.document) <= :max_content_length"
+            params["max_content_length"] = max_content_length
 
         sql = (
             "SELECT COUNT(*) FROM langchain_pg_embedding e "
@@ -434,31 +453,57 @@ class SiloService:
         except Exception as exc:
             logger.error("_count_docs_pgvector error: %s", exc)
             return 0
-            logger.error("_count_docs_pgvector (filtered) error: %s", exc)
-            return 0
 
     @staticmethod
-    def _count_docs_qdrant(silo_id: int, silo, filter_metadata: Optional[dict]) -> int:
+    def _count_docs_qdrant(
+        silo_id: int,
+        silo,
+        filter_metadata: Optional[dict],
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
         """Count matching docs in Qdrant using the client's count() method."""
         try:
             from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
             store = _get_vector_store(silo)
             collection_name = COLLECTION_PREFIX + str(silo_id)
-            if not filter_metadata:
-                result = store.client.count(collection_name=collection_name, exact=True)
-                return result.count
             must = []
-            for key, spec in filter_metadata.items():
-                prefixed_key = f"metadata.{key}"
-                if not isinstance(spec, dict):
-                    must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=spec)))
-                    continue
-                for op, val in spec.items():
-                    if op in ("$eq", "match"):
-                        must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=val)))
-                    elif op in ("$in", "match_any") and isinstance(val, list):
-                        must.append(FieldCondition(key=prefixed_key, match=MatchAny(any=val)))
+            if filter_metadata:
+                for key, spec in filter_metadata.items():
+                    prefixed_key = f"metadata.{key}"
+                    if not isinstance(spec, dict):
+                        must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=spec)))
+                        continue
+                    for op, val in spec.items():
+                        if op in ("$eq", "match"):
+                            must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=val)))
+                        elif op in ("$in", "match_any") and isinstance(val, list):
+                            must.append(FieldCondition(key=prefixed_key, match=MatchAny(any=val)))
             qdrant_filter = Filter(must=must) if must else None
+            if min_content_length is not None or max_content_length is not None:
+                try:
+                    all_docs, _ = store.client.scroll(
+                        collection_name=collection_name,
+                        scroll_filter=qdrant_filter,
+                        with_payload=True,
+                        with_vectors=False,
+                        limit=10000,
+                    )
+                    if len(all_docs) == 10000:
+                        logger.warning("_count_docs_qdrant: hit scroll cap of 10000; count may be underestimated")
+                    count = 0
+                    for point in all_docs:
+                        content = (point.payload or {}).get("page_content", "")
+                        length = len(content)
+                        if min_content_length is not None and length < min_content_length:
+                            continue
+                        if max_content_length is not None and length > max_content_length:
+                            continue
+                        count += 1
+                    return count
+                except Exception as exc:
+                    logger.error("_count_docs_qdrant (content-length scroll) error: %s", exc)
+                    return 0
             result = store.client.count(collection_name=collection_name, count_filter=qdrant_filter, exact=True)
             return result.count
         except Exception as exc:
@@ -1114,6 +1159,8 @@ class SiloService:
         score_threshold: Optional[float] = None,
         fetch_k: Optional[int] = None,
         lambda_mult: Optional[float] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
         db: Session = None,
     ) -> List[Document]:
         # Get silo within the session to ensure relationships are loaded
@@ -1132,7 +1179,7 @@ class SiloService:
         if results_limit > MAX_SEARCH_LIMIT:
             results_limit = MAX_SEARCH_LIMIT
 
-        return _get_vector_store(silo).search_similar_documents(
+        docs = _get_vector_store(silo).search_similar_documents(
             collection_name,
             query,
             embedding_service=embedding_service,
@@ -1143,6 +1190,13 @@ class SiloService:
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
         )
+        if min_content_length is not None or max_content_length is not None:
+            docs = [
+                d for d in docs
+                if (min_content_length is None or len(d.page_content) >= min_content_length)
+                and (max_content_length is None or len(d.page_content) <= max_content_length)
+            ]
+        return docs
 
     @staticmethod
     def search_in_silo(
@@ -1154,6 +1208,8 @@ class SiloService:
         score_threshold: Optional[float] = None,
         fetch_k: Optional[int] = None,
         lambda_mult: Optional[float] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
         db: Session = None,
     ) -> List[Document]:
         """
@@ -1179,6 +1235,8 @@ class SiloService:
             score_threshold=score_threshold,
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
+            min_content_length=min_content_length,
+            max_content_length=max_content_length,
             db=db,
         )
 
@@ -1400,6 +1458,8 @@ class SiloService:
         score_threshold: Optional[float] = None,
         fetch_k: Optional[int] = None,
         lambda_mult: Optional[float] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
         db: Session = None,
     ) -> Optional[Dict[str, Any]]:
         """
@@ -1420,6 +1480,8 @@ class SiloService:
             score_threshold=score_threshold,
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
+            min_content_length=min_content_length,
+            max_content_length=max_content_length,
             db=db,
         )
         

@@ -13,7 +13,7 @@ from models.silo import Silo
 
 from schemas.silo_schemas import (
     SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema,
-    CreateSiloSchema, UpdateSiloSchema, SiloSearchSchema
+    CreateSiloSchema, UpdateSiloSchema, SiloSearchSchema, SiloCountRequestSchema
 )
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import SiloExportFileSchema
@@ -382,6 +382,8 @@ async def search_silo_documents(
             search_query.score_threshold,
             search_query.fetch_k,
             search_query.lambda_mult,
+            search_query.min_content_length,
+            search_query.max_content_length,
             db,
         )
         elapsed_ms = round((time.perf_counter() - t0) * 1000)
@@ -472,17 +474,31 @@ async def count_silo_documents(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    filter_metadata: Annotated[Optional[dict], Body(embed=True)] = None,
+    body: Annotated[SiloCountRequestSchema, Body()] = None,
 ):
     """
     Returns the number of documents matching the given filter.
     Pass an empty body or omit filter_metadata to count all documents.
     Used as dry-run before delete-by-filter.
     """
+    if body is None:
+        body = SiloCountRequestSchema()
     _validate_silo_app_ownership(silo_id, app_id, db)
     try:
-        count = SiloService.count_docs_with_filter(silo_id, filter_metadata, db)
-        return {"silo_id": silo_id, "count": count, "filter_applied": filter_metadata is not None}
+        count = SiloService.count_docs_with_filter(
+            silo_id,
+            body.filter_metadata,
+            db,
+            min_content_length=body.min_content_length,
+            max_content_length=body.max_content_length,
+        )
+        return {
+            "silo_id": silo_id,
+            "count": count,
+            "filter_applied": body.filter_metadata is not None,
+            "min_content_length": body.min_content_length,
+            "max_content_length": body.max_content_length,
+        }
     except Exception as e:
         logger.error(f"Error counting silo documents: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

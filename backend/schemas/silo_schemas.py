@@ -63,6 +63,13 @@ class UpdateSiloSchema(BaseModel):
 CreateUpdateSiloSchema = CreateSiloSchema
 
 
+class SiloCountRequestSchema(BaseModel):
+    """Request body for the count-documents endpoint."""
+    filter_metadata: Optional[Dict[str, Any]] = None
+    min_content_length: Optional[int] = None
+    max_content_length: Optional[int] = None
+
+
 class SiloSearchSchema(BaseModel):
     """Schema for searching within a silo.
 
@@ -79,6 +86,8 @@ class SiloSearchSchema(BaseModel):
     score_threshold: Optional[float] = None
     fetch_k: Optional[int] = None
     lambda_mult: Optional[float] = None
+    min_content_length: Optional[int] = None   # inclusive lower bound on chunk character count
+    max_content_length: Optional[int] = None   # inclusive upper bound on chunk character count
 
     @field_validator("search_type")
     @classmethod
@@ -98,4 +107,14 @@ class SiloSearchSchema(BaseModel):
             raise ValueError(
                 "fetch_k and lambda_mult are only valid when search_type='mmr'"
             )
+        if self.min_content_length is not None and self.min_content_length < 0:
+            raise ValueError("min_content_length must be >= 0")
+        if self.max_content_length is not None and self.max_content_length < 0:
+            raise ValueError("max_content_length must be >= 0")
+        if (
+            self.min_content_length is not None
+            and self.max_content_length is not None
+            and self.min_content_length > self.max_content_length
+        ):
+            raise ValueError("min_content_length must be <= max_content_length")
         return self
