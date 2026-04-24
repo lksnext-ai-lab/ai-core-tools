@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Search, Info } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Search, Info, Clock, History, Bot } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchControls, { type SearchControlsValue, DEFAULT_SEARCH_CONTROLS } from '../components/playground/SearchControls';
 import SiloAPISnippets from '../components/playground/SiloAPISnippets';
@@ -23,6 +23,15 @@ interface Silo {
 }
 
 const DEFAULT_DB_TYPE: SupportedDbType = 'PGVECTOR';
+
+interface QueryHistoryEntry {
+  query: string;
+  controls: SearchControlsValue;
+  filterMetadata?: Record<string, any>;
+  minContentLength: number | null;
+  maxContentLength: number | null;
+  timestamp: number;
+}
 
 function SiloPlaygroundPage() {
   const [systemDBConfig, setSystemDBConfig] = useState('');
@@ -62,11 +71,37 @@ function SiloPlaygroundPage() {
   const [reindexLoading, setReindexLoading] = useState<string | null>(null);
   const [reindexMessage, setReindexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Phase 6 observability
+  const [queryHistory, setQueryHistory] = useState<QueryHistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [lastClientMs, setLastClientMs] = useState<number | null>(null);
+  const [lastServerMs, setLastServerMs] = useState<number | null>(null);
+  const [showAgentShortcut, setShowAgentShortcut] = useState(false);
+  const [appAgentsForSilo, setAppAgentsForSilo] = useState<Array<{ id: number; name: string }>>([]);
+
   // Load silo data
   useEffect(() => {
     if (appId && siloId) {
       void loadSilo();
     }
+  }, [appId, siloId]);
+
+  useEffect(() => {
+    if (!siloId) return;
+    try {
+      const stored = localStorage.getItem(`silo_query_history_${siloId}`);
+      if (stored) setQueryHistory(JSON.parse(stored) as QueryHistoryEntry[]);
+    } catch { /* ignore */ }
+  }, [siloId]);
+
+  useEffect(() => {
+    if (!appId || !siloId) return;
+    apiService.getAgents(Number.parseInt(appId))
+      .then((agents: unknown) => {
+        const arr = (agents as Array<{ id: number; name: string; silo_id?: number | null }>) ?? [];
+        setAppAgentsForSilo(arr.filter((a) => a.silo_id === Number.parseInt(siloId)));
+      })
+      .catch(() => { /* ignore */ });
   }, [appId, siloId]);
 
 
@@ -87,6 +122,35 @@ function SiloPlaygroundPage() {
     }
   }
 
+  function saveToHistory(entry: QueryHistoryEntry) {
+    if (!siloId) return;
+    const key = `silo_query_history_${siloId}`;
+    setQueryHistory((prev) => {
+      const updated = [entry, ...prev].slice(0, 20);
+      try { localStorage.setItem(key, JSON.stringify(updated)); } catch { /* quota */ }
+      return updated;
+    });
+  }
+
+  function deleteHistoryEntry(index: number) {
+    if (!siloId) return;
+    const key = `silo_query_history_${siloId}`;
+    setQueryHistory((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      try { localStorage.setItem(key, JSON.stringify(updated)); } catch { /* quota */ }
+      return updated;
+    });
+  }
+
+  function rerunHistoryEntry(entry: QueryHistoryEntry) {
+    setSearchQuery(entry.query);
+    setSearchControls(entry.controls);
+    if (entry.filterMetadata !== undefined) handleFilterMetadataChange(entry.filterMetadata);
+    setMinContentLength(entry.minContentLength);
+    setMaxContentLength(entry.maxContentLength);
+    setShowHistory(false);
+  }
+
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     
@@ -97,7 +161,8 @@ function SiloPlaygroundPage() {
       setSearchError(null);
       setSearchResults([]);
       setHasSearched(true);
-      const response = await apiService.searchSiloDocuments(
+      const t0 = performance.now();
+      const { data: response, serverMs } = await apiService.searchSiloDocumentsWithTiming(
         Number.parseInt(appId),
         Number.parseInt(siloId),
         searchQuery,
@@ -112,6 +177,17 @@ function SiloPlaygroundPage() {
           maxContentLength: maxContentLength ?? undefined,
         },
       );
+      const clientMs = Math.round(performance.now() - t0);
+      setLastClientMs(clientMs);
+      setLastServerMs(serverMs);
+      saveToHistory({
+        query: searchQuery,
+        controls: searchControls,
+        filterMetadata,
+        minContentLength,
+        maxContentLength,
+        timestamp: Date.now(),
+      });
       
       // Extract _id from metadata and set as top-level id field
       const resultsWithIds = (response.results || []).map((result: SearchResult) => ({
@@ -446,6 +522,91 @@ function SiloPlaygroundPage() {
             </div>
           </div>
         </form>
+
+        {/* Phase 6 observability toolbar */}
+        {(lastClientMs !== null || queryHistory.length > 0 || appAgentsForSilo.length > 0) && (
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            {lastClientMs !== null && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Client: <strong>{lastClientMs} ms</strong></span>
+                {lastServerMs !== null && (
+                  <span className="text-gray-400">· Server: <strong>{lastServerMs} ms</strong></span>
+                )}
+              </div>
+            )}
+
+            {queryHistory.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowHistory((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+              >
+                <History className="w-3.5 h-3.5" />
+                {showHistory ? 'Hide history' : `History (${queryHistory.length})`}
+              </button>
+            )}
+
+            {appAgentsForSilo.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowAgentShortcut((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  Test against agent
+                </button>
+                {showAgentShortcut && (
+                  <div className="absolute left-0 top-full mt-1 z-10 bg-white border border-gray-200 rounded shadow-md min-w-44">
+                    {appAgentsForSilo.map((agent) => (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => {
+                          const qs = searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : '';
+                          navigate(`/apps/${appId}/agents/${agent.id}/playground${qs}`);
+                        }}
+                        className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 truncate"
+                      >
+                        {agent.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showHistory && queryHistory.length > 0 && (
+          <div className="border border-gray-200 rounded-lg bg-gray-50 p-3 space-y-1 mt-3">
+            <p className="text-xs font-medium text-gray-600 mb-2">Recent queries</p>
+            {queryHistory.map((entry, i) => (
+              <div key={entry.timestamp} className="flex items-center gap-2 text-sm">
+                <button
+                  type="button"
+                  onClick={() => rerunHistoryEntry(entry)}
+                  className="flex-1 text-left truncate text-gray-800 hover:text-yellow-700 hover:underline"
+                  title={entry.query}
+                >
+                  {entry.query || '(empty query)'}
+                </button>
+                <span className="text-xs text-gray-400 shrink-0">
+                  {new Date(entry.timestamp).toLocaleTimeString()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => deleteHistoryEntry(i)}
+                  className="text-gray-300 hover:text-red-400 shrink-0 text-base leading-none"
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* API snippet toggle + panel */}
         <div className="mt-3">

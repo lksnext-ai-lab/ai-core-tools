@@ -1081,6 +1081,49 @@ class ApiService {
     });
   }
 
+  async searchSiloDocumentsWithTiming(
+    appId: number,
+    siloId: number,
+    query: string,
+    limit?: number,
+    filterMetadata?: Record<string, any>,
+    searchOptions?: {
+      searchType?: string;
+      scoreThreshold?: number;
+      fetchK?: number;
+      lambdaMult?: number;
+      minContentLength?: number;
+      maxContentLength?: number;
+    },
+  ): Promise<{ data: any; serverMs: number | null }> {
+    const url = `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/search`;
+    const body = JSON.stringify({
+      query,
+      ...(limit !== undefined ? { limit } : {}),
+      filter_metadata: filterMetadata,
+      ...(searchOptions?.searchType && searchOptions.searchType !== 'similarity'
+        ? { search_type: searchOptions.searchType }
+        : {}),
+      ...(searchOptions?.scoreThreshold !== undefined
+        ? { score_threshold: searchOptions.scoreThreshold }
+        : {}),
+      ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
+      ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
+      ...(searchOptions?.minContentLength != null && { min_content_length: searchOptions.minContentLength }),
+      ...(searchOptions?.maxContentLength != null && { max_content_length: searchOptions.maxContentLength }),
+    });
+    const options: RequestInit = { method: 'POST', body };
+    const headers = this.prepareHeaders(options);
+    const response = await fetch(url, { ...options, headers });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    const serverMsHeader = response.headers.get('x-server-time-ms');
+    const serverMs = serverMsHeader !== null ? parseInt(serverMsHeader, 10) : null;
+    const data = await response.json();
+    return { data, serverMs };
+  }
+
   async getSiloNeighbors(
     appId: number | string,
     siloId: number | string,
