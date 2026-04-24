@@ -430,6 +430,32 @@ async def get_neighboring_chunks(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@silos_router.get(
+    "/{silo_id}/metadata/{field}/values",
+    summary="Get distinct values for a silo metadata field",
+    tags=["Silos"],
+)
+async def get_metadata_field_values(
+    app_id: int,
+    silo_id: int,
+    field: str,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    prefix: Annotated[Optional[str], Query(description="Filter by value prefix (case-insensitive)")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+):
+    """
+    Distinct values for a metadata field — powers autocomplete in the filter UI.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    try:
+        values = SiloService.get_metadata_field_values(silo_id, field, prefix=prefix, limit=limit, db=db)
+        return {"field": field, "values": values, "total": len(values)}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @silos_router.delete("/{silo_id}/documents",
                      summary="Delete documents from silo by IDs",
                      tags=["Silos"])

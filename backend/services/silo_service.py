@@ -1377,3 +1377,116 @@ class SiloService:
             {"page_content": doc.page_content, "metadata": doc.metadata, "score": None}
             for doc in docs
         ]
+
+    @staticmethod
+    def get_metadata_field_values(
+        silo_id: int,
+        field: str,
+        prefix: Optional[str] = None,
+        limit: int = 100,
+        db: Session = None,
+    ) -> List[str]:
+        """
+        Return distinct values for a metadata field in the silo's vector collection.
+        Sorted alphabetically, filtered by optional case-insensitive prefix.
+        limit is clamped to 1–500.
+        Raises ValueError for invalid field names, NotFoundError for missing silo.
+        """
+        import re
+        if not field or not re.match(r'^[\w.\-]+$', field):
+            raise ValueError(f"Invalid metadata field name: '{field}'")
+
+        limit = min(max(1, limit), 500)
+
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo:
+            raise NotFoundError(f"Silo {silo_id} not found", "silo")
+
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        vector_db_type = str(getattr(silo, 'vector_db_type', 'PGVECTOR')).upper()
+
+        if vector_db_type == 'QDRANT':
+            return SiloService._get_metadata_values_qdrant(silo, collection_name, field, prefix, limit)
+        else:
+            return SiloService._get_metadata_values_pgvector(collection_name, field, prefix, limit, db)
+
+    @staticmethod
+    def _get_metadata_values_pgvector(
+        collection_name: str,
+        field: str,
+        prefix: Optional[str],
+        limit: int,
+        db: Session,
+    ) -> List[str]:
+        """PGVector: raw SQL jsonb distinct-values query."""
+        sql = text("""
+            SELECT DISTINCT cmetadata->>:field AS val
+            FROM langchain_pg_embedding lpe
+            JOIN langchain_pg_collection lpc ON lpe.collection_id = lpc.uuid
+            WHERE lpc.name = :collection_name
+              AND cmetadata->>:field IS NOT NULL
+              AND cmetadata->>:field != ''
+              AND (:prefix IS NULL OR LOWER(cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+            ORDER BY val
+            LIMIT :limit
+        """)
+
+        result = db.execute(sql, {
+            "field": field,
+            "collection_name": collection_name,
+            "prefix_pattern": (prefix + '%') if prefix else None,
+            "prefix": prefix if prefix else None,
+            "limit": limit,
+        })
+        return [str(row[0]) for row in result if row[0] is not None]
+
+    @staticmethod
+    def _get_metadata_values_qdrant(
+        silo,
+        collection_name: str,
+        field: str,
+        prefix: Optional[str],
+        limit: int,
+    ) -> List[str]:
+        """Qdrant: scroll without query vector, aggregate unique field values."""
+        store = _get_vector_store(silo)
+
+        seen: set = set()
+        offset = None
+        batch_size = 200
+
+        try:
+            qdrant_client = getattr(store, 'client', None)
+            if qdrant_client is None:
+                raise AttributeError("Cannot find Qdrant client on store")
+
+            while len(seen) < limit:
+                results, next_offset = qdrant_client.scroll(
+                    collection_name=collection_name,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for point in results:
+                    payload = point.payload or {}
+                    metadata = payload.get('metadata', payload)
+                    val = metadata.get(field)
+                    SiloService._collect_value(seen, val, prefix)
+                if next_offset is None or len(results) < batch_size:
+                    break
+                offset = next_offset
+
+        except Exception as e:
+            logger.warning(f"Qdrant scroll for metadata values failed, result may be incomplete: {e}")
+
+        return sorted(list(seen))[:limit]
+
+    @staticmethod
+    def _collect_value(seen: set, val, prefix: Optional[str]) -> None:
+        """Add a metadata value to the seen set if it matches the optional prefix filter."""
+        if val is None:
+            return
+        str_val = str(val)
+        if not prefix or str_val.lower().startswith(prefix.lower()):
+            seen.add(str_val)
