@@ -1109,6 +1109,28 @@ class ApiService {
     });
   }
 
+  async countSiloDocuments(
+    appId: number | string,
+    siloId: number | string,
+    filterMetadata?: Record<string, unknown>,
+  ) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/documents/count`, {
+      method: 'POST',
+      body: JSON.stringify({ filter_metadata: filterMetadata ?? null }),
+    });
+  }
+
+  async reindexSiloResource(
+    appId: number | string,
+    siloId: number | string,
+    resourceId: number | string,
+  ) {
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/resources/${resourceId}/reindex`,
+      { method: 'POST' },
+    );
+  }
+
   // ==================== REPOSITORIES API ====================
   async getRepositories(appId: number) {
     console.log('API: Getting repositories for appId:', appId);

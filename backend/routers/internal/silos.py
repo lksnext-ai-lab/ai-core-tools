@@ -456,6 +456,68 @@ async def get_metadata_field_values(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@silos_router.post(
+    "/{silo_id}/documents/count",
+    summary="Count documents matching a metadata filter (dry-run for delete-by-filter)",
+    tags=["Silos"],
+)
+async def count_silo_documents(
+    app_id: int,
+    silo_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    filter_metadata: Annotated[Optional[dict], Body(embed=True)] = None,
+):
+    """
+    Returns the number of documents matching the given filter.
+    Pass an empty body or omit filter_metadata to count all documents.
+    Used as dry-run before delete-by-filter.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    try:
+        count = SiloService.count_docs_with_filter(silo_id, filter_metadata, db)
+        return {"silo_id": silo_id, "count": count, "filter_applied": filter_metadata is not None}
+    except Exception as e:
+        logger.error(f"Error counting silo documents: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@silos_router.post(
+    "/{silo_id}/resources/{resource_id}/reindex",
+    summary="Reindex a single repository resource into this silo",
+    tags=["Silos"],
+)
+async def reindex_silo_resource(
+    app_id: int,
+    silo_id: int,
+    resource_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """
+    Re-extracts and re-indexes a single Resource document into the silo.
+    The resource must belong to a repository whose silo_id matches this silo.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    from models.resource import Resource
+    resource = db.query(Resource).filter(Resource.resource_id == resource_id).first()
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+    if resource.repository.silo_id != silo_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resource does not belong to this silo",
+        )
+    try:
+        SiloService.index_resource(resource)
+        return {"message": f"Resource {resource_id} reindexed successfully", "resource_id": resource_id}
+    except Exception as e:
+        logger.error(f"Error reindexing resource {resource_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
 @silos_router.delete("/{silo_id}/documents",
                      summary="Delete documents from silo by IDs",
                      tags=["Silos"])

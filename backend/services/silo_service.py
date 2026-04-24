@@ -49,6 +49,29 @@ def _get_vector_store(silo: Optional[Silo] = None, vector_db_type: Optional[str]
     resolved_type = _resolve_vector_db_type(silo, vector_db_type)
     return VectorStoreFactory.get_vector_store(db_obj, resolved_type)
 
+
+def _add_pgvector_condition(conditions: list, params: dict, i: int, key: str, op: str, val) -> None:
+    """Append a single operator condition to the conditions list and populate params."""
+    numeric_ops = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}
+    if op == "$eq":
+        conditions.append(f"e.cmetadata ->> :k{i} = :v{i}")
+        params[f"k{i}"] = key
+        params[f"v{i}"] = str(val)
+    elif op == "$ne":
+        conditions.append(f"e.cmetadata ->> :k{i} != :v{i}")
+        params[f"k{i}"] = key
+        params[f"v{i}"] = str(val)
+    elif op == "$in" and isinstance(val, list):
+        placeholders = ", ".join(f":in{i}_{j}" for j in range(len(val)))
+        conditions.append(f"e.cmetadata ->> :k{i} IN ({placeholders})")
+        params[f"k{i}"] = key
+        for j, v in enumerate(val):
+            params[f"in{i}_{j}"] = str(v)
+    elif op in numeric_ops:
+        conditions.append(f"(e.cmetadata ->> :k{i})::numeric {numeric_ops[op]} :v{i}")
+        params[f"k{i}"] = key
+        params[f"v{i}"] = val
+
 class SiloService:
 
     '''SILO CRUD Operations'''
@@ -356,7 +379,92 @@ class SiloService:
         except Exception as exc:
             logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
-    
+
+    @staticmethod
+    def count_docs_with_filter(silo_id: int, filter_metadata: Optional[dict] = None, db: Session = None) -> int:
+        """
+        Count documents in a silo collection, optionally filtered by metadata.
+        Returns 0 gracefully if the silo or collection does not exist.
+        """
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo or not SiloService.check_silo_collection_exists(silo_id, db):
+            return 0
+
+        db_type = _resolve_vector_db_type(silo)
+        if db_type == "QDRANT":
+            return SiloService._count_docs_qdrant(silo_id, silo, filter_metadata)
+        else:
+            return SiloService._count_docs_pgvector(silo_id, filter_metadata, db)
+
+    @staticmethod
+    def _pgvector_filter_to_sql(filter_metadata: dict, params: dict) -> str:
+        """Convert a filter_metadata dict to SQL WHERE fragment and populate params dict."""
+        conditions = []
+        i = 0
+        for key, spec in filter_metadata.items():
+            if not isinstance(spec, dict):
+                conditions.append(f"e.cmetadata ->> :k{i} = :v{i}")
+                params[f"k{i}"] = key
+                params[f"v{i}"] = str(spec)
+                i += 1
+                continue
+            for op, val in spec.items():
+                _add_pgvector_condition(conditions, params, i, key, op, val)
+                i += 1
+        return (" AND " + " AND ".join(conditions)) if conditions else ""
+
+    @staticmethod
+    def _count_docs_pgvector(silo_id: int, filter_metadata: Optional[dict], db: Session) -> int:
+        """Count matching docs in PGVector using a direct SQL query on langchain_pg_embedding."""
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        params: dict = {"name": collection_name}
+
+        where_extra = ""
+        if filter_metadata:
+            where_extra = SiloService._pgvector_filter_to_sql(filter_metadata, params)
+
+        sql = (
+            "SELECT COUNT(*) FROM langchain_pg_embedding e "
+            "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
+            f"WHERE c.name = :name{where_extra}"
+        )
+        try:
+            row = db.execute(text(sql), params).fetchone()
+            return int(row[0]) if row else 0
+        except Exception as exc:
+            logger.error("_count_docs_pgvector error: %s", exc)
+            return 0
+            logger.error("_count_docs_pgvector (filtered) error: %s", exc)
+            return 0
+
+    @staticmethod
+    def _count_docs_qdrant(silo_id: int, silo, filter_metadata: Optional[dict]) -> int:
+        """Count matching docs in Qdrant using the client's count() method."""
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
+            store = _get_vector_store(silo)
+            collection_name = COLLECTION_PREFIX + str(silo_id)
+            if not filter_metadata:
+                result = store.client.count(collection_name=collection_name, exact=True)
+                return result.count
+            must = []
+            for key, spec in filter_metadata.items():
+                prefixed_key = f"metadata.{key}"
+                if not isinstance(spec, dict):
+                    must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=spec)))
+                    continue
+                for op, val in spec.items():
+                    if op in ("$eq", "match"):
+                        must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=val)))
+                    elif op in ("$in", "match_any") and isinstance(val, list):
+                        must.append(FieldCondition(key=prefixed_key, match=MatchAny(any=val)))
+            qdrant_filter = Filter(must=must) if must else None
+            result = store.client.count(collection_name=collection_name, count_filter=qdrant_filter, exact=True)
+            return result.count
+        except Exception as exc:
+            logger.error("_count_docs_qdrant error: %s", exc)
+            return 0
+
     @staticmethod
     def _get_silo_for_indexing(silo_id: int, db: Session):
         """Helper method to get silo and validate it exists"""
