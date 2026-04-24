@@ -13,8 +13,8 @@ interface ResultCardProps {
   result: SearchResult;
   index: number;
   maxScore: number;
-  onDelete: (result: SearchResult, index: number) => void;
-  isDeleting: boolean;
+  onDelete?: (result: SearchResult, index: number) => void;
+  isDeleting?: boolean;
   appId: string;
   siloId: string;
   isSelected?: boolean;
@@ -260,10 +260,10 @@ export default function ResultCard({
               Reindex
             </button>
           )}
-          {result.id && (
+          {result.id && onDelete && (
             <button
               onClick={() => onDelete(result, index)}
-              disabled={isDeleting}
+              disabled={!!isDeleting}
               className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               title="Delete this document from silo"
             >
