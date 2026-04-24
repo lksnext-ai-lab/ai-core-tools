@@ -17,6 +17,9 @@ interface ResultCardProps {
   isDeleting: boolean;
   appId: string;
   siloId: string;
+  isSelected?: boolean;
+  onSelect?: (id: string, selected: boolean) => void;
+  onReindex?: (resourceId: string) => void;
 }
 
 type MetadataPrimitive = string | number | undefined;
@@ -86,6 +89,9 @@ export default function ResultCard({
   isDeleting,
   appId,
   siloId,
+  isSelected,
+  onSelect,
+  onReindex,
 }: Readonly<ResultCardProps>) {
   const [expanded, setExpanded] = useState(false);
   const [metaView, setMetaView] = useState<'pretty' | 'raw'>('pretty');
@@ -175,7 +181,19 @@ export default function ResultCard({
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
+    <div className="relative border border-gray-200 rounded-lg p-4">
+      {onSelect && (
+        <div className="absolute top-3 left-3 z-10">
+          <input
+            type="checkbox"
+            checked={isSelected ?? false}
+            onChange={(e) => onSelect(result.id ?? '', e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 accent-amber-500 cursor-pointer"
+            aria-label="Select document"
+          />
+        </div>
+      )}
       {/* Header row */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -233,6 +251,15 @@ export default function ResultCard({
           >
             <FileJson className="w-3.5 h-3.5" />
           </button>
+          {onReindex && result.metadata?.resource_id && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReindex(String(result.metadata.resource_id as string | number)); }}
+              className="text-xs px-2 py-1 text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors"
+              title="Re-extract and reindex this source document"
+            >
+              Reindex
+            </button>
+          )}
           {result.id && (
             <button
               onClick={() => onDelete(result, index)}

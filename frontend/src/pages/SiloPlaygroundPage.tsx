@@ -9,6 +9,7 @@ import type {
   SupportedDbType,
 } from '../components/playground/SearchFilters';
 import ResultCard, { type SearchResult } from '../components/playground/ResultCard';
+import Modal from '../components/ui/Modal';
 
 // Define the Silo type
 interface Silo {
@@ -37,6 +38,24 @@ function SiloPlaygroundPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filterMetadata, setFilterMetadata] = useState<Record<string, any> | undefined>(undefined);
   const [searchControls, setSearchControls] = useState<SearchControlsValue>(DEFAULT_SEARCH_CONTROLS);
+
+  // Multi-select (FR-4.1)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+
+  // Single delete modal — replaces globalThis.confirm (FR-4.4)
+  const [deleteTarget, setDeleteTarget] = useState<{ result: SearchResult; index: number } | null>(null);
+
+  // Delete-by-filter (FR-4.2)
+  const [showDeleteByFilterModal, setShowDeleteByFilterModal] = useState(false);
+  const [deleteByFilterCount, setDeleteByFilterCount] = useState<number | null>(null);
+  const [deleteByFilterLoading, setDeleteByFilterLoading] = useState(false);
+  const [deleteByFilterConfirmName, setDeleteByFilterConfirmName] = useState('');
+
+  // Reindex (FR-4.3)
+  const [reindexLoading, setReindexLoading] = useState<string | null>(null);
+  const [reindexMessage, setReindexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Load silo data
   useEffect(() => {
@@ -109,37 +128,105 @@ function SiloPlaygroundPage() {
     setFilterMetadata(metadata);
   }, []);
 
-  async function handleDeleteDocument(result: SearchResult, index: number) {
-    if (!appId || !siloId || !result.id) {
-      alert('Cannot delete: Document ID not available');
-      return;
-    }
-    
-    if (!globalThis.confirm('Are you sure you want to delete this document from the silo? This action cannot be undone.')) {
-      return;
-    }
+  function handleDeleteDocument(result: SearchResult, index: number) {
+    if (!result.id) return;
+    setDeleteTarget({ result, index });
+  }
 
+  async function handleDeleteConfirmed() {
+    if (!deleteTarget || !appId || !siloId) return;
+    const { result, index } = deleteTarget;
     try {
-      setDeletingId(result.id);
-      
-      // Delete using document ID
-      await apiService.deleteSiloDocuments(
-        Number.parseInt(appId),
-        Number.parseInt(siloId),
-        [result.id]  // Pass as array of IDs
-      );
-      
-      // Remove from results locally
-      setSearchResults(prev => prev.filter((_, i) => i !== index));
-      
-      // Reload silo to update document count
+      setDeletingId(result.id ?? null);
+      await apiService.deleteSiloDocuments(Number.parseInt(appId), Number.parseInt(siloId), [result.id!]);
+      setSearchResults((prev) => prev.filter((_, i) => i !== index));
+      setSelectedIds((prev) => { const s = new Set(prev); s.delete(result.id!); return s; });
       await loadSilo();
-      
     } catch (err) {
-      console.error('Error deleting document:', err);
       setSearchError(err instanceof Error ? err.message : 'Failed to delete document');
     } finally {
       setDeletingId(null);
+      setDeleteTarget(null);
+    }
+  }
+
+  function handleSelectResult(id: string, selected: boolean) {
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      if (selected) s.add(id); else s.delete(id);
+      return s;
+    });
+  }
+
+  async function handleBulkDelete() {
+    if (!appId || !siloId) return;
+    setBulkDeleteLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await apiService.deleteSiloDocuments(Number.parseInt(appId), Number.parseInt(siloId), ids);
+      setSearchResults((prev) => prev.filter((r) => !selectedIds.has(r.id ?? '')));
+      setSelectedIds(new Set());
+      setShowBulkDeleteModal(false);
+      await loadSilo();
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Failed to delete documents');
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  }
+
+  async function handleOpenDeleteByFilter() {
+    if (!appId || !siloId) return;
+    setDeleteByFilterCount(null);
+    setDeleteByFilterConfirmName('');
+    setDeleteByFilterLoading(true);
+    setShowDeleteByFilterModal(true);
+    try {
+      const data = await apiService.countSiloDocuments(appId, siloId, filterMetadata);
+      setDeleteByFilterCount((data as { count: number }).count);
+    } catch {
+      setDeleteByFilterCount(-1);
+    } finally {
+      setDeleteByFilterLoading(false);
+    }
+  }
+
+  async function handleDeleteByFilterConfirmed() {
+    if (!appId || !siloId || !silo) return;
+    setBulkDeleteLoading(true);
+    try {
+      const searchData = await apiService.searchSiloDocuments(
+        Number.parseInt(appId), Number.parseInt(siloId), ' ', 200, filterMetadata,
+      );
+      const ids: string[] = ((searchData as { results: Array<{ id?: string; metadata?: { _id?: string } }> }).results ?? [])
+        .map((r) => r.id ?? (r.metadata?._id as string | undefined) ?? '')
+        .filter(Boolean);
+      if (ids.length > 0) {
+        await apiService.deleteSiloDocuments(Number.parseInt(appId), Number.parseInt(siloId), ids);
+        setSearchResults((prev) => prev.filter((r) => !ids.includes(r.id ?? '')));
+      }
+      setShowDeleteByFilterModal(false);
+      setDeleteByFilterConfirmName('');
+      await loadSilo();
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Failed to delete documents by filter');
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  }
+
+  async function handleReindex(resourceId: string) {
+    if (!appId || !siloId) return;
+    setReindexLoading(resourceId);
+    setReindexMessage(null);
+    try {
+      await apiService.reindexSiloResource(appId, siloId, resourceId);
+      setReindexMessage({ type: 'success', text: `Resource ${resourceId} reindexed successfully.` });
+    } catch (err) {
+      setReindexMessage({ type: 'error', text: err instanceof Error ? err.message : 'Reindex failed' });
+    } finally {
+      setReindexLoading(null);
+      setTimeout(() => setReindexMessage(null), 4000);
     }
   }
 
@@ -319,6 +406,46 @@ function SiloPlaygroundPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Search Results ({searchResults.length})
           </h2>
+
+          {/* Curator toolbar */}
+          <div className="flex flex-wrap items-center gap-3 mb-4 py-2 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+            <label className="flex items-center gap-1.5 cursor-pointer text-gray-600 select-none">
+              <input
+                type="checkbox"
+                checked={selectedIds.size > 0 && selectedIds.size === searchResults.length}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedIds(new Set(searchResults.map((r) => r.id ?? '').filter(Boolean)));
+                  } else {
+                    setSelectedIds(new Set());
+                  }
+                }}
+                className="accent-amber-500"
+              />
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+            </label>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-medium"
+              >
+                Delete selected ({selectedIds.size})
+              </button>
+            )}
+            {filterMetadata && Object.keys(filterMetadata).length > 0 && (
+              <button
+                onClick={handleOpenDeleteByFilter}
+                className="px-3 py-1 border border-red-400 text-red-600 rounded hover:bg-red-50 text-xs font-medium"
+              >
+                Delete by filter…
+              </button>
+            )}
+            {reindexMessage && (
+              <span className={`ml-auto text-xs font-medium ${reindexMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                {reindexMessage.text}
+              </span>
+            )}
+          </div>
           
           <div className="space-y-4">
             {searchResults.map((result, index) => (
@@ -331,6 +458,9 @@ function SiloPlaygroundPage() {
                 isDeleting={deletingId === result.id}
                 appId={appId ?? ''}
                 siloId={siloId ?? ''}
+                isSelected={selectedIds.has(result.id ?? '')}
+                onSelect={handleSelectResult}
+                onReindex={reindexLoading === null ? handleReindex : undefined}
               />
             ))}
           </div>
@@ -393,6 +523,107 @@ function SiloPlaygroundPage() {
           </div>
         </div>
       </div>
+      </div>
+
+      {/* Single delete confirmation modal */}
+      <Modal
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete document"
+        size="small"
+      >
+        <p className="text-sm text-gray-700 mb-4">
+          Are you sure you want to delete this document from the silo? This action cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => setDeleteTarget(null)}
+            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleDeleteConfirmed()}
+            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      </Modal>
+
+      {/* Bulk delete confirmation modal */}
+      <Modal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        title={`Delete ${selectedIds.size} document(s)`}
+        size="small"
+      >
+        <p className="text-sm text-gray-700 mb-4">
+          You are about to permanently delete <strong>{selectedIds.size}</strong> document(s) from the silo. This action cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => setShowBulkDeleteModal(false)}
+            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleBulkDelete()}
+            disabled={bulkDeleteLoading}
+            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+          >
+            {bulkDeleteLoading ? 'Deleting…' : `Delete ${selectedIds.size}`}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Delete by filter modal */}
+      <Modal
+        isOpen={showDeleteByFilterModal}
+        onClose={() => { setShowDeleteByFilterModal(false); setDeleteByFilterConfirmName(''); }}
+        title="Delete by current filter"
+        size="small"
+      >
+        {deleteByFilterLoading ? (
+          <p className="text-sm text-gray-600">Counting matching documents…</p>
+        ) : deleteByFilterCount === -1 ? (
+          <p className="text-sm text-red-600">Could not retrieve count. Check filters and try again.</p>
+        ) : (
+          <>
+            <p className="text-sm text-gray-700 mb-3">
+              This will permanently delete{' '}
+              <strong>{deleteByFilterCount ?? '…'}</strong> document(s) matching the current filter.
+              This action cannot be undone.
+            </p>
+            <p className="text-sm text-gray-600 mb-2">
+              Type the silo name <strong>{silo.name}</strong> to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteByFilterConfirmName}
+              onChange={(e) => setDeleteByFilterConfirmName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-red-400"
+              placeholder={silo.name}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setShowDeleteByFilterModal(false); setDeleteByFilterConfirmName(''); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDeleteByFilterConfirmed()}
+                disabled={deleteByFilterConfirmName !== silo.name || bulkDeleteLoading}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {bulkDeleteLoading ? 'Deleting…' : 'Delete all matching'}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
