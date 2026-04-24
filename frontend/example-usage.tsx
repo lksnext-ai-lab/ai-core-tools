@@ -2,9 +2,9 @@
 import React from 'react';
 import { 
   ExtensibleBaseApp, 
-  Header, 
-  Sidebar, 
-  Footer, 
+  Header as _Header, 
+  Sidebar as _Sidebar, 
+  Footer as _Footer, 
   Layout, 
   ThemeSelector,
   AuthProvider,

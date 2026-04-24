@@ -53,7 +53,6 @@ export default function SearchControls({ siloId, value, onChange, disabled }: Re
     } catch {
       // ignore parse errors
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siloId]);
 
   function handleChange(patch: Partial<SearchControlsValue>) {

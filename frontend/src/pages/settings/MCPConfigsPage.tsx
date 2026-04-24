@@ -578,7 +578,7 @@ function MCPConfigsPage() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {testResult.tools.map((tool: any) => (
+                          {testResult.tools.map((tool: { name: string; description: string }) => (
                             <tr key={tool.name}>
                               <td className="px-4 py-2 text-sm font-medium text-gray-900">{tool.name}</td>
                               <td className="px-4 py-2 text-sm text-gray-500">{tool.description}</td>

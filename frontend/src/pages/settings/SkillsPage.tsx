@@ -56,7 +56,7 @@ function SkillsPage() {
     }
   }
 
-  async function forceReloadSkills() {
+  async function _forceReloadSkills() {
     if (!appId) return;
 
     try {
