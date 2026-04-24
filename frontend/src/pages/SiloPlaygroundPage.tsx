@@ -38,6 +38,8 @@ function SiloPlaygroundPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filterMetadata, setFilterMetadata] = useState<Record<string, any> | undefined>(undefined);
+  const [minContentLength, setMinContentLength] = useState<number | null>(null);
+  const [maxContentLength, setMaxContentLength] = useState<number | null>(null);
   const [searchControls, setSearchControls] = useState<SearchControlsValue>(DEFAULT_SEARCH_CONTROLS);
 
   // Multi-select (FR-4.1)
@@ -106,6 +108,8 @@ function SiloPlaygroundPage() {
           scoreThreshold: searchControls.searchType === 'similarity_score_threshold' ? searchControls.scoreThreshold : undefined,
           fetchK: searchControls.searchType === 'mmr' ? searchControls.fetchK : undefined,
           lambdaMult: searchControls.searchType === 'mmr' ? searchControls.lambdaMult : undefined,
+          minContentLength: minContentLength ?? undefined,
+          maxContentLength: maxContentLength ?? undefined,
         },
       );
       
@@ -185,7 +189,13 @@ function SiloPlaygroundPage() {
     setDeleteByFilterLoading(true);
     setShowDeleteByFilterModal(true);
     try {
-      const data = await apiService.countSiloDocuments(appId, siloId, filterMetadata);
+      const data = await apiService.countSiloDocuments(
+        appId,
+        siloId,
+        filterMetadata,
+        minContentLength,
+        maxContentLength,
+      );
       setDeleteByFilterCount((data as { count: number }).count);
     } catch {
       setDeleteByFilterCount(-1);
@@ -199,7 +209,15 @@ function SiloPlaygroundPage() {
     setBulkDeleteLoading(true);
     try {
       const searchData = await apiService.searchSiloDocuments(
-        Number.parseInt(appId), Number.parseInt(siloId), ' ', 200, filterMetadata,
+        Number.parseInt(appId),
+        Number.parseInt(siloId),
+        ' ',
+        200,
+        filterMetadata,
+        {
+          minContentLength: minContentLength ?? undefined,
+          maxContentLength: maxContentLength ?? undefined,
+        },
       );
       const ids: string[] = ((searchData as { results: Array<{ id?: string; metadata?: { _id?: string } }> }).results ?? [])
         .map((r) => r.id ?? (r.metadata?._id as string | undefined) ?? '')
@@ -359,6 +377,46 @@ function SiloPlaygroundPage() {
             onChange={setSearchControls}
             disabled={isSearching}
           />
+
+          {/* Content-length filter */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-gray-700">Content length (chars):</span>
+            <div className="flex items-center gap-1">
+              <label htmlFor="minContentLength" className="text-xs text-gray-500">Min</label>
+              <input
+                type="number"
+                id="minContentLength"
+                min={0}
+                placeholder="–"
+                value={minContentLength ?? ''}
+                onChange={(e) => setMinContentLength(e.target.value === '' ? null : Number(e.target.value))}
+                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                disabled={isSearching}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <label htmlFor="maxContentLength" className="text-xs text-gray-500">Max</label>
+              <input
+                type="number"
+                id="maxContentLength"
+                min={0}
+                placeholder="–"
+                value={maxContentLength ?? ''}
+                onChange={(e) => setMaxContentLength(e.target.value === '' ? null : Number(e.target.value))}
+                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                disabled={isSearching}
+              />
+            </div>
+            {(minContentLength != null || maxContentLength != null) && (
+              <button
+                type="button"
+                onClick={() => { setMinContentLength(null); setMaxContentLength(null); }}
+                className="text-xs text-gray-400 hover:text-gray-600 underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
 
           {/* Search Query */}
           <div>

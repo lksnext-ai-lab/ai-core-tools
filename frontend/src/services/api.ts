@@ -1061,6 +1061,8 @@ class ApiService {
       scoreThreshold?: number;
       fetchK?: number;
       lambdaMult?: number;
+      minContentLength?: number;
+      maxContentLength?: number;
     },
   ) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
@@ -1073,6 +1075,8 @@ class ApiService {
         ...(searchOptions?.scoreThreshold !== undefined ? { score_threshold: searchOptions.scoreThreshold } : {}),
         ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
         ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
+        ...(searchOptions?.minContentLength != null && { min_content_length: searchOptions.minContentLength }),
+        ...(searchOptions?.maxContentLength != null && { max_content_length: searchOptions.maxContentLength }),
       }),
     });
   }
@@ -1112,11 +1116,17 @@ class ApiService {
   async countSiloDocuments(
     appId: number | string,
     siloId: number | string,
-    filterMetadata?: Record<string, unknown>,
+    filterMetadata?: Record<string, unknown> | null,
+    minContentLength?: number | null,
+    maxContentLength?: number | null,
   ) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/documents/count`, {
       method: 'POST',
-      body: JSON.stringify({ filter_metadata: filterMetadata ?? null }),
+      body: JSON.stringify({
+        filter_metadata: filterMetadata ?? null,
+        ...(minContentLength != null && { min_content_length: minContentLength }),
+        ...(maxContentLength != null && { max_content_length: maxContentLength }),
+      }),
     });
   }
 
