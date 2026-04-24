@@ -26,6 +26,7 @@ from services.folder_service import FolderService
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
+DEFAULT_SEARCH_LIMIT = 100
 
 logger = get_logger(__name__)
 
@@ -990,7 +991,13 @@ class SiloService:
         return doc_count
 
     @staticmethod
-    def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None, db: Session = None) -> List[Document]:
+    def find_docs_in_collection(
+        silo_id: int,
+        query: str,
+        filter_metadata: Optional[dict] = None,
+        limit: Optional[int] = None,
+        db: Session = None,
+    ) -> List[Document]:
         # Get silo within the session to ensure relationships are loaded
         silo = SiloRepository.get_by_id(silo_id, db)
         if not silo or not SiloService.check_silo_collection_exists(silo_id, db):
@@ -1003,8 +1010,7 @@ class SiloService:
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
-        # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
-        results_limit = 100 if filter_metadata else 5
+        results_limit = limit if limit and limit > 0 else DEFAULT_SEARCH_LIMIT
 
         return _get_vector_store(silo).search_similar_documents(
             collection_name, 
@@ -1015,7 +1021,13 @@ class SiloService:
         )
 
     @staticmethod
-    def search_in_silo(silo_id: int, query: str, filter_metadata: Optional[dict] = None, limit: int = 10, db: Session = None) -> List[Document]:
+    def search_in_silo(
+        silo_id: int,
+        query: str,
+        filter_metadata: Optional[dict] = None,
+        limit: Optional[int] = None,
+        db: Session = None,
+    ) -> List[Document]:
         """
         Search for documents in a silo using semantic search
         
@@ -1030,13 +1042,13 @@ class SiloService:
             List of Document objects with page_content and metadata
         """
         # Use find_docs_in_collection as the base implementation
-        results = SiloService.find_docs_in_collection(silo_id, query, filter_metadata, db)
-        
-        # Apply limit if specified
-        if limit and limit > 0:
-            results = results[:limit]
-            
-        return results
+        return SiloService.find_docs_in_collection(
+            silo_id,
+            query,
+            filter_metadata,
+            limit=limit,
+            db=db,
+        )
 
     @staticmethod
     def _get_filter_value_by_type(field_value: str, field_type: str) -> dict:
@@ -1270,6 +1282,7 @@ class SiloService:
         silo_id: int, 
         query: str, 
         filter_metadata: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
         db: Session = None
     ) -> Optional[Dict[str, Any]]:
         """
@@ -1285,6 +1298,7 @@ class SiloService:
             silo_id, 
             query, 
             filter_metadata=filter_metadata,
+            limit=limit,
             db=db
         )
         

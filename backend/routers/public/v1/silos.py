@@ -511,6 +511,7 @@ async def find_docs_in_collection(
             silo_id=silo_id,
             query=query,
             filter_metadata=request.filter_metadata,
+            limit=request.limit,
             db=db,
         )
 
@@ -621,4 +622,3 @@ async def index_file_document(
                 os.unlink(temp_file_path)
             except Exception as e:
                 logger.warning(f"Failed to delete temp file {temp_file_path}: {str(e)}")
-

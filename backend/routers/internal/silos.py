@@ -411,6 +411,7 @@ async def search_silo_documents(
             silo_id, 
             search_query.query, 
             search_query.filter_metadata,
+            search_query.limit,
             db
         )
         

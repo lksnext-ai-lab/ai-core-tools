@@ -66,5 +66,5 @@ CreateUpdateSiloSchema = CreateSiloSchema
 class SiloSearchSchema(BaseModel):
     """Schema for searching within a silo"""
     query: str
-    limit: Optional[int] = 10
+    limit: Optional[int] = None
     filter_metadata: Optional[Dict[str, Any]] = None
