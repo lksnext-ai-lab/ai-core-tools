@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Search, Info } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchControls, { type SearchControlsValue, DEFAULT_SEARCH_CONTROLS } from '../components/playground/SearchControls';
+import SiloAPISnippets from '../components/playground/SiloAPISnippets';
 import SearchFilters from '../components/playground/SearchFilters';
 import type {
   SearchFilterMetadataField,
@@ -52,6 +53,8 @@ function SiloPlaygroundPage() {
   const [deleteByFilterCount, setDeleteByFilterCount] = useState<number | null>(null);
   const [deleteByFilterLoading, setDeleteByFilterLoading] = useState(false);
   const [deleteByFilterConfirmName, setDeleteByFilterConfirmName] = useState('');
+
+  const [showApiSnippets, setShowApiSnippets] = useState(false);
 
   // Reindex (FR-4.3)
   const [reindexLoading, setReindexLoading] = useState<string | null>(null);
@@ -386,6 +389,33 @@ function SiloPlaygroundPage() {
           </div>
         </form>
 
+        {/* API snippet toggle + panel */}
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowApiSnippets((v) => !v)}
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            {showApiSnippets ? 'Hide API snippet' : 'Show as API call'}
+          </button>
+          {showApiSnippets && (
+            <div className="mt-3">
+              <SiloAPISnippets
+                appId={appId ?? ''}
+                siloId={siloId ?? ''}
+                siloName={silo?.name}
+                query={searchQuery}
+                limit={searchControls.limit}
+                filterMetadata={filterMetadata as Record<string, unknown> | undefined}
+                searchType={searchControls.searchType}
+                scoreThreshold={searchControls.searchType === 'similarity_score_threshold' ? searchControls.scoreThreshold : undefined}
+                fetchK={searchControls.searchType === 'mmr' ? searchControls.fetchK : undefined}
+                lambdaMult={searchControls.searchType === 'mmr' ? searchControls.lambdaMult : undefined}
+              />
+            </div>
+          )}
+        </div>
+
         {/* Search Error */}
         {searchError && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -522,7 +552,6 @@ function SiloPlaygroundPage() {
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       {/* Single delete confirmation modal */}
