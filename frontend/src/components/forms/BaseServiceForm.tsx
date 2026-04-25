@@ -148,10 +148,6 @@ function BaseServiceForm({
       setError('Model name is required');
       return;
     }
-    if (!formData.base_url.trim()) {
-      setError('Base URL is required');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -179,7 +175,6 @@ function BaseServiceForm({
     formData.name.trim() !== '' &&
     formData.provider !== '' &&
     formData.model_name.trim() !== '' &&
-    formData.base_url.trim() !== '' &&
     hasValidApiKey;
 
   return (
@@ -268,7 +263,7 @@ function BaseServiceForm({
         {/* Base URL */}
         <div>
           <label htmlFor="base_url" className="block text-sm font-medium text-gray-700 mb-2">
-            Base URL *
+            Base URL
           </label>
           <input
             type="text"
@@ -278,7 +273,6 @@ function BaseServiceForm({
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="https://api.example.com/v1"
-            required
           />
           {currentProviderDefaults && (
             <p className="mt-1 text-sm text-gray-500">

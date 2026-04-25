@@ -2111,6 +2111,10 @@ class ApiService {
     return this.request('/internal/admin/system-ai-services');
   }
 
+  async getSystemAIService(serviceId: number) {
+    return this.request(`/internal/admin/system-ai-services/${serviceId}`);
+  }
+
   async createSystemAIService(data: {
     name: string;
     provider: string;

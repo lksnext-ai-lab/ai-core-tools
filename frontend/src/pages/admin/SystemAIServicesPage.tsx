@@ -40,8 +40,13 @@ const SystemAIServicesPage: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleOpenEdit = (svc: SystemAIService) => {
-    setEditingService(svc);
+  const handleOpenEdit = async (svc: SystemAIService) => {
+    try {
+      const detail = await apiService.getSystemAIService(svc.service_id);
+      setEditingService(detail as SystemAIService);
+    } catch {
+      setEditingService(svc);
+    }
     setShowForm(true);
   };
 

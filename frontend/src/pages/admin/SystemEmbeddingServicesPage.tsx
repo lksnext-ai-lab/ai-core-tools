@@ -118,7 +118,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
           name: editingService.name,
           provider: editingService.provider,
           model_name: editingService.model_name,
-          api_key: '',
+          api_key: editingService.api_key,
           base_url: editingService.base_url,
           created_at: '',
           available_providers: [],
