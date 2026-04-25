@@ -5,6 +5,8 @@ This module provides a PGVector-specific implementation of VectorStoreBase,
 wrapping LangChain's PGVector functionality while conforming to our abstract interface.
 """
 
+import json
+import logging
 import numpy as np
 from typing import List, Optional, Dict, Any
 from sqlalchemy import text
@@ -14,6 +16,12 @@ from langchain_postgres.vectorstores import PGVector
 
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from tools.embeddingTools import get_embeddings_model
+
+logger = logging.getLogger(__name__)
+
+
+# PGVector-style operator -> SQL fragment for numeric comparisons
+_PG_NUMERIC_OPS = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}
 
 
 class PGVectorStore(VectorStoreInterface):
@@ -133,57 +141,108 @@ class PGVectorStore(VectorStoreInterface):
         query: str,
         embedding_service=None,
         filter_metadata: Optional[Dict[str, Any]] = None,
-        k: int = 5
+        k: int = 5,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
     ) -> List[Document]:
         """
         Search for similar documents in PGVector collection.
-        
+
         Args:
             collection_name: Name of the collection to search
             query: Query string or embedding vector
             embedding_service: Service to generate query embeddings
             filter_metadata: Optional metadata filters
             k: Number of results to return
-            
+            search_type: Search strategy — "similarity" (default),
+                "similarity_score_threshold", or "mmr".
+            score_threshold: Minimum relevance score for
+                "similarity_score_threshold" search.
+            fetch_k: Candidate pool size before MMR re-ranking (default: k*4).
+            lambda_mult: MMR diversity factor 0..1 (default: 0.5).
+
         Returns:
             List of Document objects with similarity scores and IDs in metadata
+            (_score=None for MMR results).
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
-        
-        # Handle empty queries by returning documents with just metadata filtering
+
+        # Handle empty queries and direct embedding vectors — always use similarity path
         if not query or (isinstance(query, str) and not query.strip()):
-            # For empty queries, use a space as minimal query
             results_with_scores = vector_store.similarity_search_with_score(
                 " ",
                 k=k,
                 filter=filter_metadata
             )
-        elif isinstance(query, (list, np.ndarray)):
-            # If we receive the embedding directly, use it
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score, '_id': doc.id},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        if isinstance(query, (list, np.ndarray)):
             results_with_scores = vector_store.similarity_search_with_score_by_vector(
                 embedding=query,
                 k=k,
                 filter=filter_metadata
             )
-        else:
-            # Normal text search with scores
-            results_with_scores = vector_store.similarity_search_with_score(
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score, '_id': doc.id},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        # Dispatch on search_type for normal text queries
+        if search_type == "mmr":
+            docs = vector_store.max_marginal_relevance_search(
                 query,
                 k=k,
-                filter=filter_metadata
+                filter=filter_metadata,
+                fetch_k=fetch_k if fetch_k else k * 4,
+                lambda_mult=lambda_mult if lambda_mult is not None else 0.5,
             )
-        
-        # Convert the results to include score and id in metadata
-        results = []
-        for doc, score in results_with_scores:
-            # Create a new Document with score AND id in metadata
-            new_doc = Document(
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': None, '_id': doc.id if doc.id else None},
+                )
+                for doc in docs
+            ]
+
+        if search_type == "similarity_score_threshold" and score_threshold is not None:
+            results_with_scores = vector_store.similarity_search_with_relevance_scores(
+                query,
+                k=k,
+                filter=filter_metadata,
+                score_threshold=score_threshold,
+            )
+            return [
+                Document(
+                    page_content=doc.page_content,
+                    metadata={**doc.metadata, '_score': score, '_id': doc.id},
+                )
+                for doc, score in results_with_scores
+            ]
+
+        # Default: plain similarity search
+        results_with_scores = vector_store.similarity_search_with_score(
+            query,
+            k=k,
+            filter=filter_metadata
+        )
+        return [
+            Document(
                 page_content=doc.page_content,
-                metadata={**doc.metadata, '_score': score, '_id': doc.id}
+                metadata={**doc.metadata, '_score': score, '_id': doc.id},
             )
-            results.append(new_doc)
-            
-        return results
+            for doc, score in results_with_scores
+        ]
     
     def get_retriever(
         self,
@@ -191,26 +250,33 @@ class PGVectorStore(VectorStoreInterface):
         embedding_service=None,
         search_params: Optional[Dict[str, Any]] = None,
         use_async: bool = False,
+        search_type: str = "similarity",
         **kwargs
     ) -> VectorStoreRetriever:
         """
         Get a LangChain retriever for PGVector collection.
-        
+
         Args:
             collection_name: Name of the collection
             embedding_service: Service to generate embeddings
             search_params: Optional search parameters (filters, k, etc.)
             use_async: If True, uses async engine for async operations (e.g., in LangGraph)
+            search_type: LangChain retriever search strategy — "similarity"
+                (default), "similarity_score_threshold", or "mmr".
             **kwargs: Additional arguments to pass to as_retriever
-            
+
         Returns:
             VectorStoreRetriever instance configured for this collection
         """
         vector_store = self._get_vector_store(collection_name, embedding_service, use_async)
-        
+
         if search_params is not None:
-            return vector_store.as_retriever(search_kwargs=search_params, **kwargs)
-        return vector_store.as_retriever(**kwargs)
+            return vector_store.as_retriever(
+                search_type=search_type,
+                search_kwargs=search_params,
+                **kwargs
+            )
+        return vector_store.as_retriever(search_type=search_type, **kwargs)
 
     def collection_exists(self, collection_name: str) -> bool:
         with self.engine.connect() as connection:
@@ -220,19 +286,169 @@ class PGVectorStore(VectorStoreInterface):
             )
             return result.scalar() is not None
 
-    def count_documents(self, collection_name: str) -> int:
-        with self.engine.connect() as connection:
-            collection_uuid = connection.execute(
-                text("SELECT uuid FROM langchain_pg_collection WHERE name = :name"),
-                {"name": collection_name}
-            ).scalar()
+    def count_documents(
+        self,
+        collection_name: str,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
+        params: Dict[str, Any] = {"name": collection_name}
+        where_extra = self._build_filter_sql(filter_metadata, params) if filter_metadata else ""
 
-            if not collection_uuid:
-                return 0
+        if min_content_length is not None:
+            where_extra += " AND LENGTH(e.document) >= :min_content_length"
+            params["min_content_length"] = min_content_length
+        if max_content_length is not None:
+            where_extra += " AND LENGTH(e.document) <= :max_content_length"
+            params["max_content_length"] = max_content_length
 
-            count = connection.execute(
-                text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = :uuid"),
-                {"uuid": collection_uuid}
-            ).scalar()
+        sql = text(
+            "SELECT COUNT(*) FROM langchain_pg_embedding e "
+            "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
+            f"WHERE c.name = :name{where_extra}"
+        )
 
-            return int(count or 0)
+        try:
+            with self.engine.connect() as connection:
+                row = connection.execute(sql, params).fetchone()
+                return int(row[0]) if row else 0
+        except Exception as exc:
+            logger.error("PGVector count_documents error: %s", exc)
+            return 0
+
+    def update_documents_metadata(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        metadata_updates: Dict[str, Any],
+        replace: bool = False,
+    ) -> int:
+        if not filter_metadata:
+            raise ValueError("filter_metadata is required for update_documents_metadata")
+
+        params: Dict[str, Any] = {
+            "name": collection_name,
+            "metadata": json.dumps(metadata_updates),
+        }
+        where_extra = self._build_filter_sql(filter_metadata, params)
+
+        if replace:
+            set_clause = "cmetadata = CAST(:metadata AS jsonb)"
+        else:
+            set_clause = "cmetadata = cmetadata || CAST(:metadata AS jsonb)"
+
+        sql = text(
+            f"UPDATE langchain_pg_embedding AS e SET {set_clause} "
+            "WHERE e.collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = :name)"
+            f"{where_extra}"
+        )
+
+        try:
+            with self.engine.begin() as connection:
+                result = connection.execute(sql, params)
+                return int(result.rowcount or 0)
+        except Exception as exc:
+            logger.error("PGVector update_documents_metadata error: %s", exc)
+            raise
+
+    def get_distinct_metadata_values(
+        self,
+        collection_name: str,
+        field: str,
+        prefix: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[str]:
+        sql = text(
+            """
+            SELECT DISTINCT cmetadata->>:field AS val
+            FROM langchain_pg_embedding lpe
+            JOIN langchain_pg_collection lpc ON lpe.collection_id = lpc.uuid
+            WHERE lpc.name = :collection_name
+              AND cmetadata->>:field IS NOT NULL
+              AND cmetadata->>:field != ''
+              AND (:prefix IS NULL OR LOWER(cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+            ORDER BY val
+            LIMIT :limit
+            """
+        )
+
+        try:
+            with self.engine.connect() as connection:
+                result = connection.execute(
+                    sql,
+                    {
+                        "field": field,
+                        "collection_name": collection_name,
+                        "prefix_pattern": (prefix + "%") if prefix else None,
+                        "prefix": prefix if prefix else None,
+                        "limit": limit,
+                    },
+                )
+                return [str(row[0]) for row in result if row[0] is not None]
+        except Exception as exc:
+            logger.error("PGVector get_distinct_metadata_values error: %s", exc)
+            return []
+
+    @staticmethod
+    def _build_filter_sql(filter_metadata: Dict[str, Any], params: Dict[str, Any]) -> str:
+        """
+        Translate a PGVector-style metadata filter into an SQL WHERE fragment
+        targeting the ``e.cmetadata`` JSONB column. Populates ``params`` with
+        the bind values. Returns a string starting with ``" AND "`` or empty.
+
+        Supported operators: $eq, $ne, $gt, $gte, $lt, $lte, $in.
+        Plain values (e.g. ``{"field": "value"}``) are treated as ``$eq``.
+        """
+        if not filter_metadata:
+            return ""
+
+        # Avoid bind-parameter collisions when the caller already provided keys.
+        idx = sum(1 for k in params if k.startswith("k") and k[1:].isdigit())
+        conditions: List[str] = []
+
+        for key, spec in filter_metadata.items():
+            if not isinstance(spec, dict):
+                conditions.append(f"e.cmetadata ->> :k{idx} = :v{idx}")
+                params[f"k{idx}"] = key
+                params[f"v{idx}"] = str(spec)
+                idx += 1
+                continue
+
+            for op, val in spec.items():
+                conditions.extend(
+                    PGVectorStore._operator_condition(idx, key, op, val, params)
+                )
+                idx += 1
+
+        return (" AND " + " AND ".join(conditions)) if conditions else ""
+
+    @staticmethod
+    def _operator_condition(
+        idx: int,
+        key: str,
+        op: str,
+        val: Any,
+        params: Dict[str, Any],
+    ) -> List[str]:
+        """Build SQL fragment(s) for one (key, op, val) triple."""
+        if op == "$eq":
+            params[f"k{idx}"] = key
+            params[f"v{idx}"] = str(val)
+            return [f"e.cmetadata ->> :k{idx} = :v{idx}"]
+        if op == "$ne":
+            params[f"k{idx}"] = key
+            params[f"v{idx}"] = str(val)
+            return [f"e.cmetadata ->> :k{idx} != :v{idx}"]
+        if op == "$in" and isinstance(val, list):
+            placeholders = ", ".join(f":in{idx}_{j}" for j in range(len(val)))
+            params[f"k{idx}"] = key
+            for j, v in enumerate(val):
+                params[f"in{idx}_{j}"] = str(v)
+            return [f"e.cmetadata ->> :k{idx} IN ({placeholders})"]
+        if op in _PG_NUMERIC_OPS:
+            params[f"k{idx}"] = key
+            params[f"v{idx}"] = val
+            return [f"(e.cmetadata ->> :k{idx})::numeric {_PG_NUMERIC_OPS[op]} :v{idx}"]
+        logger.warning("Unsupported PGVector filter operator '%s' for field '%s'; ignoring", op, key)
+        return []

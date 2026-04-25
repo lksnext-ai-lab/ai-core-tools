@@ -225,6 +225,7 @@ async def find_docs_in_repository(
             silo_id=repository.silo_id,
             query=query,
             filter_metadata=request.filter_metadata,
+            limit=request.limit,
             db=db,
         )
 
@@ -514,4 +515,3 @@ async def delete_media(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete media",
         )
-

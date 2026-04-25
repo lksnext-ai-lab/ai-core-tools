@@ -45,7 +45,7 @@ export default function ConversationSidebar({
   currentConversationId,
   onConversationSelect,
   onNewConversation,
-  onReloadRequest
+  onReloadRequest: _onReloadRequest
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +95,7 @@ export default function ConversationSidebar({
     }
   }
 
-  async function handleEditTitle(conversationId: number, newTitle: string) {
+  async function _handleEditTitle(conversationId: number, newTitle: string) {
     try {
       await apiService.updateConversation(conversationId, { title: newTitle });
       setConversations(conversations.map(c => 

@@ -24,7 +24,7 @@ const TIERS = [
 ];
 
 const SubscriptionPage: React.FC = () => {
-  const { subscription, usage, isLoading, error, refresh } = useSubscription();
+  const { subscription, usage, isLoading, error, refresh: _refresh } = useSubscription();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 

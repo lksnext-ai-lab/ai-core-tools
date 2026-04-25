@@ -51,7 +51,7 @@ function BaseServiceForm({
   onCancel,
   providers,
   getProviderDefaults,
-  formTitle,
+  formTitle: _formTitle,
   serviceType,
   needsApiKey = false
 }: Readonly<BaseServiceFormProps>) {

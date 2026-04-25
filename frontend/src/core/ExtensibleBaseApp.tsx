@@ -14,7 +14,6 @@ import type { LibraryConfig, ExtraRoute } from './types';
 import { baseTheme } from '../themes/baseTheme';
 
 // Import base pages
-import HomePage from '../pages/HomePage';
 import LandingPage from '../pages/LandingPage';
 import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
@@ -75,7 +74,6 @@ interface ExtensibleBaseAppProps {
 export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   config,
   extraRoutes = [],
-  children
 }) => {
   // Merge routes from config and extraRoutes prop
   const allExtraRoutes = [...(config.routes || []), ...extraRoutes];

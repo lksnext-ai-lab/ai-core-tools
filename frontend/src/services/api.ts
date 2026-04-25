@@ -1050,15 +1050,103 @@ class ApiService {
     return response.json();
   }
 
-  async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
+  async searchSiloDocuments(
+    appId: number,
+    siloId: number,
+    query: string,
+    limit?: number,
+    filterMetadata?: Record<string, any>,
+    searchOptions?: {
+      searchType?: string;
+      scoreThreshold?: number;
+      fetchK?: number;
+      lambdaMult?: number;
+      minContentLength?: number;
+      maxContentLength?: number;
+    },
+  ) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',
       body: JSON.stringify({
         query,
-        limit,
-        filter_metadata: filterMetadata
+        ...(limit !== undefined ? { limit } : {}),
+        filter_metadata: filterMetadata,
+        ...(searchOptions?.searchType && searchOptions.searchType !== 'similarity' ? { search_type: searchOptions.searchType } : {}),
+        ...(searchOptions?.scoreThreshold !== undefined ? { score_threshold: searchOptions.scoreThreshold } : {}),
+        ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
+        ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
+        ...(searchOptions?.minContentLength != null && { min_content_length: searchOptions.minContentLength }),
+        ...(searchOptions?.maxContentLength != null && { max_content_length: searchOptions.maxContentLength }),
       }),
     });
+  }
+
+  async searchSiloDocumentsWithTiming(
+    appId: number,
+    siloId: number,
+    query: string,
+    limit?: number,
+    filterMetadata?: Record<string, any>,
+    searchOptions?: {
+      searchType?: string;
+      scoreThreshold?: number;
+      fetchK?: number;
+      lambdaMult?: number;
+      minContentLength?: number;
+      maxContentLength?: number;
+    },
+  ): Promise<{ data: any; serverMs: number | null }> {
+    const url = `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/search`;
+    const body = JSON.stringify({
+      query,
+      ...(limit !== undefined ? { limit } : {}),
+      filter_metadata: filterMetadata,
+      ...(searchOptions?.searchType && searchOptions.searchType !== 'similarity'
+        ? { search_type: searchOptions.searchType }
+        : {}),
+      ...(searchOptions?.scoreThreshold !== undefined
+        ? { score_threshold: searchOptions.scoreThreshold }
+        : {}),
+      ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
+      ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
+      ...(searchOptions?.minContentLength != null && { min_content_length: searchOptions.minContentLength }),
+      ...(searchOptions?.maxContentLength != null && { max_content_length: searchOptions.maxContentLength }),
+    });
+    const options: RequestInit = { method: 'POST', body };
+    const headers = this.prepareHeaders(options);
+    const response = await fetch(url, { ...options, headers });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    const serverMsHeader = response.headers.get('x-server-time-ms');
+    const serverMs = serverMsHeader !== null ? parseInt(serverMsHeader, 10) : null;
+    const data = await response.json();
+    return { data, serverMs };
+  }
+
+  async getSiloNeighbors(
+    appId: number | string,
+    siloId: number | string,
+    sourceType: string,
+    sourceId: string,
+  ) {
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/documents/neighbors?source_type=${encodeURIComponent(sourceType)}&source_id=${encodeURIComponent(sourceId)}`,
+    );
+  }
+
+  async getSiloMetadataValues(
+    appId: number | string,
+    siloId: number | string,
+    field: string,
+    prefix?: string,
+    limit = 100,
+  ) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (prefix) params.set('prefix', prefix);
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/metadata/${encodeURIComponent(field)}/values?${params}`,
+    );
   }
 
   async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
@@ -1066,6 +1154,34 @@ class ApiService {
       method: 'DELETE',
       body: JSON.stringify({ document_ids: documentIds }),
     });
+  }
+
+  async countSiloDocuments(
+    appId: number | string,
+    siloId: number | string,
+    filterMetadata?: Record<string, unknown> | null,
+    minContentLength?: number | null,
+    maxContentLength?: number | null,
+  ) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/documents/count`, {
+      method: 'POST',
+      body: JSON.stringify({
+        filter_metadata: filterMetadata ?? null,
+        ...(minContentLength != null && { min_content_length: minContentLength }),
+        ...(maxContentLength != null && { max_content_length: maxContentLength }),
+      }),
+    });
+  }
+
+  async reindexSiloResource(
+    appId: number | string,
+    siloId: number | string,
+    resourceId: number | string,
+  ) {
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/resources/${resourceId}/reindex`,
+      { method: 'POST' },
+    );
   }
 
   // ==================== REPOSITORIES API ====================

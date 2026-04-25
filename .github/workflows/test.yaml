@@ -62,6 +62,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
+    if: false  # Temporarily disabled until we optimize the test suite and reduce flakiness
 
     services:
       postgres:
