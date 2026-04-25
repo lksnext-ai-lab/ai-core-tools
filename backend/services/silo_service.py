@@ -1,13 +1,11 @@
 from typing import Optional, List, Dict, Any
 import os
-import json
 from models.media import Media
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
 from db.database import db as db_obj
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from utils.logger import get_logger
 from langchain_core.documents import Document
 from tools.vector_store_factory import VectorStoreFactory
@@ -49,28 +47,6 @@ def _get_vector_store(silo: Optional[Silo] = None, vector_db_type: Optional[str]
     resolved_type = _resolve_vector_db_type(silo, vector_db_type)
     return VectorStoreFactory.get_vector_store(db_obj, resolved_type)
 
-
-def _add_pgvector_condition(conditions: list, params: dict, i: int, key: str, op: str, val) -> None:
-    """Append a single operator condition to the conditions list and populate params."""
-    numeric_ops = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}
-    if op == "$eq":
-        conditions.append(f"e.cmetadata ->> :k{i} = :v{i}")
-        params[f"k{i}"] = key
-        params[f"v{i}"] = str(val)
-    elif op == "$ne":
-        conditions.append(f"e.cmetadata ->> :k{i} != :v{i}")
-        params[f"k{i}"] = key
-        params[f"v{i}"] = str(val)
-    elif op == "$in" and isinstance(val, list):
-        placeholders = ", ".join(f":in{i}_{j}" for j in range(len(val)))
-        conditions.append(f"e.cmetadata ->> :k{i} IN ({placeholders})")
-        params[f"k{i}"] = key
-        for j, v in enumerate(val):
-            params[f"in{i}_{j}"] = str(v)
-    elif op in numeric_ops:
-        conditions.append(f"(e.cmetadata ->> :k{i})::numeric {numeric_ops[op]} :v{i}")
-        params[f"k{i}"] = key
-        params[f"v{i}"] = val
 
 class SiloService:
 
@@ -389,125 +365,24 @@ class SiloService:
         max_content_length: Optional[int] = None,
     ) -> int:
         """
-        Count documents in a silo collection, optionally filtered by metadata.
-        Returns 0 gracefully if the silo or collection does not exist.
+        Count documents in a silo collection, optionally filtered by metadata
+        and/or content length. Returns 0 gracefully if the silo or collection
+        does not exist.
         """
         silo = SiloRepository.get_by_id(silo_id, db)
         if not silo or not SiloService.check_silo_collection_exists(silo_id, db):
             return 0
 
-        db_type = _resolve_vector_db_type(silo)
-        if db_type == "QDRANT":
-            return SiloService._count_docs_qdrant(silo_id, silo, filter_metadata, min_content_length, max_content_length)
-        else:
-            return SiloService._count_docs_pgvector(silo_id, filter_metadata, db, min_content_length, max_content_length)
-
-    @staticmethod
-    def _pgvector_filter_to_sql(filter_metadata: dict, params: dict) -> str:
-        """Convert a filter_metadata dict to SQL WHERE fragment and populate params dict."""
-        conditions = []
-        i = 0
-        for key, spec in filter_metadata.items():
-            if not isinstance(spec, dict):
-                conditions.append(f"e.cmetadata ->> :k{i} = :v{i}")
-                params[f"k{i}"] = key
-                params[f"v{i}"] = str(spec)
-                i += 1
-                continue
-            for op, val in spec.items():
-                _add_pgvector_condition(conditions, params, i, key, op, val)
-                i += 1
-        return (" AND " + " AND ".join(conditions)) if conditions else ""
-
-    @staticmethod
-    def _count_docs_pgvector(
-        silo_id: int,
-        filter_metadata: Optional[dict],
-        db: Session,
-        min_content_length: Optional[int] = None,
-        max_content_length: Optional[int] = None,
-    ) -> int:
-        """Count matching docs in PGVector using a direct SQL query on langchain_pg_embedding."""
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        params: dict = {"name": collection_name}
-
-        where_extra = ""
-        if filter_metadata:
-            where_extra = SiloService._pgvector_filter_to_sql(filter_metadata, params)
-
-        if min_content_length is not None:
-            where_extra += " AND LENGTH(e.document) >= :min_content_length"
-            params["min_content_length"] = min_content_length
-        if max_content_length is not None:
-            where_extra += " AND LENGTH(e.document) <= :max_content_length"
-            params["max_content_length"] = max_content_length
-
-        sql = (
-            "SELECT COUNT(*) FROM langchain_pg_embedding e "
-            "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
-            f"WHERE c.name = :name{where_extra}"
-        )
         try:
-            row = db.execute(text(sql), params).fetchone()
-            return int(row[0]) if row else 0
+            return _get_vector_store(silo).count_documents(
+                collection_name,
+                filter_metadata=filter_metadata,
+                min_content_length=min_content_length,
+                max_content_length=max_content_length,
+            )
         except Exception as exc:
-            logger.error("_count_docs_pgvector error: %s", exc)
-            return 0
-
-    @staticmethod
-    def _count_docs_qdrant(
-        silo_id: int,
-        silo,
-        filter_metadata: Optional[dict],
-        min_content_length: Optional[int] = None,
-        max_content_length: Optional[int] = None,
-    ) -> int:
-        """Count matching docs in Qdrant using the client's count() method."""
-        try:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
-            store = _get_vector_store(silo)
-            collection_name = COLLECTION_PREFIX + str(silo_id)
-            must = []
-            if filter_metadata:
-                for key, spec in filter_metadata.items():
-                    prefixed_key = f"metadata.{key}"
-                    if not isinstance(spec, dict):
-                        must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=spec)))
-                        continue
-                    for op, val in spec.items():
-                        if op in ("$eq", "match"):
-                            must.append(FieldCondition(key=prefixed_key, match=MatchValue(value=val)))
-                        elif op in ("$in", "match_any") and isinstance(val, list):
-                            must.append(FieldCondition(key=prefixed_key, match=MatchAny(any=val)))
-            qdrant_filter = Filter(must=must) if must else None
-            if min_content_length is not None or max_content_length is not None:
-                try:
-                    all_docs, _ = store.client.scroll(
-                        collection_name=collection_name,
-                        scroll_filter=qdrant_filter,
-                        with_payload=True,
-                        with_vectors=False,
-                        limit=10000,
-                    )
-                    if len(all_docs) == 10000:
-                        logger.warning("_count_docs_qdrant: hit scroll cap of 10000; count may be underestimated")
-                    count = 0
-                    for point in all_docs:
-                        content = (point.payload or {}).get("page_content", "")
-                        length = len(content)
-                        if min_content_length is not None and length < min_content_length:
-                            continue
-                        if max_content_length is not None and length > max_content_length:
-                            continue
-                        count += 1
-                    return count
-                except Exception as exc:
-                    logger.error("_count_docs_qdrant (content-length scroll) error: %s", exc)
-                    return 0
-            result = store.client.count(collection_name=collection_name, count_filter=qdrant_filter, exact=True)
-            return result.count
-        except Exception as exc:
-            logger.error("_count_docs_qdrant error: %s", exc)
+            logger.error("count_docs_with_filter error for silo %s: %s", silo_id, exc)
             return 0
 
     @staticmethod
@@ -609,91 +484,63 @@ class SiloService:
         """
         Update only the metadata of a resource in the vector database without re-indexing content.
         This is more efficient for operations like moving files between folders.
-        
+
         Args:
             resource: Resource instance with updated folder information
             db_session: Optional database session to use (if None, creates new session)
         """
+        session = db_session if db_session else SessionLocal()
         try:
-            # Use provided session or create new one
-            if db_session:
-                session = db_session
-            else:
-                session = SessionLocal()
-            
-            # Get resource with relations
             resource_with_relations = session.query(Resource).filter(
                 Resource.resource_id == resource.resource_id
             ).first()
-            
+
             if not resource_with_relations:
                 logger.error(f"Resource {resource.resource_id} not found for metadata update")
                 return
-            
-            logger.info(f"Updating metadata for resource {resource.resource_id}, folder_id: {resource_with_relations.folder_id}")
-            
-            collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
-            
-            # Build the correct file path including folder structure
-            if resource_with_relations.folder_id:
-                from services.folder_service import FolderService
-                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
-                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
-            else:
-                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
-            
+
+            silo = resource_with_relations.repository.silo
+            collection_name = COLLECTION_PREFIX + str(silo.silo_id)
+
             file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
-            
-            # Prepare updated metadata
             base_metadata = {
                 "repository_id": resource_with_relations.repository_id,
                 "resource_id": resource_with_relations.resource_id,
-                "silo_id": resource_with_relations.repository.silo_id,
+                "silo_id": silo.silo_id,
                 "name": resource_with_relations.uri,
-                "file_type": file_extension
+                "file_type": file_extension,
             }
-            
-            # Add folder information if resource is in a folder
+
             if resource_with_relations.folder_id:
-                from services.folder_service import FolderService
                 folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
                 base_metadata["folder_id"] = resource_with_relations.folder_id
                 base_metadata["folder_path"] = folder_path
-                # Store relative path including folder structure
-                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
-                logger.info(f"Resource in folder: {folder_path}, ref: {base_metadata['ref']}")
+                base_metadata["ref"] = os.path.join(
+                    str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri
+                )
             else:
-                # Resource is at root level
                 base_metadata["folder_id"] = None
                 base_metadata["folder_path"] = ""
-                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
-                logger.info(f"Resource at root, ref: {base_metadata['ref']}")
-            
-            # Update metadata in vector database using direct SQL
-            # The langchain_pg_embedding table stores documents with metadata as JSONB
-            update_query = text("""
-                UPDATE langchain_pg_embedding 
-                SET cmetadata = :new_metadata
-                WHERE collection_id = (
-                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
+                base_metadata["ref"] = os.path.join(
+                    str(resource_with_relations.repository_id), resource_with_relations.uri
                 )
-                AND cmetadata->>'resource_id' = :resource_id
-            """)
-            
-            session.execute(update_query, {
-                'new_metadata': json.dumps(base_metadata),
-                'collection_name': collection_name,
-                'resource_id': str(resource.resource_id)
-            })
-            session.commit()
-            
-            logger.info(f"Updated metadata for resource {resource.resource_id} in collection {collection_name}")
-            
+
+            updated = _get_vector_store(silo).update_documents_metadata(
+                collection_name,
+                filter_metadata={"resource_id": {"$eq": str(resource.resource_id)}},
+                metadata_updates=base_metadata,
+                replace=True,
+            )
+
+            logger.info(
+                "Updated metadata for resource %s in collection %s (%s rows)",
+                resource.resource_id, collection_name, updated,
+            )
+
         except Exception as e:
             logger.error(f"Error updating resource metadata: {str(e)}")
             raise
         finally:
-            # Only close if we created the session
             if not db_session:
                 session.close()
 
@@ -702,68 +549,54 @@ class SiloService:
         """
         Update only the metadata of media chunks in the vector database without re-indexing content.
         Updates folder information for all chunks belonging to this media.
-        
+
         Args:
             media: Media instance with updated folder information
             db_session: Optional database session
         """
+        session = db_session if db_session else SessionLocal()
         try:
-            if db_session:
-                session = db_session
-            else:
-                session = SessionLocal()
-            
-            # Get media with relations
             media_with_relations = session.query(Media).filter(
                 Media.media_id == media.media_id
             ).first()
-            
+
             if not media_with_relations:
                 logger.error(f"Media {media.media_id} not found for metadata update")
                 return
-            
-            logger.info(f"Updating metadata for media {media.media_id}, folder_id: {media_with_relations.folder_id}")
-            
-            collection_name = COLLECTION_PREFIX + str(media_with_relations.repository.silo_id)
-            
-            # Prepare updated metadata fields
+
+            silo = media_with_relations.repository.silo
+            collection_name = COLLECTION_PREFIX + str(silo.silo_id)
+
             metadata_updates = {
                 "source_type": media_with_relations.source_type,
                 "source_url": media_with_relations.source_url,
                 "language": media_with_relations.language,
-                "name": media_with_relations.name
+                "name": media_with_relations.name,
             }
-            
-            # Add folder information
+
             if media_with_relations.folder_id:
-                from services.folder_service import FolderService
                 folder_path = FolderService.get_folder_path(media_with_relations.folder_id, session)
                 metadata_updates["folder_id"] = media_with_relations.folder_id
                 metadata_updates["folder_path"] = folder_path
             else:
                 metadata_updates["folder_id"] = None
                 metadata_updates["folder_path"] = ""
-            
-            # Update all chunks for this media in vector database
-            update_query = text("""
-                UPDATE langchain_pg_embedding 
-                SET cmetadata = cmetadata || CAST(:metadata_updates AS jsonb)
-                WHERE collection_id = (
-                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
-                )
-                AND cmetadata->>'media_id' = :media_id
-                AND cmetadata->>'content_type' = 'media_chunk'
-            """)
 
-            session.execute(update_query, {
-                'metadata_updates': json.dumps(metadata_updates),
-                'collection_name': collection_name,
-                'media_id': str(media.media_id)
-            })
-            session.commit()
-            
-            logger.info(f"Updated metadata for all chunks of media {media.media_id} in collection {collection_name}")
-            
+            updated = _get_vector_store(silo).update_documents_metadata(
+                collection_name,
+                filter_metadata={
+                    "media_id": {"$eq": str(media.media_id)},
+                    "content_type": {"$eq": "media_chunk"},
+                },
+                metadata_updates=metadata_updates,
+                replace=False,
+            )
+
+            logger.info(
+                "Updated metadata for media %s in collection %s (%s chunks)",
+                media.media_id, collection_name, updated,
+            )
+
         except Exception as e:
             logger.error(f"Error updating media metadata: {str(e)}")
             raise
@@ -1124,24 +957,17 @@ class SiloService:
             return 0
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        
-        # First, find matching documents to count them
-        matching_docs = _get_vector_store(silo).search_similar_documents(
-            collection_name,
-            query=" ",  # Use empty query with metadata filter only
-            embedding_service=silo.embedding_service,
-            filter_metadata=filter_metadata,
-            k=1000  # Get up to 1000 matching docs
-        )
-        
-        doc_count = len(matching_docs)
-        
+        store = _get_vector_store(silo)
+
+        # Count matches first via the vector store abstraction (faster than search).
+        doc_count = store.count_documents(collection_name, filter_metadata=filter_metadata)
+
         if doc_count == 0:
             logger.info(f"No documents found matching the filter in silo {silo_id}")
             return 0
-        
+
         # Delete the matched documents using metadata filter
-        _get_vector_store(silo).delete_documents(
+        store.delete_documents(
             collection_name,
             ids=filter_metadata,  # Pass metadata filter as dict
             embedding_service=silo.embedding_service
@@ -1573,90 +1399,6 @@ class SiloService:
             raise NotFoundError(f"Silo {silo_id} not found", "silo")
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        vector_db_type = str(getattr(silo, 'vector_db_type', 'PGVECTOR')).upper()
-
-        if vector_db_type == 'QDRANT':
-            return SiloService._get_metadata_values_qdrant(silo, collection_name, field, prefix, limit)
-        else:
-            return SiloService._get_metadata_values_pgvector(collection_name, field, prefix, limit, db)
-
-    @staticmethod
-    def _get_metadata_values_pgvector(
-        collection_name: str,
-        field: str,
-        prefix: Optional[str],
-        limit: int,
-        db: Session,
-    ) -> List[str]:
-        """PGVector: raw SQL jsonb distinct-values query."""
-        sql = text("""
-            SELECT DISTINCT cmetadata->>:field AS val
-            FROM langchain_pg_embedding lpe
-            JOIN langchain_pg_collection lpc ON lpe.collection_id = lpc.uuid
-            WHERE lpc.name = :collection_name
-              AND cmetadata->>:field IS NOT NULL
-              AND cmetadata->>:field != ''
-              AND (:prefix IS NULL OR LOWER(cmetadata->>:field) LIKE LOWER(:prefix_pattern))
-            ORDER BY val
-            LIMIT :limit
-        """)
-
-        result = db.execute(sql, {
-            "field": field,
-            "collection_name": collection_name,
-            "prefix_pattern": (prefix + '%') if prefix else None,
-            "prefix": prefix if prefix else None,
-            "limit": limit,
-        })
-        return [str(row[0]) for row in result if row[0] is not None]
-
-    @staticmethod
-    def _get_metadata_values_qdrant(
-        silo,
-        collection_name: str,
-        field: str,
-        prefix: Optional[str],
-        limit: int,
-    ) -> List[str]:
-        """Qdrant: scroll without query vector, aggregate unique field values."""
-        store = _get_vector_store(silo)
-
-        seen: set = set()
-        offset = None
-        batch_size = 200
-
-        try:
-            qdrant_client = getattr(store, 'client', None)
-            if qdrant_client is None:
-                raise AttributeError("Cannot find Qdrant client on store")
-
-            while len(seen) < limit:
-                results, next_offset = qdrant_client.scroll(
-                    collection_name=collection_name,
-                    limit=batch_size,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=False,
-                )
-                for point in results:
-                    payload = point.payload or {}
-                    metadata = payload.get('metadata', payload)
-                    val = metadata.get(field)
-                    SiloService._collect_value(seen, val, prefix)
-                if next_offset is None or len(results) < batch_size:
-                    break
-                offset = next_offset
-
-        except Exception as e:
-            logger.warning(f"Qdrant scroll for metadata values failed, result may be incomplete: {e}")
-
-        return sorted(list(seen))[:limit]
-
-    @staticmethod
-    def _collect_value(seen: set, val, prefix: Optional[str]) -> None:
-        """Add a metadata value to the seen set if it matches the optional prefix filter."""
-        if val is None:
-            return
-        str_val = str(val)
-        if not prefix or str_val.lower().startswith(prefix.lower()):
-            seen.add(str_val)
+        return _get_vector_store(silo).get_distinct_metadata_values(
+            collection_name, field, prefix=prefix, limit=limit,
+        )

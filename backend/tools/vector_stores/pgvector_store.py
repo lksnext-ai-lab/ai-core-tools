@@ -5,6 +5,8 @@ This module provides a PGVector-specific implementation of VectorStoreBase,
 wrapping LangChain's PGVector functionality while conforming to our abstract interface.
 """
 
+import json
+import logging
 import numpy as np
 from typing import List, Optional, Dict, Any
 from sqlalchemy import text
@@ -14,6 +16,12 @@ from langchain_postgres.vectorstores import PGVector
 
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from tools.embeddingTools import get_embeddings_model
+
+logger = logging.getLogger(__name__)
+
+
+# PGVector-style operator -> SQL fragment for numeric comparisons
+_PG_NUMERIC_OPS = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}
 
 
 class PGVectorStore(VectorStoreInterface):
@@ -278,19 +286,169 @@ class PGVectorStore(VectorStoreInterface):
             )
             return result.scalar() is not None
 
-    def count_documents(self, collection_name: str) -> int:
-        with self.engine.connect() as connection:
-            collection_uuid = connection.execute(
-                text("SELECT uuid FROM langchain_pg_collection WHERE name = :name"),
-                {"name": collection_name}
-            ).scalar()
+    def count_documents(
+        self,
+        collection_name: str,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
+        params: Dict[str, Any] = {"name": collection_name}
+        where_extra = self._build_filter_sql(filter_metadata, params) if filter_metadata else ""
 
-            if not collection_uuid:
-                return 0
+        if min_content_length is not None:
+            where_extra += " AND LENGTH(e.document) >= :min_content_length"
+            params["min_content_length"] = min_content_length
+        if max_content_length is not None:
+            where_extra += " AND LENGTH(e.document) <= :max_content_length"
+            params["max_content_length"] = max_content_length
 
-            count = connection.execute(
-                text("SELECT COUNT(*) FROM langchain_pg_embedding WHERE collection_id = :uuid"),
-                {"uuid": collection_uuid}
-            ).scalar()
+        sql = text(
+            "SELECT COUNT(*) FROM langchain_pg_embedding e "
+            "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
+            f"WHERE c.name = :name{where_extra}"
+        )
 
-            return int(count or 0)
+        try:
+            with self.engine.connect() as connection:
+                row = connection.execute(sql, params).fetchone()
+                return int(row[0]) if row else 0
+        except Exception as exc:
+            logger.error("PGVector count_documents error: %s", exc)
+            return 0
+
+    def update_documents_metadata(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        metadata_updates: Dict[str, Any],
+        replace: bool = False,
+    ) -> int:
+        if not filter_metadata:
+            raise ValueError("filter_metadata is required for update_documents_metadata")
+
+        params: Dict[str, Any] = {
+            "name": collection_name,
+            "metadata": json.dumps(metadata_updates),
+        }
+        where_extra = self._build_filter_sql(filter_metadata, params)
+
+        if replace:
+            set_clause = "cmetadata = CAST(:metadata AS jsonb)"
+        else:
+            set_clause = "cmetadata = cmetadata || CAST(:metadata AS jsonb)"
+
+        sql = text(
+            f"UPDATE langchain_pg_embedding AS e SET {set_clause} "
+            "WHERE e.collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = :name)"
+            f"{where_extra}"
+        )
+
+        try:
+            with self.engine.begin() as connection:
+                result = connection.execute(sql, params)
+                return int(result.rowcount or 0)
+        except Exception as exc:
+            logger.error("PGVector update_documents_metadata error: %s", exc)
+            raise
+
+    def get_distinct_metadata_values(
+        self,
+        collection_name: str,
+        field: str,
+        prefix: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[str]:
+        sql = text(
+            """
+            SELECT DISTINCT cmetadata->>:field AS val
+            FROM langchain_pg_embedding lpe
+            JOIN langchain_pg_collection lpc ON lpe.collection_id = lpc.uuid
+            WHERE lpc.name = :collection_name
+              AND cmetadata->>:field IS NOT NULL
+              AND cmetadata->>:field != ''
+              AND (:prefix IS NULL OR LOWER(cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+            ORDER BY val
+            LIMIT :limit
+            """
+        )
+
+        try:
+            with self.engine.connect() as connection:
+                result = connection.execute(
+                    sql,
+                    {
+                        "field": field,
+                        "collection_name": collection_name,
+                        "prefix_pattern": (prefix + "%") if prefix else None,
+                        "prefix": prefix if prefix else None,
+                        "limit": limit,
+                    },
+                )
+                return [str(row[0]) for row in result if row[0] is not None]
+        except Exception as exc:
+            logger.error("PGVector get_distinct_metadata_values error: %s", exc)
+            return []
+
+    @staticmethod
+    def _build_filter_sql(filter_metadata: Dict[str, Any], params: Dict[str, Any]) -> str:
+        """
+        Translate a PGVector-style metadata filter into an SQL WHERE fragment
+        targeting the ``e.cmetadata`` JSONB column. Populates ``params`` with
+        the bind values. Returns a string starting with ``" AND "`` or empty.
+
+        Supported operators: $eq, $ne, $gt, $gte, $lt, $lte, $in.
+        Plain values (e.g. ``{"field": "value"}``) are treated as ``$eq``.
+        """
+        if not filter_metadata:
+            return ""
+
+        # Avoid bind-parameter collisions when the caller already provided keys.
+        idx = sum(1 for k in params if k.startswith("k") and k[1:].isdigit())
+        conditions: List[str] = []
+
+        for key, spec in filter_metadata.items():
+            if not isinstance(spec, dict):
+                conditions.append(f"e.cmetadata ->> :k{idx} = :v{idx}")
+                params[f"k{idx}"] = key
+                params[f"v{idx}"] = str(spec)
+                idx += 1
+                continue
+
+            for op, val in spec.items():
+                conditions.extend(
+                    PGVectorStore._operator_condition(idx, key, op, val, params)
+                )
+                idx += 1
+
+        return (" AND " + " AND ".join(conditions)) if conditions else ""
+
+    @staticmethod
+    def _operator_condition(
+        idx: int,
+        key: str,
+        op: str,
+        val: Any,
+        params: Dict[str, Any],
+    ) -> List[str]:
+        """Build SQL fragment(s) for one (key, op, val) triple."""
+        if op == "$eq":
+            params[f"k{idx}"] = key
+            params[f"v{idx}"] = str(val)
+            return [f"e.cmetadata ->> :k{idx} = :v{idx}"]
+        if op == "$ne":
+            params[f"k{idx}"] = key
+            params[f"v{idx}"] = str(val)
+            return [f"e.cmetadata ->> :k{idx} != :v{idx}"]
+        if op == "$in" and isinstance(val, list):
+            placeholders = ", ".join(f":in{idx}_{j}" for j in range(len(val)))
+            params[f"k{idx}"] = key
+            for j, v in enumerate(val):
+                params[f"in{idx}_{j}"] = str(v)
+            return [f"e.cmetadata ->> :k{idx} IN ({placeholders})"]
+        if op in _PG_NUMERIC_OPS:
+            params[f"k{idx}"] = key
+            params[f"v{idx}"] = val
+            return [f"(e.cmetadata ->> :k{idx})::numeric {_PG_NUMERIC_OPS[op]} :v{idx}"]
+        logger.warning("Unsupported PGVector filter operator '%s' for field '%s'; ignoring", op, key)
+        return []

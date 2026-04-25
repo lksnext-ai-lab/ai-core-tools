@@ -416,10 +416,194 @@ class QdrantStore(VectorStoreInterface):
             logger.debug(f"Qdrant collection %s not found: %s", collection_name, exc)
             return False
 
-    def count_documents(self, collection_name: str) -> int:
+    def count_documents(
+        self,
+        collection_name: str,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
         try:
-            response = self.client.count(collection_name)
+            qdrant_filter = self._build_qdrant_filter(filter_metadata)
+
+            # Content-length filtering must be done in-memory (no native operator).
+            if min_content_length is not None or max_content_length is not None:
+                return self._count_with_content_length_filter(
+                    collection_name, qdrant_filter, min_content_length, max_content_length
+                )
+
+            response = self.client.count(
+                collection_name=collection_name,
+                count_filter=qdrant_filter,
+                exact=True,
+            )
             return int(response.count)
         except Exception as exc:
-            logger.debug(f"Failed to count documents for collection %s: %s", collection_name, exc)
+            logger.debug("Qdrant count_documents error for %s: %s", collection_name, exc)
+            return 0
+
+    def update_documents_metadata(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        metadata_updates: Dict[str, Any],
+        replace: bool = False,
+    ) -> int:
+        if not filter_metadata:
+            raise ValueError("filter_metadata is required for update_documents_metadata")
+
+        qdrant_filter = self._build_qdrant_filter(filter_metadata)
+        if qdrant_filter is None:
+            return 0
+
+        updated = 0
+        for batch in self._iter_filtered_points(collection_name, qdrant_filter):
+            updated += self._apply_metadata_updates(
+                collection_name, batch, metadata_updates, replace
+            )
+        return updated
+
+    def _iter_filtered_points(self, collection_name: str, qdrant_filter, batch_size: int = 200):
+        """Yield successive batches of points matching ``qdrant_filter``."""
+        offset = None
+        while True:
+            results, next_offset = self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=qdrant_filter,
+                limit=batch_size,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not results:
+                return
+            yield results
+            if next_offset is None or len(results) < batch_size:
+                return
+            offset = next_offset
+
+    def _apply_metadata_updates(
+        self,
+        collection_name: str,
+        points,
+        metadata_updates: Dict[str, Any],
+        replace: bool,
+    ) -> int:
+        """Apply metadata updates to a batch of points; return number updated."""
+        for point in points:
+            if replace:
+                new_metadata = dict(metadata_updates)
+            else:
+                payload = point.payload or {}
+                existing = payload.get("metadata", {}) if isinstance(payload, dict) else {}
+                new_metadata = {**existing, **metadata_updates}
+
+            self.client.set_payload(
+                collection_name=collection_name,
+                payload={"metadata": new_metadata},
+                points=[point.id],
+            )
+        return len(points)
+
+    def get_distinct_metadata_values(
+        self,
+        collection_name: str,
+        field: str,
+        prefix: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[str]:
+        seen: set = set()
+        offset = None
+        batch_size = 200
+
+        try:
+            while len(seen) < limit:
+                results, next_offset = self.client.scroll(
+                    collection_name=collection_name,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                self._collect_metadata_values(results, field, prefix, seen)
+                if next_offset is None or len(results) < batch_size:
+                    break
+                offset = next_offset
+        except Exception as exc:
+            logger.warning(
+                "Qdrant get_distinct_metadata_values for %s.%s failed; partial results: %s",
+                collection_name, field, exc,
+            )
+
+        return sorted(seen)[:limit]
+
+    @staticmethod
+    def _collect_metadata_values(points, field: str, prefix: Optional[str], seen: set) -> None:
+        """Collect matching metadata values from a batch of points into ``seen``."""
+        for point in points:
+            payload = point.payload or {}
+            metadata = payload.get("metadata", payload) if isinstance(payload, dict) else {}
+            val = metadata.get(field) if isinstance(metadata, dict) else None
+            if val is None:
+                continue
+            str_val = str(val)
+            if prefix and not str_val.lower().startswith(prefix.lower()):
+                continue
+            seen.add(str_val)
+
+    def _build_qdrant_filter(self, filter_metadata: Optional[Dict[str, Any]]):
+        """
+        Build a Qdrant native ``Filter`` object from a PGVector-style filter dict.
+        Returns ``None`` when no filter is provided.
+        """
+        if not filter_metadata:
+            return None
+
+        try:
+            from qdrant_client.models import Filter
+        except ImportError:
+            raise ImportError("qdrant-client is required for Qdrant filter building")
+
+        if self._is_qdrant_native_filter(filter_metadata):
+            native_dict = filter_metadata
+        else:
+            native_dict = self._translate_pgvector_filter_to_qdrant(filter_metadata)
+
+        if not native_dict:
+            return None
+
+        return Filter(**native_dict)
+
+    def _count_with_content_length_filter(
+        self,
+        collection_name: str,
+        qdrant_filter,
+        min_content_length: Optional[int],
+        max_content_length: Optional[int],
+    ) -> int:
+        """In-memory content-length filtering via scroll (capped at 10k points)."""
+        try:
+            all_docs, _ = self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=qdrant_filter,
+                with_payload=True,
+                with_vectors=False,
+                limit=10000,
+            )
+            if len(all_docs) == 10000:
+                logger.warning(
+                    "Qdrant count_documents: hit scroll cap of 10000; count may be underestimated"
+                )
+            count = 0
+            for point in all_docs:
+                content = (point.payload or {}).get("page_content", "")
+                length = len(content)
+                if min_content_length is not None and length < min_content_length:
+                    continue
+                if max_content_length is not None and length > max_content_length:
+                    continue
+                count += 1
+            return count
+        except Exception as exc:
+            logger.error("Qdrant content-length count error: %s", exc)
             return 0
