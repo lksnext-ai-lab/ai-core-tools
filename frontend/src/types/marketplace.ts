@@ -100,6 +100,7 @@ export interface MarketplaceConversation {
   message_count: number;
   agent_display_name: string;
   agent_icon_url: string | null;
+  app_name: string | null;
 }
 
 /** Query parameters for browsing the marketplace catalog */
