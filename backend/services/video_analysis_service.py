@@ -221,10 +221,25 @@ class VideoAnalysisService:
         return result
 
 
-def _parse_llm_response(response_text: str) -> List[Dict[str, Any]]:
-    """Parse JSON response from LLM, handling potential formatting issues"""
+def _parse_llm_response(response_text) -> List[Dict[str, Any]]:
+    """Parse JSON response from LLM, handling potential formatting issues.
+
+    LangChain ChatGoogleGenerativeAI may return ``response.content`` as either
+    a plain ``str`` or a list of content blocks (typical for multimodal inputs).
+    Each block is a dict like ``{"type": "text", "text": "..."}`` or a string.
+    """
     import re
-    text = response_text.strip()
+
+    if isinstance(response_text, list):
+        parts: List[str] = []
+        for block in response_text:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and isinstance(block.get('text'), str):
+                parts.append(block['text'])
+        text = ''.join(parts).strip()
+    else:
+        text = (response_text or '').strip()
     
     # Try to extract JSON from markdown code block
     if '```json' in text:
