@@ -312,7 +312,7 @@ function BaseServiceForm({
             data-lpignore="true"
             data-form-type="other"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder={formData.provider === 'GoogleCloud' ? '{"type":"service_account","project_id":...}' : 'sk-...'}
+            placeholder={formData.provider === 'GoogleCloud' ? '{"type":"service_account","project_id":...}' : formData.provider === 'Google' ? 'AIza...' : 'sk-...'}
             required={formData.provider !== 'Custom' && formData.provider !== 'Ollama'}
           />
           <p className="mt-1 text-sm text-gray-500">
@@ -323,6 +323,18 @@ function BaseServiceForm({
               : 'Required for cloud providers'}
           </p>
         </div>
+
+        {/* Google AI Studio setup hint */}
+        {formData.provider === 'Google' && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs font-medium text-blue-800 mb-1">Google AI Studio Setup</p>
+            <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+              <li><strong>API Key:</strong> Get it at <span className="font-mono">aistudio.google.com</span> → Get API key</li>
+              <li><strong>Model:</strong> e.g., gemini-2.5-pro, gemini-2.0-flash, gemini-1.5-pro</li>
+              <li><strong>Base URL:</strong> Leave as default unless using a custom endpoint</li>
+            </ul>
+          </div>
+        )}
 
         {/* Google Cloud Vertex AI setup hint */}
         {formData.provider === 'GoogleCloud' && (

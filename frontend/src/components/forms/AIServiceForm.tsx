@@ -25,6 +25,7 @@ const AI_PROVIDERS: ProviderConfig[] = [
   { value: 'Anthropic', name: 'Anthropic' },
   { value: 'Custom', name: 'Custom/Ollama' },
   { value: 'MistralAI', name: 'Mistral' },
+  { value: 'Google', name: 'Google AI Studio' },
   { value: 'GoogleCloud', name: 'Google Cloud (Vertex AI)' }
 ];
 
@@ -49,6 +50,10 @@ const getAIProviderDefaults = (provider: string): ProviderDefaults => {
     'MistralAI': {
       baseUrl: 'https://api.mistral.ai/v1',
       modelPlaceholder: 'mistral-large-latest, mistral-small-latest'
+    },
+    'Google': {
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      modelPlaceholder: 'gemini-2.5-pro, gemini-2.0-flash, gemini-1.5-pro'
     },
     'GoogleCloud': {
       baseUrl: '',
