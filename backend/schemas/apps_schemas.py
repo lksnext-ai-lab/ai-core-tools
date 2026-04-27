@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -71,6 +71,12 @@ class AppDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+def _strip_if_string(v):
+    # Common normalizer for credentials pasted from emails / .env files /
+    # password managers — trailing whitespace breaks HTTP header construction.
+    return v.strip() if isinstance(v, str) else v
+
+
 class CreateAppSchema(BaseModel):
     """Schema for creating a new app"""
     name: str
@@ -78,6 +84,13 @@ class CreateAppSchema(BaseModel):
     agent_rate_limit: Optional[int] = 0
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
+
+    @field_validator("langsmith_api_key", mode="before")
+    @classmethod
+    def _strip_credentials(cls, v):
+        return _strip_if_string(v)
+
+
 class UpdateAppSchema(BaseModel):
     """Schema for updating an app"""
     name: str
@@ -86,6 +99,11 @@ class UpdateAppSchema(BaseModel):
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
     enable_openai_api: bool = False
+
+    @field_validator("langsmith_api_key", mode="before")
+    @classmethod
+    def _strip_credentials(cls, v):
+        return _strip_if_string(v)
 
 
 # ==================== COLLABORATION SCHEMAS ====================

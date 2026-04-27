@@ -37,8 +37,11 @@ interface RepositoryDetail {
   ai_services: Array<{
     service_id: number;
     name: string;
+    supports_video?: boolean;
   }>;
   media: Media[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
 }
 
   interface Media {
@@ -49,6 +52,7 @@ interface RepositoryDetail {
     duration: number | null;
     language: string | null;
     status: string;
+    processing_mode: string | null;
     error_message: string | null;
     create_date: string;
     folder_id: number | null;
@@ -145,7 +149,6 @@ const RepositoryDetailPage: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const pollingIntervalsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
-  const [selectedTranscriptionServiceId, setSelectedTranscriptionServiceId] = useState<number | null>(null);
   const [mediaConfig, setMediaConfig] = useState({
     forced_language: '',
     chunk_min_duration: 30,
@@ -288,7 +291,6 @@ const RepositoryDetailPage: React.FC = () => {
           mediaFiles,
           selectedFolderId || undefined,
           mediaConfig,
-          selectedTranscriptionServiceId || undefined
         );
         
         if (result.failed_files?.length > 0) {
@@ -304,7 +306,6 @@ const RepositoryDetailPage: React.FC = () => {
           youtubeUrl,
           selectedFolderId || undefined,
           mediaConfig,
-          selectedTranscriptionServiceId || undefined
         );
       }
       
@@ -612,6 +613,20 @@ const RepositoryDetailPage: React.FC = () => {
           <p className="text-gray-600">
             Created {formatDate(repository.created_at)} • {repository.resources.length} files
           </p>
+          {(repository.transcription_service_id || repository.video_ai_service_id) && (
+            <p className="text-sm text-gray-500 mt-1">
+              {repository.transcription_service_id && (
+                <span className="inline-flex items-center gap-1 mr-3">
+                  🎙️ <span>Transcription: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</span>
+                </span>
+              )}
+              {repository.video_ai_service_id && (
+                <span className="inline-flex items-center gap-1">
+                  🎬 <span>Video AI: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</span>
+                </span>
+              )}
+            </p>
+          )}
           
           {/* Breadcrumb Navigation */}
           <div className="mt-2 flex items-center text-sm text-gray-600">
@@ -645,7 +660,6 @@ const RepositoryDetailPage: React.FC = () => {
 
               <button
                 onClick={() => {
-                  setSelectedTranscriptionServiceId(null);
                   setShowMediaUploadModal(true);
                 }}
                 disabled={uploading}
@@ -812,12 +826,17 @@ const RepositoryDetailPage: React.FC = () => {
                                 {media.duration
                                   ? `${media.duration.toFixed(1)}s`
                                   : 'processing...'}
+                                {media.processing_mode === 'multimodal' && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700" title="Indexed with multimodal video analysis">
+                                    Multimodal
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <StatusBadge status={media.status} />
+                            <StatusBadge status={media.status} processingMode={media.processing_mode} />
 
                             {canEdit && (
                               <>
@@ -1159,7 +1178,6 @@ const RepositoryDetailPage: React.FC = () => {
           setShowMediaUploadModal(false);
           setMediaFiles([]);
           setYoutubeUrl('');
-          setSelectedTranscriptionServiceId(null);
         }}
         title="Upload Media"
       >
@@ -1221,29 +1239,27 @@ const RepositoryDetailPage: React.FC = () => {
           <div className="border-t pt-4">
             <h3 className="font-medium mb-3">Processing Options</h3>
             
+            {/* Repository AI Services (read-only info) */}
+            <div className="mb-3 space-y-2">
+              {repository?.transcription_service_id ? (
+                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2 flex items-center gap-2">
+                  <span>🎙️</span>
+                  <span>Transcription: <strong>{repository.ai_services?.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</strong></span>
+                </div>
+              ) : (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                  ⚠️ No transcription service configured. Please set one in the repository settings before uploading media.
+                </div>
+              )}
+              {repository?.video_ai_service_id && (
+                <div className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded p-2 flex items-center gap-2">
+                  <span>🎬</span>
+                  <span>Video Analysis: <strong>{repository.ai_services?.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</strong> (multimodal enabled)</span>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-3">
-              <div>
-                <label htmlFor="transcription-service-select" className="block text-sm font-medium text-gray-700 mb-1">Transcription Service *</label>
-                {!repository?.ai_services || repository.ai_services.length === 0 ? (
-                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                    No transcription services available. Please create an AI service.
-                  </div>
-                ) : (
-                  <select
-                    id="transcription-service-select"
-                    value={selectedTranscriptionServiceId || ''}
-                    onChange={(e) => setSelectedTranscriptionServiceId(e.target.value ? Number.parseInt(e.target.value) : null)}
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  >
-                    <option value="">-- Select a Transcription Service --</option>
-                    {repository.ai_services.map(service => (
-                      <option key={service.service_id} value={service.service_id}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
 
               <div>
                 <label htmlFor="media-language-select" className="block text-sm text-gray-700 mb-1">Language (optional)</label>
@@ -1313,7 +1329,7 @@ const RepositoryDetailPage: React.FC = () => {
             <button
               onClick={handleMediaUpload}
               disabled={
-                selectedTranscriptionServiceId === null ||
+                !repository?.transcription_service_id ||
                 (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl)
               }
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"

@@ -32,6 +32,7 @@ class AIServiceService:
             name=service.name,
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",  # description stores model name
+            supports_video=service.supports_video or False,
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
@@ -39,13 +40,12 @@ class AIServiceService:
 
     @staticmethod
     def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIServiceListItemSchema]:
-        """Get all AI services for a specific app, plus platform-level system services."""
+        """Get all AI services for a specific app, including platform-level system services."""
         app_services = AIServiceRepository.get_by_app_id(db, app_id)
         system_services = AIServiceRepository.get_system_services(db)
 
         result = [AIServiceService._to_list_item(svc, is_system=False) for svc in app_services]
         result += [AIServiceService._to_list_item(svc, is_system=True) for svc in system_services]
-
         return result
     
     @staticmethod
@@ -63,6 +63,7 @@ class AIServiceService:
                 model_name="",
                 api_key="",
                 base_url="",
+                supports_video=False,
                 created_at=None,
                 # Form data
                 available_providers=providers
@@ -88,6 +89,7 @@ class AIServiceService:
             model_name=service.description or "",
             api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",  # Use endpoint as base_url
+            supports_video=service.supports_video or False,
             created_at=service.create_date,
             available_providers=providers,
             needs_api_key=needs_api_key,
@@ -123,6 +125,7 @@ class AIServiceService:
         if not is_masked_key(service_data.api_key):
             service.api_key = service_data.api_key
         service.endpoint = service_data.base_url  # Store base_url in endpoint
+        service.supports_video = service_data.supports_video
         
         # Create or update the service
         if service_id == 0:
@@ -157,6 +160,7 @@ class AIServiceService:
             description=service.description,
             api_key=service.api_key,
             endpoint=service.endpoint,
+            supports_video=service.supports_video or False,
             create_date=datetime.now()
         )
         
@@ -265,7 +269,9 @@ class AIServiceService:
                     ),
                 }
             
-            # Initialize OpenAI client
+            # Initialize OpenAI client. The api_key is already normalized by
+            # CreateUpdateAIServiceSchema on every create/update, so we trust
+            # what we read from the DB.
             client = OpenAI(api_key=service.api_key)
             
             logger.info("Testing Whisper connection using configured API key")

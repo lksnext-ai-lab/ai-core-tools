@@ -436,7 +436,6 @@ async def upload_media(
     repository_id: int,
     background_tasks: BackgroundTasks,
     files: Annotated[List[UploadFile], File(...)],
-    transcription_service_id: Annotated[int, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
@@ -447,7 +446,8 @@ async def upload_media(
     chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
-    Upload video/audio files for transcription and indexing
+    Upload video/audio files for transcription and indexing.
+    AI services (transcription, video analysis) are configured at repository level.
 
     Supported formats:
     - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
@@ -467,14 +467,13 @@ async def upload_media(
             repository_id=repository_id,
             files=files,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             user_context=auth_context,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
         )
 
         return MediaUploadResponse(
@@ -492,7 +491,6 @@ async def add_youtube_video(
     background_tasks: BackgroundTasks,
     repository_id: int,
     url: Annotated[str, Form(...)],
-    transcription_service_id: Annotated[int, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
@@ -503,7 +501,8 @@ async def add_youtube_video(
     chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
-    Add YouTube video for transcription and indexing
+    Add YouTube video for transcription and indexing.
+    AI services (transcription, video analysis) are configured at repository level.
 
     The video will be:
     1. Downloaded from YouTube
@@ -511,6 +510,7 @@ async def add_youtube_video(
     3. Transcribed using Whisper
     4. Chunked into segments
     5. Indexed for RAG queries
+    6. (If multimodal) Video analyzed with Video-LLM and visual descriptions merged
 
     Configuration:
     - forced_language: Force transcription language (e.g., 'es', 'en', 'fr'). Leave empty for auto-detect.
@@ -526,13 +526,12 @@ async def add_youtube_video(
             url=url,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
         )
 
         return MediaResponse(**media.__dict__)

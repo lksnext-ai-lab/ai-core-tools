@@ -309,7 +309,6 @@ class YouTubeRequestSchema(BaseModel):
     """YouTube video add request"""
     url: str
     folder_id: Optional[int] = None
-    transcription_service_id: int
     forced_language: Optional[str] = None
     chunk_min_duration: Optional[int] = None
     chunk_max_duration: Optional[int] = None

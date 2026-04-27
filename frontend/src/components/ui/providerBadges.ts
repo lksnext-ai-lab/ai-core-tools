@@ -6,7 +6,9 @@ export const getProviderBadgeColor = (provider = '') => {
     'anthropic': 'bg-purple-100 text-purple-800',
     'ollama': 'bg-orange-100 text-orange-800',
     'mistralai': 'bg-purple-100 text-purple-800',
-    'custom': 'bg-gray-100 text-gray-800'
+    'custom': 'bg-gray-100 text-gray-800',
+    'google': 'bg-yellow-100 text-yellow-800',
+    'googlecloud': 'bg-emerald-100 text-emerald-800'
   };
   return map[normalized] || 'bg-gray-100 text-gray-800';
 };

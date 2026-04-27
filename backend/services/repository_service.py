@@ -16,7 +16,7 @@ from repositories.repository_repository import RepositoryRepository
 from repositories.resource_repository import ResourceRepository
 from repositories.embedding_service_repository import EmbeddingServiceRepository
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, CreateRepositorySchema, UpdateRepositorySchema
-from utils.vector_db_immutability import assert_vector_db_type_immutable
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from datetime import datetime
 from utils.logger import get_logger
 from tools.vector_store_factory import VectorStoreFactory
@@ -24,6 +24,8 @@ from tools.vector_store_factory import VectorStoreFactory
 load_dotenv()
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 logger = get_logger(__name__)
+
+_REPOSITORY_NOT_FOUND = "Repository not found"
 
 class RepositoryService:
 
@@ -127,6 +129,9 @@ class RepositoryService:
             Updated Repository instance
         """
         if repository.silo and embedding_service_id:
+            assert_embedding_service_immutable(
+                repository.silo.embedding_service_id, embedding_service_id, "repository"
+            )
             repository.silo.embedding_service_id = embedding_service_id
 
         if repository.silo:
@@ -262,8 +267,8 @@ class RepositoryService:
             
             # Get AI services for media transcription
             from repositories.ai_service_repository import AIServiceRepository
-            ai_services_query = AIServiceRepository.get_by_app_id(db, app_id)
-            ai_services = [{"service_id": s.service_id, "name": s.name} for s in ai_services_query]
+            ai_services_query = AIServiceRepository.get_by_app_id(db, app_id) + AIServiceRepository.get_system_services(db)
+            ai_services = [{"service_id": s.service_id, "name": s.name, "supports_video": s.supports_video} for s in ai_services_query]
             
             return RepositoryDetailSchema(
                 repository_id=0,
@@ -278,7 +283,9 @@ class RepositoryService:
                 vector_db_type='PGVECTOR',
                 vector_db_options=vector_db_options,
                 media=[],
-                ai_services=ai_services
+                ai_services=ai_services,
+                transcription_service_id=None,
+                video_ai_service_id=None
             )
         
         # Existing repository
@@ -286,7 +293,7 @@ class RepositoryService:
         if not repo:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Repository not found"
+                detail=_REPOSITORY_NOT_FOUND
             )
         
         # Get resources
@@ -312,8 +319,8 @@ class RepositoryService:
         
         # Get AI services for media transcription
         from repositories.ai_service_repository import AIServiceRepository
-        ai_services_query = AIServiceRepository.get_by_app_id(db, app_id)
-        ai_services = [{"service_id": s.service_id, "name": s.name} for s in ai_services_query]
+        ai_services_query = AIServiceRepository.get_by_app_id(db, app_id) + AIServiceRepository.get_system_services(db)
+        ai_services = [{"service_id": s.service_id, "name": s.name, "supports_video": s.supports_video} for s in ai_services_query]
         
         # Get folders for the repository
         from services.folder_service import FolderService
@@ -384,7 +391,9 @@ class RepositoryService:
             vector_db_type=vector_db_type,
             vector_db_options=vector_db_options,
             media=media_list,
-            ai_services=ai_services
+            ai_services=ai_services,
+            transcription_service_id=repo.transcription_service_id,
+            video_ai_service_id=repo.video_ai_service_id
         )
 
     @staticmethod
@@ -417,8 +426,10 @@ class RepositoryService:
         repo.app_id = app_id
         repo.name = repo_data.name
         repo.type = repo_data.type
-        repo.status = repo_data.status or "active"
+        repo.status = repo_data.status or 'active'
         repo.create_date = datetime.now()
+        repo.transcription_service_id = repo_data.transcription_service_id
+        repo.video_ai_service_id = repo_data.video_ai_service_id
 
         return RepositoryService.create_repository(
             repo,
@@ -435,9 +446,8 @@ class RepositoryService:
         db: Session,
     ) -> Repository:
         """
-        Update an existing repository — business logic called by PUT /{repository_id}.
-        vector_db_type is not accepted here; the immutability guard in update_repository()
-        will reject any attempt to change it through direct service calls.
+        Update an existing repository — business logic called by PUT /{repository_id} router endpoint.
+        vector_db_type is immutable after creation and is intentionally not part of UpdateRepositorySchema.
         """
         from fastapi import HTTPException, status
 
@@ -445,7 +455,7 @@ class RepositoryService:
         if not repo:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Repository not found",
+                detail=_REPOSITORY_NOT_FOUND,
             )
 
         repo.name = repo_data.name
@@ -453,11 +463,13 @@ class RepositoryService:
             repo.type = repo_data.type
         if repo_data.status is not None:
             repo.status = repo_data.status
+        repo.transcription_service_id = repo_data.transcription_service_id
+        repo.video_ai_service_id = repo_data.video_ai_service_id
 
         return RepositoryService.update_repository(
             repo,
             repo_data.embedding_service_id,
-            None,  # vector_db_type not accepted on update
+            None,
             db,
         )
 
