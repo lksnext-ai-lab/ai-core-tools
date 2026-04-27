@@ -16,7 +16,7 @@ from repositories.repository_repository import RepositoryRepository
 from repositories.resource_repository import ResourceRepository
 from repositories.embedding_service_repository import EmbeddingServiceRepository
 from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, CreateRepositorySchema, UpdateRepositorySchema
-from utils.vector_db_immutability import assert_vector_db_type_immutable
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from datetime import datetime
 from utils.logger import get_logger
 from tools.vector_store_factory import VectorStoreFactory
@@ -24,6 +24,8 @@ from tools.vector_store_factory import VectorStoreFactory
 load_dotenv()
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 logger = get_logger(__name__)
+
+_REPOSITORY_NOT_FOUND = "Repository not found"
 
 class RepositoryService:
 
@@ -127,6 +129,9 @@ class RepositoryService:
             Updated Repository instance
         """
         if repository.silo and embedding_service_id:
+            assert_embedding_service_immutable(
+                repository.silo.embedding_service_id, embedding_service_id, "repository"
+            )
             repository.silo.embedding_service_id = embedding_service_id
 
         if repository.silo:
@@ -288,7 +293,7 @@ class RepositoryService:
         if not repo:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Repository not found"
+                detail=_REPOSITORY_NOT_FOUND
             )
         
         # Get resources
@@ -430,6 +435,41 @@ class RepositoryService:
             repo,
             repo_data.embedding_service_id,
             normalized_vector_db_type,
+            db,
+        )
+
+    @staticmethod
+    def update_repository_router(
+        app_id: int,
+        repository_id: int,
+        repo_data: UpdateRepositorySchema,
+        db: Session,
+    ) -> Repository:
+        """
+        Update an existing repository — business logic called by PUT /{repository_id} router endpoint.
+        vector_db_type is immutable after creation and is intentionally not part of UpdateRepositorySchema.
+        """
+        from fastapi import HTTPException, status
+
+        repo = RepositoryRepository.get_by_id(db, repository_id)
+        if not repo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_REPOSITORY_NOT_FOUND,
+            )
+
+        repo.name = repo_data.name
+        if repo_data.type is not None:
+            repo.type = repo_data.type
+        if repo_data.status is not None:
+            repo.status = repo_data.status
+        repo.transcription_service_id = repo_data.transcription_service_id
+        repo.video_ai_service_id = repo_data.video_ai_service_id
+
+        return RepositoryService.update_repository(
+            repo,
+            repo_data.embedding_service_id,
+            None,
             db,
         )
 

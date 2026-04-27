@@ -64,6 +64,8 @@ class UpdateRepositorySchema(BaseModel):
     type: Optional[str] = None
     status: Optional[str] = None
     embedding_service_id: Optional[int] = None
+    transcription_service_id: Optional[int] = None
+    video_ai_service_id: Optional[int] = None
 
 
 # Backward-compatible alias used by internal callers that haven't been updated yet
