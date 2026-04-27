@@ -26,7 +26,7 @@ from schemas.import_schemas import (
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
-from utils.secret_utils import mask_api_key, is_masked_key
+from utils.secret_utils import mask_api_key, is_masked_key, normalize_credential_map
 
 # Import nested routers for app-specific resources
 from .agents import agents_router
@@ -190,6 +190,10 @@ async def import_full_app(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid api_keys JSON: {e}",
             )
+        # api_keys bypasses the field_validators on CreateUpdateAIServiceSchema
+        # because FullAppImportService assigns to the ORM directly. Normalize
+        # at this boundary instead — same effect.
+        api_keys = normalize_credential_map(api_keys)
 
     # Import (always creates new app)
     service = FullAppImportService(db)

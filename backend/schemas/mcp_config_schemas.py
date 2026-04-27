@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -33,3 +33,11 @@ class CreateUpdateMCPConfigSchema(BaseModel):
     description: Optional[str] = ""
     config: str  # JSON string containing the full MCP server configuration
     ssl_verify: bool = True
+
+    @field_validator("config", mode="before")
+    @classmethod
+    def _strip_config_envelope(cls, v):
+        # Trim whitespace at both ends only — preserves the JSON structure
+        # but cleans up trailing newlines from copy-paste of multi-line configs.
+        # Inner credentials embedded in the JSON keep their original form.
+        return v.strip() if isinstance(v, str) else v

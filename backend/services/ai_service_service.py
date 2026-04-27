@@ -269,7 +269,9 @@ class AIServiceService:
                     ),
                 }
             
-            # Initialize OpenAI client
+            # Initialize OpenAI client. The api_key is already normalized by
+            # CreateUpdateAIServiceSchema on every create/update, so we trust
+            # what we read from the DB.
             client = OpenAI(api_key=service.api_key)
             
             logger.info("Testing Whisper connection using configured API key")
