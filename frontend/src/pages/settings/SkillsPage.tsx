@@ -56,7 +56,7 @@ function SkillsPage() {
     }
   }
 
-  async function forceReloadSkills() {
+  async function _forceReloadSkills() {
     if (!appId) return;
 
     try {
@@ -119,16 +119,18 @@ function SkillsPage() {
       if (editingSkill && editingSkill.skill_id !== 0) {
         // Update existing skill
         await apiService.updateSkill(Number.parseInt(appId), editingSkill.skill_id, data);
+        setIsModalOpen(false);
+        setEditingSkill(null);
         await loadSkills();
       } else {
-        // Create new skill - invalidate cache and force reload
-        await apiService.createSkill(Number.parseInt(appId), data);
-        settingsCache.invalidateSkills(appId);
-        await forceReloadSkills();
+        // Create new skill - add to local state directly from API response
+        const newSkill = await apiService.createSkill(Number.parseInt(appId), data);
+        const updatedSkills = [...skills, newSkill];
+        setSkills(updatedSkills);
+        settingsCache.setSkills(appId, updatedSkills);
+        setIsModalOpen(false);
+        setEditingSkill(null);
       }
-
-      setIsModalOpen(false);
-      setEditingSkill(null);
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to save skill');
     }

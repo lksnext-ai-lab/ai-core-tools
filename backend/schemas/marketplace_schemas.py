@@ -153,6 +153,7 @@ class MarketplaceConversationSchema(BaseModel):
     message_count: int
     agent_display_name: str  # Resolved display name
     agent_icon_url: Optional[str] = None
+    app_name: Optional[str] = None  # App that owns the agent
 
 
 class MarketplaceConversationListSchema(BaseModel):

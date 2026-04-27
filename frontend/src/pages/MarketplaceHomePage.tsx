@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, MessageCircle, Store, ArrowRight, Check, X } from 'lucide-react';
+import { Bot, MessageCircle, Pencil, Store, ArrowRight, Check, X } from 'lucide-react';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -29,6 +29,8 @@ export default function MarketplaceHomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [editingConvId, setEditingConvId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
 
   const handleDeleteClick = async (e: React.MouseEvent, conversationId: number) => {
     e.stopPropagation();
@@ -43,6 +45,37 @@ export default function MarketplaceHomePage() {
       // ignore
     } finally {
       setConfirmDeleteId(null);
+    }
+  };
+
+  const handleRenameStart = (e: React.MouseEvent, conv: MarketplaceConversation) => {
+    e.stopPropagation();
+    setEditingConvId(conv.conversation_id);
+    setEditingTitle(conv.title || conv.agent_display_name);
+  };
+
+  const handleRenameSave = async (conversationId: number) => {
+    const trimmed = editingTitle.trim();
+    if (trimmed) {
+      try {
+        await apiService.updateConversation(conversationId, { title: trimmed });
+        setConversations((prev) =>
+          prev.map((c) => c.conversation_id === conversationId ? { ...c, title: trimmed } : c)
+        );
+      } catch {
+        // ignore
+      }
+    }
+    setEditingConvId(null);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent, conversationId: number) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSave(conversationId);
+    } else if (e.key === 'Escape') {
+      setEditingConvId(null);
     }
   };
 
@@ -151,7 +184,11 @@ export default function MarketplaceHomePage() {
                 <li key={conv.conversation_id} className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/marketplace/chat/${conv.conversation_id}`)}
+                    onClick={(e) => {
+                      if (editingConvId === conv.conversation_id) return;
+                      if ((e.target as HTMLElement).closest('button[data-action]')) return;
+                      navigate(`/marketplace/chat/${conv.conversation_id}`);
+                    }}
                     className="flex-1 min-w-0 text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-3">
@@ -172,9 +209,35 @@ export default function MarketplaceHomePage() {
                       {/* Conversation info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors duration-200">
-                            {conv.agent_display_name}
-                          </span>
+                          <div className="flex items-center gap-1 min-w-0 flex-1">
+                            {editingConvId === conv.conversation_id ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onBlur={() => handleRenameSave(conv.conversation_id)}
+                                onKeyDown={(e) => handleRenameKeyDown(e, conv.conversation_id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-sm font-semibold text-gray-900 border-b border-blue-500 outline-none bg-transparent w-full"
+                              />
+                            ) : (
+                              <>
+                                <span className="text-sm font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors duration-200">
+                                  {conv.title || conv.agent_display_name}
+                                </span>
+                                <button
+                                  type="button"
+                                  data-action="rename"
+                                  onClick={(e) => handleRenameStart(e, conv)}
+                                  className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-500 transition-all"
+                                  title="Rename conversation"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
                           <time
                             dateTime={conv.updated_at}
                             className="text-xs text-gray-400 shrink-0"
@@ -182,6 +245,9 @@ export default function MarketplaceHomePage() {
                             {formatRelativeTime(conv.updated_at)}
                           </time>
                         </div>
+                        <p className="text-xs text-gray-400 truncate mt-0.5">
+                          {[conv.app_name, conv.agent_display_name].filter(Boolean).join(' · ')}
+                        </p>
                         {conv.last_message ? (
                           <p className="text-xs text-gray-500 truncate mt-0.5">{conv.last_message}</p>
                         ) : (

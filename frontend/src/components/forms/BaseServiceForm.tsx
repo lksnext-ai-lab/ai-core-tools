@@ -53,6 +53,7 @@ function BaseServiceForm({
   onCancel,
   providers,
   getProviderDefaults,
+  formTitle: _formTitle,
   serviceType,
   needsApiKey = false
 }: Readonly<BaseServiceFormProps>) {
@@ -152,10 +153,6 @@ function BaseServiceForm({
       setError('Model name is required');
       return;
     }
-    if (!formData.base_url.trim()) {
-      setError('Base URL is required');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -183,7 +180,6 @@ function BaseServiceForm({
     formData.name.trim() !== '' &&
     formData.provider !== '' &&
     formData.model_name.trim() !== '' &&
-    formData.base_url.trim() !== '' &&
     hasValidApiKey;
 
   return (

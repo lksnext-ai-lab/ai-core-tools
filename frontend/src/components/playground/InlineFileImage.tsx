@@ -16,7 +16,7 @@ const InlineFileImage: React.FC<InlineFileImageProps> = ({ fileId, filename, res
       .then((url) => { if (!cancelled) setSrc(url); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [fileId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fileId]);
 
   if (error) {
     return <span className="text-red-500 text-sm italic">[Image unavailable: {filename}]</span>;

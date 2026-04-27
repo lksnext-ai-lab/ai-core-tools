@@ -86,21 +86,34 @@ class VectorStoreInterface(ABC):
         query: str,
         embedding_service=None,
         filter_metadata: Optional[Dict[str, Any]] = None,
-        k: int = 5
+        k: int = 5,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
     ) -> List[Document]:
         """
         Search for similar documents in the vector store.
-        
+
         Args:
             collection_name: Name of the collection/index to search
             query: Query string or embedding vector
             embedding_service: Service to generate query embeddings
             filter_metadata: Optional metadata filters
             k: Number of results to return (default: 5)
-            
+            search_type: Search strategy — "similarity" (default),
+                "similarity_score_threshold", or "mmr".
+            score_threshold: Minimum relevance score; used when
+                search_type="similarity_score_threshold".
+            fetch_k: Candidate pool size before MMR re-ranking; used when
+                search_type="mmr" (default: k*4).
+            lambda_mult: MMR diversity factor 0..1; used when search_type="mmr"
+                (default: 0.5).
+
         Returns:
             List of Document objects with similarity scores in metadata
-            
+            (_score=None for MMR results).
+
         Raises:
             Exception: If search fails
         """
@@ -113,21 +126,24 @@ class VectorStoreInterface(ABC):
         embedding_service=None,
         search_params: Optional[Dict[str, Any]] = None,
         use_async: bool = False,
+        search_type: str = "similarity",
         **kwargs
     ) -> VectorStoreRetriever:
         """
         Get a LangChain retriever for the vector store.
-        
+
         Args:
             collection_name: Name of the collection/index
             embedding_service: Service to generate embeddings
             search_params: Optional search parameters (filters, k, etc.)
             use_async: Whether to use async operations
+            search_type: LangChain retriever search strategy — "similarity"
+                (default), "similarity_score_threshold", or "mmr".
             **kwargs: Additional arguments for retriever configuration
-            
+
         Returns:
             VectorStoreRetriever instance
-            
+
         Raises:
             Exception: If retriever creation fails
         """
@@ -147,14 +163,71 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    def count_documents(self, collection_name: str) -> int:
+    def count_documents(
+        self,
+        collection_name: str,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
         """
-        Count the number of documents stored in a collection/index.
+        Count documents stored in a collection/index, optionally filtered.
 
         Args:
             collection_name: Name of the collection/index
+            filter_metadata: Optional PGVector-style metadata filter
+                (e.g. ``{"field": {"$eq": "value"}}``)
+            min_content_length: Optional minimum length of ``page_content``
+            max_content_length: Optional maximum length of ``page_content``
 
         Returns:
-            Number of documents stored in the collection
+            Number of documents matching the criteria
+        """
+        pass
+
+    @abstractmethod
+    def update_documents_metadata(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        metadata_updates: Dict[str, Any],
+        replace: bool = False,
+    ) -> int:
+        """
+        Update metadata for documents matching a metadata filter.
+
+        Args:
+            collection_name: Name of the collection/index
+            filter_metadata: PGVector-style metadata filter selecting the
+                documents to update.
+            metadata_updates: Metadata fields to apply.
+            replace: If True, the matched documents' metadata is fully replaced
+                by ``metadata_updates``. If False (default), ``metadata_updates``
+                is merged into the existing metadata.
+
+        Returns:
+            Number of documents updated.
+        """
+        pass
+
+    @abstractmethod
+    def get_distinct_metadata_values(
+        self,
+        collection_name: str,
+        field: str,
+        prefix: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[str]:
+        """
+        Return distinct string values for a metadata field in a collection.
+
+        Args:
+            collection_name: Name of the collection/index
+            field: Metadata field name
+            prefix: Optional case-insensitive prefix filter
+            limit: Maximum number of values to return
+
+        Returns:
+            Alphabetically sorted list of distinct values.
         """
         pass

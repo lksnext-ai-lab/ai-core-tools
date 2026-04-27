@@ -257,7 +257,15 @@ async def search_silo(
 
     try:
         result = SiloService.search_silo_documents_router(
-            silo_id, request.query, request.filter_metadata, db
+            silo_id,
+            request.query,
+            request.filter_metadata,
+            request.limit,
+            request.search_type,
+            request.score_threshold,
+            request.fetch_k,
+            request.lambda_mult,
+            db,
         )
 
         if result is None:
@@ -511,6 +519,7 @@ async def find_docs_in_collection(
             silo_id=silo_id,
             query=query,
             filter_metadata=request.filter_metadata,
+            limit=request.limit,
             db=db,
         )
 
@@ -621,4 +630,3 @@ async def index_file_document(
                 os.unlink(temp_file_path)
             except Exception as e:
                 logger.warning(f"Failed to delete temp file {temp_file_path}: {str(e)}")
-

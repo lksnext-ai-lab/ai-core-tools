@@ -90,7 +90,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     const isLastRow = tableRow !== null && tableRow === tableBody?.lastElementChild;
 
     // Use fixed positioning to avoid being clipped by overflow containers
-    let style: React.CSSProperties = {
+    const style: React.CSSProperties = {
       position: 'fixed',
       zIndex: 9999,
     };

@@ -24,7 +24,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appId]);
 
   async function load() {
@@ -45,7 +44,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       cache.set(appId, response || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
-      // eslint-disable-next-line no-console
       console.error('Error loading services:', err);
     } finally {
       setLoading(false);
@@ -62,7 +60,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       cache.set(appId, response || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
-      // eslint-disable-next-line no-console
       console.error('Error reloading services:', err);
     } finally {
       setLoading(false);
@@ -79,7 +76,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       cache.set(appId, newServices);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete item');
-      // eslint-disable-next-line no-console
       console.error('Error deleting item:', err);
     }
   }
@@ -92,7 +88,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       setIsModalOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load item');
-      // eslint-disable-next-line no-console
       console.error('Error loading item:', err);
     }
   }
@@ -105,7 +100,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       await forceReload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to copy item');
-      // eslint-disable-next-line no-console
       console.error('Error copying item:', err);
     }
   }
