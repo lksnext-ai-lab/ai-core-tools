@@ -15,11 +15,28 @@ export { ThemeSelector } from './components/theme/ThemeSelector';
 
 // Export shared form components and hooks
 export { useFormState } from './hooks/useFormState';
+export { useApiMutation } from './hooks/useApiMutation';
+export type { ApiMutation, MutationToastOptions } from './hooks/useApiMutation';
 export { FormField, FormTextArea, FormSelect, FormCheckbox } from './components/ui/FormField';
 export { FormError } from './components/ui/FormError';
 export { FormActions } from './components/ui/FormActions';
 export { default as ImportModal } from './components/ui/ImportModal';
 export type { ImportResponse, ConflictMode, ComponentType } from './components/ui/ImportModal';
+
+// Standardized table, confirmation, toast primitives
+export { default as DataTable } from './components/ui/DataTable';
+export type { DataTableProps } from './components/ui/DataTable';
+export { default as Table } from './components/ui/Table';
+export type { TableColumn, TableProps } from './components/ui/Table';
+export { default as ActionDropdown } from './components/ui/ActionDropdown';
+export type { ActionItem } from './components/ui/ActionDropdown';
+export { default as Modal } from './components/ui/Modal';
+export { default as ConfirmationModal } from './components/ui/ConfirmationModal';
+export type { ConfirmVariant } from './components/ui/ConfirmationModal';
+export { ConfirmProvider, useConfirm } from './contexts/ConfirmContext';
+export type { ConfirmOptions } from './contexts/ConfirmContext';
+export { MESSAGES, errorMessage } from './constants/messages';
+export { toast } from 'sonner';
 
 // Export shared settings hooks and components
 export { useSettingsData } from './hooks/useSettingsData';
