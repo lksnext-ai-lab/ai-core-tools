@@ -82,8 +82,14 @@ function ChatInterface({
   const lastScrollTopRef = useRef(0);
   const filterPanelId = `metadata-filters-${agentId}`;
 
+  const playgroundStream = useCallback(
+    (message: string, opts: Parameters<typeof apiService.chatWithAgentStream>[3]) =>
+      apiService.chatWithAgentStream(appId, agentId, message, opts),
+    [appId, agentId],
+  );
+
   const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
-    useStreamingChat(appId, agentId);
+    useStreamingChat(playgroundStream);
 
   // Hold streaming content visible briefly after isStreaming flips to false,
   // so the transition to the final committed message is seamless.
