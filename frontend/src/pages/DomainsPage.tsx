@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Globe, Link2, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
-import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 interface Domain {
   domain_id: number;
@@ -24,13 +26,13 @@ function DomainsPage() {
   const { appId } = useParams<{ appId: string }>();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
-  
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
+
   const navigate = useNavigate();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null);
 
   useEffect(() => {
     loadDomains();
@@ -54,23 +56,28 @@ function DomainsPage() {
     }
   }
 
-    function handleDeleteDomain(domain: Domain) {
-    setDomainToDelete(domain);
-    setShowDeleteModal(true);
-  }
+  async function handleDeleteDomain(domain: Domain) {
+    if (!appId) return;
 
-  async function confirmDeleteDomain() {
-    if (!domainToDelete || !appId) return;
-    
-    try {
-      await apiService.deleteDomain(Number.parseInt(appId), domainToDelete.domain_id);
-      setDomains(domains.filter(d => d.domain_id !== domainToDelete.domain_id));
-      setShowDeleteModal(false);
-      setDomainToDelete(null);
-    } catch (err) {
-      console.error('Error deleting domain:', err);
-      alert('Failed to delete domain');
-    }
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('domain'),
+      message: `Are you sure you want to delete "${domain.name}"? This action cannot be undone and will remove all associated URLs and indexed content.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteDomain(Number.parseInt(appId), domain.domain_id),
+      {
+        loading: MESSAGES.DELETING('domain'),
+        success: MESSAGES.DELETED('domain'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('domain')),
+      },
+    );
+    if (result === undefined) return;
+
+    setDomains(domains.filter((d) => d.domain_id !== domain.domain_id));
   }
 
   if (loading) {
@@ -205,7 +212,7 @@ function DomainsPage() {
                     },
                     {
                       label: 'Delete',
-                      onClick: () => handleDeleteDomain(domain),
+                      onClick: () => { void handleDeleteDomain(domain); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
                     }
@@ -232,39 +239,6 @@ function DomainsPage() {
           </button>
         </div>
       )}
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false);
-          setDomainToDelete(null);
-        }}
-        title="Delete Domain"
-      >
-        <div className="p-6">
-          <p className="text-gray-700 mb-6">
-            Are you sure you want to delete "{domainToDelete?.name}"? This action cannot be undone and will remove all associated URLs and indexed content.
-          </p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false);
-                setDomainToDelete(null);
-              }}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmDeleteDomain}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

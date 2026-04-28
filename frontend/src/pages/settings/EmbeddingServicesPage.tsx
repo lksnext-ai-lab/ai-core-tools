@@ -59,7 +59,7 @@ function EmbeddingServicesPage() {
     setIsModalOpen,
     setEditingService,
     forceReload,
-  } = useServicesManager<EmbeddingService>(appId, api as any, cache as any);
+  } = useServicesManager<EmbeddingService>(appId, api as any, cache as any, { entity: 'embedding service' });
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingServiceId, setExportingServiceId] = useState<number | null>(null);

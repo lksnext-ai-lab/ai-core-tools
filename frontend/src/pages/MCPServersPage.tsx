@@ -7,12 +7,17 @@ import Table from '../components/ui/Table';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 import type { MCPServerListItem } from '../core/types';
 
 function MCPServersPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
 
   const [servers, setServers] = useState<MCPServerListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,19 +46,30 @@ function MCPServersPage() {
   }
 
   async function handleDelete(serverId: number) {
-    if (!confirm('Are you sure you want to delete this MCP server? This action cannot be undone.')) {
-      return;
-    }
-
     if (!appId) return;
 
-    try {
-      await apiService.deleteMCPServer(Number.parseInt(appId), serverId);
-      setServers(servers.filter(s => s.server_id !== serverId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete MCP server');
-      console.error('Error deleting MCP server:', err);
-    }
+    const target = servers.find((s) => s.server_id === serverId);
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('MCP server'),
+      message: target
+        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone.`
+        : MESSAGES.CONFIRM_DELETE_MESSAGE('MCP server'),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteMCPServer(Number.parseInt(appId), serverId),
+      {
+        loading: MESSAGES.DELETING('MCP server'),
+        success: MESSAGES.DELETED('MCP server'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('MCP server')),
+      },
+    );
+    if (result === undefined) return;
+
+    setServers(servers.filter((s) => s.server_id !== serverId));
   }
 
   function copyToClipboard(text: string, serverId: number) {

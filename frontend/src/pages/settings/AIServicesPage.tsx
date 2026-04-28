@@ -59,7 +59,7 @@ function AIServicesPage() {
     setIsModalOpen,
     setEditingService,
     forceReload,
-  } = useServicesManager<AIService>(appId, api as any, cache as any);
+  } = useServicesManager<AIService>(appId, api as any, cache as any, { entity: 'AI service' });
 
   const [testResult, setTestResult] = useState<any>(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);

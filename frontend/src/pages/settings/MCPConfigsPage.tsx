@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Upload, ArrowDownToLine, Loader2, Plug, Pencil, Trash2, CheckCircle2, XCircle, X, Lightbulb } from 'lucide-react';
+import { toast } from 'sonner';
+import { Upload, ArrowDownToLine, Loader2, Plug, Pencil, Trash2, Lightbulb } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
@@ -12,16 +13,21 @@ import type { MCPConfig } from '../../core/types';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { AppRole } from '../../types/roles';
-import ImportModal, { 
-  type ConflictMode, 
-  type ImportResponse 
+import ImportModal, {
+  type ConflictMode,
+  type ImportResponse
 } from '../../components/ui/ImportModal';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../../constants/messages';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
   const [configs, setConfigs] = useState<MCPConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,10 +38,6 @@ function MCPConfigsPage() {
   const [testingConfigId, setTestingConfigId] = useState<number | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingConfigId, setExportingConfigId] = useState<number | null>(null);
-  const [notification, setNotification] = useState<{
-    message: string; 
-    type: 'success' | 'error'
-  } | null>(null);
 
   // Load MCP configs from cache or API
   useEffect(() => {
@@ -107,23 +109,32 @@ function MCPConfigsPage() {
   }
 
   async function handleDelete(configId: number) {
-    if (!confirm('Are you sure you want to delete this MCP config?')) {
-      return;
-    }
-
     if (!appId) return;
 
-    try {
-      await apiService.deleteMCPConfig(Number.parseInt(appId), configId);
-      // Remove from local state
-      const newConfigs = configs.filter(c => c.config_id !== configId);
-      setConfigs(newConfigs);
-      // Update cache
-      settingsCache.setMCPConfigs(appId, newConfigs);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete config');
-      console.error('Error deleting MCP config:', err);
-    }
+    const target = configs.find((c) => c.config_id === configId);
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('MCP config'),
+      message: target
+        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone.`
+        : MESSAGES.CONFIRM_DELETE_MESSAGE('MCP config'),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteMCPConfig(Number.parseInt(appId), configId),
+      {
+        loading: MESSAGES.DELETING('MCP config'),
+        success: MESSAGES.DELETED('MCP config'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('MCP config')),
+      },
+    );
+    if (result === undefined) return;
+
+    const newConfigs = configs.filter((c) => c.config_id !== configId);
+    setConfigs(newConfigs);
+    settingsCache.setMCPConfigs(appId, newConfigs);
   }
 
   function handleCreateConfig() {
@@ -147,23 +158,31 @@ function MCPConfigsPage() {
   async function handleSaveConfig(data: any) {
     if (!appId) return;
 
+    const isUpdate = Boolean(editingConfig && editingConfig.config_id !== 0);
+
+    const result = await mutate(
+      () =>
+        isUpdate
+          ? apiService.updateMCPConfig(Number.parseInt(appId), editingConfig.config_id, data)
+          : apiService.createMCPConfig(Number.parseInt(appId), data),
+      {
+        loading: isUpdate ? MESSAGES.UPDATING('MCP config') : MESSAGES.CREATING('MCP config'),
+        success: isUpdate ? MESSAGES.UPDATED('MCP config') : MESSAGES.CREATED('MCP config'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('MCP config')),
+      },
+    );
+    // Only run side-effects if the create/update itself succeeded — refetch
+    // failures shouldn't roll the modal back or surface as save errors.
+    if (result === undefined) return;
+
+    settingsCache.invalidateMCPConfigs(appId);
     try {
-      if (editingConfig && editingConfig.config_id !== 0) {
-        // Update existing config - no need to invalidate cache
-        await apiService.updateMCPConfig(Number.parseInt(appId), editingConfig.config_id, data);
-        await loadMCPConfigs();
-      } else {
-        // Create new config - invalidate cache and force reload
-        await apiService.createMCPConfig(Number.parseInt(appId), data);
-        settingsCache.invalidateMCPConfigs(appId);
-        await forceReloadMCPConfigs();
-      }
-      
-      setIsModalOpen(false);
-      setEditingConfig(null);
+      await forceReloadMCPConfigs();
     } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to save config');
+      console.error('Refetch after save failed:', err);
     }
+    setIsModalOpen(false);
+    setEditingConfig(null);
   }
 
   function handleCloseModal() {
@@ -198,21 +217,12 @@ function MCPConfigsPage() {
       globalThis.URL.revokeObjectURL(url);
       a.remove();
       
-      // Show security info about auth tokens
-      setNotification({
-        message: (
-          'Configuration exported. Remember that authentication tokens ' +
-          'must be reconfigured after import.'
-        ),
-        type: 'success'
-      });
-      setTimeout(() => setNotification(null), 7000);
+      toast.success(
+        'Configuration exported. Remember that authentication tokens must be reconfigured after import.',
+        { duration: 7000 },
+      );
     } catch (err) {
-      setNotification({
-        message: err instanceof Error ? err.message : 'Failed to export config',
-        type: 'error'
-      });
-      setTimeout(() => setNotification(null), 5000);
+      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('MCP config')));
     } finally {
       setExportingConfigId(null);
     }
@@ -234,37 +244,21 @@ function MCPConfigsPage() {
       );
       
       if (result.success) {
-        // Close modal immediately
         setShowImportModal(false);
-        
-        // Build message with warnings
-        let message = result.message || 'Import completed successfully';
+
+        let message = result.message || MESSAGES.IMPORTED('MCP config');
         if (result.summary?.warnings && result.summary.warnings.length > 0) {
           message += '. ' + result.summary.warnings.join('. ');
         }
-        
-        // Show success notification with warnings
-        setNotification({
-          message,
-          type: 'success'
-        });
-        
-        // Invalidate cache and refresh the list
+        toast.success(message, { duration: 7000 });
+
         settingsCache.invalidateMCPConfigs(appId);
         await forceReloadMCPConfigs();
-        
-        // Auto-dismiss notification after 7 seconds
-        setTimeout(() => setNotification(null), 7000);
       }
-      
+
       return result;
     } catch (err) {
-      // Show error notification
-      setNotification({
-        message: err instanceof Error ? err.message : 'Import failed',
-        type: 'error'
-      });
-      setTimeout(() => setNotification(null), 5000);
+      toast.error(errorMessage(err, MESSAGES.IMPORT_FAILED('MCP config')));
       throw err;
     }
   }
@@ -344,49 +338,6 @@ function MCPConfigsPage() {
             } 
             className="mb-4" 
           />
-        )}
-
-        {/* Notification Banner */}
-        {notification && (
-          <div className={
-            `mb-4 rounded-lg p-4 ${
-              notification.type === 'success' 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-red-50 border border-red-200'
-            }`
-          }>
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                {notification.type === 'success'
-                  ? <CheckCircle2 className="w-5 h-5 text-green-400" />
-                  : <XCircle className="w-5 h-5 text-red-400" />}
-              </div>
-              <div className="ml-3 flex-1">
-                <p className={
-                  `text-sm font-medium ${
-                    notification.type === 'success' 
-                      ? 'text-green-800' 
-                      : 'text-red-800'
-                  }`
-                }>
-                  {notification.message}
-                </p>
-              </div>
-              <button
-                onClick={() => setNotification(null)}
-                className={
-                  `ml-3 inline-flex rounded-md p-1.5 ${
-                    notification.type === 'success' 
-                      ? 'text-green-500 hover:bg-green-100' 
-                      : 'text-red-500 hover:bg-red-100'
-                  } focus:outline-none`
-                }
-              >
-                <span className="sr-only">Dismiss</span>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
         )}
 
         {/* Configs Table */}

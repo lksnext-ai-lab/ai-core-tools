@@ -12,6 +12,9 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../../constants/messages';
 
 interface APIKey {
   key_id: number;
@@ -27,6 +30,8 @@ function APIKeysPage() {
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,43 +91,56 @@ function APIKeysPage() {
   }
 
   async function handleDelete(keyId: number) {
-    if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
-      return;
-    }
-
     if (!appId) return;
 
-    try {
-      await apiService.deleteAPIKey(Number.parseInt(appId), keyId);
-      // Remove from local state
-      const newApiKeys = apiKeys.filter(k => k.key_id !== keyId);
-      setApiKeys(newApiKeys);
-      // Update cache
-      settingsCache.setAPIKeys(appId, newApiKeys);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete API key');
-      console.error('Error deleting API key:', err);
-    }
+    const target = apiKeys.find((k) => k.key_id === keyId);
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('API key'),
+      message: target
+        ? `Are you sure you want to delete "${target.name}"? Any application using it will lose access immediately.`
+        : MESSAGES.CONFIRM_DELETE_MESSAGE('API key'),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteAPIKey(Number.parseInt(appId), keyId),
+      {
+        loading: MESSAGES.DELETING('API key'),
+        success: MESSAGES.DELETED('API key'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('API key')),
+      },
+    );
+    if (result === undefined) return;
+
+    const newApiKeys = apiKeys.filter((k) => k.key_id !== keyId);
+    setApiKeys(newApiKeys);
+    settingsCache.setAPIKeys(appId, newApiKeys);
   }
 
   async function handleToggle(keyId: number) {
     if (!appId) return;
 
-    try {
-      const response = await apiService.toggleAPIKey(Number.parseInt(appId), keyId);
-      // Update local state
-      const updatedApiKeys = apiKeys.map(key => 
-        key.key_id === keyId 
-          ? { ...key, is_active: response.is_active }
-          : key
-      );
-      setApiKeys(updatedApiKeys);
-      // Update cache
-      settingsCache.setAPIKeys(appId, updatedApiKeys);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to toggle API key');
-      console.error('Error toggling API key:', err);
-    }
+    const target = apiKeys.find((k) => k.key_id === keyId);
+    const willActivate = !target?.is_active;
+    const verb = willActivate ? 'Activating' : 'Deactivating';
+
+    const result = await mutate(
+      () => apiService.toggleAPIKey(Number.parseInt(appId), keyId),
+      {
+        loading: `${verb} API key…`,
+        success: willActivate ? 'API key activated' : 'API key deactivated',
+        error: (err) => errorMessage(err, 'Failed to toggle API key'),
+      },
+    );
+    if (result === undefined) return;
+
+    const updatedApiKeys = apiKeys.map((key) =>
+      key.key_id === keyId ? { ...key, is_active: result.is_active } : key,
+    );
+    setApiKeys(updatedApiKeys);
+    settingsCache.setAPIKeys(appId, updatedApiKeys);
   }
 
   function handleCreateKey() {
@@ -146,29 +164,40 @@ function APIKeysPage() {
   async function handleSaveKey(data: any) {
     if (!appId) return;
 
-    try {
-      if (editingKey && editingKey.key_id !== 0) {
-        // Update existing key - no need to invalidate cache
-        await apiService.updateAPIKey(Number.parseInt(appId), editingKey.key_id, data);
-        await loadAPIKeys(); // Reload the list
-        setIsModalOpen(false);
-        setEditingKey(null);
-      } else {
-        // Create new key - invalidate cache and force reload
-        const response = await apiService.createAPIKey(Number.parseInt(appId), data);
-        
-        // Show the API key value in a special modal
-        setCreatedKey(response);
-        setShowKeyModal(true);
-        setIsModalOpen(false);
-        setEditingKey(null);
-        
-        // Invalidate cache and force reload to include the new key
-        settingsCache.invalidateAPIKeys(appId);
-        await forceReloadAPIKeys();
+    const isUpdate = Boolean(editingKey && editingKey.key_id !== 0);
+
+    const result = await mutate(
+      () =>
+        isUpdate
+          ? apiService.updateAPIKey(Number.parseInt(appId), editingKey.key_id, data)
+          : apiService.createAPIKey(Number.parseInt(appId), data),
+      {
+        loading: isUpdate ? MESSAGES.UPDATING('API key') : MESSAGES.CREATING('API key'),
+        success: isUpdate ? MESSAGES.UPDATED('API key') : MESSAGES.CREATED('API key'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('API key')),
+      },
+    );
+    if (result === undefined) return;
+
+    setIsModalOpen(false);
+    setEditingKey(null);
+
+    if (isUpdate) {
+      try {
+        await loadAPIKeys();
+      } catch (err) {
+        console.error('Refetch after update failed:', err);
       }
-    } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to save API key');
+    } else {
+      // New key — surface the secret once via APIKeyDisplayModal, then refresh list.
+      setCreatedKey(result);
+      setShowKeyModal(true);
+      settingsCache.invalidateAPIKeys(appId);
+      try {
+        await forceReloadAPIKeys();
+      } catch (err) {
+        console.error('Refetch after create failed:', err);
+      }
     }
   }
 
