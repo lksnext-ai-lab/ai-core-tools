@@ -54,7 +54,7 @@ export const Layout: React.FC<LayoutProps> = ({
   showFooter = true
 }) => {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
       {/* Full-width Header */}
       {showHeader && (
         <Header
@@ -69,20 +69,21 @@ export const Layout: React.FC<LayoutProps> = ({
 
       <QuotaWarningBanner />
 
-      {/* Main Content Row */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Content Row — min-h-0 lets children shrink below their intrinsic
+          size so the sidebar's tall nav never pushes the document past 100vh */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar */}
         {showSidebar && (
-          <Sidebar 
+          <Sidebar
             navigationConfig={navigationConfig}
             {...sidebarProps}
           />
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Page Content */}
-          <main className={`flex-1 overflow-x-auto overflow-y-visible p-6 ${mainProps.className || ''}`}>
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
+          {/* Page Content — owns its own scroll so the sidebar never pushes it */}
+          <main className={`flex-1 min-h-0 overflow-auto p-6 ${mainProps.className || ''}`}>
             {children}
           </main>
           
