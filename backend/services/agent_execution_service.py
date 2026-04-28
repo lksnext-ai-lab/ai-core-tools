@@ -99,6 +99,25 @@ class AgentExecutionService:
                 db=db,
             )
 
+            # Resolve temporary playground media silos for this session
+            temp_silo_ids = None
+            session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
+            if session_id_for_media and db:
+                try:
+                    from services.playground_media_service import PlaygroundMediaService
+                    app_id = ctx.user_context.get("app_id") if ctx.user_context else None
+                    if app_id:
+                        temp_silo_ids = PlaygroundMediaService.get_temp_silo_ids_for_agent(
+                            app_id, agent_id, session_id_for_media, db
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not resolve temp silos: {e}")
+
+                # Vectorize attached files (PDFs, text) into a temp silo for RAG
+                temp_silo_ids = self._vectorize_and_resolve_file_silos(
+                    ctx, agent_id, session_id_for_media, db, temp_silo_ids
+                )
+
             response = await self._execute_agent_async(
                 ctx.fresh_agent,
                 ctx.enhanced_message,
@@ -107,6 +126,7 @@ class AgentExecutionService:
                 ctx.user_context,
                 ctx.image_files,
                 working_dir=ctx.working_dir,
+                temp_silo_ids=temp_silo_ids or None,
             )
 
             return await self._finalize_turn(ctx, response, db)
@@ -252,6 +272,7 @@ class AgentExecutionService:
             session_id_for_cache=session_id_for_cache,
             working_dir=working_dir,
             pre_existing_files=pre_existing_files,
+            original_message=message,
             processed_files=processed_files,
             search_params=search_params,
             user_context=user_context,
@@ -533,6 +554,33 @@ class AgentExecutionService:
                     logger.error(f"Error removing file {file_data['file_id']} during reset: {str(e)}")
             
             logger.info(f"Conversation reset for agent {agent_id} - cleared {len(attached_files)} files")
+
+            # Clean up playground temp media repositories
+            conversation_id = user_context.get("conversation_id") if user_context else None
+            app_id = user_context.get("app_id") if user_context else None
+            if conversation_id and app_id and db:
+                try:
+                    from services.playground_media_service import PlaygroundMediaService
+                    from services.conversation_service import ConversationService
+                    conv = ConversationService.get_conversation(db, conversation_id, user_context)
+                    if conv and conv.session_id:
+                        PlaygroundMediaService.cleanup(app_id, agent_id, conv.session_id, db)
+                        logger.info(f"Cleaned up playground media for agent {agent_id} session {conv.session_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up playground media during reset: {e}")
+
+            # Delete the Conversation record from the database
+            if conversation_id and db:
+                try:
+                    from services.conversation_service import ConversationService
+                    conversation = ConversationService.get_conversation(db, conversation_id, user_context)
+                    if conversation:
+                        db.delete(conversation)
+                        db.commit()
+                        logger.info(f"Deleted conversation record {conversation_id} for agent {agent_id}")
+                except Exception as e:
+                    logger.error(f"Error deleting conversation record during reset: {e}")
+
             return True
             
         except Exception as e:
@@ -874,6 +922,62 @@ class AgentExecutionService:
             logger.error(f"Error processing PDF with OCR: {str(e)}")
             raise
     
+    def _vectorize_and_resolve_file_silos(
+        self,
+        ctx: "AgentExecutionContext",
+        agent_id: int,
+        session_id: str,
+        db: Session,
+        temp_silo_ids: Optional[List[int]],
+    ) -> Optional[List[int]]:
+        """Vectorize text-based attached files into the shared temp playground silo.
+
+        Reuses the same repo/silo created by PlaygroundMediaService so that
+        media transcriptions and file content live in a single retriever.
+
+        Modifies ``ctx.enhanced_message`` and ``ctx.image_files`` in-place to
+        remove file content that has been vectorized (the agent will retrieve
+        it via RAG instead of reading it from the message context).
+
+        Returns:
+            Updated list of temp_silo_ids (may be the same reference or a new list).
+        """
+        try:
+            from services.playground_media_service import PlaygroundMediaService
+            app_id = ctx.user_context.get("app_id") if ctx.user_context else None
+            if not app_id or not ctx.processed_files:
+                return temp_silo_ids
+
+            vectorized_ids = PlaygroundMediaService.vectorize_file_references(
+                app_id, agent_id, session_id,
+                ctx.processed_files, db,
+            )
+            if not vectorized_ids:
+                return temp_silo_ids
+
+            # Rebuild enhanced message without vectorized file content
+            remaining_files = [
+                f for f in ctx.processed_files if f.get("file_id") not in vectorized_ids
+            ]
+            ctx.enhanced_message, ctx.image_files = self._prepare_message_with_files(
+                ctx.original_message, remaining_files
+            )
+
+            # Re-resolve silo IDs (vectorize may have created the repo/silo)
+            if not temp_silo_ids:
+                temp_silo_ids = PlaygroundMediaService.get_temp_silo_ids_for_agent(
+                    app_id, agent_id, session_id, db
+                )
+
+            logger.info(
+                "Vectorized %d file(s) for agent %s; temp_silo_ids=%s",
+                len(vectorized_ids), agent_id, temp_silo_ids,
+            )
+        except Exception as e:
+            logger.warning(f"Could not vectorize playground files: {e}")
+
+        return temp_silo_ids
+
     def _prepare_message_with_files(self, message: str, processed_files: List[Dict]) -> tuple:
         """
         Build enhanced message with file contents and separate image files.
@@ -969,7 +1073,8 @@ class AgentExecutionService:
         session_id_for_cache: str = None,
         user_context: Dict = None,
         image_files: List[Dict] = None,
-        working_dir: Optional[str] = None
+        working_dir: Optional[str] = None,
+        temp_silo_ids: Optional[List[int]] = None
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
         
@@ -984,7 +1089,8 @@ class AgentExecutionService:
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, langsmith_config, mcp_client = await create_agent(
-                fresh_agent, search_params, session_id_for_cache, user_context, working_dir
+                fresh_agent, search_params, session_id_for_cache, user_context, working_dir,
+                temp_silo_ids=temp_silo_ids
             )
             
             # Prepare configuration

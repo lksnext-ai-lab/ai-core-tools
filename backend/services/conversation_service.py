@@ -292,6 +292,20 @@ class ConversationService:
         if not conversation:
             return False
         
+        # Clean up playground temp media repositories (silo + repo + vectors)
+        try:
+            from services.playground_media_service import PlaygroundMediaService
+            app_id = conversation.agent.app_id
+            PlaygroundMediaService.cleanup(
+                app_id, conversation.agent_id, conversation.session_id, db
+            )
+            logger.info(
+                f"Cleaned up playground media for conversation {conversation_id} "
+                f"(agent {conversation.agent_id}, session {conversation.session_id})"
+            )
+        except Exception as e:
+            logger.error(f"Error cleaning up playground media during delete: {e}")
+        
         # Delete the chat history from PostgreSQL checkpointer
         try:
             # Use the full session_id as-is (don't remove the conv_ prefix)

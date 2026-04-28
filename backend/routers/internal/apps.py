@@ -3,6 +3,7 @@ from typing import List, Tuple, Optional, Annotated
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 import json
+import os
 from pydantic import ValidationError
 
 # Import database
@@ -700,9 +701,10 @@ async def validate_langsmith_key(
         )
 
     try:
+        api_url = os.getenv("LANGSMITH_ENDPOINT") or "https://api.smith.langchain.com"
         client = ls.Client(
             api_key=app.langsmith_api_key,
-            api_url="https://api.smith.langchain.com",
+            api_url=api_url,
         )
         settings = client._get_settings()
         tenant_handle = getattr(settings, 'tenant_handle', None)
