@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 interface RepositoryFormData {
   name: string;
@@ -32,6 +34,7 @@ interface AIService {
 const RepositoryFormPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +113,7 @@ const RepositoryFormPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!appId) {
       setError('Invalid application context');
       return;
@@ -145,34 +148,35 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
-    try {
-      setSaving(true);
-      setError(null);
+    const payload = {
+      name: trimmedName,
+      embedding_service_id: formData.embedding_service_id,
+      vector_db_type: normalizedVectorDbType,
+      transcription_service_id: formData.transcription_service_id,
+      video_ai_service_id: formData.video_ai_service_id,
+    };
 
-      if (isNewRepository) {
-        await apiService.createRepository(appIdNumber, { 
-          name: trimmedName,
-          embedding_service_id: formData.embedding_service_id,
-          vector_db_type: normalizedVectorDbType,
-          transcription_service_id: formData.transcription_service_id,
-          video_ai_service_id: formData.video_ai_service_id,
-        });
-      } else {
-        await apiService.updateRepository(appIdNumber, repositoryIdNumber, { 
-          name: trimmedName,
-          embedding_service_id: formData.embedding_service_id,
-          vector_db_type: normalizedVectorDbType,
-          transcription_service_id: formData.transcription_service_id,
-          video_ai_service_id: formData.video_ai_service_id,
-        });
-      }
+    setError(null);
+    setSaving(true);
+    const result = await mutate(
+      () =>
+        isNewRepository
+          ? apiService.createRepository(appIdNumber, payload)
+          : apiService.updateRepository(appIdNumber, repositoryIdNumber, payload),
+      {
+        loading: isNewRepository
+          ? MESSAGES.CREATING('repository')
+          : MESSAGES.UPDATING('repository'),
+        success: isNewRepository
+          ? MESSAGES.CREATED('repository')
+          : MESSAGES.UPDATED('repository'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('repository')),
+      },
+    );
+    setSaving(false);
 
+    if (result !== undefined) {
       navigate(`/apps/${appId}/repositories`);
-    } catch (err) {
-      console.error('Error saving repository:', err);
-      setError('Failed to save repository');
-    } finally {
-      setSaving(false);
     }
   };
 

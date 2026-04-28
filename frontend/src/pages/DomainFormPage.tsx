@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 interface EmbeddingService {
   service_id: number;
@@ -28,9 +30,10 @@ interface DomainFormData {
 function DomainFormPage() {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
 
@@ -61,11 +64,11 @@ function DomainFormPage() {
 
   async function loadDomainData() {
     if (!appId) return;
-    
+
     try {
       setLoading(true);
-      setError(null);
-      
+      setLoadError(null);
+
       const numericAppId = Number.parseInt(appId, 10);
       const domainIdNum = isNewDomain ? 0 : Number.parseInt(domainId ?? '0', 10);
       const response = await apiService.getDomain(numericAppId, domainIdNum);
@@ -109,7 +112,7 @@ function DomainFormPage() {
       }
     } catch (err) {
       console.error('Error loading domain data:', err);
-      setError('Failed to load domain data');
+      setLoadError(errorMessage(err, MESSAGES.LOAD_FAILED('domain')));
     } finally {
       setLoading(false);
     }
@@ -117,29 +120,31 @@ function DomainFormPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
-    if (!appId) return;
-    
-    try {
-      setSaving(true);
-      setError(null);
-      
-      const numericAppId = Number.parseInt(appId, 10);
-      const domainIdNum = isNewDomain ? 0 : Number.parseInt(domainId ?? '0', 10);
 
-      if (isNewDomain) {
-        await apiService.createDomain(numericAppId, formData);
-      } else {
+    if (!appId) return;
+
+    const numericAppId = Number.parseInt(appId, 10);
+    const domainIdNum = isNewDomain ? 0 : Number.parseInt(domainId ?? '0', 10);
+
+    setSaving(true);
+    const result = await mutate(
+      () => {
+        if (isNewDomain) {
+          return apiService.createDomain(numericAppId, formData);
+        }
         const { vector_db_type: _vdb, embedding_service_id: _esi, ...updatePayload } = formData;
-        await apiService.updateDomain(numericAppId, domainIdNum, updatePayload);
-      }
-      
-      // Navigate back to domains list
+        return apiService.updateDomain(numericAppId, domainIdNum, updatePayload);
+      },
+      {
+        loading: isNewDomain ? MESSAGES.CREATING('domain') : MESSAGES.UPDATING('domain'),
+        success: isNewDomain ? MESSAGES.CREATED('domain') : MESSAGES.UPDATED('domain'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('domain')),
+      },
+    );
+    setSaving(false);
+
+    if (result !== undefined) {
       navigate(`/apps/${appId}/domains`);
-    } catch (err) {
-      console.error('Error saving domain:', err);
-      setError('Failed to save domain');
-      setSaving(false);
     }
   }
 
@@ -165,7 +170,7 @@ function DomainFormPage() {
     );
   }
 
-  if (error) {
+  if (loadError) {
     return (
       <div className="p-6">
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
@@ -173,7 +178,7 @@ function DomainFormPage() {
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">Error</h3>
               <div className="mt-2 text-sm text-red-700">
-                <p>{error}</p>
+                <p>{loadError}</p>
               </div>
               <div className="mt-4">
                 <button
