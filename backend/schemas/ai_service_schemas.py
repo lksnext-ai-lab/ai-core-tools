@@ -28,10 +28,10 @@ class AIServiceDetailSchema(BaseModel):
     api_key: str
     base_url: str
     supports_video: bool = False
-    created_at: Optional[datetime]
-    available_providers: List[Dict[str, Any]]
+    created_at: Optional[datetime] = None
+    available_providers: List[Dict[str, Any]] = []
     needs_api_key: bool = False
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
