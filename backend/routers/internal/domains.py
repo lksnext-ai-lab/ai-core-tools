@@ -1,16 +1,17 @@
-from fastapi import APIRouter, HTTPException, status, Request, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, status, Request, Depends, Query
 from fastapi.responses import JSONResponse
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 import json
 
 # Import services
 from services.domain_service import DomainService
-from services.url_service import UrlService
 from services.domain_export_service import DomainExportService
 from services.domain_import_service import DomainImportService
-from tools.scrapTools import scrape_and_index_url, reindex_domain_urls
+from services.crawl_policy_service import CrawlPolicyService
+from services.crawl_job_service import CrawlJobService, ConflictError
+from services.domain_url_service import DomainUrlService
 
 # Import schemas and auth
 from schemas.domain_url_schemas import (
@@ -19,9 +20,17 @@ from schemas.domain_url_schemas import (
     CreateUpdateDomainSchema,
     CreateDomainSchema,
     UpdateDomainSchema,
-    URLListItemSchema,
-    CreateURLSchema,
-    URLActionResponseSchema
+)
+from schemas.crawl_schemas import (
+    CrawlPolicySchema,
+    CrawlPolicyResponseSchema,
+    CrawlJobResponseSchema,
+    TriggerCrawlResponseSchema,
+    CrawlJobListResponseSchema,
+    DomainUrlListResponseSchema,
+    DomainUrlDetailSchema,
+    AddDomainUrlSchema,
+    DomainUrlActionResponseSchema,
 )
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import DomainExportFileSchema
@@ -37,7 +46,6 @@ from utils.error_handlers import ValidationError
 from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from tools.vector_store_factory import VectorStoreFactory
 from fastapi import File, UploadFile
-from typing import Optional
 
 logger = get_logger(__name__)
 
@@ -47,48 +55,7 @@ URL_NOT_FOUND = "URL not found"
 domains_router = APIRouter()
 
 
-#BACKGROUND TASKS
-
-def background_scrape_and_index(domain_id: int, url_path: str, url_id: int):
-    """
-    Background task to scrape and index a single URL
-    """
-    from db.database import SessionLocal
-    db = SessionLocal()
-    try:
-        domain = DomainService.get_domain(domain_id, db)
-        if domain:
-            scrape_and_index_url(domain, url_path, url_id, db)
-            logger.info(f"Background indexing completed for URL {url_id}")
-        else:
-            logger.error(f"Domain {domain_id} not found for background indexing")
-    except Exception as e:
-        logger.error(f"Background indexing failed for URL {url_id}: {str(e)}")
-    finally:
-        db.close()
-
-
-def background_reindex_domain(domain_id: int):
-    """
-    Background task to reindex all URLs in a domain
-    """
-    from db.database import SessionLocal
-    db = SessionLocal()
-    try:
-        domain = DomainService.get_domain(domain_id, db)
-        if domain:
-            results = reindex_domain_urls(domain, db)
-            logger.info(f"Background domain reindexing completed for domain {domain_id}: {results}")
-        else:
-            logger.error(f"Domain {domain_id} not found for background reindexing")
-    except Exception as e:
-        logger.error(f"Background domain reindexing failed for domain {domain_id}: {str(e)}")
-    finally:
-        db.close()
-
-
-
-#DOMAIN MANAGEMENT
+# ==================== DOMAIN MANAGEMENT ====================
 
 @domains_router.post(
     "/import",
@@ -107,11 +74,7 @@ async def import_domain(
     new_name: Annotated[Optional[str], Query()] = None,
     selected_embedding_service_id: Annotated[Optional[int], Query()] = None,
 ):
-    """Import Domain from JSON file.
-
-    Note: Imports domain structure and URL list.
-    URLs will need to be re-crawled after import.
-    """
+    """Import Domain from JSON file."""
     try:
         content = await file.read()
         file_data = json.loads(content)
@@ -125,57 +88,40 @@ async def import_domain(
             app_id,
             conflict_mode,
             new_name,
-            selected_embedding_service_id=(
-                selected_embedding_service_id
-            ),
+            selected_embedding_service_id=selected_embedding_service_id,
         )
 
         return ImportResponseSchema(
             success=True,
-            message=(
-                f"Domain '{summary.component_name}' "
-                f"imported successfully"
-            ),
+            message=f"Domain '{summary.component_name}' imported successfully",
             summary=summary,
         )
     except HTTPException:
         raise
     except ValueError as e:
         if "already exists" in str(e):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, str(e)
-            )
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, str(e)
-        )
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:
-        logger.error(
-            f"Import error: {str(e)}", exc_info=True
-        )
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "Import failed",
-        )
+        logger.error(f"Import error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Import failed")
 
 
-@domains_router.get("/", 
+@domains_router.get("/",
                     summary="List domains",
                     tags=["Domains"],
                     response_model=List[DomainListItemSchema])
 async def list_domains(
-    app_id: int, 
-    request: Request, 
-    db: Annotated[Session, Depends(get_db)], 
+    app_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """
-    List all domains for a specific app.
-    """
-    
+    """List all domains for a specific app."""
     try:
         domains_with_counts = DomainService.get_domains_with_url_counts(app_id, db)
-        
+
         result = []
         for domain, url_count in domains_with_counts:
             if domain.silo and getattr(domain.silo, 'vector_db_type', None):
@@ -190,15 +136,13 @@ async def list_domains(
                 created_at=domain.create_date,
                 url_count=url_count,
                 silo_id=domain.silo_id,
-                vector_db_type=domain_vector_db_type
+                vector_db_type=domain_vector_db_type,
             ))
-        
         return result
-        
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving domains: {str(e)}"
+            detail=f"Error retrieving domains: {str(e)}",
         )
 
 
@@ -207,47 +151,28 @@ async def list_domains(
                     tags=["Domains"],
                     response_model=DomainDetailSchema)
 async def get_domain(
-    app_id: int, 
-    domain_id: int, 
-    request: Request, 
-    db: Annotated[Session, Depends(get_db)], 
+    app_id: int,
+    domain_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """
-    Get detailed information about a specific domain.
-    """
-    
+    """Get detailed information about a specific domain."""
     if domain_id == 0:
-        # New domain - return empty template with embedding services
         embedding_services = DomainService.get_embedding_services_for_app(app_id, db)
         vector_db_options = VectorStoreFactory.get_available_type_options()
-        default_vector_db_type = 'PGVECTOR'
-        
         return DomainDetailSchema(
-            domain_id=0,
-            name="",
-            description="",
-            base_url="",
-            content_tag="body",
-            content_class="",
-            content_id="",
-            created_at=None,
-            silo_id=None,
-            url_count=0,
-            embedding_services=embedding_services,
-            embedding_service_id=None,
-            vector_db_type=default_vector_db_type,
-            vector_db_options=vector_db_options
+            domain_id=0, name="", description="", base_url="",
+            content_tag="body", content_class="", content_id="",
+            created_at=None, silo_id=None, url_count=0,
+            embedding_services=embedding_services, embedding_service_id=None,
+            vector_db_type='PGVECTOR', vector_db_options=vector_db_options,
         )
-    
-    # Existing domain
+
     domain_detail = DomainService.get_domain_detail(domain_id, app_id, db)
     if not domain_detail:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=DOMAIN_NOT_FOUND
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DOMAIN_NOT_FOUND)
     return domain_detail
 
 
@@ -264,9 +189,7 @@ async def create_domain(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Create a new domain.
-    """
+    """Create a new domain."""
     try:
         data = {
             'domain_id': None,
@@ -277,7 +200,7 @@ async def create_domain(
             'content_class': domain_data.content_class,
             'content_id': domain_data.content_id,
             'app_id': app_id,
-            'vector_db_type': domain_data.vector_db_type
+            'vector_db_type': domain_data.vector_db_type,
         }
         created_domain_id = DomainService.create_or_update_domain(data, domain_data.embedding_service_id, db)
         return await get_domain(app_id, created_domain_id, request, db, auth_context, role)
@@ -303,9 +226,7 @@ async def update_domain(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Update an existing domain. Note: vector_db_type and embedding_service_id cannot be changed after creation.
-    """
+    """Update an existing domain."""
     try:
         raw_body = await request.json()
         existing_domain = DomainService.get_domain(domain_id, db)
@@ -322,7 +243,7 @@ async def update_domain(
             'content_class': domain_data.content_class,
             'content_id': domain_data.content_id,
             'app_id': app_id,
-            'vector_db_type': None  # immutable — not accepted on update
+            'vector_db_type': None,
         }
         updated_domain_id = DomainService.create_or_update_domain(data, None, db)
         return await get_domain(app_id, updated_domain_id, request, db, auth_context, role)
@@ -339,34 +260,27 @@ async def update_domain(
                        summary="Delete domain",
                        tags=["Domains"])
 async def delete_domain(
-    app_id: int, 
-    domain_id: int, 
-    request: Request, 
-    db: Annotated[Session, Depends(get_db)], 
+    app_id: int,
+    domain_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Delete a domain and its associated silo and URLs.
-    """
-    
+    """Delete a domain and its associated silo and URLs."""
     try:
         domain = DomainService.get_domain(domain_id, db)
         if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        # Delete domain using service (this should also handle silo and URL cleanup)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DOMAIN_NOT_FOUND)
         DomainService.delete_domain(domain_id, db)
         return {"message": "Domain deleted successfully"}
-        
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting domain: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting domain: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error deleting domain: {str(e)}")
 
 
 @domains_router.post(
@@ -381,56 +295,27 @@ async def export_domain(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
-    include_dependencies: Annotated[bool, Query(
-        description="Bundle silo and its dependencies",
-    )] = True,
+    include_dependencies: Annotated[bool, Query(description="Bundle silo and its dependencies")] = True,
 ):
-    """Export Domain configuration to JSON file.
-
-    Note: Exports domain structure and URL list.
-    Crawled content is NOT exported (heavy data).
-    URLs will need to be re-crawled after import.
-    """
+    """Export Domain configuration to JSON file."""
     try:
         export_service = DomainExportService(db)
         export_data = export_service.export_domain(
-            domain_id,
-            app_id,
-            getattr(auth_context, "user_id", None),
-            include_dependencies,
+            domain_id, app_id, getattr(auth_context, "user_id", None), include_dependencies,
         )
-
-        filename = (
-            f"{export_data.domain.name.replace(' ', '_')}"
-            f"_domain.json"
-        )
-
+        filename = f"{export_data.domain.name.replace(' ', '_')}_domain.json"
         return JSONResponse(
             content=export_data.model_dump(mode="json"),
-            headers={
-                "Content-Disposition": (
-                    f'attachment; filename="{filename}"'
-                )
-            },
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except ValueError as e:
         logger.warning(f"Export failed: {str(e)}")
         if "not found" in str(e):
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, str(e)
-            )
-        else:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, str(e)
-            )
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:
-        logger.error(
-            f"Export error: {str(e)}", exc_info=True
-        )
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "Export failed",
-        )
+        logger.error(f"Export error: {str(e)}", exc_info=True)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
 
 
 # ==================== URL MANAGEMENT ====================
@@ -438,7 +323,7 @@ async def export_domain(
 @domains_router.get("/{domain_id}/urls",
                     summary="List URLs for domain",
                     tags=["Domains", "URLs"],
-                    response_model=List[URLListItemSchema])
+                    response_model=DomainUrlListResponseSchema)
 async def list_domain_urls(
     app_id: int,
     domain_id: int,
@@ -446,92 +331,92 @@ async def list_domain_urls(
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=200),
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    discovered_via: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
 ):
-    """
-    List URLs for a specific domain with pagination.
-    """
-    
+    """List DomainUrl rows for a specific domain with optional filters and pagination."""
     try:
-        _, urls, _ = DomainService.get_domain_with_urls(domain_id, db, page, per_page)
-        
-        result = []
-        for url in urls:
-            result.append(URLListItemSchema(
-                url_id=url.url_id,
-                url=url.url,
-                created_at=url.created_at,
-                updated_at=url.updated_at,
-                status=url.status
-            ))
-        
-        return result
-        
+        urls, pagination = DomainUrlService.list_urls(
+            domain_id=domain_id, db=db, page=page, per_page=per_page,
+            status=status_filter, discovered_via=discovered_via, q=q,
+        )
+        return DomainUrlListResponseSchema(
+            items=urls,
+            page=pagination['page'],
+            per_page=pagination['per_page'],
+            total=pagination['total'],
+        )
     except Exception as e:
         logger.error(f"Error retrieving URLs for domain {domain_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving URLs: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving URLs: {str(e)}")
 
 
 @domains_router.post("/{domain_id}/urls",
                      summary="Add URL to domain",
                      tags=["Domains", "URLs"],
-                     response_model=URLActionResponseSchema)
-async def add_url_to_domain(
+                     response_model=DomainUrlActionResponseSchema,
+                     status_code=status.HTTP_201_CREATED)
+async def add_domain_url(
     app_id: int,
     domain_id: int,
-    url_data: CreateURLSchema,
+    url_data: AddDomainUrlSchema,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Add a new URL to a domain and scrape its content.
-    """
-    
+    """Add a URL to a domain manually (queued for next crawl)."""
     try:
-        # Get domain info
         domain = DomainService.get_domain(domain_id, db)
         if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        # Clean URL (remove query parameters)
-        clean_url = url_data.url.split('?')[0]
-        
-        # Create URL using service
-        url_id = UrlService.create_url(clean_url, domain_id, db)
-        
-        # Add background task for scraping and indexing
-        background_tasks.add_task(background_scrape_and_index, domain_id, clean_url, url_id)
-        
-        message = "URL added and indexing started in background"
-        
-        return URLActionResponseSchema(
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DOMAIN_NOT_FOUND)
+        domain_url = DomainUrlService.add_manual_url(url_data.url, domain_id, db)
+        return DomainUrlActionResponseSchema(
             success=True,
-            message=message,
-            url_id=url_id
+            message="URL added successfully",
+            url_id=domain_url.id,
         )
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error adding URL to domain {domain_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error adding URL: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error adding URL: {str(e)}")
+
+
+@domains_router.get("/{domain_id}/urls/{url_id}",
+                    summary="Get URL detail",
+                    tags=["Domains", "URLs"],
+                    response_model=DomainUrlDetailSchema)
+async def get_domain_url(
+    app_id: int,
+    domain_id: int,
+    url_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """Get detailed information about a specific domain URL."""
+    try:
+        domain_url = DomainUrlService.get_url(url_id, db)
+        if not domain_url or domain_url.domain_id != domain_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=URL_NOT_FOUND)
+        return domain_url
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving URL {url_id}: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving URL: {str(e)}")
 
 
 @domains_router.delete("/{domain_id}/urls/{url_id}",
                        summary="Delete URL from domain",
                        tags=["Domains", "URLs"],
-                       response_model=URLActionResponseSchema)
-async def delete_url_from_domain(
+                       response_model=DomainUrlActionResponseSchema)
+async def delete_domain_url(
     app_id: int,
     domain_id: int,
     url_id: int,
@@ -540,89 +425,24 @@ async def delete_url_from_domain(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Delete a URL from a domain and remove its indexed content.
-    """
-    
+    """Delete a URL from a domain and remove its indexed content."""
     try:
-        # Delete URL using service (this should also remove indexed content)
-        UrlService.delete_url(url_id, domain_id, db)
-        
-        return URLActionResponseSchema(
-            success=True,
-            message="URL deleted successfully"
-        )
-        
+        deleted = DomainUrlService.delete_url(url_id, domain_id, db)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=URL_NOT_FOUND)
+        return DomainUrlActionResponseSchema(success=True, message="URL deleted successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting URL {url_id} from domain {domain_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting URL: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error deleting URL: {str(e)}")
 
 
-@domains_router.post("/{domain_id}/urls/{url_id}/reindex",
-                     summary="Re-index URL content",
+@domains_router.post("/{domain_id}/urls/{url_id}/recrawl",
+                     summary="Force re-crawl a URL",
                      tags=["Domains", "URLs"],
-                     response_model=URLActionResponseSchema)
-async def reindex_url(
-    app_id: int,
-    domain_id: int,
-    url_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-):
-    """
-    Re-index content for a specific URL.
-    """
-    
-    try:
-        # Get domain and URL info
-        domain = DomainService.get_domain(domain_id, db)
-        if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        url = UrlService.get_url(url_id, db)
-        if not url or url.domain_id != domain_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=URL_NOT_FOUND
-            )
-        
-        # Remove old content first
-        from services.silo_service import SiloService
-        full_url = domain.base_url + url.url
-        SiloService.delete_url(domain.silo_id, full_url, db)
-        
-        # Add background task for re-scraping and indexing
-        background_tasks.add_task(background_scrape_and_index, domain_id, url.url, url_id)
-        
-        message = "URL re-indexing started in background"
-        
-        return URLActionResponseSchema(
-            success=True,
-            message=message,
-            url_id=url_id
-        )
-        
-    except Exception as e:
-        logger.error(f"Error re-indexing URL {url_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error re-indexing URL: {str(e)}"
-        )
-
-
-@domains_router.post("/{domain_id}/urls/{url_id}/unindex",
-                     summary="Unindex URL content",
-                     tags=["Domains", "URLs"],
-                     response_model=URLActionResponseSchema)
-async def unindex_url(
+                     response_model=DomainUrlActionResponseSchema)
+async def recrawl_url(
     app_id: int,
     domain_id: int,
     url_id: int,
@@ -631,129 +451,17 @@ async def unindex_url(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Remove URL content from index and mark as unindexed.
-    """
-    
+    """Mark a URL for immediate re-crawl on the next job run."""
     try:
-        # Get domain and URL info
-        domain = DomainService.get_domain(domain_id, db)
-        if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        url = UrlService.get_url(url_id, db)
-        if not url or url.domain_id != domain_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=URL_NOT_FOUND
-            )
-        
-        # Unindex the URL
-        UrlService.unindex_url(url_id, db, domain_id)
-        
-        return URLActionResponseSchema(
-            success=True,
-            message="URL unindexed successfully",
-            url_id=url_id
-        )
-        
+        found = DomainUrlService.mark_for_recrawl(url_id, domain_id, db)
+        if not found:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=URL_NOT_FOUND)
+        return DomainUrlActionResponseSchema(success=True, message="URL marked for re-crawl", url_id=url_id)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error unindexing URL {url_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error unindexing URL: {str(e)}"
-        )
-
-
-@domains_router.post("/{domain_id}/urls/{url_id}/reject",
-                     summary="Reject URL",
-                     tags=["Domains", "URLs"],
-                     response_model=URLActionResponseSchema)
-async def reject_url(
-    app_id: int,
-    domain_id: int,
-    url_id: int,
-    request: Request,
-    db: Annotated[Session, Depends(get_db)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-):
-    """
-    Mark URL as rejected (content not suitable for indexing).
-    """
-    
-    try:
-        # Get domain and URL info
-        domain = DomainService.get_domain(domain_id, db)
-        if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        url = UrlService.get_url(url_id, db)
-        if not url or url.domain_id != domain_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=URL_NOT_FOUND
-            )
-        
-        # Reject the URL
-        UrlService.reject_url(url_id, db, domain_id)
-        
-        return URLActionResponseSchema(
-            success=True,
-            message="URL rejected successfully",
-            url_id=url_id
-        )
-        
-    except Exception as e:
-        logger.error(f"Error rejecting URL {url_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error rejecting URL: {str(e)}"
-        )
-
-
-@domains_router.post("/{domain_id}/reindex",
-                     summary="Re-index all domain URLs",
-                     tags=["Domains", "URLs"])
-async def reindex_domain(
-    app_id: int,
-    domain_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-):
-    """
-    Re-index content for all URLs in a domain.
-    """
-    
-    try:
-        # Get domain info
-        domain = DomainService.get_domain(domain_id, db)
-        if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        # Add background task for re-indexing all URLs
-        background_tasks.add_task(background_reindex_domain, domain_id)
-        
-        return {
-            "message": "Domain re-indexing started in background",
-            "status": "started"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error re-indexing domain {domain_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error re-indexing domain: {str(e)}"
-        )
+        logger.error(f"Error marking URL {url_id} for re-crawl: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
 
 
 @domains_router.get("/{domain_id}/urls/{url_id}/content",
@@ -768,65 +476,189 @@ async def get_url_content(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """
-    Get the scraped content for a specific URL.
-    """
-    
+    """Get the indexed content for a specific URL."""
     try:
-        # Get domain and URL info
         domain = DomainService.get_domain(domain_id, db)
         if not domain:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=DOMAIN_NOT_FOUND
-            )
-        # Get URL info
-        url = UrlService.get_url(url_id, db)
-        if not url or url.domain_id != domain_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=URL_NOT_FOUND
-            )
-        
-        # Get content from silo
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DOMAIN_NOT_FOUND)
+
+        domain_url = DomainUrlService.get_url(url_id, db)
+        if not domain_url or domain_url.domain_id != domain_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=URL_NOT_FOUND)
+
         if not domain.silo_id:
-            return {
-                "url": domain.base_url + url.url,
-                "content": None,
-                "message": "No silo associated with this domain"
-            }
-        
-        # Query the silo for content related to this URL
+            return {"url": domain_url.url, "content": None, "message": "No silo associated with this domain"}
+
         from services.silo_service import SiloService
-        full_url = domain.base_url + url.url
-        
-        # Search for content with this URL in metadata
         results = SiloService.search_in_silo(
             silo_id=domain.silo_id,
-            query=full_url,  # Search for the URL itself
+            query=domain_url.url,
             limit=10,
-            db=db
+            db=db,
         )
-        
-        # Extract content from results
+
         content_pieces = []
         for result in results:
             if hasattr(result, 'page_content'):
                 content_pieces.append(result.page_content)
             elif hasattr(result, 'content'):
                 content_pieces.append(result.content)
-        
+
         content = "\n\n".join(content_pieces) if content_pieces else None
-        
         return {
-            "url": full_url,
+            "url": domain_url.url,
             "content": content,
-            "message": "Content retrieved successfully" if content else "No content found for this URL"
+            "message": "Content retrieved successfully" if content else "No content found for this URL",
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error retrieving URL content: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving URL content: {str(e)}")
+
+
+# ==================== CRAWL POLICY ====================
+
+@domains_router.get("/{domain_id}/crawl-policy",
+                    summary="Get crawl policy",
+                    tags=["Domains", "Crawl"],
+                    response_model=CrawlPolicyResponseSchema)
+async def get_crawl_policy(
+    app_id: int,
+    domain_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """Get the crawl policy for a domain."""
+    policy = CrawlPolicyService.get_policy(domain_id, db)
+    if not policy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl policy not found")
+    return policy
+
+
+@domains_router.put("/{domain_id}/crawl-policy",
+                    summary="Create or update crawl policy",
+                    tags=["Domains", "Crawl"],
+                    response_model=CrawlPolicyResponseSchema)
+async def upsert_crawl_policy(
+    app_id: int,
+    domain_id: int,
+    policy_data: CrawlPolicySchema,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """Create or update the crawl policy for a domain."""
+    try:
+        policy = CrawlPolicyService.upsert_policy(domain_id, policy_data, db)
+        return policy
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error upserting crawl policy for domain {domain_id}: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+# ==================== CRAWL JOBS ====================
+
+@domains_router.post("/{domain_id}/crawl-jobs",
+                     summary="Trigger a crawl job",
+                     tags=["Domains", "Crawl"],
+                     response_model=TriggerCrawlResponseSchema,
+                     status_code=status.HTTP_202_ACCEPTED)
+async def trigger_crawl(
+    app_id: int,
+    domain_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """Enqueue a manual crawl job for a domain."""
+    domain = DomainService.get_domain(domain_id, db)
+    if not domain:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DOMAIN_NOT_FOUND)
+
+    try:
+        user_id = getattr(auth_context, 'user_id', None)
+        job = CrawlJobService.enqueue(domain_id, user_id, db)
+        return TriggerCrawlResponseSchema(job_id=job.id, status="QUEUED")
+    except ConflictError as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving URL content: {str(e)}"
-        ) 
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "A job is already queued or running", "job_id": e.job_id},
+        )
+    except Exception as e:
+        logger.error(f"Error triggering crawl for domain {domain_id}: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@domains_router.get("/{domain_id}/crawl-jobs",
+                    summary="List crawl jobs",
+                    tags=["Domains", "Crawl"],
+                    response_model=CrawlJobListResponseSchema)
+async def list_crawl_jobs(
+    app_id: int,
+    domain_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=200),
+):
+    """List crawl jobs for a domain, newest first."""
+    jobs, pagination = CrawlJobService.list_jobs(domain_id, db, page, per_page)
+    return CrawlJobListResponseSchema(
+        items=jobs,
+        page=pagination['page'],
+        per_page=pagination['per_page'],
+        total=pagination['total'],
+    )
+
+
+@domains_router.get("/{domain_id}/crawl-jobs/{job_id}",
+                    summary="Get crawl job",
+                    tags=["Domains", "Crawl"],
+                    response_model=CrawlJobResponseSchema)
+async def get_crawl_job(
+    app_id: int,
+    domain_id: int,
+    job_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """Get a specific crawl job."""
+    job = CrawlJobService.get_job(job_id, domain_id, db)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found")
+    return job
+
+
+@domains_router.post("/{domain_id}/crawl-jobs/{job_id}/cancel",
+                     summary="Cancel a crawl job",
+                     tags=["Domains", "Crawl"],
+                     response_model=CrawlJobResponseSchema)
+async def cancel_crawl_job(
+    app_id: int,
+    domain_id: int,
+    job_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """Cancel a queued or running crawl job."""
+    try:
+        job = CrawlJobService.cancel(job_id, domain_id, db)
+        return job
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error cancelling crawl job {job_id}: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
