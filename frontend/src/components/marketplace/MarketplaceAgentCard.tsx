@@ -4,6 +4,8 @@ import { Bot, BookOpen } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { StarRating } from './StarRating';
 import { apiService } from '../../services/api';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { errorMessage } from '../../constants/messages';
 import type { MarketplaceAgentCard as MarketplaceAgentCardType } from '../../types/marketplace';
 
 interface MarketplaceAgentCardProps {
@@ -30,18 +32,24 @@ const CATEGORY_VARIANT: Record<string, 'info' | 'success' | 'warning' | 'error' 
  */
 export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardProps) {
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const [starting, setStarting] = useState(false);
 
   const handleStartChat = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (starting) return;
     setStarting(true);
-    try {
-      const conv = await apiService.createMarketplaceConversation(agent.agent_id);
-      navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
-    } finally {
-      setStarting(false);
-    }
+    const conv = await mutate(
+      () => apiService.createMarketplaceConversation(agent.agent_id),
+      {
+        loading: 'Starting conversation…',
+        success: 'Conversation started',
+        error: (err) => errorMessage(err, 'Failed to start conversation'),
+      },
+    );
+    setStarting(false);
+    if (!conv) return;
+    navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
   };
 
   return (

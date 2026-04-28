@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Bot} from 'lucide-react';
+import { ArrowLeft, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiService } from '../services/api';
@@ -8,6 +8,8 @@ import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { Badge } from '../components/ui/Badge';
 import { StarRating } from '../components/marketplace/StarRating';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { errorMessage } from '../constants/messages';
 import type {
   MarketplaceAgentDetail,
   MarketplaceConversation,
@@ -71,6 +73,7 @@ const CATEGORY_VARIANT: Record<
 export default function MarketplaceAgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const numericId = Number(agentId);
 
   const [agent, setAgent] = useState<MarketplaceAgentDetail | null>(null);
@@ -82,7 +85,6 @@ export default function MarketplaceAgentDetailPage() {
   // Rating state
   const [myRating, setMyRating] = useState<number | null>(null);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
-  const [ratingError, setRatingError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!numericId || Number.isNaN(numericId)) {
@@ -117,34 +119,43 @@ export default function MarketplaceAgentDetailPage() {
   const handleStartChat = useCallback(async () => {
     if (!agent) return;
     setStarting(true);
-    try {
-      const conv = await apiService.createMarketplaceConversation(agent.agent_id);
-      navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start conversation');
-    } finally {
-      setStarting(false);
-    }
-  }, [agent, navigate]);
+    const conv = await mutate(
+      () => apiService.createMarketplaceConversation(agent.agent_id),
+      {
+        loading: 'Starting conversation…',
+        success: 'Conversation started',
+        error: (err) => errorMessage(err, 'Failed to start conversation'),
+      },
+    );
+    setStarting(false);
+    if (!conv) return;
+    navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
+  }, [agent, mutate, navigate]);
 
-  const handleRate = useCallback(async (rating: number) => {
-    if (!agent || ratingSubmitting) return;
-    setRatingSubmitting(true);
-    setRatingError(null);
-    try {
-      const result = await apiService.rateMarketplaceAgent(agent.agent_id, rating);
+  const handleRate = useCallback(
+    async (rating: number) => {
+      if (!agent || ratingSubmitting) return;
+      setRatingSubmitting(true);
+      const result = await mutate(
+        () => apiService.rateMarketplaceAgent(agent.agent_id, rating),
+        {
+          loading: 'Submitting rating…',
+          success: 'Rating saved',
+          error: (err) => errorMessage(err, 'Failed to submit rating'),
+        },
+      );
+      setRatingSubmitting(false);
+      if (!result) return;
+
       setMyRating(result.rating);
       setAgent((prev) =>
         prev
           ? { ...prev, rating_avg: result.rating_avg, rating_count: result.rating_count }
           : prev,
       );
-    } catch (err) {
-      setRatingError(err instanceof Error ? err.message : 'Failed to submit rating');
-    } finally {
-      setRatingSubmitting(false);
-    }
-  }, [agent, ratingSubmitting]);
+    },
+    [agent, mutate, ratingSubmitting],
+  );
 
   if (loading) {
     return <LoadingState message="Loading agent details..." />;
@@ -307,16 +318,10 @@ export default function MarketplaceAgentDetailPage() {
             {hasConversation ? (
               <div className="space-y-2">
                 <StarRating value={myRating} interactive size="md" onChange={handleRate} />
-                {ratingSubmitting && (
-                  <p className="text-xs text-gray-500">Submitting…</p>
-                )}
                 {myRating !== null && !ratingSubmitting && (
                   <p className="text-xs text-gray-500">
                     Your rating: {myRating} star{myRating === 1 ? '' : 's'}. Click to change.
                   </p>
-                )}
-                {ratingError && (
-                  <p className="text-xs text-red-500">{ratingError}</p>
                 )}
               </div>
             ) : (
