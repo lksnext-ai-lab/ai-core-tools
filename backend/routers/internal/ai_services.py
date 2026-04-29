@@ -13,11 +13,20 @@ from db.database import get_db
 from services.ai_service_service import AIServiceService
 from services.ai_service_export_service import AIServiceExportService
 from services.ai_service_import_service import AIServiceImportService
+from services.provider_models_service import (
+    PROVIDER_ERROR_STATUS,
+    ProviderModelsService,
+)
 
 # Import schemas and auth
 from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import AIServiceExportFileSchema
+from schemas.provider_models_schemas import (
+    ListProviderModelsRequest,
+    ListProviderModelsResponse,
+)
+from tools.ai.provider_model_clients import ProviderListingError
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 
@@ -57,6 +66,42 @@ async def list_ai_services(
 
 
 # ==================== STATIC ROUTES (must come before /{service_id}) ====================
+
+
+@ai_services_router.post(
+    "/list-models",
+    summary="List models available from a provider",
+    tags=["AI Services"],
+    response_model=ListProviderModelsResponse,
+)
+async def list_ai_service_provider_models(
+    body: ListProviderModelsRequest,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    """List models for the given provider using the credentials in the
+    request body. The credentials are NOT persisted — this endpoint is a
+    read-only probe used by the AI Service creation wizard.
+    """
+    body.purpose = "chat"  # AI Services only — embeddings have their own route
+    try:
+        return ProviderModelsService.list_models(body)
+    except ProviderListingError as exc:
+        status_code = PROVIDER_ERROR_STATUS.get(exc.code, 500)
+        raise HTTPException(status_code=status_code, detail=exc.message)
+    except Exception as e:
+        # Log only the exception type — `str(e)` from an unhandled error
+        # may include credentials embedded by the SDK in error messages.
+        logger.error(
+            "Unexpected error listing models (provider: %s): %s",
+            body.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list provider models",
+        )
 
 
 @ai_services_router.post("/test-connection",
