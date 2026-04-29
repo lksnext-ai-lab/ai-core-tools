@@ -7,6 +7,9 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import MediaUploadModal from './MediaUploadModal';
+import VideoPlayer from './VideoPlayer';
+import type { VideoTimestamp } from './VideoPlayer';
 
 interface Message {
   id: string;
@@ -39,6 +42,7 @@ interface ChatInterfaceProps {
   agentName: string;
   conversationId?: number | null;
   onConversationCreated?: (conversationId: number) => void;
+  onConversationReset?: () => void;
   onMessageSent?: () => void;
   metadataFields?: SearchFilterMetadataField[];
   vectorDbType?: string;
@@ -50,6 +54,7 @@ function ChatInterface({
   agentName,
   conversationId,
   onConversationCreated,
+  onConversationReset,
   onMessageSent,
   metadataFields,
   vectorDbType,
@@ -70,6 +75,13 @@ function ChatInterface({
   /** UI-only state to render the floating "scroll to bottom" button. Behaviour
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  // Media upload state
+  const [showMediaUploadModal, setShowMediaUploadModal] = useState(false);
+  const [mediaConversationId, setMediaConversationId] = useState<number | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [playgroundMedia, setPlaygroundMedia] = useState<Array<{ media_id: number; name: string; status: string; source_type: string; media_type: string }>>([]);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -164,6 +176,9 @@ function ChatInterface({
 
   useEffect(() => {
     setCurrentConversationId(conversationId || null);
+    if (!conversationId) {
+      setCurrentSessionId(null);
+    }
   }, [conversationId]);
 
   useEffect(() => {
@@ -173,6 +188,10 @@ function ChatInterface({
 
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
+
+          if (response.session_id) {
+            setCurrentSessionId(response.session_id);
+          }
 
           if (response.messages && response.messages.length > 0) {
             const loadedMessages: Message[] = response.messages.map(
@@ -224,7 +243,49 @@ function ChatInterface({
 
     loadConversationHistory();
     loadPersistentFiles();
-  }, [appId, agentId, currentConversationId]);
+
+    // Load playground media if session exists
+    if (currentSessionId) {
+      apiService.listPlaygroundMedia(appId, agentId, currentSessionId)
+        .then((media) => setPlaygroundMedia(Array.isArray(media) ? media : []))
+        .catch(() => setPlaygroundMedia([]));
+    } else {
+      setPlaygroundMedia([]);
+    }
+  }, [appId, agentId, currentConversationId, currentSessionId]);
+
+  // Poll for media processing status updates
+  // Uses a ref-based approach so the interval is NOT recreated on every state change.
+  useEffect(() => {
+    const hasProcessing = playgroundMedia.some(
+      (m) => m.status !== 'ready' && m.status !== 'error'
+    );
+
+    if (hasProcessing && currentSessionId && !pollingRef.current) {
+      // Start polling only when there is processing media and no interval is active
+      pollingRef.current = setInterval(async () => {
+        try {
+          const media = await apiService.listPlaygroundMedia(appId, agentId, currentSessionId);
+          const list = Array.isArray(media) ? media : [];
+          setPlaygroundMedia(list);
+          // Stop polling if all done
+          if (list.every((m: { status: string }) => m.status === 'ready' || m.status === 'error')) {
+            if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+          }
+        } catch {
+          // keep polling — transient network errors should not kill the status display
+        }
+      }, 3000);
+    } else if ((!hasProcessing || !currentSessionId) && pollingRef.current) {
+      // All media finished or session gone — stop polling
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    return () => {
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    };
+  }, [playgroundMedia, appId, agentId, currentSessionId]);
 
   useEffect(() => {
     if ((!metadataFields || metadataFields.length === 0) && filterMetadata !== undefined) {
@@ -288,6 +349,9 @@ function ChatInterface({
         setCurrentConversationId(result.conversationId);
         onConversationCreated?.(result.conversationId);
       }
+      if (result.sessionId && !currentSessionId) {
+        setCurrentSessionId(result.sessionId);
+      }
 
       await refreshFileList(result.conversationId || currentConversationId);
       onMessageSent?.();
@@ -307,11 +371,15 @@ function ChatInterface({
 
   const handleResetConversation = async () => {
     try {
-      await apiService.resetAgentConversation(appId, agentId);
+      await apiService.resetAgentConversation(appId, agentId, currentConversationId);
       setMessages([]);
       setPersistentFiles([]);
+      setPlaygroundMedia([]);
+      setMediaConversationId(null);
+      setCurrentSessionId(null);
       setFilterMetadata(undefined);
       setFiltersKey((prev) => prev + 1);
+      onConversationReset?.();
     } catch (error) {
       console.error('Error resetting conversation:', error);
     }
@@ -330,6 +398,9 @@ function ChatInterface({
         const convResponse = await apiService.createConversation(agentId);
         targetConversationId = convResponse.conversation_id;
         setCurrentConversationId(targetConversationId);
+        if (convResponse.session_id) {
+          setCurrentSessionId(convResponse.session_id);
+        }
         if (onConversationCreated && targetConversationId) {
           onConversationCreated(targetConversationId);
         }
@@ -393,6 +464,11 @@ function ChatInterface({
   };
 
   const handleRemovePersistentFile = async (fileId: string) => {
+    // Handle media item removal
+    if (fileId.startsWith('media_')) {
+      await handleDeletePlaygroundMedia();
+      return;
+    }
     try {
       await apiService.removeAttachedFile(appId, agentId, fileId, currentConversationId);
       const response = await apiService.listAttachedFiles(
@@ -408,6 +484,65 @@ function ChatInterface({
 
   // ─── Misc handlers ────────────────────────────────────────────────────────────
 
+  const handleMediaButtonClick = async () => {
+    // Ensure conversation exists before opening media upload modal
+    let convId = currentConversationId;
+    if (!convId) {
+      try {
+        const convResponse = await apiService.createConversation(agentId);
+        convId = convResponse.conversation_id;
+        setCurrentConversationId(convId);
+        setCurrentSessionId(convResponse.session_id);
+        if (onConversationCreated && convId) {
+          onConversationCreated(convId);
+        }
+      } catch (error) {
+        console.error('Error creating conversation for media upload:', error);
+        return;
+      }
+    }
+    setMediaConversationId(convId ?? null);
+    setShowMediaUploadModal(true);
+  };
+
+  const handleMediaUploadComplete = async () => {
+    // Refresh playground media list after upload
+    if (!currentSessionId) return;
+
+    const fetchMedia = async () => {
+      const media = await apiService.listPlaygroundMedia(appId, agentId, currentSessionId);
+      return Array.isArray(media) ? media : [];
+    };
+
+    try {
+      let list = await fetchMedia();
+      // Retry once after a brief delay if the list is empty (DB commit timing)
+      if (list.length === 0) {
+        await new Promise((r) => setTimeout(r, 1000));
+        list = await fetchMedia();
+      }
+      setPlaygroundMedia(list);
+    } catch (error) {
+      console.error('Error loading playground media:', error);
+    }
+  };
+
+  const handleDeletePlaygroundMedia = async () => {
+    if (!currentSessionId) return;
+    try {
+      await apiService.deletePlaygroundMedia(appId, agentId, currentSessionId);
+      setPlaygroundMedia([]);
+      // Revoke blob URL so the player stops
+      if (videoBlobUrlRef.current) {
+        URL.revokeObjectURL(videoBlobUrlRef.current);
+        videoBlobUrlRef.current = null;
+      }
+      setVideoBlobUrl(null);
+    } catch (error) {
+      console.error('Error deleting playground media:', error);
+    }
+  };
+
   const handleFilterMetadataChange = useCallback(
     (metadata: Record<string, unknown> | undefined) => {
       setFilterMetadata(metadata);
@@ -422,17 +557,135 @@ function ChatInterface({
     }
   };
 
-  const panelFiles: PanelFile[] = persistentFiles.map((f) => ({
-    id: f.file_id,
-    filename: f.filename,
-    file_type: f.file_type,
-    processing_status: f.processing_status,
-    file_size_display: f.file_size_display,
-    has_extractable_content: f.has_extractable_content,
-    content_preview: f.content_preview,
-  }));
+  const panelFiles: PanelFile[] = [
+    ...persistentFiles.map((f) => ({
+      id: f.file_id,
+      filename: f.filename,
+      file_type: f.file_type,
+      processing_status: f.processing_status,
+      file_size_display: f.file_size_display,
+      has_extractable_content: f.has_extractable_content,
+      content_preview: f.content_preview,
+    })),
+    ...playgroundMedia.map((m) => ({
+      id: `media_${m.media_id}`,
+      filename: m.name,
+      file_type: 'media' as const,
+      processing_status: m.status,
+    })),
+  ];
 
   const canSend = !isStreaming && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+
+  // ─── Video timestamp parsing ──────────────────────────────────────────────────
+
+  /**
+   * Parse timestamp patterns from agent response text.
+   * Matches: [02:05 - 03:00], [02:05-03:00], [02:05], [1:02:05 - 1:03:00]
+   */
+  const parseTimestamps = (text: string): VideoTimestamp[] => {
+    if (typeof text !== 'string') return [];
+    // Match range patterns: [02:05 - 03:00] or [02:05-03:00]
+    const rangeRegex = /\[(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–]\s*(\d{1,2}:\d{2}(?::\d{2})?)\]/g;
+    // Match single timestamp patterns: [02:05]
+    const singleRegex = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g;
+
+    const results: VideoTimestamp[] = [];
+    const seen = new Set<string>();
+
+    const toSeconds = (t: string) => {
+      const parts = t.split(':').map(Number);
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      return parts[0] * 60 + parts[1];
+    };
+
+    // First pass: ranges
+    let match: RegExpExecArray | null;
+    while ((match = rangeRegex.exec(text)) !== null) {
+      const startStr = match[1];
+      const endStr = match[2];
+      const key = `${startStr}-${endStr}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // Also mark individual timestamps as seen so single-pass doesn't duplicate
+      seen.add(startStr);
+      seen.add(endStr);
+
+      results.push({
+        start_time: toSeconds(startStr),
+        end_time: toSeconds(endStr),
+        text_preview: '',
+        is_agent_cited: true,
+      });
+    }
+
+    // Second pass: single timestamps not already part of a range
+    while ((match = singleRegex.exec(text)) !== null) {
+      const ts = match[1];
+      if (seen.has(ts)) continue;
+      seen.add(ts);
+      const secs = toSeconds(ts);
+
+      results.push({
+        start_time: secs,
+        end_time: secs + 30, // Default 30s window for single timestamps
+        text_preview: '',
+        is_agent_cited: true,
+      });
+    }
+
+    // Sort by start_time
+    results.sort((a, b) => a.start_time - b.start_time);
+    return results;
+  };
+
+  // Fetch video blob with auth and create object URL for the <video> element
+  const readyVideoMedia = playgroundMedia.find((m) => m.status === 'ready');
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
+  const videoBlobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!readyVideoMedia || !currentSessionId) {
+      // Revoke previous blob URL when media is removed or conversation changes
+      if (videoBlobUrlRef.current) {
+        URL.revokeObjectURL(videoBlobUrlRef.current);
+        videoBlobUrlRef.current = null;
+      }
+      setVideoBlobUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    apiService
+      .fetchPlaygroundMediaBlob(appId, agentId, readyVideoMedia.media_id, currentSessionId)
+      .then((blob) => {
+        if (cancelled) return;
+        // Revoke previous URL if any
+        if (videoBlobUrlRef.current) {
+          URL.revokeObjectURL(videoBlobUrlRef.current);
+        }
+        const url = URL.createObjectURL(blob);
+        videoBlobUrlRef.current = url;
+        setVideoBlobUrl(url);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch media blob:', err);
+        if (!cancelled) setVideoBlobUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [readyVideoMedia?.media_id, currentSessionId, appId, agentId]);
+
+  // Clean up blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (videoBlobUrlRef.current) {
+        URL.revokeObjectURL(videoBlobUrlRef.current);
+      }
+    };
+  }, []);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -680,6 +933,7 @@ function ChatInterface({
 
                   // Agent message — skip entrance animation for the message just committed from streaming
                   const wasStreamed = message.id === lastStreamedMsgIdRef.current;
+                  const msgTimestamps = videoBlobUrl ? parseTimestamps(String(message.content)) : [];
                   return (
                     <div
                       key={message.id}
@@ -692,6 +946,14 @@ function ChatInterface({
                             resolveFileUrl={resolveFileUrl}
                           />
                         </div>
+                        {msgTimestamps.length > 0 && videoBlobUrl && (
+                          <VideoPlayer
+                            videoUrl={videoBlobUrl}
+                            timestamps={msgTimestamps}
+                            title={readyVideoMedia?.name}
+                            isAudio={readyVideoMedia?.media_type === 'audio'}
+                          />
+                        )}
                         <div className="mt-1">
                           <span className="text-xs text-gray-400 dark:text-gray-500">
                             {message.timestamp.toLocaleTimeString([], {
@@ -794,6 +1056,35 @@ function ChatInterface({
                 </button>
               </div>
 
+              {/* Media attach button */}
+              <button
+                type="button"
+                onClick={handleMediaButtonClick}
+                disabled={isStreaming}
+                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
+                           hover:text-purple-600 dark:hover:text-purple-400
+                           hover:bg-purple-50 dark:hover:bg-purple-900/20
+                           disabled:opacity-40 disabled:cursor-not-allowed
+                           transition-all duration-150"
+                title="Attach media (video/audio)"
+                aria-label="Attach media"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+              </button>
+
               {/* Textarea */}
               <textarea
                 value={inputMessage}
@@ -877,6 +1168,18 @@ function ChatInterface({
           onDownloadFile={handleDownloadFile}
         />
       </div>
+
+      {/* Media Upload Modal */}
+      {mediaConversationId && currentSessionId && (
+        <MediaUploadModal
+          isOpen={showMediaUploadModal}
+          onClose={() => setShowMediaUploadModal(false)}
+          appId={appId}
+          agentId={agentId}
+          sessionId={currentSessionId}
+          onUploadComplete={handleMediaUploadComplete}
+        />
+      )}
     </div>
   );
 }

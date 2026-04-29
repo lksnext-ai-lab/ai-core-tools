@@ -224,8 +224,9 @@ class ApiService {
     });
   }
 
-  async resetAgentConversation(appId: number, agentId: number) {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
+  async resetAgentConversation(appId: number, agentId: number, conversationId?: number | null) {
+    const params = conversationId ? `?conversation_id=${conversationId}` : '';
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset${params}`, {
       method: 'POST',
     });
   }
@@ -961,6 +962,102 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}`, {
       method: 'DELETE',
     })
+  }
+
+  // ==================== PLAYGROUND MEDIA API ====================
+
+  async uploadPlaygroundMedia(appId: number, agentId: number, sessionId: string, files: File[], config?: {
+    transcription_service_id?: number;
+    video_ai_service_id?: number;
+    embedding_service_id?: number;
+    forced_language?: string;
+    chunk_min_duration?: number;
+    chunk_max_duration?: number;
+    chunk_overlap?: number;
+  }) {
+    const formData = new FormData();
+    const headers: Record<string, string> = {};
+    
+    files.forEach(file => formData.append('files', file));
+    formData.append('session_id', sessionId);
+    
+    if (config?.transcription_service_id) formData.append('transcription_service_id', config.transcription_service_id.toString());
+    if (config?.video_ai_service_id) formData.append('video_ai_service_id', config.video_ai_service_id.toString());
+    if (config?.embedding_service_id) formData.append('embedding_service_id', config.embedding_service_id.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+  }
+
+  async addPlaygroundYouTube(appId: number, agentId: number, sessionId: string, url: string, config?: {
+    transcription_service_id?: number;
+    video_ai_service_id?: number;
+    embedding_service_id?: number;
+    forced_language?: string;
+    chunk_min_duration?: number;
+    chunk_max_duration?: number;
+    chunk_overlap?: number;
+  }) {
+    const formData = new FormData();
+    const headers: Record<string, string> = {};
+    
+    formData.append('url', url);
+    formData.append('session_id', sessionId);
+    
+    if (config?.transcription_service_id) formData.append('transcription_service_id', config.transcription_service_id.toString());
+    if (config?.video_ai_service_id) formData.append('video_ai_service_id', config.video_ai_service_id.toString());
+    if (config?.embedding_service_id) formData.append('embedding_service_id', config.embedding_service_id.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media/youtube`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+  }
+
+  async listPlaygroundMedia(appId: number, agentId: number, sessionId: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media?session_id=${encodeURIComponent(sessionId)}`);
+  }
+
+  async deletePlaygroundMedia(appId: number, agentId: number, sessionId: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media?session_id=${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async fetchPlaygroundMediaBlob(appId: number, agentId: number, mediaId: number, sessionId: string): Promise<Blob> {
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/playground-media/${mediaId}/stream?session_id=${encodeURIComponent(sessionId)}`;
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch media: ${response.status}`);
+    }
+    return response.blob();
   }
 
   // ==================== SILOS API ====================

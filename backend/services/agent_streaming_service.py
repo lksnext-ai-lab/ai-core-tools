@@ -105,6 +105,7 @@ class AgentStreamingService:
                 "metadata",
                 {
                     "conversation_id": ctx.effective_conv_id,
+                    "session_id": ctx.conversation.session_id if ctx.conversation else None,
                     "agent_id": agent_id,
                     "agent_name": ctx.agent.name,
                     "has_memory": ctx.agent.has_memory,
@@ -114,12 +115,32 @@ class AgentStreamingService:
             # ----------------------------------------------------------------
             # 3. Build agent chain
             # ----------------------------------------------------------------
+            # Resolve temporary playground media silos
+            temp_silo_ids = None
+            session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
+            if session_id_for_media and effective_db:
+                try:
+                    from services.playground_media_service import PlaygroundMediaService
+                    app_id = user_context.get("app_id") if user_context else None
+                    if app_id:
+                        temp_silo_ids = PlaygroundMediaService.get_temp_silo_ids_for_agent(
+                            app_id, agent_id, session_id_for_media, effective_db
+                        )
+                except Exception:
+                    pass
+
+                # Vectorize attached files (PDFs, text) into a temp silo for RAG
+                temp_silo_ids = self.execution_service._vectorize_and_resolve_file_silos(
+                    ctx, agent_id, session_id_for_media, effective_db, temp_silo_ids
+                )
+
             agent_chain, langsmith_config, mcp_client = await create_agent(
                 ctx.fresh_agent,
                 ctx.search_params,
                 ctx.session_id_for_cache,
                 ctx.user_context,
                 ctx.working_dir,
+                temp_silo_ids=temp_silo_ids or None,
             )
 
             config = prepare_agent_config(ctx.fresh_agent)

@@ -35,6 +35,7 @@ class AgentExecutionContext:
     pre_existing_files: set = field(default_factory=set)
 
     # Original inputs (needed by finalize for metadata)
+    original_message: str = ""                      # Raw user message before file injection
     processed_files: List[Dict[str, Any]] = field(default_factory=list)
     search_params: Optional[Dict[str, Any]] = None
     user_context: Optional[Dict[str, Any]] = None

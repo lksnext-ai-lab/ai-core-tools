@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from utils.security import generate_signature
 import os
@@ -32,6 +32,7 @@ from schemas.marketplace_schemas import (
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from services.file_management_service import FileManagementService, FileReference
+from services.playground_media_service import PlaygroundMediaService
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -790,6 +791,7 @@ async def reset_conversation(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
+    conversation_id: int = None,
 ):
     """
     Internal API: Reset conversation for playground (OAuth authentication)
@@ -802,7 +804,8 @@ async def reset_conversation(
         user_context = {
             "user_id": int(auth_context.identity.id),
             "oauth": True,
-            "app_id": app_id
+            "app_id": app_id,
+            "conversation_id": conversation_id,
         }
 
         # Use unified service layer
@@ -1196,3 +1199,246 @@ async def update_marketplace_profile(
         return MarketplaceProfileSchema.model_validate(profile)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+# ==================== PLAYGROUND MEDIA ====================
+
+@agents_router.post(
+    "/{agent_id}/playground-media",
+    summary="Upload media to playground temp repository",
+    tags=["Agents"],
+    responses={500: {"description": "Media upload failed"}},
+)
+async def upload_playground_media(
+    app_id: int,
+    agent_id: int,
+    background_tasks: BackgroundTasks,
+    files: Annotated[List[UploadFile], File(...)],
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    session_id: Annotated[str, Form(...)],
+    transcription_service_id: Annotated[Optional[int], Form()] = None,
+    video_ai_service_id: Annotated[Optional[int], Form()] = None,
+    embedding_service_id: Annotated[Optional[int], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
+):
+  
+    try:
+        _get_agent_or_404(db, agent_id, app_id)
+
+        result = await PlaygroundMediaService.upload_media_files(
+            app_id=app_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            files=files,
+            db=db,
+            background_tasks=background_tasks,
+            transcription_service_id=transcription_service_id,
+            video_ai_service_id=video_ai_service_id,
+            embedding_service_id=embedding_service_id,
+            forced_language=forced_language,
+            chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration,
+            chunk_overlap=chunk_overlap,
+        )
+
+        from schemas.media_schemas import MediaResponse as MR
+        return {
+            "message": f"Uploaded {len(result['created_media'])} media file(s)",
+            "repository_id": result["repository_id"],
+            "silo_id": result["silo_id"],
+            "created_media": [MR(**m.__dict__) for m in result["created_media"]],
+            "failed_files": result["failed_files"],
+        }
+    except Exception as e:
+        logger.error(f"Error uploading playground media: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents_router.post(
+    "/{agent_id}/playground-media/youtube",
+    summary="Add YouTube video to playground temp repository",
+    tags=["Agents"],
+    responses={400: {"description": "Invalid URL"}, 500: {"description": "Upload failed"}},
+)
+async def add_playground_youtube(
+    app_id: int,
+    agent_id: int,
+    background_tasks: BackgroundTasks,
+    url: Annotated[str, Form(...)],
+    session_id: Annotated[str, Form(...)],
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    transcription_service_id: Annotated[Optional[int], Form()] = None,
+    video_ai_service_id: Annotated[Optional[int], Form()] = None,
+    embedding_service_id: Annotated[Optional[int], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
+):
+    """Add a YouTube URL to the playground temp repository."""
+    try:
+        _get_agent_or_404(db, agent_id, app_id)
+
+        result = await PlaygroundMediaService.upload_youtube(
+            app_id=app_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            url=url,
+            db=db,
+            background_tasks=background_tasks,
+            transcription_service_id=transcription_service_id,
+            video_ai_service_id=video_ai_service_id,
+            embedding_service_id=embedding_service_id,
+            forced_language=forced_language,
+            chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration,
+            chunk_overlap=chunk_overlap,
+        )
+
+        from schemas.media_schemas import MediaResponse as MR
+        return {
+            "repository_id": result["repository_id"],
+            "silo_id": result["silo_id"],
+            "media": MR(**result["media"].__dict__),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error adding playground YouTube: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents_router.get(
+    "/{agent_id}/playground-media",
+    summary="List playground media",
+    tags=["Agents"],
+)
+async def list_playground_media(
+    app_id: int,
+    agent_id: int,
+    session_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """List media items in the playground temp repository."""
+    _get_agent_or_404(db, agent_id, app_id)
+    return PlaygroundMediaService.list_media(app_id, agent_id, session_id, db)
+
+
+@agents_router.delete(
+    "/{agent_id}/playground-media",
+    summary="Delete playground temp repository and media",
+    tags=["Agents"],
+)
+async def delete_playground_media(
+    app_id: int,
+    agent_id: int,
+    session_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """Delete the temp playground repository, its silo, and all vector data."""
+    _get_agent_or_404(db, agent_id, app_id)
+    deleted = PlaygroundMediaService.cleanup(app_id, agent_id, session_id, db)
+    return {"success": deleted, "message": "Playground media cleaned up" if deleted else "No playground media found"}
+
+
+@agents_router.get(
+    "/{agent_id}/playground-media/{media_id}/stream",
+    summary="Stream a playground media file (video/audio)",
+    tags=["Agents"],
+)
+async def stream_playground_media(
+    app_id: int,
+    agent_id: int,
+    media_id: int,
+    session_id: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+   
+    import os
+    from fastapi.responses import StreamingResponse
+    from repositories.media_repository import MediaRepository
+
+    _get_agent_or_404(db, agent_id, app_id)
+
+    # Verify media belongs to the temp repo for this agent+session
+    repo = PlaygroundMediaService.get_temp_repository(app_id, agent_id, session_id, db)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Playground repository not found")
+
+    media = MediaRepository.get_by_id(media_id, db)
+    if not media or media.repository_id != repo.repository_id:
+        raise HTTPException(status_code=404, detail="Media not found in playground repository")
+
+    if not media.file_path or not os.path.exists(media.file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    # Determine media type
+    ext = os.path.splitext(media.file_path)[1].lower()
+    media_types = {
+        '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4',
+    }
+    content_type = media_types.get(ext, 'application/octet-stream')
+    file_size = os.path.getsize(media.file_path)
+
+    # Support HTTP Range requests (required for video seeking/playback)
+    range_header = request.headers.get("range")
+    if range_header:
+        # Parse "bytes=start-end"
+        range_spec = range_header.replace("bytes=", "").strip()
+        parts = range_spec.split("-")
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if parts[1] else file_size - 1
+        end = min(end, file_size - 1)
+        length = end - start + 1
+
+        def ranged_file():
+            with open(media.file_path, "rb") as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = f.read(min(8192, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(
+            ranged_file(),
+            status_code=206,
+            media_type=content_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(length),
+            },
+        )
+
+    # Full file response (no Range header)
+    def full_file():
+        with open(media.file_path, "rb") as f:
+            while chunk := f.read(8192):
+                yield chunk
+
+    return StreamingResponse(
+        full_file(),
+        media_type=content_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+        },
+    )

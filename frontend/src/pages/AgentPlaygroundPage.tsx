@@ -119,6 +119,13 @@ function AgentPlaygroundPage() {
     setConversationReloadTrigger(prev => prev + 1); // Trigger conversation list reload to update message counts
   };
 
+  const handleConversationReset = () => {
+    // Conversation was deleted on the backend — clear current ID and reload sidebar
+    setCurrentConversationId(null);
+    setConversationKey(prev => prev + 1);
+    setConversationReloadTrigger(prev => prev + 1);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -269,6 +276,7 @@ function AgentPlaygroundPage() {
                     agentName={agent.name}
                     conversationId={currentConversationId}
                     onConversationCreated={handleConversationCreated}
+                    onConversationReset={handleConversationReset}
                     onMessageSent={handleMessageSent}
                     metadataFields={agent.silo?.metadata_definition?.fields}
                     vectorDbType={agent.silo?.vector_db_type}
