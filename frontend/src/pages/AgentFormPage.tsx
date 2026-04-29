@@ -1,9 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import {
+  discoverA2ACard,
+  extractA2ASecuritySchemes,
+  extractUnsupportedA2AAuthSchemeNames,
+  getA2ARawAuthentication,
+  getEffectiveA2ASecurityRequirements,
+  type A2AAdvertisedSecurityScheme,
+  type A2AAgentAuthConfig,
+  type AgentCard,
+  type AgentSkill,
+} from '../services/a2aDiscovery';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
@@ -12,6 +23,23 @@ import type { TabItem } from '../components/ui/Tabs';
 import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
+
+type AgentSourceType = 'local' | 'a2a';
+
+interface A2AAgentConfig {
+  card_url: string;
+  remote_agent_id?: string;
+  auth_config?: A2AAgentAuthConfig | null;
+  remote_agent_metadata: Record<string, any>;
+  advertised_skills?: AgentSkill[];
+  sync_status: string;
+  health_status: string;
+  last_successful_refresh_at?: string | null;
+  last_refresh_attempt_at?: string | null;
+  last_refresh_error?: string | null;
+  documentation_url?: string | null;
+  icon_url?: string | null;
+}
 
 // Define the Agent types
 interface Agent {
@@ -37,6 +65,8 @@ interface Agent {
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
+  source_type?: AgentSourceType;
+  a2a_config?: A2AAgentConfig | null;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -55,6 +85,7 @@ interface AgentFormData {
   system_prompt: string;
   prompt_template: string;
   type: string;
+  source_type: AgentSourceType;
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
@@ -69,11 +100,26 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  a2a_card_url: string;
+  a2a_card_snapshot?: Record<string, any>;
+  a2a_auth_config: A2AAgentAuthConfig;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
 }
+
+const EMPTY_A2A_AUTH_CONFIG: A2AAgentAuthConfig = {
+  scheme_name: null,
+  scheme_type: 'none',
+  api_key: '',
+  bearer_token: '',
+  username: '',
+  password: '',
+  client_certificate: '',
+  client_key: '',
+  ca_certificate: '',
+};
 
 // Output Parser Field Component
 const OutputParserField = ({
@@ -125,6 +171,123 @@ const OutputParserField = ({
         ))}
       </select>
     )}
+  </div>
+);
+
+const MemoryManagementSection = ({
+  formData,
+  handleInputChange,
+  isA2AAgent,
+}: {
+  formData: AgentFormData;
+  handleInputChange: (field: keyof AgentFormData, value: any) => void;
+  isA2AAgent: boolean;
+}) => (
+  <div className="border-t border-gray-200 pt-6">
+    <div className="flex items-center mb-6">
+      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
+        <Brain className="w-5 h-5 text-indigo-600" />
+      </div>
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          {isA2AAgent
+            ? 'MattinAI will keep local conversation history and reuse the remote A2A task when possible.'
+            : 'Configura la estrategia de gestión de memoria del agente'}
+        </p>
+      </div>
+    </div>
+
+    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
+      <div className="flex items-start">
+        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
+        <div>
+          <p className="text-sm text-indigo-800 font-medium">
+            {isA2AAgent ? 'Conversation continuity for imported A2A agents' : 'Estrategia Híbrida Automática'}
+          </p>
+          <p className="text-xs text-indigo-700 mt-1">
+            {isA2AAgent
+              ? 'When enabled, each conversation thread keeps its own MattinAI-managed memory and remote A2A task continuity. Starting a new conversation creates a fresh remote thread.'
+              : 'El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div className="space-y-6">
+      <div>
+        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
+          Máximo de Mensajes
+        </label>
+        <input
+          type="number"
+          id="memory_max_messages"
+          min="1"
+          max="100"
+          value={formData.memory_max_messages}
+          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
+          Límite de Tokens
+        </label>
+        <input
+          type="number"
+          id="memory_max_tokens"
+          min="100"
+          max="32000"
+          step="100"
+          value={formData.memory_max_tokens}
+          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          Número máximo de tokens para el historial de conversación (recomendado: 4000)
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
+          Umbral de Resumen
+        </label>
+        <input
+          type="number"
+          id="memory_summarize_threshold"
+          min="1"
+          max="50"
+          value={formData.memory_summarize_threshold}
+          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <span className="text-gray-600">Mensajes:</span>
+          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
+        </div>
+        <div>
+          <span className="text-gray-600">Tokens:</span>
+          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
+        </div>
+        <div>
+          <span className="text-gray-600">Umbral:</span>
+          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
+        </div>
+      </div>
+    </div>
   </div>
 );
 
@@ -187,6 +350,7 @@ function AgentFormPage() {
     system_prompt: '',
     prompt_template: '',
     type: 'agent',
+    source_type: 'local',
     is_tool: false,
     has_memory: false,
     enable_code_interpreter: false,
@@ -197,9 +361,16 @@ function AgentFormPage() {
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
-    skill_ids: []
+    skill_ids: [],
+    a2a_card_url: '',
+    a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
+  const [a2aDiscovery, setA2aDiscovery] = useState<{ card: AgentCard; skills: AgentSkill[] } | null>(null);
+  const [a2aLoading, setA2aLoading] = useState(false);
+  const [a2aError, setA2aError] = useState<string | null>(null);
+  const [a2aRefreshLoading, setA2aRefreshLoading] = useState(false);
+  const [a2aRefreshSuccess, setA2aRefreshSuccess] = useState<string | null>(null);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -241,6 +412,7 @@ function AgentFormPage() {
         system_prompt: response.system_prompt || '',
         prompt_template: response.prompt_template || '',
         type: response.type || 'agent',
+        source_type: response.source_type || 'local',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
         enable_code_interpreter: response.enable_code_interpreter || false,
@@ -255,11 +427,22 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        a2a_card_url: response.a2a_config?.card_url || '',
+        a2a_card_snapshot: response.a2a_config?.remote_agent_metadata || undefined,
+        a2a_auth_config: response.a2a_config?.auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
         text_system_prompt: response.text_system_prompt || ''
       });
+
+      if (response.a2a_config?.remote_agent_metadata) {
+        const remoteCard = response.a2a_config.remote_agent_metadata as AgentCard;
+        const remoteSkills = Array.isArray(remoteCard.skills) ? remoteCard.skills : [];
+        setA2aDiscovery({ card: remoteCard, skills: remoteSkills });
+      } else {
+        setA2aDiscovery(null);
+      }
 
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
@@ -309,6 +492,29 @@ function AgentFormPage() {
     }));
   };
 
+  const handleA2AAuthConfigChange = (field: keyof A2AAgentAuthConfig, value: string | null) => {
+    setFormData(prev => ({
+      ...prev,
+      a2a_auth_config: {
+        ...prev.a2a_auth_config,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleA2AAuthSchemeChange = (scheme: A2AAdvertisedSecurityScheme | null) => {
+    setFormData(prev => ({
+      ...prev,
+      a2a_auth_config: scheme ? {
+        ...EMPTY_A2A_AUTH_CONFIG,
+        scheme_name: scheme.name,
+        scheme_type: scheme.type,
+      } : {
+        ...EMPTY_A2A_AUTH_CONFIG,
+      },
+    }));
+  };
+
   const handleToolToggle = (toolId: number) => {
     setFormData(prev => ({
       ...prev,
@@ -335,6 +541,164 @@ function AgentFormPage() {
         : [...prev.skill_ids, skillId]
     }));
   };
+
+  const applyImportedA2ACard = useCallback((card: AgentCard) => {
+    setFormData(prev => ({
+      ...prev,
+      source_type: 'a2a',
+      type: 'agent',
+      name: card.name || prev.name,
+      description: card.description || prev.description,
+      has_memory: prev.has_memory,
+      enable_code_interpreter: false,
+      server_tools: [],
+      service_id: undefined,
+      silo_id: undefined,
+      output_parser_id: undefined,
+      tool_ids: [],
+      mcp_config_ids: [],
+      skill_ids: [],
+      system_prompt: '',
+      prompt_template: '',
+      a2a_card_snapshot: card as Record<string, any>,
+      a2a_auth_config: prev.a2a_auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
+    }));
+    setShowOutputParser(false);
+  }, []);
+
+  const handleSourceTypeChange = (sourceType: AgentSourceType) => {
+    setA2aError(null);
+    setA2aRefreshSuccess(null);
+    if (sourceType === 'local') {
+      setA2aDiscovery(null);
+      setFormData(prev => ({
+        ...prev,
+        source_type: 'local',
+        a2a_card_snapshot: undefined,
+        a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
+      }));
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      source_type: 'a2a',
+      type: 'agent',
+      has_memory: prev.has_memory,
+      enable_code_interpreter: false,
+      server_tools: [],
+      service_id: undefined,
+      silo_id: undefined,
+      output_parser_id: undefined,
+      tool_ids: [],
+      mcp_config_ids: [],
+      skill_ids: [],
+      system_prompt: '',
+      prompt_template: '',
+      a2a_auth_config: prev.a2a_auth_config || { ...EMPTY_A2A_AUTH_CONFIG },
+    }));
+    setShowOutputParser(false);
+  };
+
+  const handleDiscoverA2AAgent = useCallback(async () => {
+    if (!appId) {
+      setA2aError('Missing app context while loading the A2A agent card.');
+      return;
+    }
+
+    if (!formData.a2a_card_url.trim()) {
+      setA2aError('Enter a public A2A agent card URL first.');
+      return;
+    }
+
+    try {
+      setA2aLoading(true);
+      setA2aError(null);
+      setA2aRefreshSuccess(null);
+      const discovery = await discoverA2ACard(Number.parseInt(appId), formData.a2a_card_url.trim());
+      const discoveredSchemes = extractA2ASecuritySchemes(discovery.card);
+      setA2aDiscovery({ card: discovery.card, skills: discovery.skills });
+
+      setFormData(prev => {
+        if (!prev.a2a_auth_config?.scheme_name) {
+          return prev;
+        }
+        const authSchemeStillAdvertised = discoveredSchemes.some((scheme) => scheme.name === prev.a2a_auth_config.scheme_name);
+        if (authSchemeStillAdvertised) {
+          return prev;
+        }
+        return {
+          ...prev,
+          a2a_auth_config: { ...EMPTY_A2A_AUTH_CONFIG },
+        };
+      });
+
+      if (discovery.skills.length === 0) {
+        setFormData(prev => ({
+          ...prev,
+          a2a_card_snapshot: discovery.card as Record<string, any>,
+        }));
+      }
+      applyImportedA2ACard(discovery.card);
+    } catch (err) {
+      setA2aDiscovery(null);
+      setA2aError(err instanceof Error ? err.message : 'Failed to load the A2A agent card');
+    } finally {
+      setA2aLoading(false);
+    }
+  }, [appId, applyImportedA2ACard, formData.a2a_card_url]);
+
+  const handleRefreshA2ACard = useCallback(async () => {
+    if (!appId || !agentId || Number.parseInt(agentId) === 0 || !agent?.a2a_config) {
+      return;
+    }
+
+    try {
+      setA2aRefreshLoading(true);
+      setA2aRefreshSuccess(null);
+      setA2aError(null);
+
+      const refreshedAgent = await apiService.refreshA2ACard(
+        Number.parseInt(appId),
+        Number.parseInt(agentId),
+      );
+      setAgent(refreshedAgent);
+
+      const refreshedConfig = refreshedAgent.a2a_config;
+      const savedConfig = agent.a2a_config;
+      const shouldSyncVisibleA2AState = Boolean(
+        refreshedConfig
+        && savedConfig
+        && formData.a2a_card_url === savedConfig.card_url
+      );
+
+      if (refreshedConfig && shouldSyncVisibleA2AState) {
+        const refreshedCard = refreshedConfig.remote_agent_metadata as AgentCard;
+        const refreshedSkills = Array.isArray(refreshedCard?.skills) ? refreshedCard.skills as AgentSkill[] : [];
+        setA2aDiscovery(refreshedCard ? { card: refreshedCard, skills: refreshedSkills } : null);
+        setFormData(prev => ({
+          ...prev,
+          a2a_card_snapshot: refreshedConfig.remote_agent_metadata || prev.a2a_card_snapshot,
+        }));
+      }
+
+      if (refreshedConfig?.last_refresh_error) {
+        setA2aError(refreshedConfig.last_refresh_error);
+        return;
+      }
+
+      setA2aRefreshSuccess('Remote A2A metadata refreshed successfully.');
+    } catch (err) {
+      setA2aError(err instanceof Error ? err.message : 'Failed to refresh the remote A2A agent card');
+    } finally {
+      setA2aRefreshLoading(false);
+    }
+  }, [
+    agent,
+    agentId,
+    appId,
+    formData.a2a_card_url,
+  ]);
 
   // Marketplace handlers
   const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
@@ -410,6 +774,7 @@ function AgentFormPage() {
       system_prompt: formData.system_prompt,
       prompt_template: formData.prompt_template,
       type: formData.type,
+        source_type: formData.source_type,
       is_tool: formData.is_tool,
       has_memory: formData.has_memory,
       enable_code_interpreter: formData.enable_code_interpreter,
@@ -428,8 +793,19 @@ function AgentFormPage() {
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
       text_system_prompt: formData.text_system_prompt,
+        a2a_config: formData.source_type === 'a2a' ? {
+          card_url: formData.a2a_card_url,
+          card_snapshot: formData.a2a_card_snapshot,
+          auth_config: formData.a2a_auth_config?.scheme_name ? formData.a2a_auth_config : undefined,
+        } : undefined,
       app_id: Number.parseInt(appId),
     };
+
+      if (formData.source_type === 'a2a') {
+        if (!formData.a2a_card_url) {
+          throw new Error('Load a public A2A agent card before saving.');
+        }
+      }
 
     const isNew = Number.parseInt(agentId) === 0;
 
@@ -468,6 +844,26 @@ function AgentFormPage() {
 
   const pageTitle = getPageTitle(formData.type, isNewAgent);
   const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
+  const isA2AAgent = formData.source_type === 'a2a';
+  const effectiveA2ACard = (a2aDiscovery?.card || formData.a2a_card_snapshot || agent?.a2a_config?.remote_agent_metadata || null) as AgentCard | null;
+  const advertisedA2ASecuritySchemes = extractA2ASecuritySchemes(effectiveA2ACard);
+  const unsupportedA2AAuthSchemeNames = extractUnsupportedA2AAuthSchemeNames(effectiveA2ACard);
+  const rawA2AAuthentication = getA2ARawAuthentication(effectiveA2ACard);
+  const selectedA2AAuthScheme = advertisedA2ASecuritySchemes.find(
+    (scheme) => scheme.name === formData.a2a_auth_config?.scheme_name,
+  ) || null;
+  const effectiveA2ASecurityRequirements = getEffectiveA2ASecurityRequirements(
+    effectiveA2ACard,
+  );
+  const showA2AAuthSection = (
+    advertisedA2ASecuritySchemes.length > 0
+    || unsupportedA2AAuthSchemeNames.length > 0
+    || Boolean(rawA2AAuthentication)
+    || Boolean(formData.a2a_auth_config?.scheme_name)
+  );
+  const rawA2AAuthenticationJson = rawA2AAuthentication
+    ? JSON.stringify(rawA2AAuthentication, null, 2)
+    : '';
 
   const tabs: TabItem[] = [
     { id: 'basic', label: 'Basic' },
@@ -532,6 +928,417 @@ function AgentFormPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
+                  <label htmlFor="source_type" className="block text-sm font-medium text-gray-700 mb-2">
+                    Source
+                  </label>
+                  <select
+                    id="source_type"
+                    value={formData.source_type}
+                    onChange={(e) => handleSourceTypeChange(e.target.value as AgentSourceType)}
+                    disabled={!isNewAgent}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-500"
+                  >
+                    <option value="local">Local</option>
+                    <option value="a2a">External / A2A Agent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
+                    Agent Type
+                  </label>
+                  <select
+                    id="type"
+                    value={formData.type}
+                    onChange={(e) => handleInputChange('type', e.target.value)}
+                    disabled={isA2AAgent}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-500"
+                  >
+                    <option value="agent">AI Agent</option>
+                    <option value="ocr_agent">OCR Agent</option>
+                  </select>
+                </div>
+
+                {isA2AAgent && (
+                  <div className="md:col-span-2 rounded-2xl border border-blue-200 bg-blue-50 p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900">Import Public A2A Agent</h4>
+                        <p className="mt-1 text-sm text-blue-800">
+                          Load a public agent card through the backend, review the remote agent and its advertised capabilities, and create a first-class MattinAI agent backed by that external agent.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { void handleDiscoverA2AAgent(); }}
+                        disabled={a2aLoading}
+                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                      >
+                        {a2aLoading ? 'Loading...' : 'Load Card'}
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="md:col-span-2">
+                        <label htmlFor="a2a_card_url" className="block text-sm font-medium text-blue-900 mb-2">
+                          Public Agent Card URL
+                        </label>
+                        <input
+                          type="url"
+                          id="a2a_card_url"
+                          value={formData.a2a_card_url}
+                          onChange={(e) => handleInputChange('a2a_card_url', e.target.value)}
+                          className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          placeholder="https://example.com/.well-known/agent-card.json"
+                        />
+                      </div>
+
+                      {a2aDiscovery && (
+                        <>
+                          <div className="md:col-span-2 rounded-xl border border-blue-200 bg-white p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Remote Agent</p>
+                            <p className="mt-1 text-sm font-semibold text-gray-900">{a2aDiscovery.card.name}</p>
+                            {a2aDiscovery.card.description && (
+                              <p className="mt-2 text-sm text-gray-600">{a2aDiscovery.card.description}</p>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                              <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-800">
+                                {a2aDiscovery.skills.length} advertised skill{a2aDiscovery.skills.length === 1 ? '' : 's'}
+                              </span>
+                            </div>
+
+                            {a2aDiscovery.skills.length > 0 && (
+                              <div className="mt-4 space-y-3">
+                                {a2aDiscovery.skills.map((skill) => (
+                                  <div key={skill.id} className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                                    <p className="text-sm font-medium text-gray-900">{skill.name}</p>
+                                    {skill.description && (
+                                      <p className="mt-1 text-sm text-gray-600">{skill.description}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {showA2AAuthSection && (
+                      <div className="mt-4 rounded-xl border border-blue-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Remote Authentication</p>
+                            <p className="mt-1 text-sm text-gray-700">
+                              A2A agent cards may advertise auth using `securitySchemes`, `security`, per-skill `securityRequirements`, or vendor-specific metadata like `authentication`. MattinAI only configures recognized schemes today, but this section still shows the remote agent&apos;s declared requirements.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full bg-blue-100 px-2 py-1 font-medium text-blue-800">
+                              {advertisedA2ASecuritySchemes.length} configurable scheme{advertisedA2ASecuritySchemes.length === 1 ? '' : 's'}
+                            </span>
+                            {unsupportedA2AAuthSchemeNames.length > 0 && (
+                              <span className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-900">
+                                {unsupportedA2AAuthSchemeNames.length} read-only scheme{unsupportedA2AAuthSchemeNames.length === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {effectiveA2ASecurityRequirements.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            <p className="font-medium">Declared security requirements</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {effectiveA2ASecurityRequirements.map((requirement, index) => (
+                                <span key={`a2a-security-requirement-${index}`} className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900">
+                                  {Object.entries(requirement).map(([schemeName, scopes]) => `${schemeName}${scopes.length > 0 ? ` (${scopes.join(', ')})` : ''}`).join(' + ')}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {unsupportedA2AAuthSchemeNames.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+                            <p className="font-medium">Additional advertised auth schemes</p>
+                            <p className="mt-1">
+                              The remote card declares these schemes, but MattinAI cannot configure them yet.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {unsupportedA2AAuthSchemeNames.map((schemeName) => (
+                                <span key={`a2a-unsupported-auth-${schemeName}`} className="rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-900">
+                                  {schemeName}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {rawA2AAuthenticationJson && (
+                          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                            <p className="font-medium text-gray-900">Raw authentication metadata</p>
+                            <p className="mt-1">
+                              This is read-only metadata from the remote card.
+                            </p>
+                            <pre className="mt-2 overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100">
+                              {rawA2AAuthenticationJson}
+                            </pre>
+                          </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                          {(advertisedA2ASecuritySchemes.length > 0 || formData.a2a_auth_config?.scheme_name) && (
+                            <div className="md:col-span-2">
+                              <label htmlFor="a2a_auth_scheme" className="block text-sm font-medium text-gray-700 mb-2">
+                                Advertised Auth Scheme
+                              </label>
+                              <select
+                                id="a2a_auth_scheme"
+                                value={formData.a2a_auth_config?.scheme_name || ''}
+                                onChange={(e) => {
+                                  const scheme = advertisedA2ASecuritySchemes.find((item) => item.name === e.target.value) || null;
+                                  handleA2AAuthSchemeChange(scheme);
+                                }}
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="">No authentication</option>
+                                {advertisedA2ASecuritySchemes.map((scheme) => (
+                                  <option key={scheme.name} value={scheme.name}>
+                                    {scheme.name} ({scheme.type})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme && (
+                            <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                              <p className="font-medium text-gray-900">Selected scheme details</p>
+                              <p className="mt-1">Type: {selectedA2AAuthScheme.type}</p>
+                              {selectedA2AAuthScheme.type === 'apiKey' && (
+                                <p className="mt-1">
+                                  Location: {String(selectedA2AAuthScheme.config.in || 'header')}
+                                  {' · '}
+                                  Name: {String(selectedA2AAuthScheme.config.name || 'X-API-Key')}
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'http' && (
+                                <p className="mt-1">
+                                  HTTP scheme: {String(selectedA2AAuthScheme.config.scheme || 'Bearer')}
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'oauth2' && Boolean(selectedA2AAuthScheme.config.flows) && (
+                                <p className="mt-1">
+                                  OAuth2 flow metadata is advertised by the card. MattinAI currently uses a configured access token for outbound calls.
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'openIdConnect' && (
+                                <p className="mt-1">
+                                  OIDC discovery URL: {String(selectedA2AAuthScheme.config.openIdConnectUrl || 'Not provided')}
+                                </p>
+                              )}
+                              {selectedA2AAuthScheme.type === 'mtls' && (
+                                <p className="mt-1">
+                                  Configure the client certificate and key PEMs below to enable mutual TLS.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme?.type === 'apiKey' && (
+                            <div className="md:col-span-2">
+                              <label htmlFor="a2a_auth_api_key" className="block text-sm font-medium text-gray-700 mb-2">
+                                API Key
+                              </label>
+                              <input
+                                type="password"
+                                id="a2a_auth_api_key"
+                                value={formData.a2a_auth_config.api_key || ''}
+                                onChange={(e) => handleA2AAuthConfigChange('api_key', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if ((formData.a2a_auth_config.api_key || '').startsWith('****') && e.key.length === 1) {
+                                    handleA2AAuthConfigChange('api_key', '');
+                                  }
+                                }}
+                                autoComplete="off"
+                                data-lpignore="true"
+                                data-form-type="other"
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter the remote A2A API key"
+                              />
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme?.type === 'http' && String(selectedA2AAuthScheme.config.scheme || 'Bearer').toLowerCase() === 'basic' && (
+                            <>
+                              <div>
+                                <label htmlFor="a2a_auth_username" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Username
+                                </label>
+                                <input
+                                  type="text"
+                                  id="a2a_auth_username"
+                                  value={formData.a2a_auth_config.username || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('username', e.target.value)}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Enter the HTTP Basic username"
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor="a2a_auth_password" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Password
+                                </label>
+                                <input
+                                  type="password"
+                                  id="a2a_auth_password"
+                                  value={formData.a2a_auth_config.password || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('password', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.password || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('password', '');
+                                    }
+                                  }}
+                                  autoComplete="off"
+                                  data-lpignore="true"
+                                  data-form-type="other"
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Enter the HTTP Basic password"
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          {selectedA2AAuthScheme && (
+                            (selectedA2AAuthScheme.type === 'oauth2'
+                              || selectedA2AAuthScheme.type === 'openIdConnect'
+                              || (selectedA2AAuthScheme.type === 'http'
+                                && String(selectedA2AAuthScheme.config.scheme || 'Bearer').toLowerCase() !== 'basic'))
+                          ) && (
+                            <div className="md:col-span-2">
+                              <label htmlFor="a2a_auth_bearer_token" className="block text-sm font-medium text-gray-700 mb-2">
+                                Access Token
+                              </label>
+                              <input
+                                type="password"
+                                id="a2a_auth_bearer_token"
+                                value={formData.a2a_auth_config.bearer_token || ''}
+                                onChange={(e) => handleA2AAuthConfigChange('bearer_token', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if ((formData.a2a_auth_config.bearer_token || '').startsWith('****') && e.key.length === 1) {
+                                    handleA2AAuthConfigChange('bearer_token', '');
+                                  }
+                                }}
+                                autoComplete="off"
+                                data-lpignore="true"
+                                data-form-type="other"
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter the bearer token MattinAI should forward"
+                              />
+                            </div>
+                          )}
+
+                          {selectedA2AAuthScheme?.type === 'mtls' && (
+                            <>
+                              <div className="md:col-span-2">
+                                <label htmlFor="a2a_auth_client_certificate" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Client Certificate (PEM)
+                                </label>
+                                <textarea
+                                  id="a2a_auth_client_certificate"
+                                  value={formData.a2a_auth_config.client_certificate || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('client_certificate', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.client_certificate || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('client_certificate', '');
+                                    }
+                                  }}
+                                  rows={4}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="-----BEGIN CERTIFICATE-----"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label htmlFor="a2a_auth_client_key" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Client Key (PEM)
+                                </label>
+                                <textarea
+                                  id="a2a_auth_client_key"
+                                  value={formData.a2a_auth_config.client_key || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('client_key', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.client_key || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('client_key', '');
+                                    }
+                                  }}
+                                  rows={4}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="-----BEGIN PRIVATE KEY-----"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label htmlFor="a2a_auth_ca_certificate" className="block text-sm font-medium text-gray-700 mb-2">
+                                  Custom CA Certificate (Optional)
+                                </label>
+                                <textarea
+                                  id="a2a_auth_ca_certificate"
+                                  value={formData.a2a_auth_config.ca_certificate || ''}
+                                  onChange={(e) => handleA2AAuthConfigChange('ca_certificate', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((formData.a2a_auth_config.ca_certificate || '').startsWith('****') && e.key.length === 1) {
+                                      handleA2AAuthConfigChange('ca_certificate', '');
+                                    }
+                                  }}
+                                  rows={4}
+                                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                  placeholder="-----BEGIN CERTIFICATE-----"
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {agent?.a2a_config && (
+                      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-medium text-gray-900">Saved external state</p>
+                            <p className="mt-1">Health: {agent.a2a_config.health_status}</p>
+                            <p>Sync: {agent.a2a_config.sync_status}</p>
+                            <p>
+                              Advertised skills: {((agent.a2a_config.advertised_skills || []) as AgentSkill[]).length}
+                            </p>
+                            {agent.a2a_config.last_successful_refresh_at && (
+                              <p>Last successful refresh: {new Date(agent.a2a_config.last_successful_refresh_at).toLocaleString()}</p>
+                            )}
+                          </div>
+                          {!isNewAgent && (
+                            <button
+                              type="button"
+                              onClick={() => { void handleRefreshA2ACard(); }}
+                              disabled={a2aRefreshLoading}
+                              className="inline-flex shrink-0 items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <RefreshCw className={`mr-2 h-4 w-4 ${a2aRefreshLoading ? 'animate-spin' : ''}`} />
+                              {a2aRefreshLoading ? 'Refreshing...' : 'Refresh metadata'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {a2aRefreshSuccess && (
+                      <p className="mt-3 text-sm text-emerald-700">{a2aRefreshSuccess}</p>
+                    )}
+
+                    {a2aError && (
+                      <p className="mt-3 text-sm text-red-700">{a2aError}</p>
+                    )}
+                  </div>
+                )}
+
+                <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                     Nombre *
                   </label>
@@ -544,21 +1351,6 @@ function AgentFormPage() {
                     required
                     placeholder="Nombre..."
                   />
-                </div>
-
-                <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent Type
-                  </label>
-                  <select
-                    id="type"
-                    value={formData.type}
-                    onChange={(e) => handleInputChange('type', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  >
-                    <option value="agent">AI Agent</option>
-                    <option value="ocr_agent">OCR Agent</option>
-                  </select>
                 </div>
 
                 <div className="md:col-span-2">
@@ -589,6 +1381,12 @@ function AgentFormPage() {
               </div>
               
               <div className="space-y-6">
+                {isA2AAgent ? (
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-6 text-sm text-blue-900">
+                    Imported A2A agents execute through the remote A2A agent. Local system prompts and prompt templates stay disabled so the imported agent remains faithful to the upstream behavior, but conversational memory can still be enabled below so MattinAI can manage conversation threads and remote task continuity.
+                  </div>
+                ) : (
+                <>
                 <div>
                   <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
                     System Prompt
@@ -618,107 +1416,14 @@ function AgentFormPage() {
                   <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
 
-                {/* Memory Management - Conditional */}
+                </>
+                )}
                 {formData.has_memory && (
-                  <div className="border-t border-gray-200 pt-6">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-                        <Brain className="w-5 h-5 text-indigo-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configura la estrategia de gestión de memoria del agente</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
-                      <div className="flex items-start">
-                        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
-                        <div>
-                          <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
-                          <p className="text-xs text-indigo-700 mt-1">
-                            El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, 
-                            recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-6">
-                      <div>
-                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                          Máximo de Mensajes
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_messages"
-                          min="1"
-                          max="100"
-                          value={formData.memory_max_messages}
-                          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                          Límite de Tokens
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_tokens"
-                          min="100"
-                          max="32000"
-                          step="100"
-                          value={formData.memory_max_tokens}
-                          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de tokens para el historial de conversación (recomendado: 4000)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                          Umbral de Resumen
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_summarize_threshold"
-                          min="1"
-                          max="50"
-                          value={formData.memory_summarize_threshold}
-                          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Mensajes:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Tokens:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Umbral:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <MemoryManagementSection
+                    formData={formData}
+                    handleInputChange={handleInputChange}
+                    isA2AAgent={isA2AAgent}
+                  />
                 )}
               </div>
             </div>
@@ -727,8 +1432,13 @@ function AgentFormPage() {
           {/* TAB 3: CONFIGURATION */}
           {activeTab === 'configuration' && (
             <div className="space-y-6">
-              {/* Configuration for regular agents */}
-              {formData.type !== 'ocr_agent' && (
+              {isA2AAgent && (
+                <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
+                  External A2A agents do not use a local AI service, RAG silo, output parser, or code interpreter. The imported remote agent remains the execution backend, while conversational memory stays available as an optional MattinAI-managed layer.
+                </div>
+              )}
+              {/* Configuration for regular local agents */}
+              {formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <>
                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                     <div className="flex items-center mb-6">
@@ -817,97 +1527,107 @@ function AgentFormPage() {
                     </div>
                   </div>
 
-                  {/* Agent Capabilities Card */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                        <Zap className="w-5 h-5 text-green-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
-                    </div>
+                </>
+              )}
 
-                    {/* MCP Warning Dialog */}
-                    {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
-                      <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                        <div className="flex items-start">
-                          <span className="text-amber-500 text-xl mr-3">!</span>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-amber-900 mb-2">
-                              This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </h4>
-                            <p className="text-sm text-amber-800 mb-2">
-                              Unmarking this agent as a tool will make it unavailable in the following MCP servers:
-                            </p>
-                            <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
-                              {mcpUsage.mcp_servers.map(s => (
-                                <li key={s.server_id}>{s.server_name}</li>
-                              ))}
-                            </ul>
-                            <div className="flex space-x-3">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleInputChange('is_tool', false);
-                                  setShowMcpWarning(false);
-                                }}
-                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Unmark as Tool Anyway
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowMcpWarning(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
+              {/* Agent Capabilities Card */}
+              {formData.type !== 'ocr_agent' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                  <div className="flex items-center mb-6">
+                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
+                      <Zap className="w-5 h-5 text-green-600" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
+                  </div>
+
+                  {/* MCP Warning Dialog */}
+                  {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
+                    <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <div className="flex items-start">
+                        <span className="text-amber-500 text-xl mr-3">!</span>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-amber-900 mb-2">
+                            This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                          </h4>
+                          <p className="text-sm text-amber-800 mb-2">
+                            Unmarking this agent as a tool will make it unavailable in the following MCP servers:
+                          </p>
+                          <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
+                            {mcpUsage.mcp_servers.map(s => (
+                              <li key={s.server_id}>{s.server_name}</li>
+                            ))}
+                          </ul>
+                          <div className="flex space-x-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleInputChange('is_tool', false);
+                                setShowMcpWarning(false);
+                              }}
+                              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Unmark as Tool Anyway
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowMcpWarning(false)}
+                              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
-                          id="is_tool"
-                          type="checkbox"
-                          checked={formData.is_tool}
-                          onChange={(e) => {
-                            // If unmarking as tool and agent is used in MCP servers, show warning
-                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
-                              setShowMcpWarning(true);
-                            } else {
-                              handleInputChange('is_tool', e.target.checked);
-                            }
-                          }}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="ml-3">
-                          <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
-                          <p className="text-xs text-gray-500">Can be used by other agents</p>
-                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                            <p className="text-xs text-purple-600 mt-1">
-                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </p>
-                          )}
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                      <input
+                        id="is_tool"
+                        type="checkbox"
+                        checked={formData.is_tool}
+                        onChange={(e) => {
+                          if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                            setShowMcpWarning(true);
+                          } else {
+                            handleInputChange('is_tool', e.target.checked);
+                          }
+                        }}
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="ml-3">
+                        <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
+                        <p className="text-xs text-gray-500">
+                          {isA2AAgent ? 'Expose this imported A2A agent through MCP servers and other agents.' : 'Can be used by other agents'}
+                        </p>
+                        {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                          <p className="text-xs text-purple-600 mt-1">
+                            Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                          </p>
+                        )}
                       </div>
+                    </div>
 
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
-                          id="has_memory"
-                          type="checkbox"
-                          checked={formData.has_memory}
-                          onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="ml-3">
-                          <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
-                          <p className="text-xs text-gray-500">Maintains conversation memory</p>
-                        </div>
+                    <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                      <input
+                        id="has_memory"
+                        type="checkbox"
+                        checked={formData.has_memory}
+                        onChange={(e) => handleInputChange('has_memory', e.target.checked)}
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="ml-3">
+                        <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
+                        <p className="text-xs text-gray-500">
+                          {isA2AAgent
+                            ? 'Enable MattinAI-managed conversation threads for this imported A2A agent'
+                            : 'Maintains conversation memory'}
+                        </p>
                       </div>
+                    </div>
 
+                    {!isA2AAgent && (
                       <div className="flex items-center p-4 bg-gray-50 rounded-xl">
                         <input
                           id="enable_code_interpreter"
@@ -921,9 +1641,10 @@ function AgentFormPage() {
                           <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
                         </div>
                       </div>
-                    </div>
+                    )}
+                  </div>
 
-                    {/* Provider-side Tools */}
+                  {!isA2AAgent && (
                     <div className="mt-6 pt-6 border-t border-gray-100">
                       <div className="mb-3">
                         <h4 className="text-sm font-semibold text-gray-800">Provider-side Tools</h4>
@@ -1005,8 +1726,8 @@ function AgentFormPage() {
                         Unsupported tools for the selected provider are silently ignored.
                       </p>
                     </div>
-                  </div>
-                </>
+                  )}
+                </div>
               )}
 
               {/* Configuration for OCR agents */}
@@ -1105,8 +1826,13 @@ function AgentFormPage() {
           {/* TAB 4: ADVANCED */}
           {activeTab === 'advanced' && (
             <div className="space-y-6">
+              {isA2AAgent && (
+                <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 text-sm text-blue-900">
+                  Most native MattinAI execution-shaping capabilities remain intentionally disabled for imported A2A agents. Conversational memory is the exception: when enabled, MattinAI manages the conversation thread while the external A2A agent remains the execution backend.
+                </div>
+              )}
               {/* Tools Card - Only for regular agents */}
-              {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
+              {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
@@ -1156,7 +1882,7 @@ function AgentFormPage() {
               )}
 
               {/* MCP Configs Card - Only for regular agents */}
-              {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
+              {agent?.mcp_configs && formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center mb-6">
                     <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
@@ -1244,7 +1970,7 @@ function AgentFormPage() {
               )}
 
               {/* Skills Card - Only for regular agents */}
-              {agent?.skills && formData.type !== 'ocr_agent' && (
+              {agent?.skills && formData.type !== 'ocr_agent' && !isA2AAgent && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center justify-between mb-6">
                     <div>

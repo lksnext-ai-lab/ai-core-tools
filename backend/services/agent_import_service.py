@@ -4,6 +4,7 @@ from typing import Optional, List, Dict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool
+from models.a2a_agent import A2AAgent
 from models.ai_service import AIService
 from models.silo import Silo
 from models.output_parser import OutputParser
@@ -26,6 +27,7 @@ from services.ai_service_import_service import AIServiceImportService
 from services.silo_import_service import SiloImportService
 from services.output_parser_import_service import OutputParserImportService
 from services.mcp_config_import_service import MCPConfigImportService
+from services.a2a_service import A2AService
 from repositories.agent_repository import AgentRepository
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.silo_repository import SiloRepository
@@ -52,6 +54,42 @@ class AgentImportService:
         self.silo_import = SiloImportService(session)
         self.parser_import = OutputParserImportService(session)
         self.mcp_import = MCPConfigImportService(session)
+
+    @staticmethod
+    def _get_source_type(agent: Optional[Agent]) -> str:
+        return "a2a" if getattr(agent, "a2a_config", None) else "local"
+
+    def _upsert_a2a_config(self, agent_id: int, export_config) -> None:
+        canonical_config = A2AService.prepare_imported_config(
+            export_config.model_dump(mode="json")
+        )
+        if not canonical_config:
+            raise ValueError("A2A export is missing the source configuration")
+
+        record = (
+            self.session.query(A2AAgent)
+            .filter(A2AAgent.agent_id == agent_id)
+            .first()
+        )
+        if not record:
+            record = A2AAgent(agent_id=agent_id)
+
+        A2AService.apply_source_config(record, canonical_config)
+        self.session.add(record)
+
+    def _validate_source_conversion(
+        self,
+        existing_agent: Optional[Agent],
+        exported_source_type: str,
+    ) -> None:
+        if not existing_agent:
+            return
+
+        existing_source_type = self._get_source_type(existing_agent)
+        if existing_source_type != exported_source_type:
+            raise ValueError(
+                "Changing an agent between local and A2A sources is not supported yet"
+            )
 
     def get_by_name_and_app(
         self, name: str, app_id: int
@@ -94,9 +132,15 @@ class AgentImportService:
         warnings = []
         missing_dependencies = []
         requires_ai_service_selection = False
+        is_a2a_import = export_data.agent.source_type == "a2a"
+
+        if is_a2a_import:
+            warnings.append(
+                "Imported A2A agents are marked pending until their remote card is refreshed in the new environment."
+            )
 
         # Check AI service dependency (MANDATORY)
-        if export_data.agent.service_name:
+        if export_data.agent.service_name and not is_a2a_import:
             # If AI service is NOT bundled, require user selection
             if export_data.ai_service is None:
                 requires_ai_service_selection = True
@@ -184,6 +228,12 @@ class AgentImportService:
 
         global_warnings = []
         dependencies = []
+        is_a2a_import = export_data.agent.source_type == "a2a"
+
+        if is_a2a_import:
+            global_warnings.append(
+                "Imported A2A agents will start in pending health until their remote card is refreshed."
+            )
 
         # Preview the main agent
         existing_agent = self.get_by_name_and_app(
@@ -202,7 +252,7 @@ class AgentImportService:
         # Preview AI service
         ai_service_preview = None
         requires_ai_service_selection = False
-        if export_data.agent.service_name:
+        if export_data.agent.service_name and not is_a2a_import:
             if export_data.ai_service:
                 ai_service_preview = ComponentPreviewItem(
                     component_type=ComponentType.AI_SERVICE,
@@ -419,6 +469,7 @@ class AgentImportService:
             ValueError: If validation fails or mandatory dependencies missing
         """
         warnings = []
+        is_a2a_import = export_data.agent.source_type == "a2a"
 
         # Validate version
         validate_export_version(export_data.metadata.export_version)
@@ -445,88 +496,98 @@ class AgentImportService:
             # No conflict but user provided a custom name
             agent_name = new_name
 
+        self._validate_source_conversion(
+            existing_agent,
+            export_data.agent.source_type,
+        )
+
         # Step 1: Import or resolve AI service (MANDATORY)
         service_id = None
-        # Priority 1: Check ID map from full app import (already imported services)
-        if ai_service_id_map and export_data.agent.service_name in ai_service_id_map:
-            service_id = ai_service_id_map[export_data.agent.service_name]
-            logger.info(
-                f"Resolved AI service via ID map: '{export_data.agent.service_name}' -> ID {service_id}"
-            )
-        # Priority 2: User selected existing AI service
-        elif selected_ai_service_id:
-            service = AIServiceRepository.get_by_id_and_app_id(
-                self.session, selected_ai_service_id, app_id
-            )
-            if not service:
-                raise ValueError(
-                    f"Selected AI service {selected_ai_service_id} not found"
+        if not is_a2a_import:
+            # Priority 1: Check ID map from full app import (already imported services)
+            if ai_service_id_map and export_data.agent.service_name in ai_service_id_map:
+                service_id = ai_service_id_map[export_data.agent.service_name]
+                logger.info(
+                    f"Resolved AI service via ID map: '{export_data.agent.service_name}' -> ID {service_id}"
                 )
-            service_id = selected_ai_service_id
-        # Priority 3: Try to find by name (for existing services)
-        elif export_data.agent.service_name and not export_data.ai_service:
-            service = (
-                self.session.query(AIService)
-                .filter(
-                    AIService.name == export_data.agent.service_name,
-                    AIService.app_id == app_id,
+            # Priority 2: User selected existing AI service
+            elif selected_ai_service_id:
+                service = AIServiceRepository.get_by_id_and_app_id(
+                    self.session, selected_ai_service_id, app_id
                 )
-                .first()
-            )
-            if service:
-                service_id = service.service_id
-            else:
-                raise ValueError(
-                    f"AI service '{export_data.agent.service_name}' not "
-                    f"found. Please select an AI service."
-                )
-        # Priority 4: Bundled AI service - import it (last resort for individual agent imports)
-        elif export_data.ai_service:
-            try:
-                from schemas.export_schemas import AIServiceExportFileSchema
-                
-                ai_service_export = AIServiceExportFileSchema(
-                    metadata=export_data.metadata,
-                    ai_service=export_data.ai_service
-                )
-                # Use custom name: {original_name} {agent_name}
-                ai_service_custom_name = f"{export_data.ai_service.name} {agent_name}"
-                ai_import_result = self.ai_service_import.import_ai_service(
-                    ai_service_export,
-                    app_id,
-                    conflict_mode=ConflictMode.RENAME,
-                    new_name=ai_service_custom_name,
-                )
-                # Find the imported service by name
-                imported_service = (
+                if not service:
+                    raise ValueError(
+                        f"Selected AI service {selected_ai_service_id} not found"
+                    )
+                service_id = selected_ai_service_id
+            # Priority 3: Try to find by name (for existing services)
+            elif export_data.agent.service_name and not export_data.ai_service:
+                service = (
                     self.session.query(AIService)
                     .filter(
-                        AIService.name == ai_import_result.component_name,
+                        AIService.name == export_data.agent.service_name,
                         AIService.app_id == app_id,
                     )
                     .first()
                 )
-                if imported_service:
-                    service_id = imported_service.service_id
-                    warnings.extend(ai_import_result.warnings)
-            except Exception as e:
-                logger.error(f"Failed to import bundled AI service: {e}")
-                raise ValueError(
-                    f"Failed to import bundled AI service: {e}"
-                )
-        else:
-            raise ValueError(
-                "AI service is mandatory but not provided. Please bundle an AI service, "
-                "select an existing one, or ensure it's available in the target app."
-            )
+                if service:
+                    service_id = service.service_id
+                else:
+                    raise ValueError(
+                        f"AI service '{export_data.agent.service_name}' not "
+                        f"found. Please select an AI service."
+                    )
+            # Priority 4: Bundled AI service - import it (last resort for individual agent imports)
+            elif export_data.ai_service:
+                try:
+                    from schemas.export_schemas import AIServiceExportFileSchema
 
-        # Ensure we have a service_id
-        if not service_id:
-            raise ValueError("Failed to resolve AI service ID")
+                    ai_service_export = AIServiceExportFileSchema(
+                        metadata=export_data.metadata,
+                        ai_service=export_data.ai_service
+                    )
+                    # Use custom name: {original_name} {agent_name}
+                    ai_service_custom_name = f"{export_data.ai_service.name} {agent_name}"
+                    ai_import_result = self.ai_service_import.import_ai_service(
+                        ai_service_export,
+                        app_id,
+                        conflict_mode=ConflictMode.RENAME,
+                        new_name=ai_service_custom_name,
+                    )
+                    # Find the imported service by name
+                    imported_service = (
+                        self.session.query(AIService)
+                        .filter(
+                            AIService.name == ai_import_result.component_name,
+                            AIService.app_id == app_id,
+                        )
+                        .first()
+                    )
+                    if imported_service:
+                        service_id = imported_service.service_id
+                        warnings.extend(ai_import_result.warnings)
+                except Exception as e:
+                    logger.error(f"Failed to import bundled AI service: {e}")
+                    raise ValueError(
+                        f"Failed to import bundled AI service: {e}"
+                    )
+            else:
+                raise ValueError(
+                    "AI service is mandatory but not provided. Please bundle an AI service, "
+                    "select an existing one, or ensure it's available in the target app."
+                )
+
+            # Ensure we have a service_id
+            if not service_id:
+                raise ValueError("Failed to resolve AI service ID")
+        else:
+            warnings.append(
+                "Imported A2A agent metadata is preserved, but health starts as pending until refresh."
+            )
 
         # Step 2: Import or resolve Silo (OPTIONAL)
         silo_id = None
-        if export_data.silo and import_bundled_silo:
+        if not is_a2a_import and export_data.silo and import_bundled_silo:
             # Bundled silo - import it
             try:
                 # Use custom name: {original_name} {agent_name}
@@ -567,7 +628,7 @@ class AgentImportService:
             except Exception as e:
                 logger.warning(f"Failed to import bundled silo: {e}")
                 warnings.append(f"Failed to import bundled silo: {e}")
-        elif selected_silo_id:
+        elif not is_a2a_import and selected_silo_id:
             # User selected existing silo
             silo = SiloRepository.get_by_id(selected_silo_id, self.session)
             if silo and silo.app_id == app_id:
@@ -576,7 +637,7 @@ class AgentImportService:
                 warnings.append(
                     f"Selected silo {selected_silo_id} not found"
                 )
-        elif export_data.agent.silo_name:
+        elif not is_a2a_import and export_data.agent.silo_name:
             # Try to find by name
             silo = (
                 self.session.query(Silo)
@@ -596,7 +657,7 @@ class AgentImportService:
 
         # Step 3: Import or resolve Output Parser (OPTIONAL)
         parser_id = None
-        if export_data.output_parser and import_bundled_output_parser:
+        if not is_a2a_import and export_data.output_parser and import_bundled_output_parser:
             # Bundled parser - import it
             try:
                 # Use custom name: {original_name} {agent_name}
@@ -624,7 +685,7 @@ class AgentImportService:
             except Exception as e:
                 logger.warning(f"Failed to import bundled parser: {e}")
                 warnings.append(f"Failed to import bundled parser: {e}")
-        elif selected_output_parser_id:
+        elif not is_a2a_import and selected_output_parser_id:
             # User selected existing parser
             parser_repo = OutputParserRepository()
             parser = parser_repo.get_by_id_and_app_id(
@@ -636,7 +697,7 @@ class AgentImportService:
                 warnings.append(
                     f"Selected parser {selected_output_parser_id} not found"
                 )
-        elif export_data.agent.output_parser_name:
+        elif not is_a2a_import and export_data.agent.output_parser_name:
             # Try to find by name
             parser = (
                 self.session.query(OutputParser)
@@ -658,7 +719,11 @@ class AgentImportService:
 
         # Step 4: Import bundled MCP configs
         imported_mcp_ids = {}
-        _mcp_list = export_data.mcp_configs if import_bundled_mcp_configs else []
+        _mcp_list = (
+            export_data.mcp_configs
+            if import_bundled_mcp_configs and not is_a2a_import
+            else []
+        )
         for mcp_config in _mcp_list:
             try:
                 mcp_file = MCPConfigExportFileSchema(
@@ -689,7 +754,11 @@ class AgentImportService:
 
         # Step 5: Import bundled agent tools
         imported_tool_ids = {}
-        _tool_list = export_data.agent_tools if import_bundled_agent_tools else []
+        _tool_list = (
+            export_data.agent_tools
+            if import_bundled_agent_tools and not is_a2a_import
+            else []
+        )
         for tool_agent in _tool_list:
             try:
                 # Create a minimal export file for the tool agent
@@ -782,6 +851,12 @@ class AgentImportService:
                     app_id,
                 )
 
+                if is_a2a_import:
+                    self._upsert_a2a_config(
+                        existing_agent.agent_id,
+                        export_data.agent.a2a_config,
+                    )
+
                 self.session.commit()
                 warnings.append(
                     "Existing agent configuration updated. "
@@ -796,15 +871,28 @@ class AgentImportService:
                     created=False,
                     conflict_detected=True,
                     warnings=warnings,
-                    next_steps=[
-                        "Review updated agent configuration",
-                    ],
+                    next_steps=(
+                        [
+                            "Review updated agent configuration",
+                            "Refresh the imported A2A agent metadata before first execution",
+                        ]
+                        if is_a2a_import
+                        else [
+                            "Review updated agent configuration",
+                        ]
+                    ),
                 )
 
         # Step 7: Create new agent
         # Determine agent type based on OCR fields
         agent_type = "agent"
-        if export_data.agent.vision_system_prompt or export_data.agent.text_system_prompt:
+        if (
+            not is_a2a_import
+            and (
+                export_data.agent.vision_system_prompt
+                or export_data.agent.text_system_prompt
+            )
+        ):
             agent_type = "ocr_agent"
         
         if agent_type == "ocr_agent":
@@ -874,6 +962,12 @@ class AgentImportService:
         self.session.add(new_agent)
         self.session.flush()
 
+        if is_a2a_import:
+            self._upsert_a2a_config(
+                new_agent.agent_id,
+                export_data.agent.a2a_config,
+            )
+
         # Step 8: Create tool associations
         self._update_agent_tools(
             new_agent.agent_id,
@@ -900,9 +994,15 @@ class AgentImportService:
             created=True,
             conflict_detected=existing_agent is not None,
             warnings=warnings,
-            next_steps=[
-                "Configure AI service API key if needed",
-            ],
+            next_steps=(
+                [
+                    "Refresh the imported A2A agent metadata before first execution",
+                ]
+                if is_a2a_import
+                else [
+                    "Configure AI service API key if needed",
+                ]
+            ),
         )
 
     def _update_agent_tools(

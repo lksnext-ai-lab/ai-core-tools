@@ -1,7 +1,10 @@
 from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
 from langchain_mistralai import MistralAIEmbeddings
-from langchain_azure_ai.embeddings import AzureAIEmbeddingsModel
+try:
+    from langchain_azure_ai.embeddings import AzureAIOpenAIApiEmbeddingsModel as AzureAIEmbeddingsModel
+except ImportError:
+    from langchain_azure_ai.embeddings import AzureAIEmbeddingsModel
 from huggingface_hub import InferenceClient
 from models.embedding_service import EmbeddingProvider
 import logging
@@ -62,7 +65,7 @@ def get_embeddings_model(embedding_service):
         )
     elif embedding_service.provider == EmbeddingProvider.Azure.value:
         return AzureAIEmbeddingsModel(
-            model_name=embedding_service.name,
+            model=embedding_service.name,
             api_version=embedding_service.api_version or "2024-02-15-preview",
             credential=embedding_service.api_key,
             endpoint=embedding_service.endpoint

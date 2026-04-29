@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.ocr_agent import OCRAgent
 from models.ai_service import AIService
@@ -22,7 +22,12 @@ class AgentRepository:
     @staticmethod
     def get_by_id(db: Session, agent_id: int) -> Optional[Agent]:
         """Get agent by ID from Agent table"""
-        return db.query(Agent).filter(Agent.agent_id == agent_id).first()
+        return (
+            db.query(Agent)
+            .options(joinedload(Agent.a2a_config))
+            .filter(Agent.agent_id == agent_id)
+            .first()
+        )
     
     @staticmethod
     def get_ocr_agent_by_id(db: Session, agent_id: int) -> Optional[OCRAgent]:
@@ -45,7 +50,13 @@ class AgentRepository:
     @staticmethod
     def get_by_app_id(db: Session, app_id: int) -> List[Agent]:
         """Get all agents for a specific app"""
-        return db.query(Agent).filter(Agent.app_id == app_id).order_by(Agent.create_date.desc()).all()
+        return (
+            db.query(Agent)
+            .options(joinedload(Agent.a2a_config))
+            .filter(Agent.app_id == app_id)
+            .order_by(Agent.create_date.desc())
+            .all()
+        )
     
     @staticmethod
     def get_tool_agents_by_app_id(db: Session, app_id: int, exclude_agent_id: Optional[int] = None) -> List[Agent]:

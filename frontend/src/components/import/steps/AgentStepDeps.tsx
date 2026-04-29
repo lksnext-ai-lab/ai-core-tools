@@ -70,59 +70,96 @@ function AgentStepDeps({
   importBundledAgentTools,
   onImportBundledAgentToolsChange,
 }: Readonly<Props>) {
+  const needsAIServiceResolution = Boolean(
+    preview.ai_service || preview.requires_ai_service_selection
+  );
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600">
         Configure how dependencies are resolved for this agent.
       </p>
 
-      {/* AI Service - Mandatory */}
-      <DepCard
-        icon={COMPONENT_TYPE_ICONS.ai_service}
-        title="AI Service"
-        badge="Required"
-      >
-        {preview.ai_service ? (
-          <>
-            <div className="space-y-2">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="ai_service_source"
-                  checked={!useExistingAIService}
-                  onChange={() =>
-                    onUseExistingAIServiceChange(false)
+      {needsAIServiceResolution ? (
+        <DepCard
+          icon={COMPONENT_TYPE_ICONS.ai_service}
+          title="AI Service"
+          badge="Required"
+        >
+          {preview.ai_service ? (
+            <>
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="ai_service_source"
+                    checked={!useExistingAIService}
+                    onChange={() =>
+                      onUseExistingAIServiceChange(false)
+                    }
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Import bundled:{' '}
+                    <strong>
+                      {preview.ai_service.component_name}
+                    </strong>
+                    {preview.ai_service.provider && (
+                      <span className="text-gray-500 ml-1">
+                        ({preview.ai_service.provider})
+                      </span>
+                    )}
+                  </span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="ai_service_source"
+                    checked={useExistingAIService}
+                    onChange={() =>
+                      onUseExistingAIServiceChange(true)
+                    }
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Use existing AI service
+                  </span>
+                </label>
+              </div>
+              {useExistingAIService && (
+                <select
+                  value={selectedAIServiceId ?? ''}
+                  onChange={(e) =>
+                    onSelectedAIServiceIdChange(
+                      e.target.value
+                        ? Number(e.target.value)
+                        : null
+                    )
                   }
-                  className="text-blue-600"
-                />
-                <span className="text-sm text-gray-700">
-                  Import bundled:{' '}
-                  <strong>
-                    {preview.ai_service.component_name}
-                  </strong>
-                  {preview.ai_service.provider && (
-                    <span className="text-gray-500 ml-1">
-                      ({preview.ai_service.provider})
-                    </span>
-                  )}
-                </span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="ai_service_source"
-                  checked={useExistingAIService}
-                  onChange={() =>
-                    onUseExistingAIServiceChange(true)
-                  }
-                  className="text-blue-600"
-                />
-                <span className="text-sm text-gray-700">
-                  Use existing AI service
-                </span>
-              </label>
-            </div>
-            {useExistingAIService && (
+                  className="w-full mt-2 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">
+                    -- Select AI Service --
+                  </option>
+                  {availableAIServices.map((svc) => (
+                    <option key={svc.id} value={svc.id}>
+                      {svc.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {!useExistingAIService && (
+                <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
+                  API key will need to be configured after import.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <Alert
+                type="warning"
+                message="This agent requires an AI service that is not bundled. Select an existing one."
+              />
               <select
                 value={selectedAIServiceId ?? ''}
                 onChange={(e) =>
@@ -143,42 +180,15 @@ function AgentStepDeps({
                   </option>
                 ))}
               </select>
-            )}
-            {!useExistingAIService && (
-              <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
-                API key will need to be configured after import.
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            <Alert
-              type="warning"
-              message={`AI service "${preview.agent.component_name}" requires is not bundled. Select an existing one.`}
-            />
-            <select
-              value={selectedAIServiceId ?? ''}
-              onChange={(e) =>
-                onSelectedAIServiceIdChange(
-                  e.target.value
-                    ? Number(e.target.value)
-                    : null
-                )
-              }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">
-                -- Select AI Service --
-              </option>
-              {availableAIServices.map((svc) => (
-                <option key={svc.id} value={svc.id}>
-                  {svc.name}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-      </DepCard>
+            </>
+          )}
+        </DepCard>
+      ) : (
+        <Alert
+          type="info"
+          message="This import does not require a local AI service. Imported A2A agents keep their remote execution backend."
+        />
+      )}
 
       {/* Silo - Optional */}
       {preview.silo && (

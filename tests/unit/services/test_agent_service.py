@@ -53,6 +53,7 @@ def make_agent(
     agent.request_count = 0
     agent.marketplace_visibility = None
     agent.marketplace_profile = None
+    agent.a2a_config = None
     agent.vision_service_id = None
     agent.vision_system_prompt = None
     agent.text_system_prompt = None
@@ -131,6 +132,7 @@ class TestGetAgentsList:
         assert result[0].name == "Test Agent"
         assert result[0].agent_id == 1
         assert isinstance(result[0], AgentListItemSchema) or isinstance(result[0], dict)
+        assert result[0].source_type == "local"
 
     def test_includes_ai_service_info_when_linked(self, mocker):
         """Agent's AI service is included if linked."""
@@ -326,6 +328,51 @@ class TestGetAgentDetail:
         assert result.ai_services is not None
         assert len(result.ai_services) == 1
 
+    def test_includes_a2a_metadata_when_present(self, mocker):
+        """A2A agents expose source metadata in the detail response."""
+        db = MagicMock()
+        service = AgentService()
+        agent = make_agent()
+        agent.a2a_config = MagicMock(
+            card_url="https://example.com/.well-known/agent-card.json",
+            remote_agent_id="https://example.com/a2a",
+            remote_agent_metadata={
+                "name": "Remote Agent",
+                "skills": [{"id": "translate", "name": "Translate"}],
+            },
+            sync_status="synced",
+            health_status="healthy",
+            last_successful_refresh_at=None,
+            last_refresh_attempt_at=None,
+            last_refresh_error=None,
+            documentation_url=None,
+            icon_url=None,
+        )
+
+        mocker.patch.object(service, '_get_agent_for_detail', return_value=agent)
+        mocker.patch.object(service, '_get_form_data', return_value={
+            'ai_services': [],
+            'silos': [],
+            'output_parsers': [],
+            'tools': [],
+            'mcp_configs': [],
+            'skills': []
+        })
+        mocker.patch.object(service, '_get_agent_associations', return_value={
+            'tool_ids': [],
+            'mcp_ids': [],
+            'skill_ids': []
+        })
+        mocker.patch.object(service, '_get_silo_info', return_value=None)
+        mocker.patch.object(service, '_get_output_parser_info', return_value=None)
+
+        result = service.get_agent_detail(db, app_id=1, agent_id=1)
+
+        assert result is not None
+        assert result.source_type == "a2a"
+        assert result.a2a_config is not None
+        assert result.a2a_config.advertised_skills == [{"id": "translate", "name": "Translate"}]
+
 
 # ---------------------------------------------------------------------------
 # create_or_update_agent
@@ -403,6 +450,29 @@ class TestCreateOrUpdateAgent:
         result = service.create_or_update_agent(db, agent_data, agent_type='agent')
         
         assert result == 5  # Returns the agent ID
+
+    def test_a2a_sanitization_keeps_tool_agent_flag_and_memory_setting(self):
+        """Imported A2A agents may still be exposed as tool agents and remain conversational."""
+        service = AgentService()
+
+        sanitized = service._sanitize_a2a_agent_data({
+            'source_type': 'a2a',
+            'is_tool': True,
+            'has_memory': True,
+            'enable_code_interpreter': True,
+            'server_tools': ['web_search'],
+            'tool_ids': [2],
+            'mcp_config_ids': [3],
+            'skill_ids': [4],
+        })
+
+        assert sanitized['is_tool'] is True
+        assert sanitized['has_memory'] is True
+        assert sanitized['enable_code_interpreter'] is False
+        assert sanitized['server_tools'] == []
+        assert sanitized['tool_ids'] == []
+        assert sanitized['mcp_config_ids'] == []
+        assert sanitized['skill_ids'] == []
 
 
 # ---------------------------------------------------------------------------

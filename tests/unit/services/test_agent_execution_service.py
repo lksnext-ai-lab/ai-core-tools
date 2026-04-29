@@ -14,6 +14,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import HTTPException
 
+from services.a2a_executor_service import A2AExecutionResult, A2AMemoryContext
 from services.agent_execution_service import AgentExecutionService
 from services.agent_execution_context import AgentExecutionContext
 
@@ -41,6 +42,7 @@ def make_agent(
     agent.request_count = 0
     agent.is_frozen = is_frozen  # SaaS mode: must be explicitly False to avoid MagicMock truthiness
     agent.ai_service = None
+    agent.a2a_config = None
     agent.prompt_template = MagicMock()
     agent.prompt_template.format.return_value = "formatted message"
     return agent
@@ -230,6 +232,33 @@ class TestSuccessfulExecution:
 
         assert result["metadata"]["files_processed"] == 0
 
+    @pytest.mark.asyncio
+    async def test_routes_a2a_agents_to_a2a_executor(self):
+        agent = make_agent(agent_id=1, has_memory=False)
+        agent.a2a_config = MagicMock(card_url="https://example.com/.well-known/agent-card.json")
+        svc, _ = make_service(agent=agent)
+
+        executor_result = A2AExecutionResult(text="Remote reply")
+        with patch(
+            "services.agent_execution_service.A2AExecutorService.execute",
+            new=AsyncMock(return_value=executor_result),
+        ) as mock_execute:
+            result = await svc._execute_agent_async(
+                agent,
+                "hello",
+                user_context={"user_id": 1},
+                attachment_files=[{"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}],
+            )
+
+        assert result is executor_result
+        mock_execute.assert_awaited_once_with(
+            agent,
+            "hello",
+            user_context={"user_id": 1},
+            attachment_files=[{"filename": "photo.png", "file_path": "conversations/1/photo.png", "type": "image"}],
+            memory_context=None,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Memory-enabled agents — tested via _prepare_turn
@@ -400,3 +429,143 @@ class TestFileSnapshotting:
             )
 
             mock_inject.assert_called_once_with("ok", [mock_file_ref])
+
+
+class TestA2AMemorySupport:
+    @pytest.mark.asyncio
+    async def test_build_a2a_memory_history_trims_and_cleans_messages(self):
+        agent = make_agent(agent_id=7, has_memory=True)
+        agent.memory_max_messages = 2
+        agent.memory_summarize_threshold = 3
+        svc, _ = make_service(agent=agent)
+
+        raw_history = [
+            {"role": "user", "content": "first turn"},
+            {"role": "agent", "content": "second turn"},
+            {"role": "user", "content": "hello\n\n[Attached files:]\n--- File: note.txt ---\nsecret\n--- End of note.txt ---"},
+            {"role": "agent", "content": "final answer"},
+        ]
+
+        with patch(
+            "services.agent_cache_service.CheckpointerCacheService.get_conversation_history_async",
+            new=AsyncMock(return_value=raw_history),
+        ):
+            history = await svc._build_a2a_memory_history(agent, "conv_7_abc")
+
+        assert history[0]["role"] == "system"
+        assert "omitted" in history[0]["content"]
+        assert history[1]["role"] == "user"
+        assert history[1]["content"].startswith("hello")
+        assert "note.txt" not in history[1]["content"]
+        assert history[2] == {"role": "agent", "content": "final answer"}
+
+    def test_apply_a2a_remote_state_updates_conversation(self):
+        svc, _ = make_service(agent=make_agent())
+        conversation = MagicMock()
+        ctx = make_context(conversation=conversation)
+        db = MagicMock()
+
+        svc._apply_a2a_remote_state(
+            ctx,
+            A2AExecutionResult(
+                text="done",
+                remote_task_id="task-9",
+                remote_context_id="ctx-9",
+                remote_task_state="input-required",
+            ),
+            db,
+        )
+
+        assert conversation.a2a_remote_task_id == "task-9"
+        assert conversation.a2a_remote_context_id == "ctx-9"
+        assert conversation.a2a_remote_task_state == "input-required"
+        db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_agent_chat_with_file_refs_converts_a2a_result_to_text(self):
+        agent = make_agent(agent_id=1, has_memory=True)
+        agent.a2a_config = MagicMock(card_url="https://example.com/.well-known/agent-card.json")
+        conversation = MagicMock(conversation_id=123)
+        ctx = make_context(
+            agent=agent,
+            fresh_agent=agent,
+            conversation=conversation,
+            session_id_for_cache="conv_1_abc",
+        )
+        svc, _ = make_service(agent=agent)
+        db = MagicMock()
+
+        with (
+            patch.object(svc, "_prepare_turn", new=AsyncMock(return_value=ctx)),
+            patch.object(
+                svc,
+                "_execute_agent_async",
+                new=AsyncMock(
+                    return_value=A2AExecutionResult(
+                        text="Remote reply",
+                        remote_task_id="task-1",
+                        remote_context_id="ctx-1",
+                        remote_task_state="input-required",
+                    )
+                ),
+            ),
+            patch.object(
+                svc,
+                "_finalize_turn",
+                new=AsyncMock(
+                    return_value={
+                        "response": "Remote reply",
+                        "agent_id": 1,
+                        "conversation_id": 123,
+                        "metadata": {},
+                        "parsed_response": "Remote reply",
+                        "effective_conv_id": 123,
+                        "files_data": [],
+                    }
+                ),
+            ) as mock_finalize,
+            patch.object(svc, "_persist_a2a_history", new=AsyncMock()) as mock_persist_history,
+            patch("services.agent_execution_service.A2AService.update_health"),
+        ):
+            await svc.execute_agent_chat_with_file_refs(
+                agent_id=1,
+                message="hello",
+                db=db,
+            )
+
+        mock_finalize.assert_awaited_once_with(ctx, "Remote reply", db)
+        mock_persist_history.assert_awaited_once_with(ctx, "Remote reply")
+        assert conversation.a2a_remote_task_id == "task-1"
+        assert conversation.a2a_remote_context_id == "ctx-1"
+        assert conversation.a2a_remote_task_state == "input-required"
+
+    @pytest.mark.asyncio
+    async def test_persist_a2a_history_appends_messages_to_checkpointer(self):
+        agent = make_agent(agent_id=12, has_memory=True)
+        agent.a2a_config = MagicMock(card_url="https://example.com/.well-known/agent-card.json")
+        conversation = MagicMock(conversation_id=55)
+        ctx = make_context(
+            agent=agent,
+            fresh_agent=agent,
+            conversation=conversation,
+            session_id_for_cache="conv_12_abc",
+            enhanced_message="hello there",
+        )
+        svc, _ = make_service(agent=agent)
+
+        mock_checkpointer = MagicMock()
+        mock_checkpointer.aget_tuple = AsyncMock(return_value=None)
+        mock_checkpointer.aput = AsyncMock()
+
+        with patch(
+            "services.agent_cache_service.CheckpointerCacheService.get_async_checkpointer",
+            new=AsyncMock(return_value=mock_checkpointer),
+        ):
+            await svc._persist_a2a_history(ctx, "general kenobi")
+
+        mock_checkpointer.aput.assert_awaited_once()
+        checkpoint = mock_checkpointer.aput.await_args.args[1]
+        messages = checkpoint["channel_values"]["messages"]
+        assert len(messages) == 2
+        assert messages[0].content == "hello there"
+        assert messages[1].content == "general kenobi"

@@ -16,7 +16,14 @@ from services.marketplace_quota_service import MarketplaceQuotaService
 from services.system_settings_service import SystemSettingsService
 from services.user_service import UserService
 from db.database import get_db
-from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
+from schemas.agent_schemas import (
+    AgentListItemSchema,
+    AgentDetailSchema,
+    CreateUpdateAgentSchema,
+    UpdatePromptSchema,
+    A2AAgentCardDiscoveryRequestSchema,
+    A2AAgentCardDiscoveryResponseSchema,
+)
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
 from schemas.import_schemas import (
     ConflictMode,
@@ -31,6 +38,7 @@ from schemas.marketplace_schemas import (
 )
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from services.a2a_service import A2AService
 from services.file_management_service import FileManagementService, FileReference
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
@@ -274,6 +282,78 @@ async def list_agents(
     return agents_list
 
 
+@agents_router.post(
+    "/discover-a2a-card",
+    summary="Discover public A2A agent card",
+    tags=["Agents"],
+    response_model=A2AAgentCardDiscoveryResponseSchema,
+)
+async def discover_a2a_card(
+    app_id: int,
+    payload: A2AAgentCardDiscoveryRequestSchema,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """Fetch a public A2A agent card from the backend to avoid browser CORS issues."""
+    try:
+        return await A2AService.discover_card(payload.card_url)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error(f"Failed to discover A2A card for app {app_id}: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to load the remote A2A agent card",
+        ) from exc
+
+
+@agents_router.post(
+    "/{agent_id}/refresh-a2a-card",
+    summary="Refresh imported A2A agent metadata",
+    tags=["Agents"],
+    response_model=AgentDetailSchema,
+)
+async def refresh_a2a_card(
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
+):
+    """Refresh the cached agent card metadata for an imported A2A agent."""
+    agent = _get_agent_or_404(db, agent_id, app_id)
+    if not getattr(agent, "a2a_config", None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only imported A2A agents can refresh a remote agent card",
+        )
+
+    try:
+        await A2AService.refresh_card(agent.a2a_config, db)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+    refreshed_agent = agent_service.get_agent_detail(db, app_id, agent_id)
+    if not refreshed_agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=AGENT_NOT_FOUND_ERROR,
+        )
+    return refreshed_agent
+
+
 @agents_router.get("/{agent_id}",
                   summary="Get agent details",
                   tags=["Agents"],
@@ -365,7 +445,29 @@ async def create_or_update_agent(
     Create a new agent or update an existing one.
     """
     # App access validation would be implemented here
-    
+    canonical_a2a_config = None
+    existing_a2a_auth_config = None
+    if agent_id != 0:
+        existing_agent = agent_service.get_agent(db, agent_id)
+        existing_a2a_auth_config = getattr(getattr(existing_agent, "a2a_config", None), "auth_config", None)
+
+    if agent_data.source_type == 'a2a' and agent_data.a2a_config:
+        try:
+            canonical_a2a_config = await A2AService.validate_source_config(
+                agent_data.a2a_config.model_dump(),
+                existing_auth_config=existing_a2a_auth_config,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(exc),
+            ) from exc
+
     # Prepare agent data
     agent_dict = {
         'agent_id': agent_id,
@@ -389,13 +491,26 @@ async def create_or_update_agent(
         # OCR-specific fields
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
-        'text_system_prompt': agent_data.text_system_prompt
+        'text_system_prompt': agent_data.text_system_prompt,
+        'source_type': agent_data.source_type,
+        'a2a_config': canonical_a2a_config,
     }
     
-    logger.info(f"Creating/updating agent with data: {agent_dict}")
+    safe_agent_dict = dict(agent_dict)
+    safe_a2a_config = dict(safe_agent_dict.get('a2a_config') or {})
+    if safe_a2a_config.get('auth_config'):
+        safe_a2a_config['auth_config'] = {'configured': True}
+    safe_agent_dict['a2a_config'] = safe_a2a_config or None
+    logger.info(f"Creating/updating agent with data: {safe_agent_dict}")
     
-    # Create or update agent
-    created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
+    try:
+        # Create or update agent
+        created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     
     # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting)
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})

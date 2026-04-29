@@ -39,6 +39,9 @@ class Conversation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     last_message = Column(Text, nullable=True)  # Preview of last message
     message_count = Column(Integer, default=0, nullable=False)  # Number of messages in conversation
+    a2a_remote_task_id = Column(String(255), nullable=True)
+    a2a_remote_context_id = Column(String(255), nullable=True)
+    a2a_remote_task_state = Column(String(64), nullable=True)
     
     # User context (for API key users who don't have user_id)
     api_key_hash = Column(String(64), nullable=True)  # MD5 hash of API key for tracking
@@ -68,6 +71,8 @@ class Conversation(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "last_message": self.last_message,
-            "message_count": self.message_count
+            "message_count": self.message_count,
+            "a2a_remote_task_id": self.a2a_remote_task_id,
+            "a2a_remote_context_id": self.a2a_remote_context_id,
+            "a2a_remote_task_state": self.a2a_remote_task_state,
         }
-

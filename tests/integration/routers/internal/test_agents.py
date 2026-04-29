@@ -437,6 +437,72 @@ class TestUpdateAgent:
 
 
 # ---------------------------------------------------------------------------
+# Refresh A2A metadata
+# ---------------------------------------------------------------------------
+
+class TestRefreshA2ACard:
+    """POST /internal/apps/{app_id}/agents/{agent_id}/refresh-a2a-card"""
+
+    def test_refresh_a2a_card_updates_cached_metadata(
+        self, client, fake_app, fake_agent, owner_headers, db
+    ):
+        """Refreshing an imported A2A agent returns the updated detail payload."""
+        from models.a2a_agent import A2AAgent
+
+        a2a_record = A2AAgent(
+            agent_id=fake_agent.agent_id,
+            card_url="https://remote.example.com/.well-known/agent-card.json",
+            remote_agent_id="https://remote.example.com/old",
+            remote_agent_metadata={"name": "Old Agent", "skills": [{"id": "skill-1", "name": "Search"}]},
+            sync_status="error",
+            health_status="unreachable",
+        )
+        db.add(a2a_record)
+        db.flush()
+
+        async def fake_refresh(record, session):
+            record.remote_agent_id = "https://remote.example.com"
+            record.remote_agent_metadata = {
+                "name": "Remote Agent",
+                "skills": [{"id": "skill-1", "name": "Updated Search"}],
+            }
+            record.sync_status = "synced"
+            record.health_status = "healthy"
+            record.last_refresh_error = None
+            session.add(record)
+            session.commit()
+            return record
+
+        with patch("routers.internal.agents.A2AService.refresh_card", new=AsyncMock(side_effect=fake_refresh)):
+            response = client.post(
+                f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}/refresh-a2a-card",
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["source_type"] == "a2a"
+        assert data["a2a_config"]["remote_agent_id"] == "https://remote.example.com"
+        assert data["a2a_config"]["advertised_skills"] == [{"id": "skill-1", "name": "Updated Search"}]
+        assert data["a2a_config"]["health_status"] == "healthy"
+        assert data["a2a_config"]["sync_status"] == "synced"
+
+    def test_refresh_a2a_card_rejects_local_agents(
+        self, client, fake_app, fake_agent, owner_headers, db
+    ):
+        """Refreshing a local agent returns a client error."""
+        db.flush()
+
+        response = client.post(
+            f"/internal/apps/{fake_app.app_id}/agents/{fake_agent.agent_id}/refresh-a2a-card",
+            headers=owner_headers,
+        )
+
+        assert response.status_code == 400
+        assert "Only imported A2A agents" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # Delete agent
 # ---------------------------------------------------------------------------
 

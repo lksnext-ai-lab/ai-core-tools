@@ -193,6 +193,19 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`);
   }
 
+  async discoverA2ACard(appId: number, cardUrl: string) {
+    return this.request(`/internal/apps/${appId}/agents/discover-a2a-card`, {
+      method: 'POST',
+      body: JSON.stringify({ card_url: cardUrl }),
+    });
+  }
+
+  async refreshA2ACard(appId: number, agentId: number) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/refresh-a2a-card`, {
+      method: 'POST',
+    });
+  }
+
   async createAgent(appId: number, agentId: number, data: any) {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
       method: 'POST',

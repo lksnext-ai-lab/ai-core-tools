@@ -25,6 +25,8 @@ interface Agent {
   request_count: number;
   description?: string;
   service_id?: number;
+  source_type?: 'local' | 'a2a';
+  health_status?: string | null;
   ai_service?: {
     name: string;
     model_name: string;
@@ -316,6 +318,11 @@ function AgentsPage() {
                       Tool 
                     </span>
                   )}
+                  {agent.source_type === 'a2a' && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      External / A2A
+                    </span>
+                  )}
                 </div>
               </div>
             )
@@ -362,10 +369,23 @@ function AgentsPage() {
           },
           {
             header: 'Status',
-            render: () => (
-              <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
-                {' '}Active
+            render: (agent) => (
+              <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                agent.health_status === 'unreachable' || agent.health_status === 'invalid'
+                  ? 'bg-red-100 text-red-800'
+                  : agent.health_status === 'degraded'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-green-100 text-green-800'
+              }`}>
+                <span className={`w-2 h-2 rounded-full mr-2 ${
+                  agent.health_status === 'unreachable' || agent.health_status === 'invalid'
+                    ? 'bg-red-400'
+                    : agent.health_status === 'degraded'
+                      ? 'bg-amber-400'
+                      : 'bg-green-400'
+                }`} />
+                {' '}
+                {agent.source_type === 'a2a' ? (agent.health_status || 'healthy') : 'Active'}
               </span>
             )
           },

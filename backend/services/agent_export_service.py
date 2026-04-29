@@ -8,12 +8,14 @@ from schemas.export_schemas import (
     AgentExportFileSchema,
     ExportAgentToolRefSchema,
     ExportAgentMCPRefSchema,
+    ExportA2AConfigSchema,
 )
 from services.base_export_service import BaseExportService
 from services.ai_service_export_service import AIServiceExportService
 from services.silo_export_service import SiloExportService
 from services.output_parser_export_service import OutputParserExportService
 from services.mcp_config_export_service import MCPConfigExportService
+from services.a2a_service import A2AService
 from repositories.agent_repository import AgentRepository
 import logging
 
@@ -22,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 class AgentExportService(BaseExportService):
     """Service for exporting Agents (configuration only, no conversations)."""
+
+    @staticmethod
+    def _optional_string(value):
+        """Return a string value or None for unexpected mock/object values."""
+        return value if isinstance(value, str) else None
 
     def __init__(self, session: Session):
         """Initialize Agent export service.
@@ -99,12 +106,18 @@ class AgentExportService(BaseExportService):
         vision_service_name = None
         vision_system_prompt = None
         text_system_prompt = None
-        if hasattr(agent, 'vision_service_rel') and agent.vision_service_rel:
-            vision_service_name = agent.vision_service_rel.name
-        if hasattr(agent, 'vision_system_prompt'):
-            vision_system_prompt = agent.vision_system_prompt
-        if hasattr(agent, 'text_system_prompt'):
-            text_system_prompt = agent.text_system_prompt
+        if agent.type == 'ocr_agent':
+            vision_service = getattr(agent, 'vision_service_rel', None)
+            if vision_service:
+                vision_service_name = self._optional_string(
+                    getattr(vision_service, 'name', None)
+                )
+            vision_system_prompt = self._optional_string(
+                getattr(agent, 'vision_system_prompt', None)
+            )
+            text_system_prompt = self._optional_string(
+                getattr(agent, 'text_system_prompt', None)
+            )
 
         # Get agent tool references
         agent_tool_refs = []
@@ -148,6 +161,14 @@ class AgentExportService(BaseExportService):
             vision_service_name=vision_service_name,
             vision_system_prompt=vision_system_prompt,
             text_system_prompt=text_system_prompt,
+            source_type="a2a" if getattr(agent, "a2a_config", None) else "local",
+            a2a_config=(
+                ExportA2AConfigSchema.model_validate(
+                    A2AService.serialize_export_record(agent.a2a_config)
+                )
+                if getattr(agent, "a2a_config", None)
+                else None
+            ),
         )
 
         # Create metadata

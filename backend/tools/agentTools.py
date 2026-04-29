@@ -1,6 +1,7 @@
-from langchain.messages import HumanMessage, SystemMessage, AnyMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
+from pydantic import BaseModel, Field
 from models.agent import Agent
 from models.silo import Silo, SiloType
 from langchain.tools import BaseTool, tool
@@ -9,7 +10,7 @@ from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.dateTimeTools import get_current_date
 from tools.ai.fileTools import fetch_file_in_base64
 from tools.ai.workspaceTools import create_download_url_tool
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Type
 from langchain_core.tools.retriever import create_retriever_tool
 from services.silo_service import SiloService
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -22,13 +23,143 @@ import asyncio
 import os
 import base64
 import mimetypes
+import threading
 from utils.logger import get_logger
+from utils.langsmith_utils import (
+    get_langsmith_client_kwargs,
+    get_langsmith_debug_metadata,
+    normalize_langsmith_api_key,
+)
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
+from services.a2a_executor_service import A2AExecutorService
+from services.a2a_service import A2AService
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
 from tools.python_sandbox_tools import create_python_repl_tool
 
 logger = get_logger(__name__)
+
+
+def _tool_name_for_agent(agent: Agent) -> str:
+    return (agent.name or "agent_tool").replace(" ", "_")
+
+
+def _format_tool_prompt(agent: Agent, query: str) -> str:
+    """Apply the tool agent prompt template when present."""
+    if agent.prompt_template:
+        try:
+            return agent.prompt_template.format(question=query)
+        except KeyError:
+            try:
+                return agent.prompt_template.format(query=query)
+            except KeyError:
+                logger.warning(
+                    "Could not format prompt_template for agent %s, using query directly",
+                    agent.name,
+                )
+    return query
+
+
+def _describe_a2a_agent_skills(agent: Agent) -> str:
+    """Build a tool description from all advertised A2A skills when available."""
+    a2a_config = getattr(agent, "a2a_config", None)
+    skills = A2AService.extract_advertised_skills(
+        getattr(a2a_config, "remote_agent_metadata", None)
+    )
+    if not skills:
+        return agent.description or "Remote agent tool"
+
+    described_skills = []
+    for skill in skills:
+        name = str(skill.get("name") or skill.get("id") or "").strip()
+        if not name:
+            continue
+        skill_details = [name]
+
+        description = str(skill.get("description") or "").strip()
+        if description:
+            skill_details.append(f"description={description}")
+
+        input_modes = skill.get("inputModes") or skill.get("input_modes") or []
+        if isinstance(input_modes, list) and input_modes:
+            normalized_inputs = [str(mode).strip() for mode in input_modes if str(mode).strip()]
+            if normalized_inputs:
+                skill_details.append(f"input={', '.join(normalized_inputs)}")
+
+        output_modes = skill.get("outputModes") or skill.get("output_modes") or []
+        if isinstance(output_modes, list) and output_modes:
+            normalized_outputs = [str(mode).strip() for mode in output_modes if str(mode).strip()]
+            if normalized_outputs:
+                skill_details.append(f"output={', '.join(normalized_outputs)}")
+
+        tags = skill.get("tags") or []
+        if isinstance(tags, list) and tags:
+            normalized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+            if normalized_tags:
+                skill_details.append(f"tags={', '.join(normalized_tags)}")
+
+        examples = skill.get("examples") or []
+        if isinstance(examples, list) and examples:
+            normalized_examples = [str(example).strip() for example in examples if str(example).strip()]
+            if normalized_examples:
+                skill_details.append(f"examples={'; '.join(normalized_examples)}")
+
+        described_skills.append(" | ".join(skill_details))
+
+    if not described_skills:
+        return agent.description or "Remote agent tool"
+
+    return "Advertised remote skills: " + "; ".join(described_skills)
+
+
+def _extract_agent_result_text(result: Any) -> str:
+    """Normalize LangGraph/LangChain agent results into a plain string."""
+    if isinstance(result, dict) and "messages" in result:
+        messages_list = result["messages"]
+        for msg in reversed(messages_list):
+            if hasattr(msg, "content") and msg.content:
+                return str(msg.content)
+        if messages_list:
+            last_msg = messages_list[-1]
+            return str(last_msg.content) if hasattr(last_msg, "content") else str(last_msg)
+    return str(result)
+
+
+def _run_async_callable_sync(async_callable, *args, **kwargs):
+    """Execute an async callable from sync code, even if another loop is active."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_callable(*args, **kwargs))
+
+    outcome = {}
+
+    def _runner():
+        try:
+            outcome["result"] = asyncio.run(async_callable(*args, **kwargs))
+        except Exception as exc:  # pragma: no cover - exercised via caller
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["result"]
+
+
+class AgentToolInput(BaseModel):
+    """Explicit JSON schema for agent-backed tools."""
+
+    query: str = Field(description="The request to send to the agent tool.")
+
+
+def build_agent_tool(agent: Agent, user_context: Optional[Dict] = None) -> BaseTool:
+    """Return the correct tool wrapper for local and imported A2A agents."""
+    if A2AService.is_a2a_agent(agent):
+        return A2ATool(agent, user_context=user_context)
+    return IACTTool(agent, user_context=user_context)
 
 class MCPClientManager:
     _instance = None
@@ -228,7 +359,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     for tool in agent.tool_associations:
         sub_agent = tool.tool
-        tools.append(IACTTool(sub_agent))
+        tools.append(build_agent_tool(sub_agent, user_context=user_context))
 
     # Base tools — always available for every agent
     tools.append(get_current_date)
@@ -451,12 +582,11 @@ def get_langsmith_config(agent):
     Returns a dict with client and project_name if the app has a valid LangSmith
     API key configured, or None otherwise.
     """
-    if agent.app.langsmith_api_key:
+    api_key = normalize_langsmith_api_key(getattr(agent.app, "langsmith_api_key", None))
+    if api_key:
+        debug_meta = get_langsmith_debug_metadata(api_key)
         try:
-            client = ls.Client(
-                api_key=agent.app.langsmith_api_key,
-                api_url="https://api.smith.langchain.com",
-            )
+            client = ls.Client(**get_langsmith_client_kwargs(api_key))
             try:
                 client._get_settings()
                 logger.info(
@@ -469,12 +599,20 @@ def get_langsmith_config(agent):
                     logger.error(
                         f"LangSmith API key is INVALID or EXPIRED for app '{agent.app.name}'. "
                         f"Traces will NOT be sent. "
+                        f"endpoint={debug_meta['endpoint']} "
+                        f"workspace_id_present={debug_meta['workspace_id_present']} "
+                        f"key_length={debug_meta['key_length']} "
+                        f"key_suffix=****{debug_meta['key_suffix']}. "
                         f"Generate a new key at https://smith.langchain.com/settings"
                     )
                 else:
                     logger.error(
                         f"LangSmith API key validation FAILED for app '{agent.app.name}': "
                         f"{type(validation_err).__name__}: {validation_err}. "
+                        f"endpoint={debug_meta['endpoint']} "
+                        f"workspace_id_present={debug_meta['workspace_id_present']} "
+                        f"key_length={debug_meta['key_length']} "
+                        f"key_suffix=****{debug_meta['key_suffix']}. "
                         f"Traces will NOT be sent."
                     )
                 return None
@@ -492,18 +630,62 @@ def get_langsmith_config(agent):
     return None
 
 
+class A2ATool(BaseTool):
+    name: str = "a2a_agent_tool"
+    description: str = "Invoke an imported remote A2A agent"
+    args_schema: Type[BaseModel] = AgentToolInput
+    agent: Agent
+    user_context: Optional[Dict] = None
+    executor: Any = None
+
+    def __init__(self, agent: Agent, user_context: Optional[Dict] = None) -> None:
+        super().__init__(agent=agent, user_context=user_context)
+
+        self.agent = agent
+        self.user_context = user_context
+        self.executor = A2AExecutorService()
+        self.name = _tool_name_for_agent(agent)
+        self.description = _describe_a2a_agent_skills(agent)
+
+    async def _execute(self, query: str) -> str:
+        formatted_prompt = _format_tool_prompt(self.agent, query)
+        result = await self.executor.execute(
+            self.agent,
+            formatted_prompt,
+            user_context=self.user_context,
+        )
+        return result.text if hasattr(result, "text") else str(result)
+
+    def _run(self, query: str) -> str:
+        try:
+            return _run_async_callable_sync(self._execute, query)
+        except Exception as e:
+            logger.error(f"Error executing remote agent tool {self.name}: {str(e)}")
+            return f"Error executing remote agent tool: {str(e)}"
+
+    async def _arun(self, query: str) -> str:
+        try:
+            return await self._execute(query)
+        except Exception as e:
+            logger.error(f"Error executing remote agent tool {self.name} (async): {str(e)}")
+            return f"Error executing remote agent tool: {str(e)}"
+
+
 class IACTTool(BaseTool):
     name: str = "agent_tool"
     description: str = "Search for a repository"
+    args_schema: Type[BaseModel] = AgentToolInput
     agent: Agent
+    user_context: Optional[Dict] = None
     react_agent: Any = None
     llm: Any = None
 
-    def __init__(self, agent: Agent) -> None:
-        super().__init__(agent=agent)
+    def __init__(self, agent: Agent, user_context: Optional[Dict] = None) -> None:
+        super().__init__(agent=agent, user_context=user_context)
         
         self.agent = agent  
-        self.name = agent.name.replace(" ", "_")
+        self.user_context = user_context
+        self.name = _tool_name_for_agent(agent)
         self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
         if self.llm is None:
@@ -513,7 +695,7 @@ class IACTTool(BaseTool):
         # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
-            tools.append(IACTTool(sub_agent))
+            tools.append(build_agent_tool(sub_agent, user_context=user_context))
         
         # Add base useful tools
         tools.append(get_current_date)
@@ -539,81 +721,25 @@ class IACTTool(BaseTool):
             system_prompt=tool_system_prompt if tool_system_prompt else None,
         )
 
-    def _run(self, query: str, *args, **kwargs) -> str:
+    def _run(self, query: str) -> str:
         """Synchronous execution of the agent tool"""
         try:
-            # Format the message using prompt_template if available, otherwise use query directly
-            if self.agent.prompt_template:
-                try:
-                    formatted_prompt = self.agent.prompt_template.format(question=query)
-                except KeyError:
-                    # If 'question' is not in template, try other common placeholders
-                    try:
-                        formatted_prompt = self.agent.prompt_template.format(query=query)
-                    except KeyError:
-                        # If no placeholder works, just use the query
-                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
-                        formatted_prompt = query
-            else:
-                formatted_prompt = query
-            
+            formatted_prompt = _format_tool_prompt(self.agent, query)
             messages = [HumanMessage(content=formatted_prompt)]
             result = self.react_agent.invoke({"messages": messages})
-            
-            # Extract the content from the last AI message
-            if isinstance(result, dict) and "messages" in result:
-                messages_list = result["messages"]
-                # Find the last AI message with content
-                for msg in reversed(messages_list):
-                    if hasattr(msg, 'content') and msg.content:
-                        return str(msg.content)
-                # Fallback: return the last message content
-                if messages_list:
-                    last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
-            
-            # If result is a string, return it directly
-            return str(result)
+            return _extract_agent_result_text(result)
             
         except Exception as e:
             logger.error(f"Error executing agent tool {self.name}: {str(e)}")
             return f"Error executing agent tool: {str(e)}"
     
-    async def _arun(self, query: str, *args, **kwargs) -> str:
+    async def _arun(self, query: str) -> str:
         """Asynchronous execution of the agent tool"""
         try:
-            # Format the message using prompt_template if available, otherwise use query directly
-            if self.agent.prompt_template:
-                try:
-                    formatted_prompt = self.agent.prompt_template.format(question=query)
-                except KeyError:
-                    # If 'question' is not in template, try other common placeholders
-                    try:
-                        formatted_prompt = self.agent.prompt_template.format(query=query)
-                    except KeyError:
-                        # If no placeholder works, just use the query
-                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
-                        formatted_prompt = query
-            else:
-                formatted_prompt = query
-            
+            formatted_prompt = _format_tool_prompt(self.agent, query)
             messages = [HumanMessage(content=formatted_prompt)]
             result = await self.react_agent.ainvoke({"messages": messages})
-            
-            # Extract the content from the last AI message
-            if isinstance(result, dict) and "messages" in result:
-                messages_list = result["messages"]
-                # Find the last AI message with content
-                for msg in reversed(messages_list):
-                    if hasattr(msg, 'content') and msg.content:
-                        return str(msg.content)
-                # Fallback: return the last message content
-                if messages_list:
-                    last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
-            
-            # If result is a string, return it directly
-            return str(result)
+            return _extract_agent_result_text(result)
             
         except Exception as e:
             logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")
@@ -727,4 +853,3 @@ def get_retriever_tool(silo: Silo, search_params=None):
             document_prompt=document_prompt
         )
     return None
-

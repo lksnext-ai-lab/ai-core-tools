@@ -357,12 +357,16 @@ class FullAppExportService(BaseExportService):
         agents = self.app_repo.get_agents_by_app_id(app_id)
         logger.info(f"Found {len(agents)} agents for app {app_id}")
         
-        # Filter out agents without AI service (data inconsistency)
-        valid_agents = [a for a in agents if a.service_id is not None]
+        # Filter out only local agents without AI service (data inconsistency).
+        # Imported A2A agents intentionally do not have a local AI service.
+        valid_agents = [
+            a for a in agents
+            if a.service_id is not None or getattr(a, "a2a_config", None)
+        ]
         if len(valid_agents) < len(agents):
             skipped = len(agents) - len(valid_agents)
             logger.warning(
-                f"Skipping {skipped} agent(s) without AI service (data inconsistency)"
+                f"Skipping {skipped} local agent(s) without AI service (data inconsistency)"
             )
         
         exported = []
