@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -9,6 +10,9 @@ import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import AgentImportStepper from '../components/import/AgentImportStepper';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 import type { AgentMCPUsage } from '../core/types';
 
 // Define the Agent type
@@ -39,15 +43,13 @@ function AgentsPage() {
   const navigate = useNavigate();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
-  
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
+
   const [agents, setAgents] = useState<Agent[]>([]);
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
-  const [deleteAgentMcpUsage, setDeleteAgentMcpUsage] = useState<AgentMCPUsage | null>(null);
-  const [loadingMcpUsage, setLoadingMcpUsage] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [agentToExport, setAgentToExport] = useState<Agent | null>(null);
@@ -58,7 +60,6 @@ function AgentsPage() {
     includeMCPConfigs: true,
     includeAgentTools: true,
   });
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
   const loadData = useCallback(async () => {
     if (!appId) return;
@@ -101,37 +102,56 @@ function AgentsPage() {
   const handleDeleteAgent = async (agent: Agent) => {
     if (!appId) return;
 
-    setAgentToDelete(agent);
-    setShowDeleteModal(true);
-    setDeleteAgentMcpUsage(null);
-
-    // Check if agent is used in MCP servers
+    let mcpUsage: AgentMCPUsage | null = null;
     if (agent.is_tool) {
       try {
-        setLoadingMcpUsage(true);
-        const usage = await apiService.getAgentMCPUsage(Number.parseInt(appId), agent.agent_id);
-        setDeleteAgentMcpUsage(usage);
+        mcpUsage = await apiService.getAgentMCPUsage(Number.parseInt(appId), agent.agent_id);
       } catch (err) {
         console.error('Error loading MCP usage:', err);
-      } finally {
-        setLoadingMcpUsage(false);
       }
     }
-  };
 
-  const confirmDeleteAgent = async () => {
-    if (!agentToDelete || !appId) return;
+    const message = (
+      <div className="space-y-3">
+        <p>Are you sure you want to delete &quot;{agent.name}&quot;? This action cannot be undone.</p>
+        {mcpUsage && mcpUsage.mcp_servers.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="font-medium text-amber-900 text-sm">
+              This agent is used in {mcpUsage.mcp_servers.length} MCP server
+              {mcpUsage.mcp_servers.length === 1 ? '' : 's'}:
+            </p>
+            <ul className="mt-1 text-amber-800 text-sm list-disc list-inside">
+              {mcpUsage.mcp_servers.map((s) => (
+                <li key={s.server_id}>{s.server_name}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-amber-700 text-sm">
+              Deleting this agent will make it unavailable in those MCP servers.
+            </p>
+          </div>
+        )}
+      </div>
+    );
 
-    try {
-      await apiService.deleteAgent(Number.parseInt(appId), agentToDelete.agent_id);
-      setAgents(agents.filter(a => a.agent_id !== agentToDelete.agent_id));
-      setShowDeleteModal(false);
-      setAgentToDelete(null);
-      setDeleteAgentMcpUsage(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete agent');
-      console.error('Error deleting agent:', err);
-    }
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('agent'),
+      message,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteAgent(Number.parseInt(appId), agent.agent_id),
+      {
+        loading: MESSAGES.DELETING('agent'),
+        success: MESSAGES.DELETED('agent'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('agent')),
+      },
+    );
+    if (result === undefined) return;
+
+    setAgents(agents.filter((a) => a.agent_id !== agent.agent_id));
   };
 
   const handleExportClick = (agent: Agent) => {
@@ -170,29 +190,19 @@ function AgentsPage() {
 
       setShowExportDialog(false);
       setAgentToExport(null);
-      setNotification({
-        message: 'Agent exported successfully. Note: Conversation history excluded.',
-        type: 'warning'
+      toast.warning('Agent exported successfully. Note: Conversation history excluded.', {
+        duration: 7000,
       });
-      setTimeout(() => setNotification(null), 7000);
     } catch (err) {
-      setNotification({
-        message: err instanceof Error ? err.message : 'Failed to export agent',
-        type: 'error'
-      });
-      setTimeout(() => setNotification(null), 5000);
+      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('agent')));
       console.error('Error exporting agent:', err);
     }
   };
 
   const handleImportComplete = () => {
     setShowImportModal(false);
-    setNotification({
-      message: 'Agent imported successfully',
-      type: 'success',
-    });
+    toast.success(MESSAGES.IMPORTED('agent'));
     void loadData();
-    setTimeout(() => setNotification(null), 5000);
   };
 
   const formatDate = (dateString: string) => {
@@ -272,15 +282,6 @@ function AgentsPage() {
 
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
-
-      {/* Notification */}
-      {notification && (
-        <Alert
-          type={notification.type}
-          message={notification.message}
-          onDismiss={() => setNotification(null)}
-        />
-      )}
 
       <Table
         data={agents}
@@ -442,67 +443,6 @@ function AgentsPage() {
           >
             Create Your First Agent
           </button>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && agentToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Agent</h3>
-            <p className="text-gray-600 mb-4">
-              Are you sure you want to delete "{agentToDelete.name}"? This action cannot be undone.
-            </p>
-
-            {/* MCP Usage Warning */}
-            {loadingMcpUsage && (
-              <div className="mb-4 flex items-center text-gray-500">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500 mr-2"></div>
-                Checking MCP server usage...
-              </div>
-            )}
-
-            {deleteAgentMcpUsage && deleteAgentMcpUsage.mcp_servers.length > 0 && (
-              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <div className="flex items-start">
-                  <span className="text-amber-500 mr-2">!</span>
-                  <div className="text-sm">
-                    <p className="font-medium text-amber-900">
-                      This agent is used in {deleteAgentMcpUsage.mcp_servers.length} MCP server{deleteAgentMcpUsage.mcp_servers.length === 1 ? '' : 's'}:
-                    </p>
-                    <ul className="mt-1 text-amber-800 list-disc list-inside">
-                      {deleteAgentMcpUsage.mcp_servers.map(s => (
-                        <li key={s.server_id}>{s.server_name}</li>
-                      ))}
-                    </ul>
-                    <p className="mt-2 text-amber-700">
-                      Deleting this agent will make it unavailable in these MCP servers.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setAgentToDelete(null);
-                  setDeleteAgentMcpUsage(null);
-                }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteAgent}
-                disabled={loadingMcpUsage}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-2 px-4 rounded-lg"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

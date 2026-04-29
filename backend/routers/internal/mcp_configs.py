@@ -233,8 +233,9 @@ async def create_or_update_mcp_config(
                 detail=MCP_CONFIG_NOT_FOUND_ERROR
             )
         
-        # Return updated config (reuse the GET logic)
-        return await get_mcp_config(app_id, config.config_id, auth_context, role, db)
+        # Return updated config (reuse the GET logic) — keep argument order
+        # in sync with get_mcp_config's signature (app_id, config_id, auth_context, db, role).
+        return await get_mcp_config(app_id, config.config_id, auth_context, db, role)
         
     except HTTPException:
         raise

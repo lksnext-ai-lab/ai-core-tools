@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store } from 'lucide-react';
 import { apiService } from '../services/api';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
@@ -141,6 +143,7 @@ function getPageDescription(type: string, isNewAgent: boolean, agentName?: strin
 function AgentFormPage() {
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [mcpUsage, setMcpUsage] = useState<AgentMCPUsage | null>(null);
@@ -367,80 +370,86 @@ function AgentFormPage() {
 
     setSavingMarketplace(true);
     setMarketplaceSuccess(null);
-    try {
-      const saved = await apiService.updateAgentMarketplaceProfile(
-        Number.parseInt(appId),
-        Number.parseInt(agentId),
-        marketplaceProfile,
-      );
-      setMarketplaceProfile({
-        display_name: saved.display_name || null,
-        short_description: saved.short_description || null,
-        long_description: saved.long_description || null,
-        category: saved.category || null,
-        tags: saved.tags || null,
-        icon_url: saved.icon_url || null,
-        cover_image_url: saved.cover_image_url || null,
-      });
-      setMarketplaceSuccess('Marketplace profile saved successfully');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save marketplace profile');
-    } finally {
-      setSavingMarketplace(false);
-    }
-  }, [appId, agentId, marketplaceProfile]);
+    const saved = await mutate(
+      () =>
+        apiService.updateAgentMarketplaceProfile(
+          Number.parseInt(appId),
+          Number.parseInt(agentId),
+          marketplaceProfile,
+        ),
+      {
+        loading: MESSAGES.SAVING('marketplace profile'),
+        success: 'Marketplace profile saved',
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('marketplace profile')),
+      },
+    );
+    setSavingMarketplace(false);
+
+    if (saved === undefined) return;
+
+    setMarketplaceProfile({
+      display_name: saved.display_name || null,
+      short_description: saved.short_description || null,
+      long_description: saved.long_description || null,
+      category: saved.category || null,
+      tags: saved.tags || null,
+      icon_url: saved.icon_url || null,
+      cover_image_url: saved.cover_image_url || null,
+    });
+    setMarketplaceSuccess('Marketplace profile saved successfully');
+  }, [appId, agentId, marketplaceProfile, mutate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!appId || !agentId) return;
 
-    try {
-      setSaving(true);
-      setError(null);
+    const submitData = {
+      name: formData.name,
+      description: formData.description,
+      system_prompt: formData.system_prompt,
+      prompt_template: formData.prompt_template,
+      type: formData.type,
+      is_tool: formData.is_tool,
+      has_memory: formData.has_memory,
+      enable_code_interpreter: formData.enable_code_interpreter,
+      server_tools: formData.server_tools,
+      memory_max_messages: formData.memory_max_messages,
+      memory_max_tokens: formData.memory_max_tokens,
+      memory_summarize_threshold: formData.memory_summarize_threshold,
+      service_id: formData.service_id,
+      silo_id: formData.silo_id,
+      output_parser_id: formData.output_parser_id,
+      temperature: formData.temperature,
+      tool_ids: formData.tool_ids,
+      mcp_config_ids: formData.mcp_config_ids,
+      skill_ids: formData.skill_ids,
+      // OCR-specific fields
+      vision_service_id: formData.vision_service_id,
+      vision_system_prompt: formData.vision_system_prompt,
+      text_system_prompt: formData.text_system_prompt,
+      app_id: Number.parseInt(appId),
+    };
 
-      const submitData = {
-        name: formData.name,
-        description: formData.description,
-        system_prompt: formData.system_prompt,
-        prompt_template: formData.prompt_template,
-        type: formData.type,
-        is_tool: formData.is_tool,
-        has_memory: formData.has_memory,
-        enable_code_interpreter: formData.enable_code_interpreter,
-        server_tools: formData.server_tools,
-        memory_max_messages: formData.memory_max_messages,
-        memory_max_tokens: formData.memory_max_tokens,
-        memory_summarize_threshold: formData.memory_summarize_threshold,
-        service_id: formData.service_id,
-        silo_id: formData.silo_id,
-        output_parser_id: formData.output_parser_id,
-        temperature: formData.temperature,
-        tool_ids: formData.tool_ids,
-        mcp_config_ids: formData.mcp_config_ids,
-        skill_ids: formData.skill_ids,
-        // OCR-specific fields
-        vision_service_id: formData.vision_service_id,
-        vision_system_prompt: formData.vision_system_prompt,
-        text_system_prompt: formData.text_system_prompt,
-        app_id: Number.parseInt(appId)
-      };
+    const isNew = Number.parseInt(agentId) === 0;
 
-      if (Number.parseInt(agentId) === 0) {
-        // Creating new agent
-        await apiService.createAgent(Number.parseInt(appId), 0, submitData);
-      } else {
-        // Updating existing agent
-        await apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData);
-      }
+    setError(null);
+    setSaving(true);
+    const result = await mutate(
+      () =>
+        isNew
+          ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
+          : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData),
+      {
+        loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
+        success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
+      },
+    );
+    setSaving(false);
 
-      // Navigate back to agents list
+    if (result !== undefined) {
       navigate(`/apps/${appId}/agents`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save agent');
-      console.error('Error saving agent:', err);
-    } finally {
-      setSaving(false);
     }
   };
 

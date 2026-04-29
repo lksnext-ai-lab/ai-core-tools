@@ -1,49 +1,39 @@
-import { useState, useEffect } from 'react';
-import { AlertTriangle, Users, AppWindow, Bot, KeyRound } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, AppWindow, Bot, KeyRound } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { SystemStats } from '../../services/admin';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { errorMessage } from '../../constants/messages';
 
 function StatsPage() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await adminService.getSystemStats();
       setStats(data);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
+    } catch (err) {
+      setError(errorMessage(err, 'Unable to load system statistics'));
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading statistics...</span>
-      </div>
-    );
+    return <LoadingState message="Loading statistics..." />;
   }
 
-  if (!stats) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <div className="flex">
-          <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-          <div>
-            <h3 className="text-sm font-medium text-red-800">Failed to Load Statistics</h3>
-            <p className="text-sm text-red-600 mt-1">Unable to load system statistics.</p>
-          </div>
-        </div>
-      </div>
-    );
+  if (error || !stats) {
+    return <ErrorState error={error ?? 'Unable to load system statistics'} onRetry={loadStats} />;
   }
 
   return (

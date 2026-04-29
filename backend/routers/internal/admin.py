@@ -381,6 +381,15 @@ async def reset_setting(
 from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
 from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
 from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
+from schemas.provider_models_schemas import (
+    ListProviderModelsRequest,
+    ListProviderModelsResponse,
+)
+from services.provider_models_service import (
+    PROVIDER_ERROR_STATUS,
+    ProviderModelsService,
+)
+from tools.ai.provider_model_clients import ProviderListingError
 from schemas.embedding_service_schemas import (
     EmbeddingServiceListItemSchema,
     EmbeddingServiceDetailSchema,
@@ -736,3 +745,124 @@ async def delete_system_embedding_service(
         {Silo.embedding_service_id: None}, synchronize_session='fetch'
     )
     EmbeddingServiceRepository.delete(db, svc)
+
+
+# ==================== PROVIDER MODEL DISCOVERY (system) ====================
+
+
+@router.post(
+    "/system-ai-services/list-models",
+    response_model=ListProviderModelsResponse,
+)
+async def list_system_ai_service_provider_models(
+    body: ListProviderModelsRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """List models for a provider using the credentials in the body.
+    Used by the System AI Service wizard (OMNIADMIN only).
+    """
+    body.purpose = "chat"
+    try:
+        return ProviderModelsService.list_models(body)
+    except ProviderListingError as exc:
+        raise HTTPException(
+            status_code=PROVIDER_ERROR_STATUS.get(exc.code, 500),
+            detail=exc.message,
+        )
+    except Exception as e:
+        logger.error(
+            "Unexpected error listing system AI models (provider: %s): %s",
+            body.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Failed to list provider models")
+
+
+@router.post(
+    "/system-embedding-services/list-models",
+    response_model=ListProviderModelsResponse,
+)
+async def list_system_embedding_service_provider_models(
+    body: ListProviderModelsRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """List embedding models for a provider using the credentials in the
+    body. Used by the System Embedding Service wizard (OMNIADMIN only).
+    """
+    body.purpose = "embedding"
+    try:
+        return ProviderModelsService.list_models(body)
+    except ProviderListingError as exc:
+        raise HTTPException(
+            status_code=PROVIDER_ERROR_STATUS.get(exc.code, 500),
+            detail=exc.message,
+        )
+    except Exception as e:
+        logger.error(
+            "Unexpected error listing system embedding models (provider: %s): %s",
+            body.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Failed to list provider models")
+
+
+@router.post("/system-ai-services/test-connection")
+async def test_system_ai_service_connection_with_config(
+    config: CreateUpdateAIServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """Test a system AI service connection with the provided config (OMNIADMIN)."""
+    from services.ai_service_service import AIServiceService
+
+    try:
+        service_config = {
+            "provider": config.provider,
+            "description": config.model_name,
+            "api_key": config.api_key,
+            "endpoint": config.base_url,
+            "api_version": getattr(config, "api_version", None),
+        }
+        result = AIServiceService.test_connection_with_config(service_config)
+        if isinstance(result, dict) and len(str(result.get("response", ""))) > 500:
+            result["response"] = str(result["response"])[:500] + "... (truncated)"
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Error testing system AI service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Test failed")
+
+
+@router.post("/system-embedding-services/test-connection")
+async def test_system_embedding_service_connection_with_config(
+    config: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """Test a system embedding service connection with the provided config (OMNIADMIN)."""
+    from services.embedding_service_service import EmbeddingServiceService
+
+    try:
+        service_config = {
+            "provider": config.provider,
+            "description": config.model_name,
+            "api_key": config.api_key,
+            "endpoint": config.base_url,
+        }
+        return EmbeddingServiceService.test_connection_with_config(service_config)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Error testing system embedding service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Test failed")

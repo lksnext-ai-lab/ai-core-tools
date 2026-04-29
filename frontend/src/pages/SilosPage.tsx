@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { AlertTriangle, Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -8,7 +9,9 @@ import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import ImportModal, { type ConflictMode, type ImportResponse } from '../components/ui/ImportModal';
-import Alert from '../components/ui/Alert';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 // ...existing code...
 interface Silo {
@@ -25,12 +28,13 @@ function SilosPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
-  
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
+
   const [silos, setSilos] = useState<Silo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   const [requiresEmbeddingServiceSelection, setRequiresEmbeddingServiceSelection] = useState(false);
   const [availableEmbeddingServices, setAvailableEmbeddingServices] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedEmbeddingServiceId, setSelectedEmbeddingServiceId] = useState<number | undefined>(undefined);
@@ -58,20 +62,30 @@ function SilosPage() {
   }
 
   async function handleDelete(siloId: number) {
-    if (!globalThis.confirm('Are you sure you want to delete this silo? This action cannot be undone.')) {
-      return;
-    }
-
     if (!appId) return;
 
-    try {
-      await apiService.deleteSilo(Number.parseInt(appId), siloId);
-      // Remove from local state
-      setSilos(silos.filter(s => s.silo_id !== siloId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete silo');
-      console.error('Error deleting silo:', err);
-    }
+    const target = silos.find((s) => s.silo_id === siloId);
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('silo'),
+      message: target
+        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone and removes all stored vectors.`
+        : MESSAGES.CONFIRM_DELETE_MESSAGE('silo'),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteSilo(Number.parseInt(appId), siloId),
+      {
+        loading: MESSAGES.DELETING('silo'),
+        success: MESSAGES.DELETED('silo'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('silo')),
+      },
+    );
+    if (result === undefined) return;
+
+    setSilos(silos.filter((s) => s.silo_id !== siloId));
   }
 
   async function handleExport(siloId: number) {
@@ -98,18 +112,12 @@ function SilosPage() {
       globalThis.URL.revokeObjectURL(url);
       a.remove();
 
-      // Show warning notification (7 seconds)
-      setNotification({
-        message: 'Silo exported successfully. Note: Vector data excluded. Re-upload documents after import.',
-        type: 'warning'
-      });
-      setTimeout(() => setNotification(null), 7000);
+      toast.warning(
+        'Silo exported successfully. Note: Vector data excluded. Re-upload documents after import.',
+        { duration: 7000 },
+      );
     } catch (err) {
-      setNotification({
-        message: err instanceof Error ? err.message : 'Failed to export silo',
-        type: 'error'
-      });
-      setTimeout(() => setNotification(null), 5000);
+      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('silo')));
       console.error('Error exporting silo:', err);
     }
   }
@@ -156,13 +164,9 @@ function SilosPage() {
 
       if (result.success) {
         setShowImportModal(false);
-        setNotification({
-          message: result.message || 'Silo imported successfully',
-          type: 'success'
-        });
-        void loadSilos(); // Reload silos list
-        setTimeout(() => setNotification(null), 5000);
-        
+        toast.success(result.message || MESSAGES.IMPORTED('silo'));
+        void loadSilos();
+
         // Reset embedding service selection state
         setRequiresEmbeddingServiceSelection(false);
         setSelectedEmbeddingServiceId(undefined);
@@ -257,15 +261,6 @@ function SilosPage() {
       </div>
 
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
-
-      {/* Notification */}
-      {notification && (
-        <Alert
-          type={notification.type}
-          message={notification.message}
-          onDismiss={() => setNotification(null)}
-        />
-      )}
 
       {/* Silos List */}
       {silos.length === 0 ? (

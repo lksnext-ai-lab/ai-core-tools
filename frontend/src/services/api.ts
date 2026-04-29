@@ -369,6 +369,16 @@ class ApiService {
     });
   }
 
+  async listAIServiceProviderModels(
+    appId: number,
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request(`/internal/apps/${appId}/ai-services/list-models`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   async exportAIService(appId: number, serviceId: number): Promise<Blob> {
     const token = this.getAuthToken();
     const headers: Record<string, string> = {};
@@ -452,6 +462,23 @@ class ApiService {
   async deleteEmbeddingService(appId: number, serviceId: number) {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async listEmbeddingServiceProviderModels(
+    appId: number,
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request(`/internal/apps/${appId}/embedding-services/list-models`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async testEmbeddingServiceConnectionWithConfig(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/embedding-services/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -1736,6 +1763,71 @@ class ApiService {
     );
   }
 
+  /**
+   * Stream a marketplace chat turn as Server-Sent Events.
+   * Mirrors `chatWithAgentStream` so the marketplace UI can reuse `useStreamingChat`.
+   */
+  async chatMarketplaceStream(
+    conversationId: number,
+    message: string,
+    options: {
+      files?: File[];
+      fileReferences?: string[];
+      onEvent: (event: StreamEvent) => void;
+      signal?: AbortSignal;
+    },
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('message', message);
+
+    if (options.fileReferences && options.fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(options.fileReferences));
+    }
+    if (options.files && options.files.length > 0) {
+      options.files.forEach((file) => formData.append('files', file));
+    }
+
+    const url = `${this.baseURL}/internal/marketplace/conversations/${conversationId}/chat/stream`;
+    const headers: Record<string, string> = {};
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+        this.parseSSELines(lines, options.onEvent);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
@@ -2164,6 +2256,38 @@ class ApiService {
   async deleteSystemEmbeddingService(serviceId: number) {
     return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async listSystemAIServiceProviderModels(
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request('/internal/admin/system-ai-services/list-models', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listSystemEmbeddingServiceProviderModels(
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request('/internal/admin/system-embedding-services/list-models', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async testSystemAIServiceConnectionWithConfig(data: any) {
+    return this.request('/internal/admin/system-ai-services/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async testSystemEmbeddingServiceConnectionWithConfig(data: any) {
+    return this.request('/internal/admin/system-embedding-services/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

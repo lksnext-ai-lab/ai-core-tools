@@ -10,6 +10,9 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { errorMessage } from '../../constants/messages';
 
 interface Collaborator {
   id: number;
@@ -33,6 +36,8 @@ function CollaborationPage() {
   const { appId } = useParams();
   const { user } = useUser();
   const settingsCache = useSettingsCache();
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
 
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [allMembers, setAllMembers] = useState<Collaborator[]>([]); // Owner + Collaborators
@@ -181,48 +186,72 @@ function CollaborationPage() {
   async function handleInviteUser(email: string, role: string) {
     if (!appId) return;
 
+    const result = await mutate(
+      () => apiService.inviteCollaborator(Number.parseInt(appId), email, role),
+      {
+        loading: 'Sending invitation…',
+        success: `Invitation sent to ${email}`,
+        error: (err) => errorMessage(err, 'Failed to send invitation'),
+      },
+    );
+    if (result === undefined) return;
+
+    settingsCache.invalidateCollaborators(appId);
     try {
-      await apiService.inviteCollaborator(Number.parseInt(appId), email, role);
-      // Invalidate cache and force reload collaborators list
-      settingsCache.invalidateCollaborators(appId);
       await forceReloadCollaborators();
     } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to send invitation');
+      console.error('Refetch after invite failed:', err);
     }
   }
 
   async function handleUpdateRole(userId: number, newRole: string) {
     if (!appId) return;
 
+    const result = await mutate(
+      () => apiService.updateCollaboratorRole(Number.parseInt(appId), userId, newRole),
+      {
+        loading: 'Updating role…',
+        success: 'Role updated',
+        error: (err) => errorMessage(err, 'Failed to update role'),
+      },
+    );
+    if (result === undefined) return;
+
+    settingsCache.invalidateCollaborators(appId);
     try {
-      await apiService.updateCollaboratorRole(Number.parseInt(appId), userId, newRole);
-      // Invalidate cache and force reload collaborators list
-      settingsCache.invalidateCollaborators(appId);
       await forceReloadCollaborators();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role');
-      console.error('Error updating role:', err);
+      console.error('Refetch after role update failed:', err);
     }
   }
 
   async function handleRemoveCollaborator(userId: number) {
-    if (!confirm('Are you sure you want to remove this collaborator? They will lose access to this app.')) {
-      return;
-    }
-
     if (!appId) return;
 
-    try {
-      await apiService.removeCollaborator(Number.parseInt(appId), userId);
-      // Remove from local state
-      const newCollaborators = collaborators.filter(c => c.user_id !== userId);
-      setCollaborators(newCollaborators);
-      // Update cache
-      settingsCache.setCollaborators(appId, newCollaborators);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove collaborator');
-      console.error('Error removing collaborator:', err);
-    }
+    const target = collaborators.find((c) => c.user_id === userId);
+    const ok = await confirm({
+      title: 'Remove collaborator?',
+      message: target
+        ? `Remove ${target.user_name || target.user_email} from this app? They will lose access immediately.`
+        : 'Remove this collaborator? They will lose access to this app.',
+      variant: 'danger',
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.removeCollaborator(Number.parseInt(appId), userId),
+      {
+        loading: 'Removing collaborator…',
+        success: 'Collaborator removed',
+        error: (err) => errorMessage(err, 'Failed to remove collaborator'),
+      },
+    );
+    if (result === undefined) return;
+
+    const newCollaborators = collaborators.filter((c) => c.user_id !== userId);
+    setCollaborators(newCollaborators);
+    settingsCache.setCollaborators(appId, newCollaborators);
   }
 
   const getStatusBadge = (status: string) => {

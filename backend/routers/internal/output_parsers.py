@@ -177,8 +177,9 @@ async def create_or_update_output_parser(
                 detail=OUTPUT_PARSER_NOT_FOUND_ERROR
             )
         
-        # Return updated parser (reuse the GET logic)
-        return await get_output_parser(app_id, parser.parser_id, current_user, role, db)
+        # Return updated parser (reuse the GET logic) — keep argument order
+        # in sync with get_output_parser's signature (app_id, parser_id, current_user, db, role).
+        return await get_output_parser(app_id, parser.parser_id, current_user, db, role)
             
     except HTTPException:
         raise

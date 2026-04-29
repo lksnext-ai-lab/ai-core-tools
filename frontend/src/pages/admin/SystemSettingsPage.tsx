@@ -1,16 +1,21 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { apiService } from '../../services/api';
-import Alert from '../../components/ui/Alert';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { errorMessage, MESSAGES } from '../../constants/messages';
 
 interface SystemSetting {
-  key: string;
-  value: string | null;
-  type: string;
-  category: string;
-  description: string | null;
-  updated_at: string | null;
-  resolved_value: any;
-  source: 'env' | 'db' | 'default';
+  readonly key: string;
+  readonly value: string | null;
+  readonly type: string;
+  readonly category: string;
+  readonly description: string | null;
+  readonly updated_at: string | null;
+  readonly resolved_value: any;
+  readonly source: 'env' | 'db' | 'default';
 }
 
 function validateValue(value: string, type: string): boolean {
@@ -23,7 +28,7 @@ function validateValue(value: string, type: string): boolean {
   return true;
 }
 
-function getSourceBadgeColor(source: 'env' | 'db' | 'default'): string {
+function getSourceBadgeColor(source: SystemSetting['source']): string {
   switch (source) {
     case 'env':
       return 'bg-blue-100 text-blue-800';
@@ -35,42 +40,40 @@ function getSourceBadgeColor(source: 'env' | 'db' | 'default'): string {
 }
 
 function SystemSettingsPage() {
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
+
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('marketplace');
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  async function loadSettings() {
+  const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
-      const data = await apiService.fetchSystemSettings();
+      setLoadError(null);
+      const data = (await apiService.fetchSystemSettings()) as SystemSetting[];
       setSettings(data);
-      
-      // Determine available categories from the data
-      const categoriesSet = new Set<string>(data.map((s: SystemSetting) => s.category));
-      if (categoriesSet.size === 0) {
-        setActiveTab('marketplace');
-      } else if (!categoriesSet.has(activeTab)) {
-        const firstCategory = Array.from(categoriesSet)[0] ?? 'marketplace';
-        setActiveTab(firstCategory);
-      }
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-      setError(`Failed to load system settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+      const categoriesSet = new Set<string>(data.map((s) => s.category));
+      setActiveTab((prev) => {
+        if (categoriesSet.size === 0) return 'marketplace';
+        if (categoriesSet.has(prev)) return prev;
+        return Array.from(categoriesSet)[0] ?? 'marketplace';
+      });
+    } catch (err) {
+      setLoadError(errorMessage(err, 'Failed to load system settings'));
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  // Group settings by category
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
   const settingsByCategory = useMemo(() => {
     const grouped: Record<string, SystemSetting[]> = {};
     settings.forEach((setting) => {
@@ -82,10 +85,12 @@ function SystemSettingsPage() {
     return grouped;
   }, [settings]);
 
-  const categories = useMemo(() => Object.keys(settingsByCategory).sort((a, b) => a.localeCompare(b)), [settingsByCategory]);
+  const categories = useMemo(
+    () => Object.keys(settingsByCategory).sort((a, b) => a.localeCompare(b)),
+    [settingsByCategory],
+  );
   const currentCategorySettings = settingsByCategory[activeTab] || [];
 
-  // Initialize editing values from current settings
   useEffect(() => {
     const initialValues: Record<string, string> = {};
     settings.forEach((setting) => {
@@ -94,62 +99,57 @@ function SystemSettingsPage() {
     setEditingValues(initialValues);
   }, [settings]);
 
+  const updateSavingKeys = useCallback((key: string, op: 'add' | 'remove') => {
+    setSavingKeys((prev) => {
+      const next = new Set(prev);
+      if (op === 'add') next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
   async function handleSaveSetting(setting: SystemSetting) {
     const newValue = editingValues[setting.key];
-    
-    // Client-side validation
     if (!validateValue(newValue, setting.type)) {
-      setError(`Invalid ${setting.type} value for ${setting.key}`);
+      toast.error(`Invalid ${setting.type} value for ${setting.key}`);
       return;
     }
 
-    try {
-      setSavingKeys((prev) => new Set(prev).add(setting.key));
-      setError(null);
-      setSuccess(null);
-      
-      await apiService.updateSystemSetting(setting.key, newValue);
-      setSuccess(`Setting "${setting.key}" updated successfully`);
-      
-      // Reload settings to get the updated resolved values
-      await loadSettings();
-    } catch (err) {
-      console.error('Failed to save setting:', err);
-      setError(`Failed to save setting: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setSavingKeys((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(setting.key);
-        return newSet;
-      });
-    }
+    updateSavingKeys(setting.key, 'add');
+    const result = await mutate(
+      () => apiService.updateSystemSetting(setting.key, newValue),
+      {
+        loading: MESSAGES.SAVING(`"${setting.key}"`),
+        success: MESSAGES.UPDATED(`Setting "${setting.key}"`),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED(`"${setting.key}"`)),
+      },
+    );
+    updateSavingKeys(setting.key, 'remove');
+    if (result === undefined) return;
+    await loadSettings();
   }
 
   async function handleResetSetting(setting: SystemSetting) {
-    if (!confirm(`Reset "${setting.key}" to its default value?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Reset setting?',
+      message: `Reset "${setting.key}" to its default value?`,
+      variant: 'warning',
+      confirmLabel: 'Reset',
+    });
+    if (!ok) return;
 
-    try {
-      setSavingKeys((prev) => new Set(prev).add(setting.key));
-      setError(null);
-      setSuccess(null);
-      
-      await apiService.resetSystemSetting(setting.key);
-      setSuccess(`Setting "${setting.key}" reset to default`);
-      
-      // Reload settings to get the updated values
-      await loadSettings();
-    } catch (err) {
-      console.error('Failed to reset setting:', err);
-      setError(`Failed to reset setting: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setSavingKeys((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(setting.key);
-        return newSet;
-      });
-    }
+    updateSavingKeys(setting.key, 'add');
+    const result = await mutate(
+      () => apiService.resetSystemSetting(setting.key),
+      {
+        loading: `Resetting "${setting.key}"…`,
+        success: `Setting "${setting.key}" reset to default`,
+        error: (err) => errorMessage(err, `Failed to reset setting "${setting.key}"`),
+      },
+    );
+    updateSavingKeys(setting.key, 'remove');
+    if (result === undefined) return;
+    await loadSettings();
   }
 
   function renderInputField(setting: SystemSetting) {
@@ -192,7 +192,6 @@ function SystemSettingsPage() {
       );
     }
 
-    // String or unknown type - render as text input
     return (
       <input
         type="text"
@@ -211,32 +210,27 @@ function SystemSettingsPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading system settings...</span>
-      </div>
-    );
+    return <LoadingState message="Loading system settings..." />;
+  }
+
+  if (loadError) {
+    return <ErrorState error={loadError} onRetry={loadSettings} />;
   }
 
   return (
     <div className="space-y-6">
-      {success && <Alert type="success" message={success} onDismiss={() => setSuccess(null)} />}
-      {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
-
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
         <p className="text-gray-600">Manage global system configuration</p>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white rounded-lg shadow">
         <div className="border-b border-gray-200">
           <div className="flex overflow-x-auto">
             {categories.map((category) => (
               <button
                 key={category}
+                type="button"
                 onClick={() => setActiveTab(category)}
                 className={`px-4 py-3 font-medium text-sm whitespace-nowrap ${
                   activeTab === category
@@ -250,77 +244,73 @@ function SystemSettingsPage() {
           </div>
         </div>
 
-        {/* Settings List */}
         <div className="divide-y divide-gray-200">
           {currentCategorySettings.length === 0 ? (
             <div className="px-6 py-8 text-center text-gray-500">
-              <p>No settings found in this category.</p>
+              No settings found in this category.
             </div>
           ) : (
-            currentCategorySettings.map((setting) => (
-              <div key={setting.key} className="px-6 py-4 hover:bg-gray-50">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                  {/* Left: Label and Description */}
-                  <div className="lg:col-span-1">
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{setting.description || setting.key}</p>
-                        <p className="text-xs text-gray-500 mt-1">Key: {setting.key}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span
-                            className={`inline-block px-2 py-1 text-xs font-medium rounded ${getSourceBadgeColor(
-                              setting.source
-                            )}`}
+            currentCategorySettings.map((setting) => {
+              const currentValue = editingValues[setting.key] ?? '';
+              const isUnchanged = currentValue === (setting.value ?? String(setting.resolved_value ?? ''));
+              const isSaving = savingKeys.has(setting.key);
+
+              return (
+                <div key={setting.key} className="px-6 py-4 hover:bg-gray-50">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="lg:col-span-1">
+                      <p className="font-medium text-gray-900">
+                        {setting.description || setting.key}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Key: {setting.key}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span
+                          className={`inline-block px-2 py-1 text-xs font-medium rounded ${getSourceBadgeColor(
+                            setting.source,
+                          )}`}
+                        >
+                          {setting.source === 'env' ? 'Environment Variable' : setting.source}
+                        </span>
+                        <span className="text-xs text-gray-500">{setting.type}</span>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-1">
+                      <p className="text-xs text-gray-600 mb-1">Current Value</p>
+                      <p className="font-mono text-sm text-gray-900 break-words">
+                        {String(setting.resolved_value ?? 'N/A')}
+                      </p>
+                    </div>
+
+                    <div className="lg:col-span-1">
+                      <div className="space-y-2">
+                        <div>{renderInputField(setting)}</div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveSetting(setting)}
+                            disabled={setting.source === 'env' || isSaving || isUnchanged}
+                            className="flex-1 px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                           >
-                            {setting.source === 'env' ? 'Environment Variable' : setting.source}
-                          </span>
-                          <span className="text-xs text-gray-500">{setting.type}</span>
+                            {isSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          {setting.source === 'db' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResetSetting(setting)}
+                              disabled={isSaving}
+                              className="flex-1 px-3 py-2 text-xs bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Reset
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Center: Value Display */}
-                  <div className="lg:col-span-1">
-                    <p className="text-xs text-gray-600 mb-1">Current Value</p>
-                    <p className="font-mono text-sm text-gray-900 break-words">
-                      {String(setting.resolved_value ?? 'N/A')}
-                    </p>
-                  </div>
-
-                  {/* Right: Input and Actions */}
-                  <div className="lg:col-span-1">
-                    <div className="space-y-2">
-                      <div>
-                        {renderInputField(setting)}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSaveSetting(setting)}
-                          disabled={
-                            setting.source === 'env' ||
-                            savingKeys.has(setting.key) ||
-                            editingValues[setting.key] === (setting.value ?? String(setting.resolved_value ?? ''))
-                          }
-                          className="flex-1 px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {savingKeys.has(setting.key) ? 'Saving...' : 'Save'}
-                        </button>
-                        {setting.source === 'db' && (
-                          <button
-                            onClick={() => handleResetSetting(setting)}
-                            disabled={savingKeys.has(setting.key)}
-                            className="flex-1 px-3 py-2 text-xs bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Reset
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

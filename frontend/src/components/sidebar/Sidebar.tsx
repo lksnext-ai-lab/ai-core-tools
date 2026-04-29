@@ -106,8 +106,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const settingsItems = navigationConfig?.settingsNavigation ?? [];
 
   return (
-    <div className={`w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col ${className}`}>
-      <nav className="flex-1 p-4 overflow-y-auto">
+    <div className={`w-64 shrink-0 bg-white shadow-sm border-r border-gray-200 flex flex-col min-h-0 ${className}`}>
+      <nav className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain">
         {navigationConfig && (
           <div className="space-y-6">
 

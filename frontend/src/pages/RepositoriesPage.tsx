@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FolderOpen, Gamepad2, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
-import Modal from '../components/ui/Modal';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 interface Repository {
   repository_id: number;
@@ -20,13 +22,13 @@ const RepositoriesPage: React.FC = () => {
   const { appId } = useParams<{ appId: string }>();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
-  
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
+
   const navigate = useNavigate();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [repositoryToDelete, setRepositoryToDelete] = useState<Repository | null>(null);
 
   useEffect(() => {
     if (appId) {
@@ -60,23 +62,26 @@ const RepositoriesPage: React.FC = () => {
     navigate(`/apps/${appId}/repositories/${repositoryId}/detail`);
   };
 
-  const handleDeleteRepository = (repository: Repository) => {
-    setRepositoryToDelete(repository);
-    setShowDeleteModal(true);
-  };
+  const handleDeleteRepository = async (repository: Repository) => {
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('repository'),
+      message: `Are you sure you want to delete "${repository.name}"? This action cannot be undone and will remove all associated documents.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
 
-  const confirmDeleteRepository = async () => {
-    if (!repositoryToDelete) return;
+    const result = await mutate(
+      () => apiService.deleteRepository(Number.parseInt(appId!), repository.repository_id),
+      {
+        loading: MESSAGES.DELETING('repository'),
+        success: MESSAGES.DELETED('repository'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('repository')),
+      },
+    );
+    if (result === undefined) return;
 
-    try {
-      await apiService.deleteRepository(Number.parseInt(appId!), repositoryToDelete.repository_id);
-      setRepositories(repositories.filter(r => r.repository_id !== repositoryToDelete.repository_id));
-      setShowDeleteModal(false);
-      setRepositoryToDelete(null);
-    } catch (err) {
-      console.error('Error deleting repository:', err);
-      setError('Failed to delete repository');
-    }
+    setRepositories(repositories.filter((r) => r.repository_id !== repository.repository_id));
   };
 
   const formatDate = (dateString: string) => {
@@ -220,7 +225,7 @@ const RepositoriesPage: React.FC = () => {
                     },
                     {
                       label: 'Delete',
-                      onClick: () => handleDeleteRepository(repository),
+                      onClick: () => { void handleDeleteRepository(repository); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
                     }
@@ -247,39 +252,6 @@ const RepositoriesPage: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false);
-          setRepositoryToDelete(null);
-        }}
-        title="Delete Repository"
-      >
-        <div className="p-6">
-          <p className="text-gray-700 mb-6">
-            Are you sure you want to delete "{repositoryToDelete?.name}"? This action cannot be undone and will remove all associated documents.
-          </p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false);
-                setRepositoryToDelete(null);
-              }}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmDeleteRepository}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };
