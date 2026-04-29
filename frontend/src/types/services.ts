@@ -24,6 +24,11 @@ export interface ProviderModelInfo {
   readonly context_window: number | null;
   readonly owned_by: string | null;
   readonly deprecated: boolean;
+  /** Unix timestamp (seconds) when the provider released the model.
+   *  Captured per-adapter from the SDK response — null for providers
+   *  that don't expose a timestamp (e.g. Google AI Studio). Drives the
+   *  recency sort and the "New" badge in ModelSelectionStep. */
+  readonly created_at: number | null;
   readonly source: ModelInfoSource;
 }
 
