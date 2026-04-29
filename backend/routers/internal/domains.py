@@ -583,7 +583,7 @@ async def trigger_crawl(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DOMAIN_NOT_FOUND)
 
     try:
-        user_id = getattr(auth_context, 'user_id', None)
+        user_id = int(auth_context.identity.id) if auth_context and auth_context.identity else None
         job = CrawlJobService.enqueue(domain_id, user_id, db)
         return TriggerCrawlResponseSchema(job_id=job.id, status="QUEUED")
     except ConflictError as e:
@@ -654,6 +654,11 @@ async def cancel_crawl_job(
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """Cancel a queued or running crawl job."""
+    # Check existence first to return 404 before attempting cancel
+    existing_job = CrawlJobService.get_job(job_id, domain_id, db)
+    if not existing_job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found")
+
     try:
         job = CrawlJobService.cancel(job_id, domain_id, db)
         return job

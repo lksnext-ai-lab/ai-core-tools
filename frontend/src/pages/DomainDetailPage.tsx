@@ -1,21 +1,17 @@
-import React, { useState, useEffect, useCallback, type ReactNode } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, CheckCircle2, XCircle, Ban, RefreshCw, Eye, Link2, Trash2 } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { apiService } from '../services/api';
-import Modal from '../components/ui/Modal';
-import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
+import { Tabs } from '../components/ui/Tabs';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
-import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
-
-interface DomainUrl {
-  url_id: number;
-  url: string;
-  created_at: string;
-  updated_at?: string;
-  status?: string;
-}
+import CrawlPolicyForm from '../components/forms/CrawlPolicyForm';
+import CrawlJobProgressPanel from '../components/domain/CrawlJobProgressPanel';
+import RunCrawlNowButton from '../components/domain/RunCrawlNowButton';
+import DomainUrlsTable from '../components/domain/DomainUrlsTable';
+import DomainUrlDrawer from '../components/domain/DomainUrlDrawer';
+import type { CrawlJob, CrawlJobStatus } from '../types/crawl';
 
 interface DomainDetail {
   domain_id: number;
@@ -29,812 +25,375 @@ interface DomainDetail {
   url_count: number;
   silo_id?: number;
   embedding_service_id?: number;
-  embedding_services: Array<{
-    service_id: number;
-    name: string;
-  }>;
+  embedding_services: Array<{ service_id: number; name: string }>;
 }
 
-// Helper function to format dates
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
+// ==================== Tab definitions ====================
 
-// Helper function to get URL status
-const getUrlStatus = (url: DomainUrl, reindexingUrls: Set<number>): { text: string; badge: string; icon: ReactNode } => {
-  if (reindexingUrls.has(url.url_id)) {
-    return {
-      text: 'Indexing...',
-      badge: 'bg-blue-100 text-blue-800',
-      icon: <Loader2 className="w-4 h-4 animate-spin" />
-    };
+const TABS = [
+  { id: 'configuration', label: 'Configuration' },
+  { id: 'urls', label: 'URLs' },
+  { id: 'job-history', label: 'Job history' },
+];
+
+// ==================== Job history table ====================
+
+function jobStatusBadge(status: CrawlJobStatus) {
+  switch (status) {
+    case 'QUEUED': return { text: 'Queued', className: 'bg-yellow-100 text-yellow-800' };
+    case 'RUNNING': return { text: 'Running', className: 'bg-blue-100 text-blue-800', spinner: true };
+    case 'COMPLETED': return { text: 'Completed', className: 'bg-green-100 text-green-800' };
+    case 'FAILED': return { text: 'Failed', className: 'bg-red-100 text-red-800' };
+    case 'CANCELLED': return { text: 'Cancelled', className: 'bg-gray-100 text-gray-600' };
+    default: return { text: status, className: 'bg-gray-100 text-gray-600' };
   }
+}
 
-  switch (url.status) {
-    case 'indexed':
-      return {
-        text: 'Indexed',
-        badge: 'bg-green-100 text-green-800',
-        icon: <CheckCircle2 className="w-4 h-4 text-green-500" />
-      };
-    case 'indexing':
-      return {
-        text: 'Indexing',
-        badge: 'bg-blue-100 text-blue-800',
-        icon: <Loader2 className="w-4 h-4 animate-spin" />
-      };
-    case 'rejected':
-      return {
-        text: 'Rejected',
-        badge: 'bg-red-100 text-red-800',
-        icon: <XCircle className="w-4 h-4 text-red-500" />
-      };
-    case 'unindexed':
-      return {
-        text: 'Unindexed',
-        badge: 'bg-gray-100 text-gray-600',
-        icon: <Ban className="w-4 h-4 text-red-500" />
-      };
-    case 'pending':
-      return {
-        text: 'Pending',
-        badge: 'bg-yellow-100 text-yellow-800',
-        icon: <Loader2 className="w-4 h-4" />
-      };
-    default:
-      return {
-        text: 'Not Indexed',
-        badge: 'bg-gray-100 text-gray-800',
-        icon: <Ban className="w-4 h-4 text-gray-400" />
-      };
-  }
-};
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString();
+}
 
-// Component for rendering loading state
-const LoadingView: React.FC = () => (
-  <div className="container mx-auto px-4 py-8">
-    <div className="flex justify-center items-center h-64">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+interface JobHistoryTabProps {
+  appId: number;
+  domainId: number;
+}
+
+function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
+  const [jobs, setJobs] = useState<CrawlJob[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const PER_PAGE = 10;
+
+  const fetchJobs = useCallback(async (p: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const resp = await apiService.listCrawlJobs(appId, domainId, { page: p, per_page: PER_PAGE });
+      setJobs(resp.items);
+      setTotal(resp.total);
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to load job history');
+    } finally {
+      setLoading(false);
+    }
+  }, [appId, domainId]);
+
+  useEffect(() => {
+    void fetchJobs(page);
+  }, [fetchJobs, page]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+
+  if (loading) return (
+    <div className="flex justify-center items-center py-12">
+      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+      <span className="ml-2 text-sm text-gray-500">Loading job history...</span>
     </div>
-  </div>
-);
+  );
 
-// Component for rendering error state
-const ErrorView: React.FC<{ error: string; onBack: () => void }> = ({ error, onBack }) => (
-  <div className="container mx-auto px-4 py-8">
-    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-      <p className="font-medium">Error</p>
-      <p>{error}</p>
+  if (error) return <Alert type="error" message={error} onDismiss={() => setError(null)} />;
+
+  if (jobs.length === 0) return (
+    <div className="text-center py-12 text-gray-500 text-sm">No crawl jobs yet.</div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Triggered by</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Finished</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discovered</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Indexed</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Skipped</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Failed</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {jobs.map(job => {
+              const badge = jobStatusBadge(job.status as CrawlJobStatus);
+              return (
+                <tr key={job.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 text-gray-500">#{job.id}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${badge.className}`}>
+                      {(badge as any).spinner && <Loader2 className="w-3 h-3 animate-spin" />}
+                      {badge.text}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-gray-500">
+                    {job.triggered_by === 'MANUAL' ? 'Manual' : 'Scheduled'}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{formatDate(job.started_at)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{formatDate(job.finished_at)}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">{job.discovered_count}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">{job.indexed_count}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">{job.skipped_count}</td>
+                  <td className="px-4 py-2 text-xs">
+                    {job.failed_count > 0
+                      ? <span className="text-red-600 font-medium">{job.failed_count}</span>
+                      : job.failed_count}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {total > PER_PAGE && (
+        <div className="flex items-center justify-center gap-3 text-sm text-gray-600">
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-xs"
+          >
+            Previous
+          </button>
+          <span>Page {page} of {totalPages}</span>
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-xs"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
-    <button
-      onClick={onBack}
-      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-    >
-      Back to App
-    </button>
-  </div>
-);
+  );
+}
 
-// Component for empty URL state
-const EmptyUrlsView: React.FC<{ onAddUrl: () => void; canEdit: boolean }> = ({ onAddUrl, canEdit }) => (
-  <div className="text-center py-12">
-    <div className="mb-4"><Link2 className="w-12 h-12 text-gray-300" /></div>
-    <h3 className="text-lg font-medium text-gray-900 mb-2">No URLs yet</h3>
-    <p className="text-gray-500 mb-6">Add your first URL to start indexing content</p>
-    {canEdit && (
-      <button
-        onClick={onAddUrl}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-      >
-        Add First URL
-      </button>
-    )}
-  </div>
-);
+// ==================== Main page component ====================
 
 const DomainDetailPage: React.FC = () => {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
   const navigate = useNavigate();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
-  
+
   const [domain, setDomain] = useState<DomainDetail | null>(null);
-  const [urls, setUrls] = useState<DomainUrl[]>([]);
   const [loading, setLoading] = useState(true);
-  const [urlsLoading, setUrlsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Add URL modal
-  const [showAddUrlModal, setShowAddUrlModal] = useState(false);
-  const [newUrl, setNewUrl] = useState('');
-  const [addingUrl, setAddingUrl] = useState(false);
-  
-  // Delete URL modal
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [urlToDelete, setUrlToDelete] = useState<DomainUrl | null>(null);
-  const [deletingUrl, setDeletingUrl] = useState(false);
-  
-  // Unindex URL modal
-  const [showUnindexModal, setShowUnindexModal] = useState(false);
-  const [urlToUnindex, setUrlToUnindex] = useState<DomainUrl | null>(null);
-  const [unindexingUrl, setUnindexingUrl] = useState(false);
-  
-  // Reject URL modal
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [urlToReject, setUrlToReject] = useState<DomainUrl | null>(null);
-  const [rejectingUrl, setRejectingUrl] = useState(false);
-  
-  // Content preview modal
-  const [showContentModal, setShowContentModal] = useState(false);
-  const [urlContent, setUrlContent] = useState<{url: string, content: string | null, message: string} | null>(null);
-  const [loadingContent, setLoadingContent] = useState(false);
-  
-  // Reindex states
-  const [reindexingUrls, setReindexingUrls] = useState<Set<number>>(new Set());
-  const [reindexingDomain, setReindexingDomain] = useState(false);
-  
-  // Success/Error messages
+  const [activeTab, setActiveTab] = useState('configuration');
+
+  // URLs tab state
+  const [selectedUrlId, setSelectedUrlId] = useState<number | null>(null);
+  const [latestJob, setLatestJob] = useState<CrawlJob | null>(null);
+  const [latestJobLoading, setLatestJobLoading] = useState(true);
+
+  // Global notifications
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const numericAppId = Number.parseInt(appId!);
+  const numericDomainId = Number.parseInt(domainId!);
 
   const loadDomain = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiService.getDomain(Number.parseInt(appId!), Number.parseInt(domainId!));
+      const data = await apiService.getDomain(numericAppId, numericDomainId);
       setDomain(data);
       setError(null);
-    } catch (err) {
-      console.error('Error loading domain:', err);
+    } catch {
       setError('Failed to load domain');
     } finally {
       setLoading(false);
     }
-  }, [appId, domainId]);
+  }, [numericAppId, numericDomainId]);
 
-  const loadUrls = useCallback(async () => {
+  const loadLatestJob = useCallback(async () => {
     try {
-      setUrlsLoading(true);
-      const data = await apiService.getDomainUrls(Number.parseInt(appId!), Number.parseInt(domainId!));
-      setUrls(data || []);
-    } catch (err) {
-      console.error('Error loading URLs:', err);
-      setError('Failed to load URLs');
+      setLatestJobLoading(true);
+      const resp = await apiService.listCrawlJobs(numericAppId, numericDomainId, { page: 1, per_page: 1 });
+      setLatestJob(resp.items[0] ?? null);
+    } catch {
+      // Silently ignore — panel will show "No crawl jobs yet"
     } finally {
-      setUrlsLoading(false);
+      setLatestJobLoading(false);
     }
-  }, [appId, domainId]);
+  }, [numericAppId, numericDomainId]);
 
   useEffect(() => {
     if (appId && domainId) {
       void loadDomain();
-      void loadUrls();
+      void loadLatestJob();
     }
-  }, [appId, domainId, loadDomain, loadUrls]);
+  }, [appId, domainId, loadDomain, loadLatestJob]);
 
-  const handleAddUrl = async () => {
-    if (!newUrl.trim() || !appId || !domainId) return;
-    
-    try {
-      setAddingUrl(true);
-      await apiService.addUrlToDomain(Number.parseInt(appId), Number.parseInt(domainId), { url: newUrl.trim() });
-      setNewUrl('');
-      setShowAddUrlModal(false);
-      await loadUrls(); // Reload URLs
-    } catch (err) {
-      console.error('Error adding URL:', err);
-      setErrorMessage('Failed to add URL');
-    } finally {
-      setAddingUrl(false);
-    }
+  const handleJobTriggered = (job: CrawlJob) => {
+    setLatestJob(job);
+    setSuccessMessage('Crawl job queued');
+    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
-  const handleDeleteUrl = (url: DomainUrl) => {
-    setUrlToDelete(url);
-    setShowDeleteModal(true);
-  };
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
-  const confirmDeleteUrl = async () => {
-    if (!urlToDelete || !appId || !domainId) return;
-    
-    try {
-      setDeletingUrl(true);
-      await apiService.deleteUrlFromDomain(Number.parseInt(appId), Number.parseInt(domainId), urlToDelete.url_id);
-      setUrls(urls.filter(u => u.url_id !== urlToDelete.url_id));
-      setShowDeleteModal(false);
-      setUrlToDelete(null);
-      setSuccessMessage('URL deleted successfully');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error deleting URL:', err);
-      setErrorMessage('Failed to delete URL');
-      setTimeout(() => setErrorMessage(null), 3000);
-    } finally {
-      setDeletingUrl(false);
-    }
-  };
+  if (error || !domain) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          {error ?? 'Domain not found'}
+        </div>
+        <button
+          onClick={() => navigate(`/apps/${appId}`)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+        >
+          Back to App
+        </button>
+      </div>
+    );
+  }
 
-  const handleReindexUrl = async (urlId: number) => {
-    if (!appId || !domainId) return;
-    
-    try {
-      setReindexingUrls(prev => new Set(prev).add(urlId));
-      const response = await apiService.reindexUrl(Number.parseInt(appId), Number.parseInt(domainId), urlId);
-      await loadUrls(); // Reload to get updated timestamps
-      
-      // Show success message
-      if (response.success) {
-        setSuccessMessage(response.message || 'URL re-indexed successfully');
-      } else {
-        setErrorMessage(response.message || 'Failed to re-index URL');
-      }
-      setTimeout(() => {
-        setSuccessMessage(null);
-        setErrorMessage(null);
-      }, 3000);
-    } catch (err) {
-      console.error('Error reindexing URL:', err);
-      setErrorMessage('Failed to re-index URL');
-      setTimeout(() => setErrorMessage(null), 3000);
-    } finally {
-      setReindexingUrls(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(urlId);
-        return newSet;
-      });
-    }
+  const statusIcons = {
+    COMPLETED: <CheckCircle2 className="w-4 h-4 text-green-500" />,
+    FAILED: <XCircle className="w-4 h-4 text-red-500" />,
   };
-
-  const handleUnindexUrl = async (url: DomainUrl) => {
-    if (!appId || !domainId) return;
-    
-    setUrlToUnindex(url);
-    setShowUnindexModal(true);
-  };
-
-  const confirmUnindexUrl = async () => {
-    if (!urlToUnindex || !appId || !domainId) return;
-    
-    try {
-      setUnindexingUrl(true);
-      await apiService.unindexUrl(Number.parseInt(appId), Number.parseInt(domainId), urlToUnindex.url_id);
-      await loadUrls(); // Reload to get updated status
-      setShowUnindexModal(false);
-      setUrlToUnindex(null);
-      setSuccessMessage('URL unindexed successfully');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error unindexing URL:', err);
-      setErrorMessage('Failed to unindex URL');
-      setTimeout(() => setErrorMessage(null), 3000);
-    } finally {
-      setUnindexingUrl(false);
-    }
-  };
-
-  const handleRejectUrl = async (url: DomainUrl) => {
-    if (!appId || !domainId) return;
-    
-    setUrlToReject(url);
-    setShowRejectModal(true);
-  };
-
-  const confirmRejectUrl = async () => {
-    if (!urlToReject || !appId || !domainId) return;
-    
-    try {
-      setRejectingUrl(true);
-      await apiService.rejectUrl(Number.parseInt(appId), Number.parseInt(domainId), urlToReject.url_id);
-      await loadUrls(); // Reload to get updated status
-      setShowRejectModal(false);
-      setUrlToReject(null);
-      setSuccessMessage('URL rejected successfully');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error rejecting URL:', err);
-      setErrorMessage('Failed to reject URL');
-      setTimeout(() => setErrorMessage(null), 3000);
-    } finally {
-      setRejectingUrl(false);
-    }
-  };
-
-  const handleReindexDomain = async () => {
-    if (!appId || !domainId) return;
-    
-    try {
-      setReindexingDomain(true);
-      await apiService.reindexDomain(Number.parseInt(appId), Number.parseInt(domainId));
-      await loadUrls(); // Reload to get updated timestamps
-      
-      // Show success message
-      setSuccessMessage('Domain re-indexed successfully');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error reindexing domain:', err);
-      setErrorMessage('Failed to re-index domain');
-      setTimeout(() => setErrorMessage(null), 3000);
-    } finally {
-      setReindexingDomain(false);
-    }
-  };
-
-  const handleViewContent = async (url: DomainUrl) => {
-    if (!appId || !domainId) return;
-    
-    try {
-      setLoadingContent(true);
-      setShowContentModal(true);
-      setUrlContent(null);
-      
-      const content = await apiService.getUrlContent(Number.parseInt(appId), Number.parseInt(domainId), url.url_id);
-      setUrlContent(content);
-    } catch (err) {
-      console.error('Error loading content:', err);
-      setUrlContent({
-        url: domain ? domain.base_url + url.url : url.url,
-        content: null,
-        message: 'Failed to load content'
-      });
-    } finally {
-      setLoadingContent(false);
-    }
-  };
+  void statusIcons; // suppress unused warning
 
   return (
     <div className="p-6">
-      {/* Success Message */}
-      {successMessage && <Alert type="success" message={successMessage} onDismiss={() => setSuccessMessage(null)} className="mb-6" />}
+      {successMessage && <Alert type="success" message={successMessage} onDismiss={() => setSuccessMessage(null)} className="mb-4" />}
+      {errorMessage && <Alert type="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} className="mb-4" />}
 
-      {/* Error Message */}
-      {errorMessage && <Alert type="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} className="mb-6" />}
+      {/* Header */}
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{domain.name}</h1>
+          {domain.description && <p className="text-gray-600 mt-1">{domain.description}</p>}
+          <p className="text-sm text-gray-400 mt-1 font-mono">{domain.base_url}</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate(`/apps/${appId}/domains/${domainId}/edit`)}
+            className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg"
+          >
+            Edit domain
+          </button>
+          <button
+            onClick={() => navigate(`/apps/${appId}/domains`)}
+            className="text-sm bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700"
+          >
+            Back to Domains
+          </button>
+        </div>
+      </div>
 
-      {loading && <LoadingView />}
-      {!loading && (error || !domain) && (
-        <ErrorView 
-          error={error || 'Domain not found'} 
-          onBack={() => navigate(`/apps/${appId}`)} 
-        />
+      {/* Tabs */}
+      <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
+
+      {/* Tab: Configuration */}
+      {activeTab === 'configuration' && (
+        <div className="space-y-6">
+          {/* Scraping config (read-only display) */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Scraping configuration</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500 text-xs font-medium uppercase tracking-wide">Content tag</span>
+                <p className="text-gray-900 mt-0.5">{domain.content_tag || 'body'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500 text-xs font-medium uppercase tracking-wide">Content class</span>
+                <p className="text-gray-900 mt-0.5">{domain.content_class || '—'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500 text-xs font-medium uppercase tracking-wide">Content ID</span>
+                <p className="text-gray-900 mt-0.5">{domain.content_id || '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Crawl policy */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Crawl policy</h2>
+            <CrawlPolicyForm
+              appId={numericAppId}
+              domainId={numericDomainId}
+              canEdit={canEdit}
+              onSaved={() => {
+                setSuccessMessage('Crawl policy saved');
+                setTimeout(() => setSuccessMessage(null), 3000);
+              }}
+            />
+          </div>
+        </div>
       )}
-      {!loading && !error && domain && (
-        <div className="container mx-auto px-4 py-8">
-          {/* Header */}
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{domain.name}</h1>
-              <p className="text-gray-600">{domain.description}</p>
-            </div>
-            <div className="flex items-center gap-3">
+
+      {/* Tab: URLs */}
+      {activeTab === 'urls' && (
+        <div className="space-y-6">
+          {/* Crawl job controls */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Crawl job</h2>
               {canEdit && (
-                <button
-                  onClick={() => { void handleReindexDomain(); }}
-                  disabled={reindexingDomain}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg flex items-center"
-                >
-                  {reindexingDomain ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                  )}
-                  Reindex Domain
-                </button>
-              )}
-              <button
-                onClick={() => navigate(`/apps/${appId}/domains`)}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-              >
-                Back to Domains
-              </button>
-            </div>
-          </div>
-
-          {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
-
-          {/* Scraping Configuration */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Scraping Configuration</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <span className="text-sm font-medium text-gray-500">Content Tag:</span>
-                <p className="text-gray-900">{domain.content_tag || 'body'}</p>
-              </div>
-              <div>
-                <span className="text-sm font-medium text-gray-500">Content Class:</span>
-                <p className="text-gray-900">{domain.content_class || 'None'}</p>
-              </div>
-              <div>
-                <span className="text-sm font-medium text-gray-500">Content ID:</span>
-                <p className="text-gray-900">{domain.content_id || 'None'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* URLs Section */}
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">URLs ({urls.length})</h2>
-              {urls.length > 0 && canEdit && (
-                <button
-                  onClick={() => setShowAddUrlModal(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-                >
-                  <span className="mr-2">+</span>
-                  {' '}Add URL
-                </button>
+                <RunCrawlNowButton
+                  appId={numericAppId}
+                  domainId={numericDomainId}
+                  onJobTriggered={handleJobTriggered}
+                  disabled={latestJobLoading}
+                />
               )}
             </div>
-            
-            {urlsLoading && (
-              <div className="flex justify-center items-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            )}
-            {!urlsLoading && urls.length === 0 && (
-              <EmptyUrlsView onAddUrl={() => setShowAddUrlModal(true)} canEdit={canEdit} />
-            )}
-            {!urlsLoading && urls.length > 0 && (
-              <div className="overflow-x-auto overflow-visible">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        URL
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Added
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Last Indexed
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {urls.map((url) => {
-                      const status = getUrlStatus(url, reindexingUrls);
-                      return (
-                        <tr key={url.url_id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 max-w-md truncate">
-                              {domain.base_url}{url.url}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${status.badge}`}>
-                              <span>{status.icon}</span>
-                              {status.text}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(url.created_at)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {url.updated_at ? formatDate(url.updated_at) : 'Never'}
-                          </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <ActionDropdown
-                            actions={[
-                              {
-                                label: 'View Content',
-                                onClick: () => void handleViewContent(url),
-                                icon: <Eye className="w-4 h-4" />,
-                                variant: 'success'
-                              },
-                              ...(canEdit ? [
-                                {
-                                  label: 'Reindex URL',
-                                  onClick: () => void handleReindexUrl(url.url_id),
-                                  icon: reindexingUrls.has(url.url_id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />,
-                                  variant: 'primary' as const,
-                                  disabled: reindexingUrls.has(url.url_id)
-                                },
-                                {
-                                  label: 'Unindex URL',
-                                  onClick: () => void handleUnindexUrl(url),
-                                  icon: reindexingUrls.has(url.url_id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />,
-                                  variant: 'warning' as const,
-                                  disabled: reindexingUrls.has(url.url_id)
-                                },
-                                {
-                                  label: 'Reject URL',
-                                  onClick: () => void handleRejectUrl(url),
-                                  icon: reindexingUrls.has(url.url_id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />,
-                                  variant: 'danger' as const,
-                                  disabled: reindexingUrls.has(url.url_id)
-                                },
-                                {
-                                  label: 'Delete URL',
-                                  onClick: () => handleDeleteUrl(url),
-                                  icon: <Trash2 className="w-4 h-4" />,
-                                  variant: 'danger' as const
-                                }
-                              ] : [])
-                            ]}
-                            size="sm"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  </tbody>
-                </table>
-              </div>
+            {!latestJobLoading && (
+              <CrawlJobProgressPanel
+                appId={numericAppId}
+                domainId={numericDomainId}
+                initialJob={latestJob}
+                canEdit={canEdit}
+                onJobUpdate={setLatestJob}
+              />
             )}
           </div>
 
-          {/* Add URL Modal */}
-          <Modal
-            isOpen={showAddUrlModal}
-            onClose={() => {
-              setShowAddUrlModal(false);
-              setNewUrl('');
-            }}
-            title="Add New URL"
-          >
-            <div className="p-6">
-              <div className="mb-4">
-                <label htmlFor="url-path-input" className="block text-sm font-medium text-gray-700 mb-2">
-                  URL Path
-                </label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
-                    {domain.base_url}
-                  </span>
-                  <input
-                    id="url-path-input"
-                    type="text"
-                    value={newUrl}
-                    onChange={(e) => setNewUrl(e.target.value)}
-                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="/page-path"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Enter the URL path (e.g., "/about" or "/products/item-1")
-                </p>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowAddUrlModal(false);
-                    setNewUrl('');
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddUrl}
-                  disabled={!newUrl.trim() || addingUrl}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {addingUrl ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Adding...
-                    </div>
-                  ) : (
-                    'Add URL'
-                  )}
-                </button>
-              </div>
-            </div>
-          </Modal>
+          {/* URL table */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">URLs ({domain.url_count})</h2>
+            <DomainUrlsTable
+              appId={numericAppId}
+              domainId={numericDomainId}
+              canEdit={canEdit}
+              onViewUrl={setSelectedUrlId}
+            />
+          </div>
 
-          {/* Delete URL Modal */}
-          <Modal
-            isOpen={showDeleteModal}
-            onClose={() => {
-              setShowDeleteModal(false);
-              setUrlToDelete(null);
-            }}
-            title="Delete URL"
-          >
-            <div className="p-6">
-              <p className="text-gray-700 mb-6">
-                Are you sure you want to delete this URL? This will also remove its indexed content from the silo.
-              </p>
-              <div className="bg-gray-50 rounded-lg p-3 mb-6">
-                <p className="text-sm text-gray-600 font-mono">
-                  {domain.base_url}{urlToDelete?.url}
-                </p>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setUrlToDelete(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDeleteUrl}
-                  disabled={deletingUrl}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {deletingUrl ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Deleting...
-                    </div>
-                  ) : (
-                    'Delete'
-                  )}
-                </button>
-              </div>
-            </div>
-          </Modal>
+          {/* URL detail drawer */}
+          <DomainUrlDrawer
+            appId={numericAppId}
+            domainId={numericDomainId}
+            urlId={selectedUrlId}
+            canEdit={canEdit}
+            onClose={() => setSelectedUrlId(null)}
+          />
+        </div>
+      )}
 
-          {/* Unindex URL Modal */}
-          <Modal
-            isOpen={showUnindexModal}
-            onClose={() => {
-              setShowUnindexModal(false);
-              setUrlToUnindex(null);
-            }}
-            title="Unindex URL"
-          >
-            <div className="p-6">
-              <p className="text-gray-700 mb-6">
-                Are you sure you want to unindex this URL? This will remove its content from the search index, but it can be re-indexed later.
-              </p>
-              <div className="bg-gray-50 rounded-lg p-3 mb-6">
-                <p className="text-sm text-gray-600 font-mono">
-                  {domain.base_url}{urlToUnindex?.url}
-                </p>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowUnindexModal(false);
-                    setUrlToUnindex(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmUnindexUrl}
-                  disabled={unindexingUrl}
-                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {unindexingUrl ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Unindexing...
-                    </div>
-                  ) : (
-                    'Unindex'
-                  )}
-                </button>
-              </div>
-            </div>
-          </Modal>
-
-          {/* Reject URL Modal */}
-          <Modal
-            isOpen={showRejectModal}
-            onClose={() => {
-              setShowRejectModal(false);
-              setUrlToReject(null);
-            }}
-            title="Reject URL"
-          >
-            <div className="p-6">
-              <p className="text-gray-700 mb-6">
-                Are you sure you want to reject this URL? This will permanently exclude it from auto-indexing. Rejected URLs will never be indexed automatically.
-              </p>
-              <div className="bg-gray-50 rounded-lg p-3 mb-6">
-                <p className="text-sm text-gray-600 font-mono">
-                  {domain.base_url}{urlToReject?.url}
-                </p>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setUrlToReject(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmRejectUrl}
-                  disabled={rejectingUrl}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {rejectingUrl ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Rejecting...
-                    </div>
-                  ) : (
-                    'Reject'
-                  )}
-                </button>
-              </div>
-            </div>
-          </Modal>
-
-          {/* Content Preview Modal */}
-          <Modal
-            isOpen={showContentModal}
-            onClose={() => {
-              setShowContentModal(false);
-              setUrlContent(null);
-            }}
-            title="URL Content Preview"
-            size="xlarge"
-          >
-            <div className="p-6">
-              {loadingContent && (
-                <div className="flex justify-center items-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <span className="ml-3 text-gray-600">Loading content...</span>
-                </div>
-              )}
-              {!loadingContent && urlContent && (
-                <div>
-                  <div className="mb-4">
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">URL:</h3>
-                    <p className="text-sm text-gray-600 font-mono bg-gray-50 p-2 rounded">
-                      {urlContent.url}
-                    </p>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Scraped Content:</h3>
-                    {urlContent.content ? (
-                      <div className="bg-gray-50 border rounded-lg p-4 max-h-96 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap text-sm text-gray-700">
-                          {urlContent.content}
-                        </pre>
-                      </div>
-                    ) : (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <p className="text-yellow-700">{urlContent.message}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {!loadingContent && !urlContent && (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">No content available</p>
-                </div>
-              )}
-              
-              <div className="flex justify-end mt-6">
-                <button
-                  onClick={() => {
-                    setShowContentModal(false);
-                    setUrlContent(null);
-                  }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </Modal>
+      {/* Tab: Job history */}
+      {activeTab === 'job-history' && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Crawl job history</h2>
+          <JobHistoryTab appId={numericAppId} domainId={numericDomainId} />
         </div>
       )}
     </div>
   );
 };
 
-export default DomainDetailPage; 
+export default DomainDetailPage;
