@@ -106,8 +106,8 @@ class AgentStreamingService:
                 {
                     "conversation_id": ctx.effective_conv_id,
                     "agent_id": agent_id,
-                    "agent_name": ctx.agent.name,
-                    "has_memory": ctx.agent.has_memory,
+                    "agent_name": ctx.agent_name,
+                    "has_memory": ctx.agent_has_memory,
                 },
             )
 

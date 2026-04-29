@@ -48,8 +48,11 @@ Common failure patterns:
 Before pushing, run the same checks locally:
 
 ```bash
+# Install backend dependencies the same way CI does
+poetry install --with test --no-interaction
+
 # Unit tests (fast — run these constantly)
-pytest tests/unit/ -v
+poetry run pytest tests/unit/ -v
 
 # Integration tests — auto-manages the ephemeral test DB
 ./scripts/test.sh -m integration
@@ -59,7 +62,7 @@ docker compose -f docker/docker-compose.yaml --profile test up -d db_test
 pytest tests/integration/ -v
 
 # Full suite with coverage
-pytest -v --cov=backend --cov-report=term-missing
+poetry run pytest -v --cov=backend --cov-report=term-missing
 
 # Lint frontend
 cd frontend && npm run lint
@@ -78,6 +81,6 @@ cd frontend && npm run lint
 View coverage locally after a test run:
 
 ```bash
-pytest --cov=backend --cov-report=html
+poetry run pytest --cov=backend --cov-report=html
 open htmlcov/index.html
 ```

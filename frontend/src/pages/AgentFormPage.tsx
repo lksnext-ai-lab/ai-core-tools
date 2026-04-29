@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Share2, ClipboardCopy, Check } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -10,6 +10,7 @@ import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
 import type { AgentMCPUsage } from '../core/types';
+import { configService } from '../core/ConfigService';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 
@@ -34,6 +35,11 @@ interface Agent {
   tool_ids?: number[];
   mcp_config_ids?: number[];
   skill_ids?: number[];
+  a2a_enabled?: boolean;
+  a2a_name_override?: string;
+  a2a_description_override?: string;
+  a2a_skill_tags?: string[];
+  a2a_examples?: string[];
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
@@ -69,10 +75,26 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  a2a_enabled: boolean;
+  a2a_name_override: string;
+  a2a_description_override: string;
+  a2a_skill_tags: string[];
+  a2a_examples: string[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
+}
+
+function examplesToTextarea(examples: string[]): string {
+  return examples.join('\n');
+}
+
+function textareaToExamples(value: string): string[] {
+  return value
+    .split('\n')
+    .map((example) => example.trim())
+    .filter(Boolean);
 }
 
 // Output Parser Field Component
@@ -197,9 +219,16 @@ function AgentFormPage() {
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
-    skill_ids: []
+    skill_ids: [],
+    a2a_enabled: false,
+    a2a_name_override: '',
+    a2a_description_override: '',
+    a2a_skill_tags: [],
+    a2a_examples: []
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
+  const [a2aExamplesText, setA2aExamplesText] = useState('');
+  const [a2aCardUrlCopied, setA2aCardUrlCopied] = useState(false);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -255,11 +284,17 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        a2a_enabled: response.a2a_enabled || false,
+        a2a_name_override: response.a2a_name_override || '',
+        a2a_description_override: response.a2a_description_override || '',
+        a2a_skill_tags: response.a2a_skill_tags || [],
+        a2a_examples: response.a2a_examples || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
         text_system_prompt: response.text_system_prompt || ''
       });
+      setA2aExamplesText(examplesToTextarea(response.a2a_examples || []));
 
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
@@ -424,6 +459,11 @@ function AgentFormPage() {
       tool_ids: formData.tool_ids,
       mcp_config_ids: formData.mcp_config_ids,
       skill_ids: formData.skill_ids,
+      a2a_enabled: formData.a2a_enabled,
+      a2a_name_override: formData.a2a_name_override,
+      a2a_description_override: formData.a2a_description_override,
+      a2a_skill_tags: formData.a2a_skill_tags,
+      a2a_examples: formData.a2a_examples,
       // OCR-specific fields
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
@@ -454,6 +494,21 @@ function AgentFormPage() {
   };
 
   const isNewAgent = Number.parseInt(agentId || '0') === 0;
+  const a2aCardUrl = !isNewAgent && appId
+    ? `${configService.getApiBaseUrl().replace(/\/$/, '')}/.well-known/a2a/id/${Number.parseInt(appId)}/agents/${Number.parseInt(agentId || '0')}/agent-card.json`
+    : '';
+
+  const handleCopyA2aCardUrl = async () => {
+    if (!a2aCardUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(a2aCardUrl);
+      setA2aCardUrlCopied(true);
+      globalThis.setTimeout(() => setA2aCardUrlCopied(false), 2000);
+    } catch (copyError) {
+      console.error('Failed to copy A2A card URL:', copyError);
+    }
+  };
 
   if (loading) {
     return (
@@ -474,6 +529,7 @@ function AgentFormPage() {
     { id: 'prompts', label: 'Prompts' },
     { id: 'configuration', label: 'Configuration' },
     { id: 'advanced', label: 'Advanced' },
+    { id: 'a2a', label: 'A2A' },
     { id: 'marketplace', label: 'Marketplace' }
   ];
 
@@ -1325,6 +1381,196 @@ function AgentFormPage() {
           )}
 
           {/* TAB 5: MARKETPLACE */}
+          {activeTab === 'a2a' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-cyan-100 rounded-xl flex items-center justify-center mr-4">
+                  <Share2 className="w-5 h-5 text-cyan-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">A2A Exposure</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Configure how this agent is exposed through the A2A protocol.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-start p-4 bg-cyan-50 rounded-xl border border-cyan-200">
+                  <input
+                    id="a2a_enabled"
+                    type="checkbox"
+                    checked={formData.a2a_enabled}
+                    onChange={(e) => handleInputChange('a2a_enabled', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 mt-0.5"
+                  />
+                  <div className="ml-3">
+                    <label htmlFor="a2a_enabled" className="text-sm font-medium text-gray-900">
+                      Expose this agent as an A2A agent
+                    </label>
+                    <p className="text-sm text-gray-600 mt-1">
+                      When enabled, MattinAI publishes an A2A Agent Card for this agent and allows A2A clients to invoke it.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`${formData.a2a_enabled ? 'opacity-100' : 'opacity-60'} space-y-6`}>
+                  <div>
+                    <label htmlFor="a2a_card_url" className="block text-sm font-medium text-gray-700 mb-2">
+                      A2A Agent Card URL
+                    </label>
+                    {a2aCardUrl ? (
+                      <>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <input
+                            type="text"
+                            id="a2a_card_url"
+                            value={a2aCardUrl}
+                            readOnly
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-sm text-gray-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyA2aCardUrl()}
+                            className="inline-flex items-center justify-center px-4 py-3 border border-cyan-300 rounded-xl text-sm font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 transition-colors"
+                          >
+                            {a2aCardUrlCopied ? <Check className="w-4 h-4 mr-2" /> : <ClipboardCopy className="w-4 h-4 mr-2" />}
+                            {a2aCardUrlCopied ? 'Copied!' : 'Copy URL'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {formData.a2a_enabled
+                            ? 'External A2A clients can fetch this URL to discover the published Agent Card for this agent.'
+                            : 'This is the Agent Card URL for this agent. It becomes publicly discoverable once A2A exposure is enabled.'}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="px-4 py-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-600">
+                        Save the agent first to generate its A2A Agent Card URL.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="a2a_name_override" className="block text-sm font-medium text-gray-700 mb-2">
+                        A2A Display Name
+                      </label>
+                      <input
+                        type="text"
+                        id="a2a_name_override"
+                        value={formData.a2a_name_override}
+                        onChange={(e) => handleInputChange('a2a_name_override', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200"
+                        placeholder="Defaults to the agent name"
+                        disabled={!formData.a2a_enabled}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Effective A2A Name
+                      </label>
+                      <div className="px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 min-h-[52px] flex items-center">
+                        {formData.a2a_name_override.trim() || formData.name || 'Unnamed agent'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="a2a_description_override" className="block text-sm font-medium text-gray-700 mb-2">
+                      A2A Description
+                    </label>
+                    <textarea
+                      id="a2a_description_override"
+                      value={formData.a2a_description_override}
+                      onChange={(e) => handleInputChange('a2a_description_override', e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200"
+                      placeholder="Defaults to the agent description when empty"
+                      disabled={!formData.a2a_enabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      This text is exposed through the A2A Agent Card and should help external callers understand when to use the agent.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="a2a_skill_tags" className="block text-sm font-medium text-gray-700 mb-2">
+                      A2A Skill Tags
+                    </label>
+                    <TagInput
+                      id="a2a_skill_tags"
+                      tags={formData.a2a_skill_tags}
+                      onChange={(tags) => handleInputChange('a2a_skill_tags', tags)}
+                      maxTags={12}
+                      placeholder="Add protocol-facing skill tags"
+                      disabled={!formData.a2a_enabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      Use short capability tags like <code className="bg-gray-100 px-1 rounded">support</code>, <code className="bg-gray-100 px-1 rounded">sales</code>, or <code className="bg-gray-100 px-1 rounded">documents</code>.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="a2a_examples" className="block text-sm font-medium text-gray-700 mb-2">
+                      A2A Example Prompts
+                    </label>
+                    <textarea
+                      id="a2a_examples"
+                      value={a2aExamplesText}
+                      onChange={(e) => {
+                        setA2aExamplesText(e.target.value);
+                        handleInputChange('a2a_examples', textareaToExamples(e.target.value));
+                      }}
+                      rows={6}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200"
+                      placeholder={'One example per line\nSummarize this contract\nExtract action items from this PDF'}
+                      disabled={!formData.a2a_enabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      These examples are published in the A2A Agent Card to help client applications suggest relevant starter prompts.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Published A2A Preview</h4>
+                    <dl className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <dt className="text-gray-500 mb-1">Name</dt>
+                        <dd className="text-gray-900">{formData.a2a_name_override.trim() || formData.name || 'Unnamed agent'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500 mb-1">Enabled</dt>
+                        <dd className="text-gray-900">{formData.a2a_enabled ? 'Yes' : 'No'}</dd>
+                      </div>
+                      <div className="md:col-span-2">
+                        <dt className="text-gray-500 mb-1">Description</dt>
+                        <dd className="text-gray-900">
+                          {formData.a2a_description_override.trim() || formData.description || 'No description configured'}
+                        </dd>
+                      </div>
+                      <div className="md:col-span-2">
+                        <dt className="text-gray-500 mb-1">Skill Tags</dt>
+                        <dd className="flex flex-wrap gap-2">
+                          {(formData.a2a_skill_tags.length > 0 ? formData.a2a_skill_tags : ['mattin-ai', 'agent']).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: MARKETPLACE */}
           {activeTab === 'marketplace' && (
             <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 mb-8">
               <div className="flex items-center mb-6">

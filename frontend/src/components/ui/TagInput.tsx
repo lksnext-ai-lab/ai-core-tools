@@ -7,6 +7,7 @@ interface TagInputProps {
   readonly onChange: (tags: string[]) => void;
   readonly maxTags?: number;
   readonly placeholder?: string;
+  readonly disabled?: boolean;
 }
 
 /**
@@ -18,6 +19,7 @@ export function TagInput({
   onChange,
   maxTags = 5,
   placeholder = 'Type and press Enter',
+  disabled = false,
 }: TagInputProps) {
   const [inputValue, setInputValue] = useState('');
 
@@ -25,6 +27,7 @@ export function TagInput({
     (value: string) => {
       const trimmed = value.trim().toLowerCase();
       if (!trimmed) return;
+      if (disabled) return;
       if (tags.length >= maxTags) return;
       if (tags.includes(trimmed)) return;
 
@@ -38,7 +41,7 @@ export function TagInput({
     (index: number) => {
       onChange(tags.filter((_, i) => i !== index));
     },
-    [tags, onChange],
+    [disabled, tags, onChange],
   );
 
   const handleKeyDown = useCallback(
@@ -53,25 +56,31 @@ export function TagInput({
     [inputValue, tags, addTag, removeTag],
   );
 
-  const atLimit = tags.length >= maxTags;
+  const atLimit = disabled || tags.length >= maxTags;
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-300 rounded-xl min-h-[44px] focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
+      <div className={`flex flex-wrap items-center gap-2 p-2 border border-gray-300 rounded-xl min-h-[44px] transition-all duration-200 ${
+        disabled
+          ? 'bg-gray-50 opacity-70'
+          : 'focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500'
+      }`}>
         {tags.map((tag, idx) => (
           <span
             key={tag}
             className="inline-flex items-center gap-1 text-sm bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full"
           >
             {tag}
-            <button
-              type="button"
-              onClick={() => removeTag(idx)}
-              className="ml-0.5 text-blue-600 hover:text-blue-900 font-medium"
-              aria-label={`Remove tag ${tag}`}
-            >
-              <X className="w-3 h-3" />
-            </button>
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => removeTag(idx)}
+                className="ml-0.5 text-blue-600 hover:text-blue-900 font-medium"
+                aria-label={`Remove tag ${tag}`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </span>
         ))}
         {!atLimit && (
@@ -88,7 +97,7 @@ export function TagInput({
       </div>
       <p className="text-xs text-gray-500 mt-1">
         {tags.length}/{maxTags} tags
-        {atLimit ? ' (maximum reached)' : ' — press Enter to add'}
+        {disabled ? ' (editing disabled)' : atLimit ? ' (maximum reached)' : ' — press Enter to add'}
       </p>
     </div>
   );

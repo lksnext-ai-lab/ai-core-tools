@@ -72,6 +72,11 @@ class Agent(Base):
     has_memory = Column(Boolean)
     enable_code_interpreter = Column(Boolean, default=False, nullable=False, server_default='false')
     server_tools = Column(JSON, default=list, nullable=False, server_default='[]')
+    a2a_enabled = Column(Boolean, default=False, nullable=False, server_default='false')
+    a2a_name_override = Column(String(255), nullable=True)
+    a2a_description_override = Column(Text, nullable=True)
+    a2a_skill_tags = Column(JSON, default=list, nullable=False, server_default='[]')
+    a2a_examples = Column(JSON, default=list, nullable=False, server_default='[]')
 
     # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
     memory_max_messages = Column(Integer, default=20, nullable=False)  # SummarizationMiddleware.keep=("messages", N) — messages to preserve after summarization
