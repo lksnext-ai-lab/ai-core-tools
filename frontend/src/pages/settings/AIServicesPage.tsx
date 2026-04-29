@@ -2,7 +2,8 @@ import { useParams } from 'react-router-dom';
 import { useState } from 'react';
 import { Bot, Plug, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Loader2, Upload, CheckCircle2, XCircle, X, Lightbulb, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
-import AIServiceForm from '../../components/forms/AIServiceForm';
+import ServiceWizard from '../../components/services/wizard/ServiceWizard';
+import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import ImportModal, { type ImportResponse, type ConflictMode } from '../../components/ui/ImportModal';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
@@ -307,9 +308,30 @@ function AIServicesPage() {
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={handleClose} title={editingService ? 'Edit AI Service' : 'Create New AI Service'}>
-        <AIServiceForm aiService={editingService} onSubmit={handleSave} onCancel={handleClose} />
-      </Modal>
+      {isModalOpen && !editingService && (
+        <ServiceWizard
+          isOpen
+          kind="ai"
+          scope="app"
+          appId={appId ? Number.parseInt(appId) : undefined}
+          existingNames={services.map((s) => s.name)}
+          onClose={handleClose}
+          onSave={handleSave}
+        />
+      )}
+
+      {isModalOpen && editingService && (
+        <CompactServiceEditor
+          isOpen
+          kind="ai"
+          scope="app"
+          appId={appId ? Number.parseInt(appId) : undefined}
+          service={editingService}
+          existingNames={services.map((s) => s.name)}
+          onClose={handleClose}
+          onSave={handleSave}
+        />
+      )}
 
       {/* Test Result Modal */}
       <Modal

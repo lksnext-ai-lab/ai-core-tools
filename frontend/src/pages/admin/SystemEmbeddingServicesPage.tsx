@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
-import EmbeddingServiceForm from '../../components/forms/EmbeddingServiceForm';
-import type { ServiceFormData } from '../../components/forms/BaseServiceForm';
+import ServiceWizard from '../../components/services/wizard/ServiceWizard';
+import CompactServiceEditor from '../../components/services/CompactServiceEditor';
+import type { ServiceFormData } from '../../types/services';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -182,31 +183,6 @@ const SystemEmbeddingServicesPage: React.FC = () => {
   if (isLoading) return <LoadingState message="Loading system embedding services..." />;
   if (error) return <ErrorState error={error} onRetry={fetchServices} />;
 
-  if (showForm) {
-    const formService = editingService
-      ? {
-          service_id: editingService.service_id,
-          name: editingService.name,
-          provider: editingService.provider,
-          model_name: editingService.model_name,
-          api_key: editingService.api_key,
-          base_url: editingService.base_url,
-          created_at: '',
-          available_providers: [],
-        }
-      : null;
-
-    return (
-      <div className="max-w-2xl mx-auto">
-        <EmbeddingServiceForm
-          embeddingService={formService}
-          onSubmit={handleSave}
-          onCancel={handleCancel}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -288,6 +264,29 @@ const SystemEmbeddingServicesPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {showForm && !editingService && (
+        <ServiceWizard
+          isOpen
+          kind="embedding"
+          scope="system"
+          existingNames={services.map((s) => s.name)}
+          onClose={handleCancel}
+          onSave={handleSave}
+        />
+      )}
+
+      {showForm && editingService && (
+        <CompactServiceEditor
+          isOpen
+          kind="embedding"
+          scope="system"
+          service={editingService}
+          existingNames={services.map((s) => s.name)}
+          onClose={handleCancel}
+          onSave={handleSave}
+        />
+      )}
     </div>
   );
 };

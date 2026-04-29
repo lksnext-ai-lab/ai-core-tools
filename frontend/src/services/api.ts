@@ -369,6 +369,16 @@ class ApiService {
     });
   }
 
+  async listAIServiceProviderModels(
+    appId: number,
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request(`/internal/apps/${appId}/ai-services/list-models`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   async exportAIService(appId: number, serviceId: number): Promise<Blob> {
     const token = this.getAuthToken();
     const headers: Record<string, string> = {};
@@ -452,6 +462,23 @@ class ApiService {
   async deleteEmbeddingService(appId: number, serviceId: number) {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async listEmbeddingServiceProviderModels(
+    appId: number,
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request(`/internal/apps/${appId}/embedding-services/list-models`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async testEmbeddingServiceConnectionWithConfig(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/embedding-services/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -2229,6 +2256,38 @@ class ApiService {
   async deleteSystemEmbeddingService(serviceId: number) {
     return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async listSystemAIServiceProviderModels(
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request('/internal/admin/system-ai-services/list-models', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listSystemEmbeddingServiceProviderModels(
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request('/internal/admin/system-embedding-services/list-models', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async testSystemAIServiceConnectionWithConfig(data: any) {
+    return this.request('/internal/admin/system-ai-services/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async testSystemEmbeddingServiceConnectionWithConfig(data: any) {
+    return this.request('/internal/admin/system-embedding-services/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

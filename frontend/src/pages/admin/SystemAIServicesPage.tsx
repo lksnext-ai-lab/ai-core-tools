@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
-import AIServiceForm from '../../components/forms/AIServiceForm';
-import type { ServiceFormData } from '../../components/forms/BaseServiceForm';
+import ServiceWizard from '../../components/services/wizard/ServiceWizard';
+import CompactServiceEditor from '../../components/services/CompactServiceEditor';
+import type { ServiceFormData } from '../../types/services';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -122,18 +123,6 @@ const SystemAIServicesPage: React.FC = () => {
   if (isLoading) return <LoadingState message="Loading system AI services..." />;
   if (error) return <ErrorState error={error} onRetry={fetchServices} />;
 
-  if (showForm) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <AIServiceForm
-          aiService={editingService}
-          onSubmit={handleSave}
-          onCancel={handleCancel}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -217,6 +206,29 @@ const SystemAIServicesPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {showForm && !editingService && (
+        <ServiceWizard
+          isOpen
+          kind="ai"
+          scope="system"
+          existingNames={services.map((s) => s.name)}
+          onClose={handleCancel}
+          onSave={handleSave}
+        />
+      )}
+
+      {showForm && editingService && (
+        <CompactServiceEditor
+          isOpen
+          kind="ai"
+          scope="system"
+          service={editingService}
+          existingNames={services.map((s) => s.name)}
+          onClose={handleCancel}
+          onSave={handleSave}
+        />
+      )}
     </div>
   );
 };
