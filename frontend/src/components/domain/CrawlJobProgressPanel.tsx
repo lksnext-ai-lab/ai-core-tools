@@ -91,7 +91,6 @@ export default function CrawlJobProgressPanel({
         intervalRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appId, domainId, currentJob?.id, currentJob?.status]);
 
   const handleCancel = async () => {

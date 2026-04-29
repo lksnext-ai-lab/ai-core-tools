@@ -179,7 +179,7 @@ function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
 const DomainDetailPage: React.FC = () => {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
   const navigate = useNavigate();
-  const { hasMinRole, userRole } = useAppRole(appId);
+  const { hasMinRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
 
   const [domain, setDomain] = useState<DomainDetail | null>(null);

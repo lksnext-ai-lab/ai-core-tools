@@ -19,7 +19,6 @@ import type {
   CrawlJob,
   CrawlJobListResponse,
   TriggerCrawlResponse,
-  DomainUrl,
   DomainUrlDetail,
   DomainUrlListResponse,
   DomainUrlActionResponse,
