@@ -21,7 +21,10 @@ from .repository import Repository
 from .resource import Resource
 from .folder import Folder
 from .domain import Domain
-from .url import Url
+# New crawling pipeline models (Domain must be imported before its children)
+from .domain_url import DomainUrl
+from .crawl_policy import CrawlPolicy
+from .crawl_job import CrawlJob
 from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
 from .system_setting import SystemSetting
@@ -35,9 +38,10 @@ __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill',
     'Agent', 'AgentMarketplaceProfile', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
-    'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Repository', 'Resource', 'Folder', 'Domain',
+    'DomainUrl', 'CrawlPolicy', 'CrawlJob',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
-    'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain', 'Url',
+    'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain',
     'Media',
     'MCPServer', 'MCPServerAgent',
     'SystemSetting',
@@ -46,4 +50,4 @@ __all__ = [
     'TierConfig',
     'UsageRecord',
     'UserCredential',
-] 
+]

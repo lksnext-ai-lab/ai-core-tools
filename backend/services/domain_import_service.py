@@ -5,8 +5,11 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from models.domain import Domain
-from models.url import Url
+from models.domain_url import DomainUrl
+from models.enums.domain_url_status import DomainUrlStatus
+from models.enums.discovery_source import DiscoverySource
 from models.silo import Silo
+from services.crawl.normalization import normalize_url
 from schemas.export_schemas import DomainExportFileSchema
 from schemas.import_schemas import (
     ConflictMode,
@@ -16,6 +19,7 @@ from schemas.import_schemas import (
 )
 from core.export_constants import validate_export_version
 from services.silo_import_service import SiloImportService
+from services.crawl_policy_service import CrawlPolicyService
 from schemas.export_schemas import SiloExportFileSchema
 import logging
 
@@ -254,10 +258,14 @@ class DomainImportService:
         # Create URL records (pending status — not yet crawled)
         url_count = 0
         for url_data in export_data.domain.urls:
-            url_obj = Url(
+            normalized = normalize_url(url_data.url)
+            url_obj = DomainUrl(
                 url=url_data.url,
+                normalized_url=normalized,
                 domain_id=new_domain.domain_id,
-                status="pending",
+                discovered_via=DiscoverySource.MANUAL,
+                status=DomainUrlStatus.PENDING,
+                depth=0,
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
             )
@@ -266,6 +274,11 @@ class DomainImportService:
 
         if url_count > 0:
             self.session.flush()
+
+        # Ensure a default (inactive) CrawlPolicy exists for the domain
+        CrawlPolicyService.get_or_create_default(
+            new_domain.domain_id, export_data.domain.base_url, self.session
+        )
 
         self.session.commit()
 

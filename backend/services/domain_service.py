@@ -1,6 +1,5 @@
 from typing import List, Optional, Tuple
 from models.domain import Domain
-from models.url import Url
 from models.silo import SiloType
 from schemas.domain_url_schemas import DomainDetailSchema
 from sqlalchemy.orm import Session
@@ -165,7 +164,7 @@ class DomainService:
     
     @staticmethod
     @handle_database_errors("get_domain_with_urls")
-    def get_domain_with_urls(domain_id: int, db: Session, page: int = 1, per_page: int = 20) -> Tuple[Optional[Domain], List[Url], dict]:
+    def get_domain_with_urls(domain_id: int, db: Session, page: int = 1, per_page: int = 20) -> Tuple[Optional[Domain], list, dict]:
         """
         Get a domain with its URLs with pagination
         
@@ -270,7 +269,11 @@ class DomainService:
         )
         
         created_domain = DomainRepository.create(domain, db)
-        
+
+        # Create default (inactive) CrawlPolicy for the new domain
+        from services.crawl_policy_service import CrawlPolicyService
+        CrawlPolicyService.get_or_create_default(created_domain.domain_id, base_url, db)
+
         # Create domain filter
         output_parser_service = OutputParserService()
         domain_filter_id = output_parser_service.create_default_filter_for_domain(
@@ -339,12 +342,20 @@ class DomainService:
         domain = DomainService.get_domain(domain_id, db)
         if not domain:
             raise NotFoundError(f"Domain with ID {domain_id} not found", "domain")
-        
+
+        # Guard: prevent deletion if a crawl job is active
+        from services.crawl_job_service import CrawlJobService
+        active_job = CrawlJobService.has_active_job(domain_id, db)
+        if active_job:
+            raise ValidationError(
+                f"Domain has an active crawl job (id={active_job.id}). Cancel it first."
+            )
+
         # Store domain info before deletion operations
         domain_name = domain.name
         silo_id = domain.silo_id
-        
-        # Delete domain and associated URLs using repository
+
+        # Delete domain and associated URLs using repository (cascade handles DomainUrl/CrawlPolicy/CrawlJob)
         DomainRepository.delete_with_urls(domain_id, db)
         
         logger.info(f"Successfully deleted domain {domain_id}: {domain_name}")

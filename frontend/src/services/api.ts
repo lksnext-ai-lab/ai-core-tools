@@ -13,6 +13,16 @@ import type {
   UserRatingResponse,
   MarketplaceQuotaUsage,
 } from '../types/marketplace';
+import type {
+  CrawlPolicy,
+  CrawlPolicyInput,
+  CrawlJob,
+  CrawlJobListResponse,
+  TriggerCrawlResponse,
+  DomainUrlDetail,
+  DomainUrlListResponse,
+  DomainUrlActionResponse,
+} from '../types/crawl';
 
 type ConflictMode = 'fail' | 'rename' | 'override';
 
@@ -1536,49 +1546,116 @@ class ApiService {
     });
   }
 
-  async getDomainUrls(appId: number, domainId: number, page = 1, perPage = 20) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls?page=${page}&per_page=${perPage}`);
+  // ==================== DOMAIN URLS API ====================
+
+  async listDomainUrls(
+    appId: number,
+    domainId: number,
+    params: {
+      page?: number;
+      per_page?: number;
+      status?: string;
+      discovered_via?: string;
+      q?: string;
+    } = {}
+  ): Promise<DomainUrlListResponse> {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.set('page', String(params.page));
+    if (params.per_page !== undefined) query.set('per_page', String(params.per_page));
+    if (params.status) query.set('status', params.status);
+    if (params.discovered_via) query.set('discovered_via', params.discovered_via);
+    if (params.q) query.set('q', params.q);
+    const qs = query.toString();
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls${qs ? '?' + qs : ''}`);
   }
 
-  async addUrlToDomain(appId: number, domainId: number, data: { url: string }) {
+  /** @deprecated Use listDomainUrls instead */
+  async getDomainUrls(appId: number, domainId: number, page = 1, perPage = 20): Promise<DomainUrlListResponse> {
+    return this.listDomainUrls(appId, domainId, { page, per_page: perPage });
+  }
+
+  async addDomainUrlManual(
+    appId: number,
+    domainId: number,
+    url: string
+  ): Promise<DomainUrlActionResponse> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ url }),
     });
   }
 
-  async deleteUrlFromDomain(appId: number, domainId: number, urlId: number) {
+  /** @deprecated Use addDomainUrlManual instead */
+  async addUrlToDomain(appId: number, domainId: number, data: { url: string }): Promise<DomainUrlActionResponse> {
+    return this.addDomainUrlManual(appId, domainId, data.url);
+  }
+
+  async getDomainUrl(appId: number, domainId: number, urlId: number): Promise<DomainUrlDetail> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}`);
+  }
+
+  async deleteDomainUrl(appId: number, domainId: number, urlId: number): Promise<DomainUrlActionResponse> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}`, {
       method: 'DELETE',
     });
   }
 
-  async reindexUrl(appId: number, domainId: number, urlId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/reindex`, {
-      method: 'POST',
-    });
+  /** @deprecated Use deleteDomainUrl instead */
+  async deleteUrlFromDomain(appId: number, domainId: number, urlId: number): Promise<DomainUrlActionResponse> {
+    return this.deleteDomainUrl(appId, domainId, urlId);
   }
 
-  async unindexUrl(appId: number, domainId: number, urlId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/unindex`, {
-      method: 'POST',
-    });
-  }
-
-  async rejectUrl(appId: number, domainId: number, urlId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/reject`, {
-      method: 'POST',
-    });
-  }
-
-  async reindexDomain(appId: number, domainId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/reindex`, {
+  async recrawlDomainUrl(appId: number, domainId: number, urlId: number): Promise<DomainUrlActionResponse> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/recrawl`, {
       method: 'POST',
     });
   }
 
   async getUrlContent(appId: number, domainId: number, urlId: number) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/content`);
+  }
+
+  // ==================== CRAWL POLICY API ====================
+
+  async getCrawlPolicy(appId: number, domainId: number): Promise<CrawlPolicy> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-policy`);
+  }
+
+  async updateCrawlPolicy(appId: number, domainId: number, data: CrawlPolicyInput): Promise<CrawlPolicy> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-policy`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ==================== CRAWL JOBS API ====================
+
+  async triggerCrawl(appId: number, domainId: number): Promise<TriggerCrawlResponse> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs`, {
+      method: 'POST',
+    });
+  }
+
+  async listCrawlJobs(
+    appId: number,
+    domainId: number,
+    params: { page?: number; per_page?: number } = {}
+  ): Promise<CrawlJobListResponse> {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.set('page', String(params.page));
+    if (params.per_page !== undefined) query.set('per_page', String(params.per_page));
+    const qs = query.toString();
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs${qs ? '?' + qs : ''}`);
+  }
+
+  async getCrawlJob(appId: number, domainId: number, jobId: number): Promise<CrawlJob> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs/${jobId}`);
+  }
+
+  async cancelCrawl(appId: number, domainId: number, jobId: number): Promise<CrawlJob> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs/${jobId}/cancel`, {
+      method: 'POST',
+    });
   }
 
   // ==================== VERSION API ====================
