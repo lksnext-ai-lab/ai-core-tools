@@ -150,42 +150,56 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
     
     return modelo
 
-def get_parser_model_by_id(parser_id: int, processed_parsers: set = None) -> Type[BaseModel]:
+def get_parser_model_by_id(parser_id: int, ancestor_parsers: set = None) -> Type[BaseModel]:
     """
     Obtiene y construye el modelo Pydantic correspondiente a un ID de parser.
+
+    `ancestor_parsers` mantiene la cadena de parsers que están actualmente en
+    construcción en la rama de recursión actual. Solo se considera dependencia
+    circular si un parser hijo referencia a uno de sus ancestros (no a un
+    hermano ya procesado en otra rama).
     """
     logging.info(f"Iniciando construcción del modelo Pydantic para parser_id: {parser_id}")
-    
-    if processed_parsers is None:
-        processed_parsers = set()
-    
-    if parser_id in processed_parsers:
-        logging.error(f"Dependencia circular detectada para el parser {parser_id}")
+
+    if ancestor_parsers is None:
+        ancestor_parsers = set()
+
+    if parser_id in ancestor_parsers:
+        logging.error(
+            f"Dependencia circular detectada para el parser {parser_id}. "
+            f"Cadena de ancestros: {ancestor_parsers}"
+        )
         raise ValueError(f"Dependencia circular detectada para el parser {parser_id}")
-    
-    processed_parsers.add(parser_id)
-    logging.info(f"Parsers procesados hasta ahora: {processed_parsers}")
-    
-    session = SessionLocal()
+
+    ancestor_parsers.add(parser_id)
+    logging.info(f"Cadena de ancestros activa: {ancestor_parsers}")
+
     try:
-        parser = session.query(OutputParser).filter(OutputParser.parser_id == parser_id).first()
-        if not parser:
-            raise ValueError(f"No se encontró el parser con ID {parser_id}")
-        
-        schema_data = parser.fields
-        logging.info(f"Schema obtenido de la base de datos: {schema_data}")
+        session = SessionLocal()
+        try:
+            parser = session.query(OutputParser).filter(OutputParser.parser_id == parser_id).first()
+            if not parser:
+                raise ValueError(f"No se encontró el parser con ID {parser_id}")
+
+            schema_data = parser.fields
+            logging.info(f"Schema obtenido de la base de datos: {schema_data}")
+        finally:
+            session.close()
+
+        for field in schema_data:
+            if field['type'] == 'parser':
+                logging.info(f"Procesando campo tipo parser: {field['name']}")
+                referenced_model = get_parser_model_by_id(int(field['parser_id']), ancestor_parsers)
+                field['type'] = referenced_model
+            elif field['type'] == 'list' and field.get('list_item_type') == 'parser':
+                logging.info(f"Procesando campo tipo lista de parser: {field['name']}")
+                referenced_model = get_parser_model_by_id(int(field['list_item_parser_id']), ancestor_parsers)
+                field['type'] = 'list'
+                field['list_item_type'] = referenced_model
+
+        return create_model_from_json_schema(schema_data, parser.name)
     finally:
-        session.close()
-    
-    for field in schema_data:
-        if field['type'] == 'parser':
-            logging.info(f"Procesando campo tipo parser: {field['name']}")
-            referenced_model = get_parser_model_by_id(int(field['parser_id']), processed_parsers)
-            field['type'] = referenced_model
-        elif field['type'] == 'list' and field.get('list_item_type') == 'parser':
-            logging.info(f"Procesando campo tipo lista de parser: {field['name']}")
-            referenced_model = get_parser_model_by_id(int(field['list_item_parser_id']), processed_parsers)
-            field['type'] = 'list'
-            field['list_item_type'] = referenced_model
-    
-    return create_model_from_json_schema(schema_data, parser.name)
+        # Al salir de esta rama de recursión, el parser deja de ser un ancestro
+        # activo, por lo que puede ser referenciado de nuevo en ramas paralelas
+        # (p. ej. dos hermanos que apuntan al mismo parser hijo).
+        ancestor_parsers.discard(parser_id)

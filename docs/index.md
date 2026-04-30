@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-04-27 (based on commit `d40b51d` + silo playground revamp: enhanced search controls, result inspection, faceted filters, curator tools, API snippets, observability, A/B compare)
+> Last updated: 2026-04-30 (based on commit `d40b51d` + GitFlow release workflow: git-workflow guide, release/hotfix process, versioning convention)
 
 ## Table of Contents
 
@@ -49,6 +49,7 @@
 - [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
 - [SaaS Mode](guides/saas-mode.md) — SaaS deployment: Stripe billing, subscription tiers, quota enforcement, and `system_defaults.yaml` configuration
 - [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent
+- [Git Workflow & Release Process](guides/git-workflow.md) — GitFlow branching model, release workflow, hotfix process, versioning convention, and commit rules
 
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph

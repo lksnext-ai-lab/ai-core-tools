@@ -97,6 +97,8 @@ feature/<TICKET-ID>-<desc>  # Ticket-linked features (e.g., feature/ACT-32-model
 bug/<description>           # Bug fixes (e.g., bug/blocking, bug/old-agent-calls)
 fix/<description>           # Fixes (e.g., fix/mem-leak-2)
 clean/<description>         # Cleanup/refactoring (e.g., clean/duplicity)
+release/<version>           # GitFlow release branches (e.g., release/0.4.1)
+hotfix/<description>        # Hotfixes off main (e.g., hotfix/critical-auth-bug)
 ```
 
 ### Commit Message Convention (Conventional Commits)
@@ -154,6 +156,42 @@ gh repo set-default lksnext-ai-lab/ai-core-tools
 3. **Create Branch**: Execute `git checkout -b type/description` from `develop`
 4. **Push**: Execute `git push -u origin type/description`
 5. **Clean Up**: After merge, delete local and remote branches
+
+### When Creating a GitFlow Release Branch
+This is the process for cutting a release from `develop` into `main` following GitFlow.
+
+1. **Sync develop**: Execute `git checkout develop && git pull origin develop`
+2. **Create release branch**: Execute `git checkout -b release/<version>` (e.g., `release/0.4.1`)
+3. **Bump version in `pyproject.toml`**: Change `version = "x.y.z.dev0"` → `version = "x.y.z"` (drop the `.devN` suffix)
+4. **Commit the version bump** (signed): `git add pyproject.toml && git commit -S -m "chore(release): bump version to <version>"`
+5. **Verify signature**: `git log --show-signature -1`
+6. **Push release branch**: `git pull origin release/<version> 2>/dev/null || true && git push -u origin release/<version>`
+7. **Create PR to `main`**: `gh pr create --base main --title "chore(release): release <version>" --body-file /tmp/release-pr.md`
+8. **After PR is merged to `main`**: tag the merge commit on `main`:
+   ```bash
+   git checkout main && git pull origin main
+   git tag -s v<version> -m "Release v<version>"
+   git push origin v<version>
+   ```
+9. **Back-merge `main` into `develop`** to keep history in sync:
+   ```bash
+   git checkout develop && git pull origin develop
+   git merge --no-ff main
+   git commit -S  # if needed
+   git push origin develop
+   ```
+10. **Prepare next dev version** on develop: bump `pyproject.toml` to `x.y.(z+1).dev0`, commit with `chore: start x.y.(z+1).dev0 development cycle`
+11. **Delete the release branch** (after merge): `git push origin --delete release/<version> && git branch -d release/<version>`
+
+> **Version convention**: Development versions use the `x.y.z.devN` suffix (e.g., `0.4.1.dev0`). On a release branch the `.devN` suffix is dropped to produce the clean release version (`0.4.1`). After merging back to develop, the patch is incremented and `.dev0` is appended again.
+
+### When Creating a GitFlow Hotfix Branch
+For urgent fixes that must go directly to `main`:
+
+1. **Branch from `main`**: `git checkout main && git pull origin main && git checkout -b hotfix/<description>`
+2. **Apply the fix** (delegate to `@backend-expert` or `@react-expert` as needed)
+3. **Bump patch version** in `pyproject.toml` (e.g., `0.4.1` → `0.4.2`), commit signed
+4. **Create PR to `main`** then tag and back-merge to `develop` (same as steps 7–11 of the release process)
 
 ### When Pushing Changes
 1. **Pull First**: Always execute `git pull origin <branch>` before pushing to detect remote changes
@@ -362,7 +400,7 @@ When your task originates from a plan execution step file (`/plans/<slug>/execut
 
 - ❌ Does not write application code (delegates to `@backend-expert` or `@react-expert`)
 - ❌ Does not create database migrations (delegates to `@alembic-expert`)
-- ❌ Does not bump versions (delegates to `@version-bumper`)
+- ❌ Does not bump versions arbitrarily (but **does** bump the version in `pyproject.toml` as part of the GitFlow release branch workflow — this is a required release step, not a standalone version management task)
 - ❌ Does not manage CI/CD pipeline configuration directly
 - ❌ Does not manage Docker or infrastructure files
 - ❌ Does not handle repository access control or permissions (admin tasks)
