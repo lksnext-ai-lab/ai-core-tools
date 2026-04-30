@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, File, Query, Response
 from fastapi.responses import JSONResponse
 from typing import List, Annotated, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 import json
+import time
 
 from services.silo_service import SiloService
 from services.silo_export_service import SiloExportService
@@ -11,12 +12,15 @@ from services.silo_import_service import SiloImportService
 from models.silo import Silo
 
 from schemas.silo_schemas import (
-    SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema, SiloSearchSchema
+    SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema,
+    CreateSiloSchema, UpdateSiloSchema, SiloSearchSchema, SiloCountRequestSchema
 )
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import SiloExportFileSchema
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
+from utils.error_handlers import ValidationError
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 
 from db.database import get_db
 
@@ -187,39 +191,82 @@ async def get_silo(
         )
 
 
-@silos_router.post("/{silo_id}",
-                   summary="Create or update silo",
+@silos_router.post("/",
+                   summary="Create silo",
                    tags=["Silos"],
-                   response_model=SiloDetailSchema)
-async def create_or_update_silo(
+                   response_model=SiloDetailSchema,
+                   status_code=status.HTTP_201_CREATED)
+async def create_silo(
     app_id: int,
-    silo_id: int,
-    silo_data: CreateUpdateSiloSchema,
+    silo_data: CreateSiloSchema,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
-    Create a new silo or update an existing one.
-    """    
-    if silo_id != 0:
-        _validate_silo_app_ownership(silo_id, app_id, db)
-    
+    Create a new silo.
+    """
     try:
-        # Create or update using the service
-        silo = SiloService.create_or_update_silo_router(app_id, silo_id, silo_data, db)
-        
-        # Return updated silo (reuse the GET logic)
-        logger.info(f"Silo created/updated successfully: {silo.silo_id}, now getting details")
-        return await get_silo(app_id, silo.silo_id, auth_context, role, db)
-        
+        silo = SiloService.create_or_update_silo_router(app_id, 0, silo_data, db)
+        logger.info(f"Silo created successfully: {silo.silo_id}")
+        return await get_silo(app_id, silo.silo_id, auth_context, db, role)
+
     except HTTPException:
         raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
-        logger.error(f"Error creating/updating silo: {str(e)}", exc_info=True)
+        logger.error(f"Error creating silo: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating/updating silo: {str(e)}"
+            detail=f"Error creating silo: {str(e)}"
+        )
+
+
+@silos_router.put("/{silo_id}",
+                  summary="Update silo",
+                  tags=["Silos"],
+                  response_model=SiloDetailSchema)
+async def update_silo(
+    request: Request,
+    app_id: int,
+    silo_id: int,
+    silo_data: UpdateSiloSchema,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """
+    Update an existing silo. Note: vector_db_type and embedding_service_id cannot be changed after creation.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+
+    try:
+        raw_body = await request.json()
+        existing_silo = SiloService.get_silo(silo_id, db)
+        if existing_silo:
+            assert_vector_db_type_immutable(existing_silo.vector_db_type, raw_body.get('vector_db_type'), "silo")
+            assert_embedding_service_immutable(existing_silo.embedding_service_id, raw_body.get('embedding_service_id'), "silo")
+
+        silo = SiloService.create_or_update_silo_router(app_id, silo_id, silo_data, db)
+        logger.info(f"Silo updated successfully: {silo.silo_id}")
+        return await get_silo(app_id, silo.silo_id, auth_context, db, role)
+
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error updating silo: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating silo: {str(e)}"
         )
 
 
@@ -302,43 +349,6 @@ async def export_silo(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
 
 
-# ==================== SILO PLAYGROUND ====================
-
-@silos_router.get("/{silo_id}/playground",
-                  summary="Get silo playground",
-                  tags=["Silos", "Playground"])
-async def silo_playground(
-    app_id: int,
-    silo_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
-):
-    """
-    Get silo playground interface for testing document search.
-    """
-    
-    _validate_silo_app_ownership(silo_id, app_id, db)
-    
-    try:
-        result = SiloService.get_silo_playground_info(silo_id, db)
-        if result is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=SILO_NOT_FOUND_MSG
-            )
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error accessing silo playground: {str(e)}"
-        )
-
-
 @silos_router.post("/{silo_id}/search",
                    summary="Search documents in silo",
                    tags=["Silos", "Playground"])
@@ -349,6 +359,7 @@ async def search_silo_documents(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    response: Response,
 ):
     """
     Search for documents in a silo using semantic search with optional metadata filtering.
@@ -361,12 +372,21 @@ async def search_silo_documents(
     try:
         logger.info(f"Getting silo {silo_id} for validation")
         
+        t0 = time.perf_counter()
         result = SiloService.search_silo_documents_router(
-            silo_id, 
-            search_query.query, 
+            silo_id,
+            search_query.query,
             search_query.filter_metadata,
-            db
+            search_query.limit,
+            search_query.search_type,
+            search_query.score_threshold,
+            search_query.fetch_k,
+            search_query.lambda_mult,
+            search_query.min_content_length,
+            search_query.max_content_length,
+            db,
         )
+        elapsed_ms = round((time.perf_counter() - t0) * 1000)
         
         if result is None:
             logger.error(f"Silo {silo_id} not found")
@@ -377,6 +397,7 @@ async def search_silo_documents(
         
         logger.info(f"Search completed, found {result['total_results']} results")
         logger.info(f"Returning {result['total_results']} results to frontend")
+        response.headers["X-Server-Time-Ms"] = str(elapsed_ms)
         return result
         
     except HTTPException:
@@ -388,6 +409,134 @@ async def search_silo_documents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error searching silo: {str(e)}"
         )
+
+
+@silos_router.get(
+    "/{silo_id}/documents/neighbors",
+    summary="Get neighboring chunks from same source document",
+    tags=["Silos"],
+)
+async def get_neighboring_chunks(
+    app_id: int,
+    silo_id: int,
+    source_type: Annotated[str, Query(..., description="'media' or 'resource'")],
+    source_id: Annotated[str, Query(..., description="The media_id or resource_id value")],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """
+    Return all chunks belonging to the same source document (media or resource),
+    ordered by their position (chunk_index for media, page for resources).
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    try:
+        chunks = SiloService.get_neighboring_chunks(silo_id, source_type, source_id, db)
+        return {"source_type": source_type, "source_id": source_id, "chunks": chunks, "total": len(chunks)}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@silos_router.get(
+    "/{silo_id}/metadata/{field}/values",
+    summary="Get distinct values for a silo metadata field",
+    tags=["Silos"],
+)
+async def get_metadata_field_values(
+    app_id: int,
+    silo_id: int,
+    field: str,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    prefix: Annotated[Optional[str], Query(description="Filter by value prefix (case-insensitive)")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+):
+    """
+    Distinct values for a metadata field — powers autocomplete in the filter UI.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    try:
+        values = SiloService.get_metadata_field_values(silo_id, field, prefix=prefix, limit=limit, db=db)
+        return {"field": field, "values": values, "total": len(values)}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@silos_router.post(
+    "/{silo_id}/documents/count",
+    summary="Count documents matching a metadata filter (dry-run for delete-by-filter)",
+    tags=["Silos"],
+)
+async def count_silo_documents(
+    app_id: int,
+    silo_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    body: Annotated[SiloCountRequestSchema, Body()] = None,
+):
+    """
+    Returns the number of documents matching the given filter.
+    Pass an empty body or omit filter_metadata to count all documents.
+    Used as dry-run before delete-by-filter.
+    """
+    if body is None:
+        body = SiloCountRequestSchema()
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    try:
+        count = SiloService.count_docs_with_filter(
+            silo_id,
+            body.filter_metadata,
+            db,
+            min_content_length=body.min_content_length,
+            max_content_length=body.max_content_length,
+        )
+        return {
+            "silo_id": silo_id,
+            "count": count,
+            "filter_applied": body.filter_metadata is not None,
+            "min_content_length": body.min_content_length,
+            "max_content_length": body.max_content_length,
+        }
+    except Exception as e:
+        logger.error(f"Error counting silo documents: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@silos_router.post(
+    "/{silo_id}/resources/{resource_id}/reindex",
+    summary="Reindex a single repository resource into this silo",
+    tags=["Silos"],
+)
+async def reindex_silo_resource(
+    app_id: int,
+    silo_id: int,
+    resource_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """
+    Re-extracts and re-indexes a single Resource document into the silo.
+    The resource must belong to a repository whose silo_id matches this silo.
+    """
+    _validate_silo_app_ownership(silo_id, app_id, db)
+    from models.resource import Resource
+    resource = db.query(Resource).filter(Resource.resource_id == resource_id).first()
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+    if resource.repository.silo_id != silo_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resource does not belong to this silo",
+        )
+    try:
+        SiloService.index_resource(resource)
+        return {"message": f"Resource {resource_id} reindexed successfully", "resource_id": resource_id}
+    except Exception as e:
+        logger.error(f"Error reindexing resource {resource_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @silos_router.delete("/{silo_id}/documents",

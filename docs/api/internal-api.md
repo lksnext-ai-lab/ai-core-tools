@@ -234,6 +234,8 @@ data: {"type":"done"}
 
 **Base**: `/internal/silos`
 
+#### CRUD
+
 | Method | Endpoint | Purpose | Min Role |
 |--------|----------|---------|----------|
 | GET | `/` | List silos in app | viewer |
@@ -241,6 +243,89 @@ data: {"type":"done"}
 | GET | `/{silo_id}` | Get silo details | viewer |
 | PUT | `/{silo_id}` | Update silo | editor |
 | DELETE | `/{silo_id}` | Delete silo | editor |
+| POST | `/{silo_id}/export` | Export silo configuration (structure only, no vectors) | viewer |
+
+> **Immutability**: `vector_db_type` and `embedding_service_id` cannot be changed after silo creation.
+
+#### Playground & Search
+
+| Method | Endpoint | Purpose | Min Role |
+|--------|----------|---------|----------|
+| POST | `/{silo_id}/search` | Semantic search with full retriever controls | viewer |
+| GET | `/{silo_id}/documents/neighbors` | Neighboring chunks from same source document | viewer |
+| GET | `/{silo_id}/metadata/{field}/values` | Distinct values for a metadata field (autocomplete) | viewer |
+| POST | `/{silo_id}/documents/count` | Count documents matching a filter (dry-run) | editor |
+| DELETE | `/{silo_id}/documents` | Bulk delete by document IDs | editor |
+| POST | `/{silo_id}/resources/{resource_id}/reindex` | Reindex a repository resource | editor |
+
+**Example: Semantic Search**
+
+```http
+POST /internal/silos/1/search?app_id=1
+Cookie: session=...
+Content-Type: application/json
+
+{
+  "query": "password reset procedure",
+  "limit": 10,
+  "search_type": "similarity",
+  "filter_metadata": { "source_type": { "$eq": "pdf" } }
+}
+```
+
+Supported `search_type` values: `similarity` (default), `similarity_score_threshold`, `mmr`.
+
+Additional fields for each type:
+- `score_threshold` (float 0–1) — only with `similarity_score_threshold`
+- `fetch_k` (int), `lambda_mult` (float 0–1) — only with `mmr`
+- `min_content_length`, `max_content_length` (int) — filter by chunk character count
+
+The response includes an `X-Server-Time-Ms` header indicating server-side processing time.
+
+**Response**:
+```json
+{
+  "query": "password reset procedure",
+  "results": [
+    { "page_content": "...", "metadata": { "resource_id": 42, ... }, "score": 0.87 }
+  ],
+  "total_results": 1,
+  "filter_metadata": { "source_type": { "$eq": "pdf" } }
+}
+```
+
+**Example: Get Neighboring Chunks**
+
+```http
+GET /internal/silos/1/documents/neighbors?app_id=1&source_type=resource&source_id=42
+Cookie: session=...
+```
+
+`source_type` must be `media` or `resource`. Returns all chunks from the same source ordered by `chunk_index` (media) or `page` (resource).
+
+**Example: Get Metadata Field Values**
+
+```http
+GET /internal/silos/1/metadata/source_type/values?app_id=1&prefix=p&limit=20
+Cookie: session=...
+```
+
+Powers autocomplete in the filter builder. `limit` is clamped to 1–500 (default 100).
+
+**Example: Count Documents (Dry-run)**
+
+```http
+POST /internal/silos/1/documents/count?app_id=1
+Cookie: session=...
+Content-Type: application/json
+
+{
+  "filter_metadata": { "language": { "$eq": "en" } },
+  "min_content_length": 100
+}
+```
+
+Used as dry-run before delete-by-filter. Returns `{ "count": N, "filter_applied": true }`.
 
 **Example: Create Silo**
 
@@ -253,8 +338,7 @@ Content-Type: application/json
   "name": "Knowledge Base",
   "description": "Company documentation",
   "vector_db_type": "PGVECTOR",
-  "embedding_service_id": 1,
-  "retrieval_count": 5
+  "embedding_service_id": 1
 }
 ```
 

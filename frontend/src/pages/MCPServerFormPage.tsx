@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 import type { MCPServer, ToolAgent } from '../core/types';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
@@ -12,6 +14,7 @@ function resolveInputValue(type: string, value: string, checked: boolean): strin
 function MCPServerFormPage() {
   const { appId, serverId } = useParams();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,22 +96,23 @@ function MCPServerFormPage() {
     e.preventDefault();
     if (!appId) return;
 
-    try {
-      setSaving(true);
-      setError(null);
+    setError(null);
+    setSaving(true);
+    const result = await mutate(
+      () =>
+        isEditing && serverId
+          ? apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), formData)
+          : apiService.createMCPServer(Number.parseInt(appId), formData),
+      {
+        loading: isEditing ? MESSAGES.UPDATING('MCP server') : MESSAGES.CREATING('MCP server'),
+        success: isEditing ? MESSAGES.UPDATED('MCP server') : MESSAGES.CREATED('MCP server'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('MCP server')),
+      },
+    );
+    setSaving(false);
 
-      if (isEditing && serverId) {
-        await apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), formData);
-      } else {
-        await apiService.createMCPServer(Number.parseInt(appId), formData);
-      }
-
+    if (result !== undefined) {
       navigate(`/apps/${appId}/mcp-servers`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save MCP server');
-      console.error('Error saving MCP server:', err);
-    } finally {
-      setSaving(false);
     }
   }
 

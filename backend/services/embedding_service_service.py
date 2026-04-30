@@ -121,12 +121,72 @@ class EmbeddingServiceService:
     def delete_embedding_service(db: Session, app_id: int, service_id: int) -> bool:
         """Delete an embedding service"""
         service = EmbeddingServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
-        
+
         if not service:
             return False
-        
+
         EmbeddingServiceRepository.delete(db, service)
         return True
+
+    @staticmethod
+    def test_connection_with_config(config: dict) -> dict:
+        """Test connection to an embedding service using provided configuration.
+
+        Mirrors :meth:`AIServiceService.test_connection_with_config`: builds an
+        embeddings client with the given credentials and runs a single
+        ``embed_query`` call. The credentials are NOT persisted.
+        """
+        from tools.embeddingTools import get_embeddings_model
+        from utils.logger import get_logger
+        logger = get_logger(__name__)
+
+        api_key = (config.get("api_key") or "").strip()
+        provider = config.get("provider") or ""
+        model_name = config.get("description") or ""
+        endpoint = (config.get("endpoint") or "").strip()
+
+        if not provider:
+            return {"status": "error", "message": "Provider is required"}
+        if not model_name:
+            return {"status": "error", "message": "Model name is required"}
+
+        # Ollama runs locally and may not need an API key; every other
+        # provider requires one to talk to its remote endpoint.
+        requires_api_key = provider != EmbeddingProvider.Ollama.value
+        if requires_api_key and (
+            not api_key
+            or api_key == PLACEHOLDER_API_KEY
+            or is_masked_key(api_key)
+        ):
+            return {
+                "status": "error",
+                "message": (
+                    "API key is required. Please configure a valid API key "
+                    "before testing the connection."
+                ),
+            }
+
+        class _MockEmbeddingService:
+            def __init__(self, data):
+                self.provider = data.get("provider")
+                self.name = data.get("description")  # embeddingTools uses .name as model
+                self.api_key = data.get("api_key")
+                self.endpoint = data.get("endpoint")
+
+        try:
+            embeddings = get_embeddings_model(_MockEmbeddingService(config))
+            embeddings.embed_query("ping")
+            return {
+                "status": "success",
+                "message": "Successfully connected to embedding service.",
+            }
+        except Exception as e:
+            logger.error(
+                "Error testing embedding service connection (provider: %s): %s",
+                provider,
+                str(e),
+            )
+            return {"status": "error", "message": str(e)}
 
     # Legacy methods for backward compatibility
     @staticmethod

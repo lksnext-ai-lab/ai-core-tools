@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -40,6 +40,14 @@ class CreateUpdateEmbeddingServiceSchema(BaseModel):
     model_name: str
     api_key: str
     base_url: Optional[str] = ""
+
+    @field_validator("api_key", "base_url", mode="before")
+    @classmethod
+    def _strip_credentials(cls, v):
+        # Trim whitespace/newlines that often sneak in when pasting from
+        # emails, .env files, or password managers — see the equivalent
+        # validator on CreateUpdateAIServiceSchema for context.
+        return v.strip() if isinstance(v, str) else v
 
 
 class EmbeddingServiceOptionSchema(BaseModel):

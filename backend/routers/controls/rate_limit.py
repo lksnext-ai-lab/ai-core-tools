@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 
 def enforce_app_rate_limit(
-    app_id: int,
+    app_id: str,
     response: Response,
     db: Session = Depends(get_db)
 ) -> None:
@@ -25,7 +25,7 @@ def enforce_app_rate_limit(
     FastAPI dependency to enforce per-app rate limiting.
     
     Args:
-        app_id: The app identifier from the URL path
+        app_id: The app identifier from the URL path (integer ID or slug)
         response: FastAPI response object to set headers
         db: Database session
         
@@ -33,8 +33,11 @@ def enforce_app_rate_limit(
         HTTPException: 429 if rate limit exceeded
     """
     try:
-        # Load app to get rate limit
-        app = db.query(App).filter(App.app_id == app_id).first()
+        # Load app to get rate limit (supports both integer ID and slug)
+        if app_id.isdigit():
+            app = db.query(App).filter(App.app_id == int(app_id)).first()
+        else:
+            app = db.query(App).filter(App.slug == app_id).first()
         if not app:
             logger.warning(f"App {app_id} not found for rate limiting")
             return
@@ -50,7 +53,7 @@ def enforce_app_rate_limit(
             return
         
         # Check and consume rate limit
-        state = rate_limit_service.check_and_consume(app_id, rate_limit)
+        state = rate_limit_service.check_and_consume(app.app_id, rate_limit)
         
         # Set rate limit headers
         response.headers["X-RateLimit-Limit"] = str(state.limit)

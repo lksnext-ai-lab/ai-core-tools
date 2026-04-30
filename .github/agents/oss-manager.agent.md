@@ -150,7 +150,7 @@ After your response, VS Code will automatically display a **"Commit with @git-gi
 - ❌ Never bump version numbers — delegate to `@version-bumper`
 - ❌ Never run git write commands (`git add`, `git commit`, `git push`) — always end with the Work Summary block and let the user click the "Commit with @git-github" handoff button
 - ❌ Never modify application source code — focus only on governance/community artifacts
-- ❌ Never change `docker-compose.yaml`, `.env`, or infrastructure files
+- ❌ Never change `docker/docker-compose.yaml`, `.env`, or infrastructure files
 
 ## Key Project Files
 

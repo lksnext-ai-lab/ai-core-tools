@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Request
 from typing import Optional, Annotated
 from sqlalchemy.orm import Session
 import json
@@ -25,7 +25,9 @@ from .schemas import (
 from .auth import get_api_key_auth, validate_api_key_for_app, validate_silo_ownership
 from db.database import get_db
 
-from schemas.silo_schemas import CreateUpdateSiloSchema, SiloSearchSchema
+from schemas.silo_schemas import CreateUpdateSiloSchema, UpdateSiloSchema, SiloSearchSchema
+from utils.error_handlers import ValidationError
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 
 from utils.logger import get_logger
 
@@ -151,17 +153,24 @@ async def get_silo(
     response_model=PublicSiloResponseSchema,
 )
 async def update_silo(
+    request: Request,
     app_id: int,
     silo_id: int,
-    silo_data: CreateUpdateSiloSchema,
+    silo_data: UpdateSiloSchema,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Update silo properties."""
+    """Update silo properties. Note: vector_db_type and embedding_service_id cannot be changed after creation."""
     validate_api_key_for_app(app_id, api_key, db)
     validate_silo_ownership(db, silo_id, app_id)
 
     try:
+        raw_body = await request.json()
+        existing_silo = SiloService.get_silo(silo_id, db)
+        if existing_silo:
+            assert_vector_db_type_immutable(existing_silo.vector_db_type, raw_body.get('vector_db_type'), "silo")
+            assert_embedding_service_immutable(existing_silo.embedding_service_id, raw_body.get('embedding_service_id'), "silo")
+
         silo = SiloService.create_or_update_silo_router(
             app_id=app_id,
             silo_id=silo_id,
@@ -177,6 +186,11 @@ async def update_silo(
 
     except HTTPException:
         raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
     except Exception as e:
         logger.error(f"Error updating silo {silo_id} for app {app_id}: {str(e)}")
         raise HTTPException(
@@ -243,7 +257,15 @@ async def search_silo(
 
     try:
         result = SiloService.search_silo_documents_router(
-            silo_id, request.query, request.filter_metadata, db
+            silo_id,
+            request.query,
+            request.filter_metadata,
+            request.limit,
+            request.search_type,
+            request.score_threshold,
+            request.fetch_k,
+            request.lambda_mult,
+            db,
         )
 
         if result is None:
@@ -497,6 +519,7 @@ async def find_docs_in_collection(
             silo_id=silo_id,
             query=query,
             filter_metadata=request.filter_metadata,
+            limit=request.limit,
             db=db,
         )
 
@@ -607,4 +630,3 @@ async def index_file_document(
                 os.unlink(temp_file_path)
             except Exception as e:
                 logger.warning(f"Failed to delete temp file {temp_file_path}: {str(e)}")
-

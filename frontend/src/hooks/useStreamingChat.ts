@@ -1,5 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
-import { apiService } from '../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StreamEvent, ActiveTool } from '../types/streaming';
 import { getStreamingMessage } from '../i18n/streaming';
 
@@ -9,31 +8,32 @@ interface StreamResult {
   files: Array<{ file_id: string; filename: string; file_type: string }>;
 }
 
-interface UseStreamingChatReturn {
-  /** Accumulated token content while streaming */
-  streamingContent: string;
-  /** Currently active tools being used by the agent */
-  activeTools: ActiveTool[];
-  /** Human-readable status message (e.g. "Searching knowledge base...") */
-  thinkingMessage: string | null;
-  /** Whether a stream is currently in progress */
-  isStreaming: boolean;
-  /** Error message if stream failed */
-  streamError: string | null;
-  /** Send a message and stream the response */
-  sendMessage: (
-    message: string,
-    options?: {
-      files?: File[];
-      conversationId?: number | null;
-      searchParams?: any;
-    }
-  ) => Promise<StreamResult>;
-  /** Abort the current stream */
-  abortStream: () => void;
+export interface StreamFnOptions {
+  readonly files?: File[];
+  readonly searchParams?: any;
+  readonly conversationId?: number | null;
+  readonly onEvent: (event: StreamEvent) => void;
+  readonly signal?: AbortSignal;
 }
 
-/** Module-level helpers — defined outside the hook to avoid deep function nesting */
+export type StreamFn = (message: string, options: StreamFnOptions) => Promise<void>;
+
+interface SendOptions {
+  readonly files?: File[];
+  readonly conversationId?: number | null;
+  readonly searchParams?: any;
+}
+
+interface UseStreamingChatReturn {
+  readonly streamingContent: string;
+  readonly activeTools: ActiveTool[];
+  readonly thinkingMessage: string | null;
+  readonly isStreaming: boolean;
+  readonly streamError: string | null;
+  readonly sendMessage: (message: string, options?: SendOptions) => Promise<StreamResult>;
+  readonly abortStream: () => void;
+}
+
 function buildActiveTool(toolName: string): ActiveTool {
   return {
     name: toolName,
@@ -46,24 +46,31 @@ function buildActiveTool(toolName: string): ActiveTool {
 function markToolComplete(toolName: string) {
   return (prev: ActiveTool[]): ActiveTool[] =>
     prev.map((t) =>
-      t.name === toolName && t.status === 'running' ? { ...t, status: 'complete' as const } : t
+      t.name === toolName && t.status === 'running' ? { ...t, status: 'complete' as const } : t,
     );
 }
 
-export function useStreamingChat(
-  appId: number,
-  agentId: number,
-): UseStreamingChatReturn {
+/**
+ * Reusable streaming-chat hook that drives the playground/marketplace UX.
+ * Pass a `streamFn` that performs the SSE POST and pipes events through
+ * `options.onEvent`. The hook owns all transport-agnostic state (tokens,
+ * tools, thinking status, abort handling) and exposes a `sendMessage`
+ * promise that resolves with the final response payload.
+ */
+export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
   const [streamingContent, setStreamingContent] = useState('');
   const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
   const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
+  const streamFnRef = useRef(streamFn);
+  useEffect(() => {
+    streamFnRef.current = streamFn;
+  }, [streamFn]);
+
   const abortControllerRef = useRef<AbortController | null>(null);
-  // Ref to accumulate content without re-renders on every token
   const contentRef = useRef('');
-  // Throttle: flush visible content at most once per animation frame (~16ms)
   const flushRequestedRef = useRef(false);
   const rafIdRef = useRef<number | null>(null);
 
@@ -75,15 +82,7 @@ export function useStreamingChat(
   }, []);
 
   const sendMessage = useCallback(
-    async (
-      message: string,
-      options?: {
-        files?: File[];
-        conversationId?: number | null;
-        searchParams?: any;
-      }
-    ): Promise<StreamResult> => {
-      // Reset state
+    async (message: string, options?: SendOptions): Promise<StreamResult> => {
       setStreamingContent('');
       setActiveTools([]);
       setThinkingMessage(getStreamingMessage('thinking'));
@@ -94,7 +93,6 @@ export function useStreamingChat(
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
 
-      /** Schedule a throttled UI update — batches rapid tokens into one render per frame */
       const scheduleFlush = () => {
         if (!flushRequestedRef.current) {
           flushRequestedRef.current = true;
@@ -113,7 +111,7 @@ export function useStreamingChat(
       let finalFiles: Array<{ file_id: string; filename: string; file_type: string }> = [];
 
       try {
-        await apiService.chatWithAgentStream(appId, agentId, message, {
+        await streamFnRef.current(message, {
           files: options?.files,
           searchParams: options?.searchParams,
           conversationId: options?.conversationId,
@@ -124,7 +122,6 @@ export function useStreamingChat(
                 const content = (event.data as { content?: string }).content || '';
                 contentRef.current += content;
                 scheduleFlush();
-                // Clear thinking message once tokens start flowing
                 setThinkingMessage(null);
                 break;
               }
@@ -183,14 +180,13 @@ export function useStreamingChat(
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {
-          setStreamError(null); // User-initiated abort is not an error
+          setStreamError(null);
         } else {
           const errMsg = err instanceof Error ? err.message : 'Streaming failed';
           setStreamError(errMsg);
           throw err;
         }
       } finally {
-        // Cancel pending throttle and flush all remaining content immediately
         if (rafIdRef.current) {
           cancelAnimationFrame(rafIdRef.current);
           rafIdRef.current = null;
@@ -208,7 +204,7 @@ export function useStreamingChat(
         files: finalFiles,
       };
     },
-    [appId, agentId]
+    [],
   );
 
   return {

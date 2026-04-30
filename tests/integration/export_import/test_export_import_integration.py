@@ -87,7 +87,7 @@ def sample_ai_service(db_session: Session, test_app: App):
     try:
         db_session.delete(service)
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
 
 
@@ -229,7 +229,7 @@ class TestAIServiceImportIntegration:
             AIService.app_id == test_app.app_id
         ).first()
         assert created_service is not None
-        assert created_service.api_key is None  # Should be None after import
+        assert created_service.api_key == "CHANGE_ME"  # Placeholder after import
         assert created_service.provider == export_data.ai_service.provider
         
         # Cleanup
@@ -337,7 +337,6 @@ class TestAIServiceImportIntegration:
     ):
         """Test OVERRIDE mode updates existing service."""
         original_api_key = sample_ai_service.api_key
-        original_description = sample_ai_service.description
         
         # Export
         export_service = AIServiceExportService(db_session)
@@ -388,7 +387,7 @@ class TestAIServiceImportIntegration:
         assert export_data.ai_service.api_key is None
         
         import_service = AIServiceImportService(db_session)
-        summary = import_service.import_ai_service(
+        import_service.import_ai_service(
             export_data,
             app_id=sample_ai_service.app_id,
             user_id=1,
@@ -464,7 +463,6 @@ class TestExportImportRoundTrip:
         )
         
         # Step 2: Modify name for import
-        original_name = export_data.ai_service.name
         export_data.ai_service.name = f"RoundTrip {datetime.now().timestamp()}"
         
         # Step 3: Import
@@ -483,7 +481,7 @@ class TestExportImportRoundTrip:
         assert imported_service.description == sample_ai_service.description
         assert imported_service.endpoint == sample_ai_service.endpoint
         assert imported_service.api_version == sample_ai_service.api_version
-        assert imported_service.api_key is None  # API key not imported
+        assert imported_service.api_key == "CHANGE_ME"  # API key placeholder after import
         
         # Cleanup
         db_session.delete(imported_service)
@@ -506,7 +504,7 @@ class TestExportImportRoundTrip:
         imported_services = []
         
         # Import 3 times with RENAME mode
-        for i in range(3):
+        for _ in range(3):
             summary = import_service.import_ai_service(
                 export_data,
                 app_id=sample_ai_service.app_id,

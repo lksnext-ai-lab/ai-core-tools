@@ -26,7 +26,7 @@ from schemas.import_schemas import (
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
-from utils.secret_utils import mask_api_key, is_masked_key
+from utils.secret_utils import mask_api_key, is_masked_key, normalize_credential_map
 
 # Import nested routers for app-specific resources
 from .agents import agents_router
@@ -190,6 +190,10 @@ async def import_full_app(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid api_keys JSON: {e}",
             )
+        # api_keys bypasses the field_validators on CreateUpdateAIServiceSchema
+        # because FullAppImportService assigns to the ORM directly. Normalize
+        # at this boundary instead — same effect.
+        api_keys = normalize_credential_map(api_keys)
 
     # Import (always creates new app)
     service = FullAppImportService(db)
@@ -472,6 +476,7 @@ async def get_app(
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=app.agent_cors_origins,
+        enable_openai_api=app.enable_openai_api,
         onboarding_dismissed=app.onboarding_dismissed or False,
         **counts
     )
@@ -597,7 +602,8 @@ async def update_app(
         'langsmith_api_key': langsmith_key,
         'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         'max_file_size_mb': app_data.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
-        'agent_cors_origins': app_data.agent_cors_origins
+        'agent_cors_origins': app_data.agent_cors_origins,
+        'enable_openai_api': app_data.enable_openai_api
     }
     
     # Update app using service
@@ -621,7 +627,8 @@ async def update_app(
         owner_name=owner_name,
         agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=updated_app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
-        agent_cors_origins=updated_app.agent_cors_origins
+        agent_cors_origins=updated_app.agent_cors_origins,
+        enable_openai_api=updated_app.enable_openai_api
     )
 
 

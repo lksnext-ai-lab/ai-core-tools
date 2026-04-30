@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Crown, Check, X, Ban, Trash2 } from 'lucide-react';
+import { Crown, Check, X, Ban, Trash2, RefreshCcw } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import Alert from '../../components/ui/Alert';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { errorMessage } from '../../constants/messages';
 
 function UsersPage() {
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -16,7 +22,6 @@ function UsersPage() {
   const [activatingUser, setActivatingUser] = useState<number | null>(null);
   const [resettingQuota, setResettingQuota] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const perPage = 10;
 
@@ -28,92 +33,104 @@ function UsersPage() {
     try {
       setLoading(true);
       setError(null);
-      setSuccess(null);
       const response: UserListResponse = await adminService.getUsers(currentPage, perPage, searchQuery || undefined);
       setUsers(response.users);
       setTotalPages(response.total_pages);
       setTotalUsers(response.total);
-    } catch (error) {
-      console.error('Failed to load users:', error);
-      setError(`Failed to load users: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      setError(`Failed to load users: ${errorMessage(err, 'Unknown error')}`);
     } finally {
       setLoading(false);
     }
   }
 
   async function handleDeleteUser(userId: number) {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
+    const target = users.find((u) => u.user_id === userId);
+    const ok = await confirm({
+      title: 'Delete user?',
+      message: target
+        ? `Delete ${target.name || target.email}? This will also delete all their apps and data. This action cannot be undone.`
+        : 'Delete this user? This action cannot be undone.',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
 
-    try {
-      setDeletingUser(userId);
-      setError(null);
-      setSuccess(null);
-      await adminService.deleteUser(userId);
-      setSuccess('User deleted successfully!');
-      await loadUsers(); // Reload the list
-    } catch (error) {
-      console.error('Failed to delete user:', error);
-      setError('Failed to delete user. Please try again.');
-    } finally {
-      setDeletingUser(null);
-    }
+    setDeletingUser(userId);
+    const result = await mutate(
+      () => adminService.deleteUser(userId),
+      {
+        loading: 'Deleting user…',
+        success: 'User deleted',
+        error: (err) => errorMessage(err, 'Failed to delete user'),
+      },
+    );
+    setDeletingUser(null);
+    if (result === undefined) return;
+
+    await loadUsers();
   }
 
   async function handleActivateUser(userId: number) {
-    try {
-      setActivatingUser(userId);
-      setError(null);
-      setSuccess(null);
-      const response = await adminService.activateUser(userId);
-      setSuccess(response.message);
-      await loadUsers(); // Reload the list
-    } catch (error: any) {
-      console.error('Failed to activate user:', error);
-      setError(error.message || 'Failed to activate user. Please try again.');
-    } finally {
-      setActivatingUser(null);
-    }
+    setActivatingUser(userId);
+    const result = await mutate(
+      () => adminService.activateUser(userId),
+      {
+        loading: 'Activating user…',
+        success: (data) => data?.message ?? 'User activated',
+        error: (err) => errorMessage(err, 'Failed to activate user'),
+      },
+    );
+    setActivatingUser(null);
+    if (result === undefined) return;
+
+    await loadUsers();
   }
 
   async function handleDeactivateUser(userId: number, userName: string) {
-    if (!confirm(`Are you sure you want to deactivate ${userName}? They will not be able to access the system.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Deactivate user?',
+      message: `Deactivate ${userName}? They will not be able to access the system until reactivated.`,
+      variant: 'warning',
+      confirmLabel: 'Deactivate',
+    });
+    if (!ok) return;
 
-    try {
-      setActivatingUser(userId);
-      setError(null);
-      setSuccess(null);
-      const response = await adminService.deactivateUser(userId);
-      setSuccess(response.message);
-      await loadUsers(); // Reload the list
-    } catch (error: any) {
-      console.error('Failed to deactivate user:', error);
-      setError(error.message || 'Failed to deactivate user. Please try again.');
-    } finally {
-      setActivatingUser(null);
-    }
+    setActivatingUser(userId);
+    const result = await mutate(
+      () => adminService.deactivateUser(userId),
+      {
+        loading: 'Deactivating user…',
+        success: (data) => data?.message ?? 'User deactivated',
+        error: (err) => errorMessage(err, 'Failed to deactivate user'),
+      },
+    );
+    setActivatingUser(null);
+    if (result === undefined) return;
+
+    await loadUsers();
   }
 
   async function handleResetQuota(userId: number, userLabel: string) {
-    if (!confirm(`Are you sure you want to reset the marketplace call quota for ${userLabel}? Their current month counter will be set to 0, allowing them to make up to the full quota again.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Reset marketplace quota?',
+      message: `Reset the marketplace call quota for ${userLabel}? Their current-month counter will be set to 0, allowing them to make up to the full quota again.`,
+      variant: 'warning',
+      confirmLabel: 'Reset quota',
+    });
+    if (!ok) return;
 
-    try {
-      setResettingQuota(userId);
-      setError(null);
-      setSuccess(null);
-      const response = await adminService.resetUserMarketplaceQuota(userId);
-      setSuccess(response.message || `Marketplace quota reset successfully for ${userLabel}`);
-    } catch (error: any) {
-      console.error('Failed to reset marketplace quota:', error);
-      setError(error.message || 'Failed to reset marketplace quota. Please try again.');
-    } finally {
-      setResettingQuota(null);
-    }
+    setResettingQuota(userId);
+    await mutate(
+      () => adminService.resetUserMarketplaceQuota(userId),
+      {
+        loading: 'Resetting quota…',
+        success: (data) => data?.message ?? `Marketplace quota reset for ${userLabel}`,
+        error: (err) => errorMessage(err, 'Failed to reset marketplace quota'),
+      },
+    );
+    setResettingQuota(null);
   }
 
   function handleSearch(e: React.FormEvent) {
@@ -132,7 +149,6 @@ function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {success && <Alert type="success" message={success} onDismiss={() => setSuccess(null)} />}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
       {/* Header */}
@@ -258,7 +274,7 @@ function UsersPage() {
                             ...(user.is_active ? [
                               {
                                 label: activatingUser === user.user_id ? 'Deactivating...' : 'Deactivate',
-                                onClick: () => handleDeactivateUser(user.user_id, user.name || user.email),
+                                onClick: () => { void handleDeactivateUser(user.user_id, user.name || user.email); },
                                 icon: <Ban className="w-4 h-4" />,
                                 variant: 'warning' as const,
                                 disabled: activatingUser === user.user_id
@@ -266,7 +282,7 @@ function UsersPage() {
                             ] : [
                               {
                                 label: activatingUser === user.user_id ? 'Activating...' : 'Activate',
-                                onClick: () => handleActivateUser(user.user_id),
+                                onClick: () => { void handleActivateUser(user.user_id); },
                                 icon: <Check className="w-4 h-4" />,
                                 variant: 'success' as const,
                                 disabled: activatingUser === user.user_id
@@ -274,8 +290,8 @@ function UsersPage() {
                             ]),
                             {
                               label: resettingQuota === user.user_id ? 'Resetting...' : 'Reset Quota',
-                              onClick: () => handleResetQuota(user.user_id, user.name || user.email),
-                              icon: '🔄',
+                              onClick: () => { void handleResetQuota(user.user_id, user.name || user.email); },
+                              icon: <RefreshCcw className="w-4 h-4" />,
                               variant: 'warning' as const,
                               disabled: resettingQuota === user.user_id
                             },

@@ -304,7 +304,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
           style={{ minHeight: '38px', maxHeight: '120px' }}
         />
         <button
-          onClick={handleSend}
+          onClick={() => handleSend()}
           disabled={isSending || !inputText.trim()}
           className="shrink-0 p-2 rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 transition-opacity"
           aria-label="Send"

@@ -12,12 +12,17 @@ import type { Skill } from '../../core/types';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { AppRole } from '../../types/roles';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../../constants/messages';
 
 function SkillsPage() {
   const { appId } = useParams();
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +61,7 @@ function SkillsPage() {
     }
   }
 
-  async function forceReloadSkills() {
+  async function _forceReloadSkills() {
     if (!appId) return;
 
     try {
@@ -75,23 +80,32 @@ function SkillsPage() {
   }
 
   async function handleDelete(skillId: number) {
-    if (!confirm('Are you sure you want to delete this skill?')) {
-      return;
-    }
-
     if (!appId) return;
 
-    try {
-      await apiService.deleteSkill(Number.parseInt(appId), skillId);
-      // Remove from local state
-      const newSkills = skills.filter(s => s.skill_id !== skillId);
-      setSkills(newSkills);
-      // Update cache
-      settingsCache.setSkills(appId, newSkills);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete skill');
-      console.error('Error deleting skill:', err);
-    }
+    const target = skills.find((s) => s.skill_id === skillId);
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('skill'),
+      message: target
+        ? `Are you sure you want to delete "${target.name}"? Agents using it will lose this specialization.`
+        : MESSAGES.CONFIRM_DELETE_MESSAGE('skill'),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => apiService.deleteSkill(Number.parseInt(appId), skillId),
+      {
+        loading: MESSAGES.DELETING('skill'),
+        success: MESSAGES.DELETED('skill'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('skill')),
+      },
+    );
+    if (result === undefined) return;
+
+    const newSkills = skills.filter((s) => s.skill_id !== skillId);
+    setSkills(newSkills);
+    settingsCache.setSkills(appId, newSkills);
   }
 
   function handleCreateSkill() {
@@ -115,22 +129,34 @@ function SkillsPage() {
   async function handleSaveSkill(data: any) {
     if (!appId) return;
 
-    try {
-      if (editingSkill && editingSkill.skill_id !== 0) {
-        // Update existing skill
-        await apiService.updateSkill(Number.parseInt(appId), editingSkill.skill_id, data);
-        await loadSkills();
-      } else {
-        // Create new skill - invalidate cache and force reload
-        await apiService.createSkill(Number.parseInt(appId), data);
-        settingsCache.invalidateSkills(appId);
-        await forceReloadSkills();
-      }
+    const isUpdate = Boolean(editingSkill && editingSkill.skill_id !== 0);
 
-      setIsModalOpen(false);
-      setEditingSkill(null);
-    } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to save skill');
+    const result = await mutate<Skill>(
+      () =>
+        isUpdate
+          ? apiService.updateSkill(Number.parseInt(appId), editingSkill.skill_id, data)
+          : apiService.createSkill(Number.parseInt(appId), data),
+      {
+        loading: isUpdate ? MESSAGES.UPDATING('skill') : MESSAGES.CREATING('skill'),
+        success: isUpdate ? MESSAGES.UPDATED('skill') : MESSAGES.CREATED('skill'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('skill')),
+      },
+    );
+    if (result === undefined) return;
+
+    setIsModalOpen(false);
+    setEditingSkill(null);
+
+    if (isUpdate) {
+      try {
+        await loadSkills();
+      } catch (err) {
+        console.error('Refetch after update failed:', err);
+      }
+    } else {
+      const updatedSkills = [...skills, result];
+      setSkills(updatedSkills);
+      settingsCache.setSkills(appId, updatedSkills);
     }
   }
 

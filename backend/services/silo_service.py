@@ -1,13 +1,11 @@
 from typing import Optional, List, Dict, Any
 import os
-import json
 from models.media import Media
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
 from db.database import db as db_obj
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from utils.logger import get_logger
 from langchain_core.documents import Document
 from tools.vector_store_factory import VectorStoreFactory
@@ -19,12 +17,15 @@ from utils.error_handlers import (
     handle_database_errors, NotFoundError, ValidationError, 
     validate_required_fields
 )
+from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from schemas.silo_schemas import SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema
 from repositories.silo_repository import SiloRepository
 from services.folder_service import FolderService
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
+DEFAULT_SEARCH_LIMIT = 100
+MAX_SEARCH_LIMIT = 200
 
 logger = get_logger(__name__)
 
@@ -45,6 +46,7 @@ def _get_vector_store(silo: Optional[Silo] = None, vector_db_type: Optional[str]
 
     resolved_type = _resolve_vector_db_type(silo, vector_db_type)
     return VectorStoreFactory.get_vector_store(db_obj, resolved_type)
+
 
 class SiloService:
 
@@ -122,12 +124,17 @@ class SiloService:
                 
                 logger.debug(f"Merged search_kwargs: {merged_search_kwargs}")
             
+            # Extract search_type before passing search_kwargs — it must be a top-level
+            # kwarg to `as_retriever`, not nested inside search_kwargs.
+            retriever_search_type = merged_search_kwargs.pop("search_type", "similarity")
+
             # Use async engine with psycopg (not asyncpg) for async operations
             # psycopg supports async natively and handles multiple SQL statements properly
             return _get_vector_store(silo).get_retriever(
-                collection_name, 
-                silo.embedding_service, 
+                collection_name,
+                silo.embedding_service,
                 merged_search_kwargs,
+                search_type=retriever_search_type,
                 use_async=True  # Use async psycopg engine for LangGraph compatibility
             )
         except Exception as e:
@@ -214,6 +221,12 @@ class SiloService:
                 if not silo:
                     raise NotFoundError(f"Silo with ID {silo_id} not found", "silo")
                 logger.info(f"Updating existing silo {silo_id}")
+                assert_vector_db_type_immutable(
+                    silo.vector_db_type, requested_vector_db_type, "silo"
+                )
+                assert_embedding_service_immutable(
+                    silo.embedding_service_id, silo_data.get('embedding_service_id'), "silo"
+                )
             else:
                 # Enforce per-app silo limit before creation (SaaS mode only)
                 app_id = silo_data.get('app_id')
@@ -237,8 +250,8 @@ class SiloService:
                 if silo_type == SiloType.REPO:
                     silo.metadata_definition_id = 0
 
-            # Set embedding service if provided
-            if silo_data.get('embedding_service_id'):
+            # Set embedding service on creation only — immutable after creation
+            if not silo_id and silo_data.get('embedding_service_id'):
                 silo.embedding_service_id = silo_data['embedding_service_id']
             
             # Handle metadata definition (output parser) - explicitly handle None to clear it
@@ -342,7 +355,36 @@ class SiloService:
         except Exception as exc:
             logger.error(f"Error counting docs in silo {silo_id}: {exc}")
             return 0
-    
+
+    @staticmethod
+    def count_docs_with_filter(
+        silo_id: int,
+        filter_metadata: Optional[dict] = None,
+        db: Session = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+    ) -> int:
+        """
+        Count documents in a silo collection, optionally filtered by metadata
+        and/or content length. Returns 0 gracefully if the silo or collection
+        does not exist.
+        """
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo or not SiloService.check_silo_collection_exists(silo_id, db):
+            return 0
+
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        try:
+            return _get_vector_store(silo).count_documents(
+                collection_name,
+                filter_metadata=filter_metadata,
+                min_content_length=min_content_length,
+                max_content_length=max_content_length,
+            )
+        except Exception as exc:
+            logger.error("count_docs_with_filter error for silo %s: %s", silo_id, exc)
+            return 0
+
     @staticmethod
     def _get_silo_for_indexing(silo_id: int, db: Session):
         """Helper method to get silo and validate it exists"""
@@ -442,91 +484,63 @@ class SiloService:
         """
         Update only the metadata of a resource in the vector database without re-indexing content.
         This is more efficient for operations like moving files between folders.
-        
+
         Args:
             resource: Resource instance with updated folder information
             db_session: Optional database session to use (if None, creates new session)
         """
+        session = db_session if db_session else SessionLocal()
         try:
-            # Use provided session or create new one
-            if db_session:
-                session = db_session
-            else:
-                session = SessionLocal()
-            
-            # Get resource with relations
             resource_with_relations = session.query(Resource).filter(
                 Resource.resource_id == resource.resource_id
             ).first()
-            
+
             if not resource_with_relations:
                 logger.error(f"Resource {resource.resource_id} not found for metadata update")
                 return
-            
-            logger.info(f"Updating metadata for resource {resource.resource_id}, folder_id: {resource_with_relations.folder_id}")
-            
-            collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
-            
-            # Build the correct file path including folder structure
-            if resource_with_relations.folder_id:
-                from services.folder_service import FolderService
-                folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
-                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
-            else:
-                path = os.path.join(REPO_BASE_FOLDER, str(resource_with_relations.repository_id), resource_with_relations.uri)
-            
+
+            silo = resource_with_relations.repository.silo
+            collection_name = COLLECTION_PREFIX + str(silo.silo_id)
+
             file_extension = os.path.splitext(resource_with_relations.uri)[1].lower()
-            
-            # Prepare updated metadata
             base_metadata = {
                 "repository_id": resource_with_relations.repository_id,
                 "resource_id": resource_with_relations.resource_id,
-                "silo_id": resource_with_relations.repository.silo_id,
+                "silo_id": silo.silo_id,
                 "name": resource_with_relations.uri,
-                "file_type": file_extension
+                "file_type": file_extension,
             }
-            
-            # Add folder information if resource is in a folder
+
             if resource_with_relations.folder_id:
-                from services.folder_service import FolderService
                 folder_path = FolderService.get_folder_path(resource_with_relations.folder_id, session)
                 base_metadata["folder_id"] = resource_with_relations.folder_id
                 base_metadata["folder_path"] = folder_path
-                # Store relative path including folder structure
-                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri)
-                logger.info(f"Resource in folder: {folder_path}, ref: {base_metadata['ref']}")
+                base_metadata["ref"] = os.path.join(
+                    str(resource_with_relations.repository_id), folder_path, resource_with_relations.uri
+                )
             else:
-                # Resource is at root level
                 base_metadata["folder_id"] = None
                 base_metadata["folder_path"] = ""
-                base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
-                logger.info(f"Resource at root, ref: {base_metadata['ref']}")
-            
-            # Update metadata in vector database using direct SQL
-            # The langchain_pg_embedding table stores documents with metadata as JSONB
-            update_query = text("""
-                UPDATE langchain_pg_embedding 
-                SET cmetadata = :new_metadata
-                WHERE collection_id = (
-                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
+                base_metadata["ref"] = os.path.join(
+                    str(resource_with_relations.repository_id), resource_with_relations.uri
                 )
-                AND cmetadata->>'resource_id' = :resource_id
-            """)
-            
-            session.execute(update_query, {
-                'new_metadata': json.dumps(base_metadata),
-                'collection_name': collection_name,
-                'resource_id': str(resource.resource_id)
-            })
-            session.commit()
-            
-            logger.info(f"Updated metadata for resource {resource.resource_id} in collection {collection_name}")
-            
+
+            updated = _get_vector_store(silo).update_documents_metadata(
+                collection_name,
+                filter_metadata={"resource_id": {"$eq": str(resource.resource_id)}},
+                metadata_updates=base_metadata,
+                replace=True,
+            )
+
+            logger.info(
+                "Updated metadata for resource %s in collection %s (%s rows)",
+                resource.resource_id, collection_name, updated,
+            )
+
         except Exception as e:
             logger.error(f"Error updating resource metadata: {str(e)}")
             raise
         finally:
-            # Only close if we created the session
             if not db_session:
                 session.close()
 
@@ -535,68 +549,54 @@ class SiloService:
         """
         Update only the metadata of media chunks in the vector database without re-indexing content.
         Updates folder information for all chunks belonging to this media.
-        
+
         Args:
             media: Media instance with updated folder information
             db_session: Optional database session
         """
+        session = db_session if db_session else SessionLocal()
         try:
-            if db_session:
-                session = db_session
-            else:
-                session = SessionLocal()
-            
-            # Get media with relations
             media_with_relations = session.query(Media).filter(
                 Media.media_id == media.media_id
             ).first()
-            
+
             if not media_with_relations:
                 logger.error(f"Media {media.media_id} not found for metadata update")
                 return
-            
-            logger.info(f"Updating metadata for media {media.media_id}, folder_id: {media_with_relations.folder_id}")
-            
-            collection_name = COLLECTION_PREFIX + str(media_with_relations.repository.silo_id)
-            
-            # Prepare updated metadata fields
+
+            silo = media_with_relations.repository.silo
+            collection_name = COLLECTION_PREFIX + str(silo.silo_id)
+
             metadata_updates = {
                 "source_type": media_with_relations.source_type,
                 "source_url": media_with_relations.source_url,
                 "language": media_with_relations.language,
-                "name": media_with_relations.name
+                "name": media_with_relations.name,
             }
-            
-            # Add folder information
+
             if media_with_relations.folder_id:
-                from services.folder_service import FolderService
                 folder_path = FolderService.get_folder_path(media_with_relations.folder_id, session)
                 metadata_updates["folder_id"] = media_with_relations.folder_id
                 metadata_updates["folder_path"] = folder_path
             else:
                 metadata_updates["folder_id"] = None
                 metadata_updates["folder_path"] = ""
-            
-            # Update all chunks for this media in vector database
-            update_query = text("""
-                UPDATE langchain_pg_embedding 
-                SET cmetadata = cmetadata || CAST(:metadata_updates AS jsonb)
-                WHERE collection_id = (
-                    SELECT uuid FROM langchain_pg_collection WHERE name = :collection_name
-                )
-                AND cmetadata->>'media_id' = :media_id
-                AND cmetadata->>'content_type' = 'media_chunk'
-            """)
 
-            session.execute(update_query, {
-                'metadata_updates': json.dumps(metadata_updates),
-                'collection_name': collection_name,
-                'media_id': str(media.media_id)
-            })
-            session.commit()
-            
-            logger.info(f"Updated metadata for all chunks of media {media.media_id} in collection {collection_name}")
-            
+            updated = _get_vector_store(silo).update_documents_metadata(
+                collection_name,
+                filter_metadata={
+                    "media_id": {"$eq": str(media.media_id)},
+                    "content_type": {"$eq": "media_chunk"},
+                },
+                metadata_updates=metadata_updates,
+                replace=False,
+            )
+
+            logger.info(
+                "Updated metadata for media %s in collection %s (%s chunks)",
+                media.media_id, collection_name, updated,
+            )
+
         except Exception as e:
             logger.error(f"Error updating media metadata: {str(e)}")
             raise
@@ -689,11 +689,13 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(media.repository.silo_id)
 
         # Build metadata from chunk dict and media
+        chunk_type = chunk.get('chunk_type', 'audio')  # 'audio' or 'visual'
         metadata = {
             "repository_id": media.repository_id,
             "media_id": media.media_id,
             "silo_id": media.repository.silo_id,
             "content_type": "media_chunk",
+            "chunk_type": chunk_type,
             
             # Chunk-specific data
             "chunk_index": chunk.get('chunk_index'),
@@ -708,6 +710,7 @@ class SiloService:
             "language": media.language,
             "file_type": os.path.splitext(media.file_path)[1].lower() if media.file_path else None,
             "source": media.file_path,
+            "processing_mode": media.processing_mode or "basic",
             
             # Folder information
             "folder_id": media.folder_id,
@@ -734,8 +737,10 @@ class SiloService:
             metadata["folder_path"] = ""
 
         # Create Document and index
+        page_content = chunk.get('text', '')
+        
         doc = Document(
-            page_content=chunk.get('text', ''),
+            page_content=page_content,
             metadata=metadata
         )
 
@@ -957,24 +962,17 @@ class SiloService:
             return 0
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
-        
-        # First, find matching documents to count them
-        matching_docs = _get_vector_store(silo).search_similar_documents(
-            collection_name,
-            query=" ",  # Use empty query with metadata filter only
-            embedding_service=silo.embedding_service,
-            filter_metadata=filter_metadata,
-            k=1000  # Get up to 1000 matching docs
-        )
-        
-        doc_count = len(matching_docs)
-        
+        store = _get_vector_store(silo)
+
+        # Count matches first via the vector store abstraction (faster than search).
+        doc_count = store.count_documents(collection_name, filter_metadata=filter_metadata)
+
         if doc_count == 0:
             logger.info(f"No documents found matching the filter in silo {silo_id}")
             return 0
-        
+
         # Delete the matched documents using metadata filter
-        _get_vector_store(silo).delete_documents(
+        store.delete_documents(
             collection_name,
             ids=filter_metadata,  # Pass metadata filter as dict
             embedding_service=silo.embedding_service
@@ -983,7 +981,19 @@ class SiloService:
         return doc_count
 
     @staticmethod
-    def find_docs_in_collection(silo_id: int, query: str, filter_metadata: Optional[dict] = None, db: Session = None) -> List[Document]:
+    def find_docs_in_collection(
+        silo_id: int,
+        query: str,
+        filter_metadata: Optional[dict] = None,
+        limit: Optional[int] = None,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+        db: Session = None,
+    ) -> List[Document]:
         # Get silo within the session to ensure relationships are loaded
         silo = SiloRepository.get_by_id(silo_id, db)
         if not silo or not SiloService.check_silo_collection_exists(silo_id, db):
@@ -996,19 +1006,43 @@ class SiloService:
         if silo.embedding_service_id:
             embedding_service = SiloRepository.get_embedding_service_by_id(silo.embedding_service_id, db)
         
-        # Use a higher limit when filtering by metadata to ensure all matching documents are retrieved
-        results_limit = 100 if filter_metadata else 5
+        results_limit = limit if limit and limit > 0 else DEFAULT_SEARCH_LIMIT
+        if results_limit > MAX_SEARCH_LIMIT:
+            results_limit = MAX_SEARCH_LIMIT
 
-        return _get_vector_store(silo).search_similar_documents(
-            collection_name, 
-            query, 
+        docs = _get_vector_store(silo).search_similar_documents(
+            collection_name,
+            query,
             embedding_service=embedding_service,
             filter_metadata=filter_metadata or {},
-            k=results_limit
+            k=results_limit,
+            search_type=search_type,
+            score_threshold=score_threshold,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
         )
+        if min_content_length is not None or max_content_length is not None:
+            docs = [
+                d for d in docs
+                if (min_content_length is None or len(d.page_content) >= min_content_length)
+                and (max_content_length is None or len(d.page_content) <= max_content_length)
+            ]
+        return docs
 
     @staticmethod
-    def search_in_silo(silo_id: int, query: str, filter_metadata: Optional[dict] = None, limit: int = 10, db: Session = None) -> List[Document]:
+    def search_in_silo(
+        silo_id: int,
+        query: str,
+        filter_metadata: Optional[dict] = None,
+        limit: Optional[int] = None,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+        db: Session = None,
+    ) -> List[Document]:
         """
         Search for documents in a silo using semantic search
         
@@ -1023,13 +1057,19 @@ class SiloService:
             List of Document objects with page_content and metadata
         """
         # Use find_docs_in_collection as the base implementation
-        results = SiloService.find_docs_in_collection(silo_id, query, filter_metadata, db)
-        
-        # Apply limit if specified
-        if limit and limit > 0:
-            results = results[:limit]
-            
-        return results
+        return SiloService.find_docs_in_collection(
+            silo_id,
+            query,
+            filter_metadata,
+            limit=limit,
+            search_type=search_type,
+            score_threshold=score_threshold,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
+            min_content_length=min_content_length,
+            max_content_length=max_content_length,
+            db=db,
+        )
 
     @staticmethod
     def _get_filter_value_by_type(field_value: str, field_type: str) -> dict:
@@ -1215,6 +1255,8 @@ class SiloService:
         Create or update silo using router data
         """
         # Prepare form data for the service
+        # vector_db_type uses getattr so this method works with both CreateSiloSchema
+        # (which has the field) and UpdateSiloSchema (which intentionally omits it).
         form_data = {
             'silo_id': silo_id,
             'name': silo_data.name,
@@ -1222,8 +1264,8 @@ class SiloService:
             'app_id': app_id,
             'type': silo_data.type,
             'output_parser_id': silo_data.output_parser_id,
-            'embedding_service_id': silo_data.embedding_service_id,
-            'vector_db_type': silo_data.vector_db_type
+            'embedding_service_id': getattr(silo_data, 'embedding_service_id', None),
+            'vector_db_type': getattr(silo_data, 'vector_db_type', None)
         }
         
         # Create or update using the existing service
@@ -1238,30 +1280,18 @@ class SiloService:
         return SiloRepository.delete(silo_id, db)
     
     @staticmethod
-    def get_silo_playground_info(silo_id: int, db: Session) -> Optional[Dict[str, Any]]:
-        """
-        Get silo playground information
-        """
-        # Get silo info
-        silo = SiloService.get_silo(silo_id, db)
-        if not silo:
-            return None
-        
-        docs_count = SiloService.count_docs_in_silo(silo_id, db)
-        
-        return {
-            "silo_id": silo.silo_id,
-            "name": silo.name,
-            "docs_count": docs_count,
-            "message": "Silo playground - ready for document search testing"
-        }
-    
-    @staticmethod
     def search_silo_documents_router(
-        silo_id: int, 
-        query: str, 
+        silo_id: int,
+        query: str,
         filter_metadata: Optional[Dict[str, Any]] = None,
-        db: Session = None
+        limit: Optional[int] = None,
+        search_type: str = "similarity",
+        score_threshold: Optional[float] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
+        min_content_length: Optional[int] = None,
+        max_content_length: Optional[int] = None,
+        db: Session = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Search for documents in a silo using semantic search with optional metadata filtering
@@ -1273,10 +1303,17 @@ class SiloService:
         
         # Perform the search with metadata filtering
         results = SiloService.find_docs_in_collection(
-            silo_id, 
-            query, 
+            silo_id,
+            query,
             filter_metadata=filter_metadata,
-            db=db
+            limit=limit,
+            search_type=search_type,
+            score_threshold=score_threshold,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
+            min_content_length=min_content_length,
+            max_content_length=max_content_length,
+            db=db,
         )
         
         # Convert results to response format
@@ -1296,3 +1333,77 @@ class SiloService:
             "total_results": len(response_results),
             "filter_metadata": filter_metadata
         }
+
+    @staticmethod
+    def get_neighboring_chunks(
+        silo_id: int,
+        source_type: str,
+        source_id: str,
+        db: Session = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Return all chunks from the same source document, ordered by position.
+
+        source_type: "media" or "resource"
+        source_id:   str value of media_id or resource_id (as stored in metadata)
+
+        Raises ValueError for unsupported source_type.
+        """
+        if source_type not in ("media", "resource"):
+            raise ValueError(f"Unsupported source_type '{source_type}'. Must be 'media' or 'resource'.")
+
+        if source_type == "media":
+            filter_metadata = {
+                "media_id": {"$eq": source_id},
+                "content_type": {"$eq": "media_chunk"},
+            }
+        else:
+            filter_metadata = {"resource_id": {"$eq": source_id}}
+
+        docs = SiloService.find_docs_in_collection(
+            silo_id,
+            "",
+            filter_metadata=filter_metadata,
+            limit=MAX_SEARCH_LIMIT,
+            db=db,
+        )
+
+        # Sort by position in the source document
+        if source_type == "media":
+            docs.sort(key=lambda d: d.metadata.get("chunk_index", 0))
+        else:
+            docs.sort(key=lambda d: d.metadata.get("page", d.metadata.get("chunk_index", 0)))
+
+        return [
+            {"page_content": doc.page_content, "metadata": doc.metadata, "score": None}
+            for doc in docs
+        ]
+
+    @staticmethod
+    def get_metadata_field_values(
+        silo_id: int,
+        field: str,
+        prefix: Optional[str] = None,
+        limit: int = 100,
+        db: Session = None,
+    ) -> List[str]:
+        """
+        Return distinct values for a metadata field in the silo's vector collection.
+        Sorted alphabetically, filtered by optional case-insensitive prefix.
+        limit is clamped to 1–500.
+        Raises ValueError for invalid field names, NotFoundError for missing silo.
+        """
+        import re
+        if not field or not re.match(r'^[\w.\-]+$', field):
+            raise ValueError(f"Invalid metadata field name: '{field}'")
+
+        limit = min(max(1, limit), 500)
+
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo:
+            raise NotFoundError(f"Silo {silo_id} not found", "silo")
+
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        return _get_vector_store(silo).get_distinct_metadata_values(
+            collection_name, field, prefix=prefix, limit=limit,
+        )

@@ -381,8 +381,9 @@ class MarketplaceService:
         Resolves agent display name and icon from the marketplace profile.
         """
         base_query = (
-            db.query(Conversation, Agent, AgentMarketplaceProfile)
+            db.query(Conversation, Agent, AgentMarketplaceProfile, App)
             .join(Agent, Conversation.agent_id == Agent.agent_id)
+            .join(App, Agent.app_id == App.app_id)
             .outerjoin(
                 AgentMarketplaceProfile,
                 Agent.agent_id == AgentMarketplaceProfile.agent_id,
@@ -404,7 +405,7 @@ class MarketplaceService:
         )
 
         conversations: List[MarketplaceConversationSchema] = []
-        for conv, agent, profile in results:
+        for conv, agent, profile, app in results:
             conversations.append(
                 MarketplaceConversationSchema(
                     conversation_id=conv.conversation_id,
@@ -418,6 +419,7 @@ class MarketplaceService:
                         profile.display_name if profile and profile.display_name else agent.name
                     ),
                     agent_icon_url=profile.icon_url if profile else None,
+                    app_name=app.name if app else None,
                 )
             )
 

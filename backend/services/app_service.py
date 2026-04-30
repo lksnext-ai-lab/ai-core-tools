@@ -70,7 +70,6 @@ class AppService:
         from .api_key_service import APIKeyService
         from .mcp_config_service import MCPConfigService
         from .resource_service import ResourceService
-        from .url_service import UrlService
         from .skill_service import SkillService
         from .mcp_server_service import MCPServerService
         
@@ -94,8 +93,7 @@ class AppService:
             api_key_service = APIKeyService()
             mcp_config_service = MCPConfigService()
             resource_service = ResourceService()
-            url_service = UrlService()
-            
+
             # Delete in the correct order to respect foreign key constraints
             
             # 1. Delete agents (they depend on AI services, silos, output parsers)
@@ -124,14 +122,9 @@ class AppService:
                     logger.info(f"Deleting resource {resource.resource_id}: {resource.name}")
                     resource_service.delete_resource(resource.resource_id, self.db)
             
-            # 5. Delete URLs (they depend on domains)
+            # 5. Get domains (for later deletion; DomainUrl/CrawlPolicy/CrawlJob cascade from domain FK)
             domains = self.app_repo.get_domains_by_app_id(app_id)
-            for domain in domains:
-                urls = self.app_repo.get_urls_by_domain_id(domain.domain_id)
-                for url in urls:
-                    logger.info(f"Deleting URL {url.url_id}: {url.url}")
-                    url_service.delete_url(url.url_id, domain.domain_id, self.db)
-            
+
             # 6. Delete repositories (they depend on silos)
             for repository in repositories:
                 logger.info(f"Deleting repository {repository.repository_id}: {repository.name}")

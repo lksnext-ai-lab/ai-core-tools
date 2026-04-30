@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Pencil } from 'lucide-react';
 import { apiService } from '../../services/api';
 
 interface Conversation {
@@ -45,13 +46,15 @@ export default function ConversationSidebar({
   currentConversationId,
   onConversationSelect,
   onNewConversation,
-  onReloadRequest
+  onReloadRequest: _onReloadRequest
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [editingConvId, setEditingConvId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
 
   useEffect(() => {
     loadConversations();
@@ -107,6 +110,30 @@ export default function ConversationSidebar({
     }
   }
 
+  function handleRenameStart(e: React.MouseEvent, conversation: Conversation) {
+    e.stopPropagation();
+    setEditingConvId(conversation.conversation_id);
+    setEditingTitle(conversation.title || '');
+  }
+
+  async function handleRenameSave(conversationId: number) {
+    const trimmed = editingTitle.trim();
+    if (trimmed) {
+      await handleEditTitle(conversationId, trimmed);
+    }
+    setEditingConvId(null);
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent, conversationId: number) {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSave(conversationId);
+    } else if (e.key === 'Escape') {
+      setEditingConvId(null);
+    }
+  }
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -151,13 +178,12 @@ export default function ConversationSidebar({
           return (
             <button
               key={conversation.conversation_id}
-              onClick={() => onConversationSelect(conversation.conversation_id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  onConversationSelect(conversation.conversation_id);
-                }
+              onClick={(e) => {
+                if (editingConvId === conversation.conversation_id) return;
+                if ((e.target as HTMLElement).closest('button[data-action]')) return;
+                onConversationSelect(conversation.conversation_id);
               }}
-              className={`w-full text-left p-4 cursor-pointer transition-colors ${
+              className={`group w-full text-left p-4 cursor-pointer transition-colors ${
                 isActive
                   ? 'pg-sidebar-active'
                   : 'hover:bg-white/40 dark:hover:bg-gray-800/40 border-l-2 border-transparent'
@@ -165,11 +191,37 @@ export default function ConversationSidebar({
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <h4 className={`text-sm font-medium truncate ${
-                    isActive ? 'text-indigo-900 dark:text-indigo-200' : 'text-gray-700 dark:text-gray-200'
-                  }`}>
-                    {conversation.title}
-                  </h4>
+                  {editingConvId === conversation.conversation_id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onBlur={() => handleRenameSave(conversation.conversation_id)}
+                      onKeyDown={(e) => handleRenameKeyDown(e, conversation.conversation_id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className={`text-sm font-medium border-b outline-none bg-transparent w-full ${
+                        isActive ? 'border-indigo-300 text-indigo-900 dark:text-indigo-200' : 'border-gray-400 text-gray-700 dark:text-gray-200'
+                      }`}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <h4 className={`text-sm font-medium truncate ${
+                        isActive ? 'text-indigo-900 dark:text-indigo-200' : 'text-gray-700 dark:text-gray-200'
+                      }`}>
+                        {conversation.title}
+                      </h4>
+                      <button
+                        type="button"
+                        data-action="rename"
+                        onClick={(e) => handleRenameStart(e, conversation)}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-indigo-500 transition-all"
+                        title="Renombrar conversación"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
 
                   {conversation.last_message && (
                     <p className="text-xs text-gray-500 truncate mt-1">
@@ -185,6 +237,7 @@ export default function ConversationSidebar({
                 </div>
 
                 <button
+                  data-action="delete"
                   onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
                   className={`ml-2 p-1 rounded transition-colors ${
                     isDeleteConfirming

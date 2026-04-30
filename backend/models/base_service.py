@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Text
 from db.database import Base
 from datetime import datetime
 
@@ -9,6 +9,6 @@ class BaseService(Base):
     name = Column(String(100), nullable=False)
     create_date = Column(DateTime, default=datetime.now)
     endpoint = Column(String(255), nullable=True)
-    api_key = Column(String(255), nullable=True)
+    api_key = Column(Text, nullable=True)
     description = Column(String(1000), nullable=True)
     api_version = Column(String(50), nullable=True) 

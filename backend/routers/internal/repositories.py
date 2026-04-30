@@ -13,7 +13,7 @@ from services.media_service import MediaService
 from services.repository_export_service import RepositoryExportService
 from services.repository_import_service import RepositoryImportService
 
-from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, RepositorySearchSchema
+from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetailSchema, CreateUpdateRepositorySchema, CreateRepositorySchema, UpdateRepositorySchema, RepositorySearchSchema
 from schemas.media_schemas import MediaResponse, MediaUploadResponse
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import RepositoryExportFileSchema
@@ -21,6 +21,7 @@ from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
 from repositories.media_repository import MediaRepository
+from utils.error_handlers import ValidationError
 
 # Import database dependency
 from db.database import get_db
@@ -32,6 +33,25 @@ repositories_router = APIRouter()
 
 # Debug log when router is loaded
 logger.info("Repositories router loaded successfully")
+
+
+def _validate_repository_app_ownership(repository_id: int, app_id: int, db) -> None:
+    """Raise HTTP 404 if the repository does not exist or does not belong to app_id."""
+    from models.repository import Repository as RepositoryModel
+    repo = RepositoryService.get_repository(repository_id, db)
+    if not repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
+        )
+    if repo.app_id != app_id:
+        logger.warning(
+            f"Access violation: repository {repository_id} (app {repo.app_id}) accessed from app {app_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Repository does not belong to this app",
+        )
 
 
 # ==================== REPOSITORY MANAGEMENT ====================
@@ -144,26 +164,59 @@ async def get_repository(
     return RepositoryService.get_repository_detail(app_id, repository_id, db)
 
 
-@repositories_router.post("/{repository_id}",
-                         summary="Create or update repository",
+@repositories_router.post("/",
+                         summary="Create repository",
                          tags=["Repositories"],
-                         response_model=RepositoryDetailSchema)
-async def create_or_update_repository(
+                         response_model=RepositoryDetailSchema,
+                         status_code=status.HTTP_201_CREATED)
+async def create_repository(
     app_id: int,
-    repository_id: int,
-    repo_data: CreateUpdateRepositorySchema,
+    repo_data: CreateRepositorySchema,
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """
-    Create a new repository or update an existing one.
-    """    
-    # Use RepositoryService for business logic
-    repo = RepositoryService.create_or_update_repository_router(app_id, repository_id, repo_data, db)
-    
-    # Return updated repository (reuse the GET logic)
-    return RepositoryService.get_repository_detail(app_id, repo.repository_id, db)
+    Create a new repository.
+    """
+    try:
+        repo = RepositoryService.create_repository_router(app_id, repo_data, db)
+        return RepositoryService.get_repository_detail(app_id, repo.repository_id, db)
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating repository: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@repositories_router.put("/{repository_id}",
+                         summary="Update repository",
+                         tags=["Repositories"],
+                         response_model=RepositoryDetailSchema)
+async def update_repository(
+    app_id: int,
+    repository_id: int,
+    repo_data: UpdateRepositorySchema,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+):
+    """
+    Update an existing repository. Note: vector_db_type cannot be changed after creation.
+    """
+    _validate_repository_app_ownership(repository_id, app_id, db)
+    try:
+        repo = RepositoryService.update_repository_router(app_id, repository_id, repo_data, db)
+        return RepositoryService.get_repository_detail(app_id, repo.repository_id, db)
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating repository: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @repositories_router.delete("/{repository_id}",
@@ -383,7 +436,6 @@ async def upload_media(
     repository_id: int,
     background_tasks: BackgroundTasks,
     files: Annotated[List[UploadFile], File(...)],
-    transcription_service_id: Annotated[int, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
@@ -394,7 +446,8 @@ async def upload_media(
     chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
-    Upload video/audio files for transcription and indexing
+    Upload video/audio files for transcription and indexing.
+    AI services (transcription, video analysis) are configured at repository level.
 
     Supported formats:
     - Video: mp4, mov, avi, mkv, webm, flv, wmv, mpeg, mpg
@@ -414,14 +467,13 @@ async def upload_media(
             repository_id=repository_id,
             files=files,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             user_context=auth_context,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
         )
 
         return MediaUploadResponse(
@@ -439,7 +491,6 @@ async def add_youtube_video(
     background_tasks: BackgroundTasks,
     repository_id: int,
     url: Annotated[str, Form(...)],
-    transcription_service_id: Annotated[int, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
@@ -450,7 +501,8 @@ async def add_youtube_video(
     chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
     """
-    Add YouTube video for transcription and indexing
+    Add YouTube video for transcription and indexing.
+    AI services (transcription, video analysis) are configured at repository level.
 
     The video will be:
     1. Downloaded from YouTube
@@ -458,6 +510,7 @@ async def add_youtube_video(
     3. Transcribed using Whisper
     4. Chunked into segments
     5. Indexed for RAG queries
+    6. (If multimodal) Video analyzed with Video-LLM and visual descriptions merged
 
     Configuration:
     - forced_language: Force transcription language (e.g., 'es', 'en', 'fr'). Leave empty for auto-detect.
@@ -473,13 +526,12 @@ async def add_youtube_video(
             url=url,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             db=db,
             background_tasks=background_tasks,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
         )
 
         return MediaResponse(**media.__dict__)

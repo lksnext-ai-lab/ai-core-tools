@@ -105,7 +105,7 @@ async def create_or_update_skill(
             )
 
         # Return updated skill (reuse the GET logic)
-        return await get_skill(app_id, skill.skill_id, auth_context, role, db)
+        return await get_skill(app_id, skill.skill_id, auth_context, db, role)
 
     except HTTPException:
         raise

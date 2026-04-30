@@ -5,24 +5,37 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "manual-scan-2026-03-30"  # Update to actual HEAD SHA: git log --format="%H" -1
-last_synced_date: "2026-03-30T00:00:00+00:00"
+last_synced_commit: "d40b51d52e32c9e6fd46c53ea85e1a5dd56a6567"
+last_synced_date: "2026-04-30T00:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
     - "docs/index.md"
-    - "docs/reference/environment-variables.md"
-    - "docs/architecture/backend.md"
-    - "docs/api/internal-api.md"
-    - "docs/architecture/database.md"
-    - "docs/guides/marketplace.md"
+    - "docs/guides/copilot-agents.md"
     - "docs/.doc-metadata.yaml"
   files_created:
-    - "docs/guides/saas-mode.md"
-    - "docs/guides/platform-chatbot.md"
+    - "docs/guides/git-workflow.md"
   files_deleted: []
   commits_covered: null
-  commit_range: "91a003b..HEAD"
-  notes: "Merged two parallel doc sync operations. (1) SaaS mode: new saas-mode.md and platform-chatbot.md guides, SaaS env vars (AICT_DEPLOYMENT_MODE, STRIPE_*, EMAIL_*, SMTP_*), backend.md updates for SaaS services/repos/models. (2) Marketplace/Admin: AgentMarketplaceRating and SystemSetting DB models, User.is_active field, Admin API user activation/deactivation, system stats, system settings CRUD with resolution chain, fixed quota reset response schema, marketplace file attachment endpoints (upload/list/delete/download)."
+  commit_range: "d40b51d..HEAD (release/0.4.1 branch)"
+  notes: >
+    GitFlow Release Workflow documentation (release/0.4.1 branch changes):
+    (1) Added .github/agents/git-github.agent.md workflow: "When Creating a GitFlow Release Branch"
+    (11 steps: sync develop → cut release/<version> → bump version in pyproject.toml → signed commit →
+    push → PR to main → tag main → back-merge to develop → bump next dev version → delete release branch)
+    and "When Creating a GitFlow Hotfix Branch" (4 steps).
+    (2) Added .github/instructions/.git-github.instructions.md section "GitFlow Release Workflow"
+    (8 steps) and branch naming entries: release/<version>, hotfix/<description>.
+    (3) pyproject.toml version bumped from 0.4.1.dev0 → 0.4.1 on release/0.4.1 branch.
+    Documentation created: docs/guides/git-workflow.md (full GitFlow guide: branch naming, versioning
+    convention x.y.z.devN, release workflow, hotfix workflow, commit signing, remote config, GitHub CLI rules).
+    docs/guides/copilot-agents.md updated: @git-github section expanded with GitFlow capabilities and
+    link to new guide. docs/index.md updated: new guide added to Guides TOC.
+    (3) X-Server-Time-Ms response header on search. (4) Frontend playground: result inspection
+    with score bar/source badge/expand-collapse/copy/neighbors; faceted filter builder with
+    autocomplete; curator tools (multi-select bulk delete, delete-by-filter w/ dry-run guard,
+    reindex); API snippets (cURL/Python/JS/TS); latency badge; query history; A/B compare mode.
+    NOTE: user-avatar-upload plan (PR #110) execution marked completed but feature not confirmed
+    in develop (User model has no avatar_path). Skipped pending verification.

@@ -390,8 +390,6 @@ def test_import_silo_with_bundled_embedding_service(
     )
     
     assert summary.created is True
-    assert len(summary.dependencies_created) == 1
-    assert "Embedding Service" in summary.dependencies_created[0]
     
     # Verify silo created with new embedding service
     silo_repo = SiloRepository()

@@ -288,39 +288,78 @@ docs = retriever.get_relevant_documents("How do I reset my password?")
 # Returns top 5 most relevant document chunks
 ```
 
+### Search Types
+
+The silo search engine supports three search strategies, selectable via the `search_type` parameter:
+
+| `search_type` | Description | Extra params |
+|---|---|---|
+| `similarity` | Standard cosine-similarity ranking (default) | — |
+| `similarity_score_threshold` | Returns only results at or above a relevance score | `score_threshold` (0.0–1.0) |
+| `mmr` | Maximal Marginal Relevance — balances relevance and diversity to avoid near-duplicate chunks | `fetch_k`, `lambda_mult` |
+
+### Search Parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `query` | `str` | — | Free-text search query |
+| `limit` / `k` | `int` | `DEFAULT_SEARCH_LIMIT` (100) | Max results returned; capped at `MAX_SEARCH_LIMIT` (200) |
+| `search_type` | `str` | `"similarity"` | One of `similarity`, `similarity_score_threshold`, `mmr` |
+| `score_threshold` | `float` | `None` | Minimum score (0–1). Only used with `similarity_score_threshold`. |
+| `fetch_k` | `int` | `None` | Candidate pool for MMR (must be ≥ `k`). Only used with `mmr`. |
+| `lambda_mult` | `float` | `0.5` | MMR diversity factor (0=max diversity, 1=max relevance). Only used with `mmr`. |
+| `filter_metadata` | `dict` | `None` | MongoDB-style metadata filter (e.g. `{"source_type": {"$eq": "pdf"}}`) |
+| `min_content_length` | `int` | `None` | Exclude chunks shorter than N characters |
+| `max_content_length` | `int` | `None` | Exclude chunks longer than N characters |
+
+**Server-side validation** rejects:
+- `score_threshold` when `search_type != "similarity_score_threshold"` → `400`
+- `fetch_k` or `lambda_mult` when `search_type != "mmr"` → `400`
+- `min_content_length > max_content_length` → `400`
+
 ### Similarity Search
 
 When an agent needs context, it performs a **similarity search** against the silo:
 
 1. **Generate query embedding** from user's message
-2. **Find top-k most similar vectors** in the silo (default: 5)
+2. **Find top-k most similar vectors** in the silo (default: 100)
 3. **Return corresponding document chunks**
 4. **Pass to LLM** as context
 
-**Parameters**:
-- `k`: Number of documents to retrieve (default: `silo.retrieval_count`)
-- `collection_name`: `silo_{silo_id}`
-- `embedding_service`: Silo's embedding service
-
-**Example with PGVector**:
+**Example — standard similarity**:
 ```python
 store = PGVectorStore(db)
-docs = store.similarity_search(
+docs = store.search_similar_documents(
     collection_name="silo_1",
     query="password reset procedure",
+    embedding_service=silo.embedding_service,
     k=5,
-    embedding_service=silo.embedding_service
+    search_type="similarity",
 )
 ```
 
-**Example with Qdrant**:
+**Example — score-threshold search**:
 ```python
-store = QdrantStore(db, url="http://localhost:6333")
-docs = store.similarity_search(
+docs = store.search_similar_documents(
     collection_name="silo_1",
     query="password reset procedure",
+    embedding_service=silo.embedding_service,
+    k=10,
+    search_type="similarity_score_threshold",
+    score_threshold=0.75,
+)
+```
+
+**Example — MMR (diverse results)**:
+```python
+docs = store.search_similar_documents(
+    collection_name="silo_1",
+    query="password reset procedure",
+    embedding_service=silo.embedding_service,
     k=5,
-    embedding_service=silo.embedding_service
+    search_type="mmr",
+    fetch_k=20,
+    lambda_mult=0.6,
 )
 ```
 
@@ -351,6 +390,39 @@ if agent.silo_id:
 ```
 
 The LLM can then invoke the `knowledge_base` tool to retrieve relevant context on demand.
+
+**Important**: `SiloService.get_silo_retriever` passes `search_type` as a top-level argument to LangChain's `as_retriever()`, not inside `search_kwargs`. This ensures MMR and threshold modes work correctly for production agents (a latent bug where `search_type` was silently ignored has been fixed).
+
+## Silo Playground
+
+The **Silo Playground** (`/apps/:appId/silos/:siloId/playground`) is the primary surface for inspecting and tuning vector-store contents. It is backed by the `POST /internal/apps/{appId}/silos/{siloId}/search` endpoint and exposes all retriever parameters described above.
+
+### Key Features
+
+| Feature | Description |
+|---|---|
+| **Search controls** | Top-K slider, search type selector, score threshold, MMR controls (fetch_k, lambda_mult); all persisted per silo in `localStorage` |
+| **Result inspection** | Score bar, source attribution badge, expand/collapse, copy chunk text/JSON, metadata tree view, neighboring chunks, empty-state coaching |
+| **Faceted filters** | Autocomplete-driven filter builder for each silo metadata field, operator picker (`$eq`, `$in`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$exists`), live JSON preview, saved filters |
+| **Content-length filter** | Min/max character length range to exclude too-short or too-long chunks |
+| **Curator tools** | Multi-select bulk delete, delete-by-filter with dry-run count + silo-name confirmation guard, per-result reindex action |
+| **API snippets** | Live cURL/Python/JS/TS code snippets mirroring the current playground request (paste-ready with API key) |
+| **Observability** | Per-search latency badge (`X-Server-Time-Ms` header), query history (last 20 per silo), A/B compare mode with shared-chunk highlighting |
+| **Test against agent** | Shortcut to open the agent playground with the current query pre-filled |
+
+### Source Attribution
+
+The playground detects the chunk origin from its metadata:
+
+| Source type | Detection | Neighboring chunks |
+|---|---|---|
+| **Media** | `media_id` present + `content_type == "media_chunk"` | Ordered by `chunk_index` |
+| **Repository** | `resource_id` present | Ordered by `page` (fallback to `chunk_index`) |
+| **URL / Generic** | Fallback | Not supported |
+
+### Neighboring Chunks
+
+The **"Show neighboring chunks"** action calls `GET /internal/apps/{appId}/silos/{siloId}/documents/neighbors?source_type=media&source_id=42` and returns all chunks from the same source document in reading order — useful for reconstructing context around a matched chunk.
 
 ## Performance Considerations
 

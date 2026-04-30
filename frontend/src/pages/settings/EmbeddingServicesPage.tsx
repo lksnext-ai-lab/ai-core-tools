@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
 import { Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2, AlertTriangle } from 'lucide-react';
-import Modal from '../../components/ui/Modal';
-import EmbeddingServiceForm from '../../components/forms/EmbeddingServiceForm';
+import ServiceWizard from '../../components/services/wizard/ServiceWizard';
+import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import ImportModal from '../../components/ui/ImportModal';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
@@ -59,7 +59,7 @@ function EmbeddingServicesPage() {
     setIsModalOpen,
     setEditingService,
     forceReload,
-  } = useServicesManager<EmbeddingService>(appId, api as any, cache as any);
+  } = useServicesManager<EmbeddingService>(appId, api as any, cache as any, { entity: 'embedding service' });
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingServiceId, setExportingServiceId] = useState<number | null>(null);
@@ -269,9 +269,30 @@ function EmbeddingServicesPage() {
 
       <Alert type="info" title="About Embedding Services" message="Embedding services convert text into high-dimensional vectors for semantic search, document similarity, and RAG (Retrieval-Augmented Generation) applications. Popular models include OpenAI's text-embedding-3-large, Mistral's mistral-embed, and local options like Ollama." className="mt-6" />
 
-      <Modal isOpen={isModalOpen} onClose={handleClose} title={editingService ? 'Edit Embedding Service' : 'Create New Embedding Service'}>
-        <EmbeddingServiceForm embeddingService={editingService} onSubmit={handleSave} onCancel={handleClose} />
-      </Modal>
+      {isModalOpen && !editingService && (
+        <ServiceWizard
+          isOpen
+          kind="embedding"
+          scope="app"
+          appId={appId ? Number.parseInt(appId) : undefined}
+          existingNames={services.map((s) => s.name)}
+          onClose={handleClose}
+          onSave={handleSave}
+        />
+      )}
+
+      {isModalOpen && editingService && (
+        <CompactServiceEditor
+          isOpen
+          kind="embedding"
+          scope="app"
+          appId={appId ? Number.parseInt(appId) : undefined}
+          service={editingService}
+          existingNames={services.map((s) => s.name)}
+          onClose={handleClose}
+          onSave={handleSave}
+        />
+      )}
 
       {/* Import Modal */}
       <ImportModal

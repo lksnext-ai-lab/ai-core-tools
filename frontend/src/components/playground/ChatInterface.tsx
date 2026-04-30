@@ -67,17 +67,29 @@ function ChatInterface({
     undefined
   );
   const [filtersKey, setFiltersKey] = useState(0);
-  const [isAtBottom, setIsAtBottom] = useState(true);
+  /** UI-only state to render the floating "scroll to bottom" button. Behaviour
+   *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** Tracks the ID of the message just committed from streaming — skips entrance animation */
   const lastStreamedMsgIdRef = useRef<string | null>(null);
+  /** True while the user has manually scrolled away from the bottom. Pauses auto-scroll
+   *  during streaming so the wheel/touch input is respected. Resets on send or on reaching bottom. */
+  const userScrolledUpRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
   const filterPanelId = `metadata-filters-${agentId}`;
 
+  const playgroundStream = useCallback(
+    (message: string, opts: Parameters<typeof apiService.chatWithAgentStream>[3]) =>
+      apiService.chatWithAgentStream(appId, agentId, message, opts),
+    [appId, agentId],
+  );
+
   const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
-    useStreamingChat(appId, agentId);
+    useStreamingChat(playgroundStream);
 
   // Hold streaming content visible briefly after isStreaming flips to false,
   // so the transition to the final committed message is seamless.
@@ -86,39 +98,67 @@ function ChatInterface({
 
   // ─── Scroll helpers ──────────────────────────────────────────────────────────
 
+  /** Scroll the messages container to its bottom. Uses scrollTo on the container
+   *  itself (not scrollIntoView on a child) so the scroll never propagates to
+   *  ancestor scroll containers — critical now that <main> is scrollable. */
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
   }, []);
 
-  // Track whether the user is at the bottom of the message list
+  /** Reset the scroll-up lock — used when sending a new message or clicking the FAB. */
+  const resetScrollLock = useCallback(() => {
+    userScrolledUpRef.current = false;
+    setShowScrollToBottom(false);
+  }, []);
+
+  // Track scroll direction with refs so streaming flushes never race the state update.
+  // The FAB visibility uses a state but only updates when the boolean actually flips.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    const threshold = 80;
+    lastScrollTopRef.current = container.scrollTop;
+
     const handleScroll = () => {
-      const threshold = 80;
-      const atBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-      setIsAtBottom(atBottom);
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight < threshold;
+      const scrolledUp = scrollTop < lastScrollTopRef.current;
+      lastScrollTopRef.current = scrollTop;
+
+      if (atBottom) {
+        if (userScrolledUpRef.current) {
+          userScrolledUpRef.current = false;
+          setShowScrollToBottom(false);
+        }
+        return;
+      }
+
+      if (scrolledUp && !userScrolledUpRef.current) {
+        userScrolledUpRef.current = true;
+        setShowScrollToBottom(true);
+      }
     };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Auto-scroll when new messages arrive (only if already at bottom)
+  // Auto-scroll when new messages arrive (only if user has not scrolled up)
   useEffect(() => {
-    if (isAtBottom) {
+    if (!userScrolledUpRef.current) {
       scrollToBottom();
     }
-  }, [messages, isAtBottom, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
-  // Auto-scroll while streaming
+  // Auto-scroll while streaming — driven by ref so wheel events win the race
   useEffect(() => {
-    if (isStreaming && isAtBottom) {
+    if (isStreaming && !userScrolledUpRef.current) {
       scrollToBottom('instant');
     }
-  }, [streamingContent, isStreaming, isAtBottom, scrollToBottom]);
+  }, [streamingContent, isStreaming, scrollToBottom]);
 
   // ─── Conversation / file loading ─────────────────────────────────────────────
 
@@ -210,7 +250,7 @@ function ChatInterface({
     const messageText = inputMessage;
     setInputMessage('');
     // Force scroll to bottom so the user sees the streaming response
-    setIsAtBottom(true);
+    resetScrollLock();
     setTimeout(() => scrollToBottom('instant'), 50);
 
     try {
@@ -497,7 +537,7 @@ function ChatInterface({
           {/* Messages container */}
           <div
             ref={messagesContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-3
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-2 space-y-3
                        bg-gradient-to-b from-gray-50/50 to-white/30
                        dark:from-gray-900/50 dark:to-gray-800/30
                        scroll-smooth"
@@ -682,12 +722,12 @@ function ChatInterface({
           </div>
 
           {/* Scroll-to-bottom FAB */}
-          {!isAtBottom && (
+          {showScrollToBottom && (
             <div className="relative h-0 pointer-events-none">
               <button
                 type="button"
                 onClick={() => {
-                  setIsAtBottom(true);
+                  resetScrollLock();
                   scrollToBottom();
                 }}
                 className="pg-scroll-fab pointer-events-auto"

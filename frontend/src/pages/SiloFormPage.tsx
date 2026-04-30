@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 import SiloForm from '../components/forms/SiloForm';
 
 // Define the Silo type
@@ -28,6 +30,7 @@ interface Silo {
 function SiloFormPage() {
   const { appId, siloId } = useParams();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const [silo, setSilo] = useState<Silo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,19 +70,20 @@ function SiloFormPage() {
   async function handleSubmit(formData: any) {
     if (!appId) return;
 
-    try {
-      if (isEditing && siloId) {
-        // Update existing silo
-        await apiService.updateSilo(Number.parseInt(appId), Number.parseInt(siloId), formData);
-      } else {
-        // Create new silo
-        await apiService.createSilo(Number.parseInt(appId), formData);
-      }
-      
-      // Navigate back to silos list
+    const result = await mutate(
+      () =>
+        isEditing && siloId
+          ? apiService.updateSilo(Number.parseInt(appId), Number.parseInt(siloId), formData)
+          : apiService.createSilo(Number.parseInt(appId), formData),
+      {
+        loading: isEditing ? MESSAGES.UPDATING('silo') : MESSAGES.CREATING('silo'),
+        success: isEditing ? MESSAGES.UPDATED('silo') : MESSAGES.CREATED('silo'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('silo')),
+      },
+    );
+
+    if (result !== undefined) {
       navigate(`/apps/${appId}/silos`);
-    } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to save silo');
     }
   }
 

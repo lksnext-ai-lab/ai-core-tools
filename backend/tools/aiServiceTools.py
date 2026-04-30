@@ -63,6 +63,7 @@ def create_llm_from_service(ai_service, temperature=0, is_vision=False):
         ProviderEnum.Custom.value: lambda: _build_custom_llm(ai_service, temperature),
         ProviderEnum.Azure.value: lambda: _build_azure_llm(ai_service, temperature),
         ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temperature),
+        ProviderEnum.GoogleCloud.value: lambda: _build_google_cloud_llm(ai_service, temperature),
     }
 
     # Handle case where provider might be an Enum object instead of string
@@ -140,20 +141,37 @@ def _build_mistral_llm(ai_service, temperature, is_vision):
     )
 
 
-def _build_custom_llm(ai_service, temperature):
-    client_kwargs = {"verify": False}
-    headers = {}
+def build_ollama_auth_headers(api_key: str | None, endpoint: str | None) -> dict[str, str]:
+    """Build auth headers for an Ollama-protocol endpoint.
 
-    if ai_service.api_key:
-        headers["Authorization"] = f"Bearer {ai_service.api_key}"
+    Self-hosted Ollama instances are commonly placed behind a reverse
+    proxy. Two authentication patterns are supported:
 
-    if ai_service.endpoint:
-        parsed = urlparse(ai_service.endpoint)
+    * ``Authorization: Bearer <api_key>`` when an API key is provided.
+    * ``Authorization: Basic <base64(user:pass)>`` when the endpoint URL
+      embeds basic-auth credentials. Basic auth takes precedence — it
+      mirrors the behaviour the runtime has had since this provider was
+      introduced.
+
+    Used both by :func:`_build_custom_llm` (runtime) and by the listing
+    adapter in :mod:`tools.ai.provider_model_clients` so the two paths
+    cannot drift out of sync.
+    """
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    if endpoint:
+        parsed = urlparse(endpoint)
         if parsed.username and parsed.password:
             credentials = f"{parsed.username}:{parsed.password}"
-            encoded_credentials = base64.b64encode(credentials.encode()).decode()
-            headers["Authorization"] = f"Basic {encoded_credentials}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded}"
+    return headers
 
+
+def _build_custom_llm(ai_service, temperature):
+    client_kwargs = {"verify": False}
+    headers = build_ollama_auth_headers(ai_service.api_key, ai_service.endpoint)
     if headers:
         client_kwargs["headers"] = headers
 
@@ -216,7 +234,7 @@ def _build_google_llm(ai_service, temperature):
     google_kwargs = {
         "model": ai_service.description,
         "temperature": temperature,
-        "google_api_key": ai_service.api_key,
+        "api_key": ai_service.api_key,
     }
 
     endpoint_raw = (ai_service.endpoint or "").strip()
@@ -229,3 +247,32 @@ def _build_google_llm(ai_service, temperature):
 
     return ChatGoogleGenerativeAI(**google_kwargs)
 
+def _build_google_cloud_llm(ai_service, temperature):
+    import json, os
+    from google.oauth2 import service_account
+
+    project_id = (ai_service.endpoint or "").strip()
+    location = (getattr(ai_service, 'api_version', None) or "").strip() or "europe-west1"
+    api_key_raw = (ai_service.api_key or "").strip()
+
+    if not api_key_raw:
+        raise ValueError("Service Account JSON is required for Google Cloud provider.")
+
+    sa_info = json.loads(api_key_raw)
+
+    os.environ.pop("GOOGLE_API_KEY", None)
+    os.environ.pop("GEMINI_API_KEY", None)
+
+    credentials = service_account.Credentials.from_service_account_info(
+        sa_info,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+    return ChatGoogleGenerativeAI(
+        model=ai_service.description,
+        temperature=temperature,
+        credentials=credentials,
+        project=project_id,
+        location=location,
+        vertexai=True,
+    )

@@ -47,10 +47,16 @@ poetry install --with test
 
 ### 2. Start the test database
 
-The test database is a separate PostgreSQL instance that lives only in memory (nothing is saved to disk). Start it with:
+The test database is a separate PostgreSQL instance that lives only in memory (nothing is saved to disk). Easiest way is to use the helper script that starts and stops it automatically:
 
 ```bash
-docker-compose --profile test up -d db_test
+./scripts/test.sh -m integration
+```
+
+Or start it manually:
+
+```bash
+docker compose -f docker/docker-compose.yaml --profile test up -d db_test
 ```
 
 > **Why a separate database?** We never want tests touching real data. The test DB is on port **5433** (production is 5432) and resets every time Docker restarts it.

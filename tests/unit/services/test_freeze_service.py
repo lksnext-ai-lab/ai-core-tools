@@ -4,7 +4,7 @@ The database is fully mocked (no DB connection required).
 """
 import os
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, Mock, patch, call
 from datetime import datetime, timedelta
 
 os.environ.setdefault("AICT_DEPLOYMENT_MODE", "self_managed")
@@ -307,7 +307,8 @@ class TestRecalculateOnUpgrade:
         """recalculate_on_upgrade must call apply_freeze with the new tier."""
         db = MagicMock()
 
-        with patch.object(FreezeService, "apply_freeze") as mock_freeze:
+        mock_freeze = Mock()
+        with patch("services.freeze_service.FreezeService.apply_freeze", mock_freeze):
             FreezeService.recalculate_on_upgrade(db, user_id=42, new_tier="pro")
 
         mock_freeze.assert_called_once_with(db, 42, "pro")

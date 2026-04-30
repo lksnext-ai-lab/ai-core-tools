@@ -2,17 +2,19 @@ import json
 import math
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
+from fastapi.responses import StreamingResponse
 from utils.security import generate_signature
 
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Annotated
+from typing import AsyncGenerator, List, Optional, Dict, Annotated
 
 from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
 from services.marketplace_service import MarketplaceService
 from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
+from services.agent_streaming_service import AgentStreamingService
 from services.agent_service import AgentService
 from services.user_service import UserService
 from services.file_management_service import FileManagementService, FileReference
@@ -527,6 +529,61 @@ def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
             )
 
 
+def _enforce_marketplace_quota(user_id: int, db: Session) -> None:
+    """Raise 429 when the caller has exhausted their monthly marketplace quota."""
+    user = UserService.get_user_by_id(db, user_id)
+    if not user or MarketplaceQuotaService.is_user_exempt(user):
+        return
+    settings_service = SystemSettingsService(db)
+    quota_value = settings_service.get_setting("marketplace_call_quota")
+    quota = int(quota_value) if quota_value else 0
+    if quota <= 0:
+        return
+    if MarketplaceQuotaService.check_quota_exceeded(user_id, db, quota):
+        current_usage = MarketplaceQuotaService.get_current_month_usage(user_id, db)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Marketplace call quota exceeded for this month. "
+                f"Current usage: {current_usage}/{quota}. "
+                "Quota resets at the start of next month (UTC)."
+            ),
+        )
+
+
+def _safe_increment_marketplace_usage(user_id: int, db: Session) -> None:
+    """Increment usage counter, swallowing exceptions to avoid breaking chat flows."""
+    user = UserService.get_user_by_id(db, user_id)
+    if not user or MarketplaceQuotaService.is_user_exempt(user):
+        return
+    try:
+        MarketplaceQuotaService.increment_usage(user_id, db)
+    except Exception as inc_err:
+        logger.error(f"Failed to increment marketplace usage for user {user_id}: {inc_err}")
+
+
+def _prepare_marketplace_chat(
+    conversation_id: int,
+    user_id: int,
+    db: Session,
+) -> tuple[Conversation, Agent]:
+    """Validate the conversation/agent/quota for a marketplace chat call."""
+    conversation = ConversationService.get_marketplace_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    )
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=CONVERSATION_NOT_FOUND,
+        )
+    agent = _get_agent_or_404(db, conversation.agent_id)
+    _validate_marketplace_agent(agent)
+    _enforce_marketplace_quota(user_id, db)
+    return conversation, agent
+
+
 @marketplace_router.post(
     "/conversations/{conversation_id}/chat",
     summary="Chat in marketplace conversation",
@@ -543,36 +600,7 @@ async def marketplace_chat(
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
-
-    # Load conversation and verify ownership + source
-    conversation = ConversationService.get_marketplace_conversation(
-        db=db,
-        conversation_id=conversation_id,
-        user_id=user_id,
-    )
-
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=CONVERSATION_NOT_FOUND,
-        )
-
-    # Load and validate agent
-    agent = _get_agent_or_404(db, conversation.agent_id)
-    _validate_marketplace_agent(agent)
-
-    # Marketplace quota enforcement
-    user = UserService.get_user_by_id(db, user_id)
-    if user and not MarketplaceQuotaService.is_user_exempt(user):
-        settings_service = SystemSettingsService(db)
-        quota_value = settings_service.get_setting("marketplace_call_quota")
-        quota = int(quota_value) if quota_value else 0
-        if quota > 0 and MarketplaceQuotaService.check_quota_exceeded(user_id, db, quota):
-            current_usage = MarketplaceQuotaService.get_current_month_usage(user_id, db)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Marketplace call quota exceeded for this month. Current usage: {current_usage}/{quota}. Quota resets at the start of next month (UTC).",
-            )
+    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
 
     try:
         parsed_refs = _parse_file_references_json(file_references)
@@ -605,12 +633,7 @@ async def marketplace_chat(
             db=db,
         )
 
-        # Increment usage counter after successful execution
-        if user and not MarketplaceQuotaService.is_user_exempt(user):
-            try:
-                MarketplaceQuotaService.increment_usage(user_id, db)
-            except Exception as inc_err:
-                logger.error(f"Failed to increment marketplace usage for user {user_id}: {inc_err}")
+        _safe_increment_marketplace_usage(user_id, db)
 
         logger.info(
             f"Marketplace chat processed for agent {agent.agent_id}, "
@@ -622,6 +645,94 @@ async def marketplace_chat(
         raise
     except Exception as e:
         logger.error(f"Error in marketplace chat: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        )
+
+
+@marketplace_router.post(
+    "/conversations/{conversation_id}/chat/stream",
+    summary="Chat in marketplace conversation (streaming)",
+    responses={500: {"description": "Internal server error"}},
+)
+async def marketplace_chat_stream(
+    conversation_id: int,
+    request: Request,
+    message: Annotated[str, Form(...)],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    files: Annotated[List[UploadFile], File()] = None,
+    file_references: Annotated[Optional[str], Form()] = None,
+):
+    """Stream a marketplace chat turn as Server-Sent Events.
+
+    Mirrors the playground stream endpoint so consumers get the same UX:
+    metadata → thinking/tool_start/tool_end → token… → done|error.
+    """
+    user_id = int(current_user.identity.id)
+    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+
+    try:
+        parsed_refs = _parse_file_references_json(file_references)
+        jwt_token = _extract_jwt_token(request)
+
+        user_context = {
+            "user_id": user_id,
+            "email": current_user.identity.email,
+            "oauth": True,
+            "app_id": agent.app_id,
+            "token": jwt_token,
+        }
+
+        all_file_references = await FileManagementService().resolve_chat_files(
+            files=files,
+            file_reference_ids=parsed_refs,
+            agent_id=agent.agent_id,
+            user_context=user_context,
+            conversation_id=conversation_id,
+        )
+
+        streaming_service = AgentStreamingService(db)
+        base_generator = streaming_service.stream_agent_chat(
+            agent_id=agent.agent_id,
+            message=message,
+            file_references=all_file_references,
+            search_params=None,
+            user_context=user_context,
+            conversation_id=conversation_id,
+            db=db,
+        )
+
+        async def generator() -> AsyncGenerator[str, None]:
+            stream_completed = False
+            try:
+                async for chunk in base_generator:
+                    if '"type": "done"' in chunk or '"type":"done"' in chunk:
+                        stream_completed = True
+                    yield chunk
+            finally:
+                if stream_completed:
+                    _safe_increment_marketplace_usage(user_id, db)
+
+        logger.info(
+            f"Streaming marketplace chat for agent {agent.agent_id}, "
+            f"conversation {conversation_id}, user {user_id}"
+        )
+        return StreamingResponse(
+            generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in marketplace streaming chat: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",

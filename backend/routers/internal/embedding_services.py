@@ -23,6 +23,16 @@ from db.database import get_db
 from services.embedding_service_service import EmbeddingServiceService
 from services.embedding_service_export_service import EmbeddingServiceExportService
 from services.embedding_service_import_service import EmbeddingServiceImportService
+from services.provider_models_service import (
+    PROVIDER_ERROR_STATUS,
+    ProviderModelsService,
+)
+
+from schemas.provider_models_schemas import (
+    ListProviderModelsRequest,
+    ListProviderModelsResponse,
+)
+from tools.ai.provider_model_clients import ProviderListingError
 
 # Import logger
 from utils.logger import get_logger
@@ -61,6 +71,77 @@ async def list_embedding_services(
 
 
 # ==================== STATIC ROUTES (without {service_id} parameter) ====================
+
+
+@embedding_services_router.post(
+    "/list-models",
+    summary="List embedding models available from a provider",
+    tags=["Embedding Services"],
+    response_model=ListProviderModelsResponse,
+)
+async def list_embedding_service_provider_models(
+    body: ListProviderModelsRequest,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    """List embedding models for the given provider using the credentials
+    in the request body. Credentials are NOT persisted.
+    """
+    body.purpose = "embedding"  # forced server-side
+    try:
+        return ProviderModelsService.list_models(body)
+    except ProviderListingError as exc:
+        status_code = PROVIDER_ERROR_STATUS.get(exc.code, 500)
+        raise HTTPException(status_code=status_code, detail=exc.message)
+    except Exception as e:
+        # Log only the exception type — see the AI services router for the
+        # rationale (avoid leaking credentials embedded in SDK errors).
+        logger.error(
+            "Unexpected error listing embedding models (provider: %s): %s",
+            body.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list provider models",
+        )
+
+
+@embedding_services_router.post(
+    "/test-connection",
+    summary="Test embedding service connection with config",
+    tags=["Embedding Services"],
+)
+async def test_embedding_service_connection_with_config(
+    config: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    """Test connection to an embedding service using provided configuration."""
+    try:
+        service_config = {
+            "provider": config.provider,
+            "description": config.model_name,
+            "api_key": config.api_key,
+            "endpoint": config.base_url,
+        }
+        result = EmbeddingServiceService.test_connection_with_config(service_config)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Avoid str(e) — SDK errors sometimes include the API key.
+        logger.error(
+            "Error testing embedding service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error testing embedding service connection",
+        )
 
 
 @embedding_services_router.post(

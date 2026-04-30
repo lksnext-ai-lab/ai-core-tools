@@ -40,12 +40,14 @@ from models.agent import Agent
 from models.api_key import APIKey
 from models.silo import Silo
 from models.domain import Domain
+from models.domain_url import DomainUrl
+from models.crawl_policy import CrawlPolicy
+from models.crawl_job import CrawlJob
 from models.repository import Repository
 from models.ai_service import AIService
 from models.embedding_service import EmbeddingService
 from models.output_parser import OutputParser
 from models.resource import Resource
-from models.url import Url
 
 from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
@@ -100,6 +102,11 @@ async def lifespan(app: FastAPI):
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.initialize_pool()
 
+        # Start crawl workers (job executor + scheduler)
+        from services.crawl.worker import start_crawl_workers, stop_crawl_workers
+        crawl_tasks = await start_crawl_workers(app)
+        app.state.crawl_tasks = crawl_tasks
+
         print("✅ Application startup complete")
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
@@ -110,6 +117,12 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     try:
+        # Stop crawl workers gracefully
+        crawl_tasks = getattr(app.state, 'crawl_tasks', None)
+        if crawl_tasks:
+            from services.crawl.worker import stop_crawl_workers
+            await stop_crawl_workers(crawl_tasks)
+
         # Close checkpointer connection pool
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.close_pool()

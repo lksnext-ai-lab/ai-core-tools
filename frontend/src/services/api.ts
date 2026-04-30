@@ -13,6 +13,16 @@ import type {
   UserRatingResponse,
   MarketplaceQuotaUsage,
 } from '../types/marketplace';
+import type {
+  CrawlPolicy,
+  CrawlPolicyInput,
+  CrawlJob,
+  CrawlJobListResponse,
+  TriggerCrawlResponse,
+  DomainUrlDetail,
+  DomainUrlListResponse,
+  DomainUrlActionResponse,
+} from '../types/crawl';
 
 type ConflictMode = 'fail' | 'rename' | 'override';
 
@@ -132,7 +142,7 @@ class ApiService {
     });
   }
 
-  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string }) {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean }) {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -369,6 +379,16 @@ class ApiService {
     });
   }
 
+  async listAIServiceProviderModels(
+    appId: number,
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request(`/internal/apps/${appId}/ai-services/list-models`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   async exportAIService(appId: number, serviceId: number): Promise<Blob> {
     const token = this.getAuthToken();
     const headers: Record<string, string> = {};
@@ -452,6 +472,23 @@ class ApiService {
   async deleteEmbeddingService(appId: number, serviceId: number) {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async listEmbeddingServiceProviderModels(
+    appId: number,
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request(`/internal/apps/${appId}/embedding-services/list-models`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async testEmbeddingServiceConnectionWithConfig(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/embedding-services/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -851,7 +888,7 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }, transcriptionServiceId?: number) {
+  }) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     
@@ -859,28 +896,18 @@ class ApiService {
     
     if (folderId !== undefined && folderId !== null) {
       formData.append('folder_id', folderId.toString());
-      console.log('API: Added folder_id to FormData:', folderId);
-    } else {
-      console.log('API: No folder_id provided or folderId is null/undefined');
     }
     
-    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
     if (config?.forced_language) formData.append('forced_language', config.forced_language);
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
     if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
 
     const token = this.getAuthToken();
-    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
         
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('API: Authorization header set for upload');
-    } else {
-      console.log('API: WARNING - No token found for upload request');
     }
-
-    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
 
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media`, {
       method: 'POST',
@@ -894,20 +921,15 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }, transcriptionServiceId?: number) {
+  }) {
     const formData = new FormData();
     const headers: Record<string, string> = {};
     const token = this.getAuthToken();
-    console.log('API: Auth token for upload:', token ? 'Token exists' : 'No token found');
 
     formData.append('url', url);
     if (folderId !== undefined && folderId !== null) {
       formData.append('folder_id', folderId.toString());
-      console.log('API: Added folder_id to FormData:', folderId);
-    } else {
-      console.log('API: No folder_id provided or folderId is null/undefined');
     }
-    if (transcriptionServiceId) formData.append('transcription_service_id', transcriptionServiceId.toString());
     if (config?.forced_language) formData.append('forced_language', config.forced_language);
     if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
     if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
@@ -915,12 +937,7 @@ class ApiService {
         
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('API: Authorization header set for upload');
-    } else {
-      console.log('API: WARNING - No token found for upload request');
     }
-
-    console.log('API: Making upload request to:', `/internal/apps/${appId}/repositories/${repositoryId}/resources`);
 
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/youtube`, {
       method: 'POST',
@@ -970,15 +987,15 @@ class ApiService {
   }
 
   async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean }) {
-    return this.request(`/internal/apps/${appId}/silos/0`, {
+    return this.request(`/internal/apps/${appId}/silos/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean; status?: string }) {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string }) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1050,15 +1067,103 @@ class ApiService {
     return response.json();
   }
 
-  async searchSiloDocuments(appId: number, siloId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
+  async searchSiloDocuments(
+    appId: number,
+    siloId: number,
+    query: string,
+    limit?: number,
+    filterMetadata?: Record<string, any>,
+    searchOptions?: {
+      searchType?: string;
+      scoreThreshold?: number;
+      fetchK?: number;
+      lambdaMult?: number;
+      minContentLength?: number;
+      maxContentLength?: number;
+    },
+  ) {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',
       body: JSON.stringify({
         query,
-        limit,
-        filter_metadata: filterMetadata
+        ...(limit !== undefined ? { limit } : {}),
+        filter_metadata: filterMetadata,
+        ...(searchOptions?.searchType && searchOptions.searchType !== 'similarity' ? { search_type: searchOptions.searchType } : {}),
+        ...(searchOptions?.scoreThreshold !== undefined ? { score_threshold: searchOptions.scoreThreshold } : {}),
+        ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
+        ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
+        ...(searchOptions?.minContentLength != null && { min_content_length: searchOptions.minContentLength }),
+        ...(searchOptions?.maxContentLength != null && { max_content_length: searchOptions.maxContentLength }),
       }),
     });
+  }
+
+  async searchSiloDocumentsWithTiming(
+    appId: number,
+    siloId: number,
+    query: string,
+    limit?: number,
+    filterMetadata?: Record<string, any>,
+    searchOptions?: {
+      searchType?: string;
+      scoreThreshold?: number;
+      fetchK?: number;
+      lambdaMult?: number;
+      minContentLength?: number;
+      maxContentLength?: number;
+    },
+  ): Promise<{ data: any; serverMs: number | null }> {
+    const url = `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/search`;
+    const body = JSON.stringify({
+      query,
+      ...(limit !== undefined ? { limit } : {}),
+      filter_metadata: filterMetadata,
+      ...(searchOptions?.searchType && searchOptions.searchType !== 'similarity'
+        ? { search_type: searchOptions.searchType }
+        : {}),
+      ...(searchOptions?.scoreThreshold !== undefined
+        ? { score_threshold: searchOptions.scoreThreshold }
+        : {}),
+      ...(searchOptions?.fetchK !== undefined ? { fetch_k: searchOptions.fetchK } : {}),
+      ...(searchOptions?.lambdaMult !== undefined ? { lambda_mult: searchOptions.lambdaMult } : {}),
+      ...(searchOptions?.minContentLength != null && { min_content_length: searchOptions.minContentLength }),
+      ...(searchOptions?.maxContentLength != null && { max_content_length: searchOptions.maxContentLength }),
+    });
+    const options: RequestInit = { method: 'POST', body };
+    const headers = this.prepareHeaders(options);
+    const response = await fetch(url, { ...options, headers });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    const serverMsHeader = response.headers.get('x-server-time-ms');
+    const serverMs = serverMsHeader !== null ? parseInt(serverMsHeader, 10) : null;
+    const data = await response.json();
+    return { data, serverMs };
+  }
+
+  async getSiloNeighbors(
+    appId: number | string,
+    siloId: number | string,
+    sourceType: string,
+    sourceId: string,
+  ) {
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/documents/neighbors?source_type=${encodeURIComponent(sourceType)}&source_id=${encodeURIComponent(sourceId)}`,
+    );
+  }
+
+  async getSiloMetadataValues(
+    appId: number | string,
+    siloId: number | string,
+    field: string,
+    prefix?: string,
+    limit = 100,
+  ) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (prefix) params.set('prefix', prefix);
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/metadata/${encodeURIComponent(field)}/values?${params}`,
+    );
   }
 
   async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
@@ -1066,6 +1171,34 @@ class ApiService {
       method: 'DELETE',
       body: JSON.stringify({ document_ids: documentIds }),
     });
+  }
+
+  async countSiloDocuments(
+    appId: number | string,
+    siloId: number | string,
+    filterMetadata?: Record<string, unknown> | null,
+    minContentLength?: number | null,
+    maxContentLength?: number | null,
+  ) {
+    return this.request(`/internal/apps/${appId}/silos/${siloId}/documents/count`, {
+      method: 'POST',
+      body: JSON.stringify({
+        filter_metadata: filterMetadata ?? null,
+        ...(minContentLength != null && { min_content_length: minContentLength }),
+        ...(maxContentLength != null && { max_content_length: maxContentLength }),
+      }),
+    });
+  }
+
+  async reindexSiloResource(
+    appId: number | string,
+    siloId: number | string,
+    resourceId: number | string,
+  ) {
+    return this.request(
+      `/internal/apps/${appId}/silos/${siloId}/resources/${resourceId}/reindex`,
+      { method: 'POST' },
+    );
   }
 
   // ==================== REPOSITORIES API ====================
@@ -1080,16 +1213,16 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`);
   }
 
-  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
-    return this.request(`/internal/apps/${appId}/repositories/0`, {
+  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }) {
+    return this.request(`/internal/apps/${appId}/repositories/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string }) {
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }) {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   }
@@ -1372,7 +1505,6 @@ class ApiService {
 
   async createDomain(
     appId: number,
-    domainId: number,
     data: {
       name: string;
       description?: string;
@@ -1384,7 +1516,7 @@ class ApiService {
       vector_db_type?: string;
     }
   ) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
+    return this.request(`/internal/apps/${appId}/domains/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1400,8 +1532,6 @@ class ApiService {
       content_tag?: string;
       content_class?: string;
       content_id?: string;
-      embedding_service_id?: number;
-      vector_db_type?: string;
     }
   ) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
@@ -1416,49 +1546,116 @@ class ApiService {
     });
   }
 
-  async getDomainUrls(appId: number, domainId: number, page = 1, perPage = 20) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls?page=${page}&per_page=${perPage}`);
+  // ==================== DOMAIN URLS API ====================
+
+  async listDomainUrls(
+    appId: number,
+    domainId: number,
+    params: {
+      page?: number;
+      per_page?: number;
+      status?: string;
+      discovered_via?: string;
+      q?: string;
+    } = {}
+  ): Promise<DomainUrlListResponse> {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.set('page', String(params.page));
+    if (params.per_page !== undefined) query.set('per_page', String(params.per_page));
+    if (params.status) query.set('status', params.status);
+    if (params.discovered_via) query.set('discovered_via', params.discovered_via);
+    if (params.q) query.set('q', params.q);
+    const qs = query.toString();
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls${qs ? '?' + qs : ''}`);
   }
 
-  async addUrlToDomain(appId: number, domainId: number, data: { url: string }) {
+  /** @deprecated Use listDomainUrls instead */
+  async getDomainUrls(appId: number, domainId: number, page = 1, perPage = 20): Promise<DomainUrlListResponse> {
+    return this.listDomainUrls(appId, domainId, { page, per_page: perPage });
+  }
+
+  async addDomainUrlManual(
+    appId: number,
+    domainId: number,
+    url: string
+  ): Promise<DomainUrlActionResponse> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ url }),
     });
   }
 
-  async deleteUrlFromDomain(appId: number, domainId: number, urlId: number) {
+  /** @deprecated Use addDomainUrlManual instead */
+  async addUrlToDomain(appId: number, domainId: number, data: { url: string }): Promise<DomainUrlActionResponse> {
+    return this.addDomainUrlManual(appId, domainId, data.url);
+  }
+
+  async getDomainUrl(appId: number, domainId: number, urlId: number): Promise<DomainUrlDetail> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}`);
+  }
+
+  async deleteDomainUrl(appId: number, domainId: number, urlId: number): Promise<DomainUrlActionResponse> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}`, {
       method: 'DELETE',
     });
   }
 
-  async reindexUrl(appId: number, domainId: number, urlId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/reindex`, {
-      method: 'POST',
-    });
+  /** @deprecated Use deleteDomainUrl instead */
+  async deleteUrlFromDomain(appId: number, domainId: number, urlId: number): Promise<DomainUrlActionResponse> {
+    return this.deleteDomainUrl(appId, domainId, urlId);
   }
 
-  async unindexUrl(appId: number, domainId: number, urlId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/unindex`, {
-      method: 'POST',
-    });
-  }
-
-  async rejectUrl(appId: number, domainId: number, urlId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/reject`, {
-      method: 'POST',
-    });
-  }
-
-  async reindexDomain(appId: number, domainId: number) {
-    return this.request(`/internal/apps/${appId}/domains/${domainId}/reindex`, {
+  async recrawlDomainUrl(appId: number, domainId: number, urlId: number): Promise<DomainUrlActionResponse> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/recrawl`, {
       method: 'POST',
     });
   }
 
   async getUrlContent(appId: number, domainId: number, urlId: number) {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/content`);
+  }
+
+  // ==================== CRAWL POLICY API ====================
+
+  async getCrawlPolicy(appId: number, domainId: number): Promise<CrawlPolicy> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-policy`);
+  }
+
+  async updateCrawlPolicy(appId: number, domainId: number, data: CrawlPolicyInput): Promise<CrawlPolicy> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-policy`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ==================== CRAWL JOBS API ====================
+
+  async triggerCrawl(appId: number, domainId: number): Promise<TriggerCrawlResponse> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs`, {
+      method: 'POST',
+    });
+  }
+
+  async listCrawlJobs(
+    appId: number,
+    domainId: number,
+    params: { page?: number; per_page?: number } = {}
+  ): Promise<CrawlJobListResponse> {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.set('page', String(params.page));
+    if (params.per_page !== undefined) query.set('per_page', String(params.per_page));
+    const qs = query.toString();
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs${qs ? '?' + qs : ''}`);
+  }
+
+  async getCrawlJob(appId: number, domainId: number, jobId: number): Promise<CrawlJob> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs/${jobId}`);
+  }
+
+  async cancelCrawl(appId: number, domainId: number, jobId: number): Promise<CrawlJob> {
+    return this.request(`/internal/apps/${appId}/domains/${domainId}/crawl-jobs/${jobId}/cancel`, {
+      method: 'POST',
+    });
   }
 
   // ==================== VERSION API ====================
@@ -1641,6 +1838,71 @@ class ApiService {
         body: formData,
       },
     );
+  }
+
+  /**
+   * Stream a marketplace chat turn as Server-Sent Events.
+   * Mirrors `chatWithAgentStream` so the marketplace UI can reuse `useStreamingChat`.
+   */
+  async chatMarketplaceStream(
+    conversationId: number,
+    message: string,
+    options: {
+      files?: File[];
+      fileReferences?: string[];
+      onEvent: (event: StreamEvent) => void;
+      signal?: AbortSignal;
+    },
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('message', message);
+
+    if (options.fileReferences && options.fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(options.fileReferences));
+    }
+    if (options.files && options.files.length > 0) {
+      options.files.forEach((file) => formData.append('files', file));
+    }
+
+    const url = `${this.baseURL}/internal/marketplace/conversations/${conversationId}/chat/stream`;
+    const headers: Record<string, string> = {};
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+        this.parseSSELines(lines, options.onEvent);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
@@ -1998,6 +2260,10 @@ class ApiService {
     return this.request('/internal/admin/system-ai-services');
   }
 
+  async getSystemAIService(serviceId: number) {
+    return this.request(`/internal/admin/system-ai-services/${serviceId}`);
+  }
+
   async createSystemAIService(data: {
     name: string;
     provider: string;
@@ -2067,6 +2333,38 @@ class ApiService {
   async deleteSystemEmbeddingService(serviceId: number) {
     return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async listSystemAIServiceProviderModels(
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request('/internal/admin/system-ai-services/list-models', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listSystemEmbeddingServiceProviderModels(
+    body: import('../types/services').ListProviderModelsRequest,
+  ): Promise<import('../types/services').ListProviderModelsResponse> {
+    return this.request('/internal/admin/system-embedding-services/list-models', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async testSystemAIServiceConnectionWithConfig(data: any) {
+    return this.request('/internal/admin/system-ai-services/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async testSystemEmbeddingServiceConnectionWithConfig(data: any) {
+    return this.request('/internal/admin/system-embedding-services/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

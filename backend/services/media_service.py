@@ -35,14 +35,13 @@ class MediaService:
         repository_id: int,
         files: List[UploadFile],
         folder_id: Optional[int],
-        transcription_service_id: int,
         db: Session,
         background_tasks: BackgroundTasks, 
         user_context,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
-        chunk_overlap: Optional[int] = None
+        chunk_overlap: Optional[int] = None,
     ) -> Tuple[List[Media], List[dict]]:
         """
         Upload multiple media files
@@ -63,13 +62,12 @@ class MediaService:
                     file=file,
                     repository_id=repository_id,
                     folder_id=folder_id,
-                    transcription_service_id=transcription_service_id,
                     db=db,
                     background_tasks=background_tasks, 
                     forced_language=forced_language,
                     chunk_min_duration=chunk_min_duration,
                     chunk_max_duration=chunk_max_duration,
-                    chunk_overlap=chunk_overlap
+                    chunk_overlap=chunk_overlap,
                 )
                 created_media.append(media)
             except Exception as e:
@@ -157,10 +155,10 @@ class MediaService:
                 # Rollback: move files back if partially completed
                 if media_moved:
                     shutil.move(new_media_path, old_media_path)
-                    logger.warning(f"Rolled back media file move")
+                    logger.warning("Rolled back media file move")
                 if audio_moved:
                     shutil.move(new_audio_path, old_audio_path)
-                    logger.warning(f"Rolled back audio file move")
+                    logger.warning("Rolled back audio file move")
                 raise ValueError(f"Failed to move files: {str(e)}")
         
             # Update database
@@ -193,7 +191,7 @@ class MediaService:
         app_id: int,
         repository_id: int,
         db: Session
-    ) -> None:
+    ) -> bool:
         """Delete media by ID"""
 
         logger.info(f"Delete media service called - app_id: {app_id}, repository_id: {repository_id}, media_id: {media_id}")
@@ -235,13 +233,12 @@ class MediaService:
         file: UploadFile,
         repository_id: int,
         folder_id: Optional[int],
-        transcription_service_id: int,
         db: Session,
         background_tasks: BackgroundTasks,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
-        chunk_overlap: Optional[int] = None
+        chunk_overlap: Optional[int] = None,
     ) -> Media:
         """Create media from uploaded file"""
         file_extension = os.path.splitext(file.filename)[1].lower()
@@ -256,7 +253,6 @@ class MediaService:
             name=name,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,  
             source_type='upload',
             status='pending',
             forced_language=forced_language,
@@ -294,13 +290,12 @@ class MediaService:
         url: str,
         repository_id: int,
         folder_id: Optional[int],
-        transcription_service_id: int,
         db: Session,
         background_tasks: BackgroundTasks,
         forced_language: Optional[str] = None,
         chunk_min_duration: Optional[int] = None,
         chunk_max_duration: Optional[int] = None,
-        chunk_overlap: Optional[int] = None
+        chunk_overlap: Optional[int] = None,
     ) -> Media:
         """Create media from YouTube URL"""
         import re
@@ -333,7 +328,6 @@ class MediaService:
             name=name,
             repository_id=repository_id,
             folder_id=folder_id,
-            transcription_service_id=transcription_service_id,
             source_type='youtube',
             source_url=url,
             status='pending',

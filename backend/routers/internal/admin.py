@@ -21,6 +21,8 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["admin"])
 
 USER_NOT_FOUND = "User not found"
+SYSTEM_AI_SERVICE_NOT_FOUND = "System AI service not found"
+SYSTEM_EMBEDDING_SERVICE_NOT_FOUND = "System embedding service not found"
 
 
 def require_admin(auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)]):
@@ -378,7 +380,16 @@ async def reset_setting(
 
 from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
 from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
-from schemas.ai_service_schemas import AIServiceListItemSchema, CreateUpdateAIServiceSchema
+from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
+from schemas.provider_models_schemas import (
+    ListProviderModelsRequest,
+    ListProviderModelsResponse,
+)
+from services.provider_models_service import (
+    PROVIDER_ERROR_STATUS,
+    ProviderModelsService,
+)
+from tools.ai.provider_model_clients import ProviderListingError
 from schemas.embedding_service_schemas import (
     EmbeddingServiceListItemSchema,
     EmbeddingServiceDetailSchema,
@@ -490,16 +501,51 @@ async def update_tier_config(
     return {"id": row.id, "tier": row.tier, "resource_type": row.resource_type, "limit_value": row.limit_value}
 
 
-@router.get("/system-ai-services", response_model=List[AIServiceListItemSchema])
+@router.get("/system-ai-services", response_model=List[AIServiceDetailSchema])
 async def list_system_ai_services(
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
     """List all platform-level AI Services (OMNIADMIN only, available in all deployment modes)."""
     from repositories.ai_service_repository import AIServiceRepository
-    from services.ai_service_service import AIServiceService
+    from utils.secret_utils import mask_api_key
     services = AIServiceRepository.get_system_services(db)
-    return [AIServiceService._to_list_item(svc, is_system=True) for svc in services]
+    return [
+        AIServiceDetailSchema(
+            service_id=svc.service_id,
+            name=svc.name,
+            provider=svc.provider.value if hasattr(svc.provider, 'value') else svc.provider,
+            model_name=svc.description or "",
+            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
+            base_url=svc.endpoint or "",
+            created_at=svc.create_date,
+        )
+        for svc in services
+    ]
+
+
+@router.get("/system-ai-services/{service_id}", response_model=AIServiceDetailSchema)
+async def get_system_ai_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get a single platform-level AI Service by ID (OMNIADMIN only)."""
+    from repositories.ai_service_repository import AIServiceRepository
+    from utils.secret_utils import mask_api_key
+
+    svc = AIServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail=SYSTEM_AI_SERVICE_NOT_FOUND)
+    return AIServiceDetailSchema(
+        service_id=svc.service_id,
+        name=svc.name,
+        provider=svc.provider.value if hasattr(svc.provider, 'value') else svc.provider,
+        model_name=svc.description or "",
+        api_key=mask_api_key(svc.api_key) if svc.api_key else "",
+        base_url=svc.endpoint or "",
+        created_at=svc.create_date,
+    )
 
 
 @router.post("/system-ai-services", response_model=AIServiceListItemSchema, status_code=201)
@@ -540,7 +586,7 @@ async def update_system_ai_service(
 
     svc = AIServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
-        raise HTTPException(status_code=404, detail="System AI service not found")
+        raise HTTPException(status_code=404, detail=SYSTEM_AI_SERVICE_NOT_FOUND)
 
     svc.name = body.name
     svc.provider = body.provider
@@ -563,7 +609,7 @@ async def delete_system_ai_service(
 
     svc = AIServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
-        raise HTTPException(status_code=404, detail="System AI service not found")
+        raise HTTPException(status_code=404, detail=SYSTEM_AI_SERVICE_NOT_FOUND)
     AIServiceRepository.delete(db, svc)
 
 
@@ -628,7 +674,7 @@ async def update_system_embedding_service(
 
     svc = EmbeddingServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
-        raise HTTPException(status_code=404, detail="System embedding service not found")
+        raise HTTPException(status_code=404, detail=SYSTEM_EMBEDDING_SERVICE_NOT_FOUND)
 
     svc.name = body.name
     svc.provider = body.provider
@@ -654,7 +700,7 @@ async def get_system_embedding_service_impact(
 
     svc = EmbeddingServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
-        raise HTTPException(status_code=404, detail="System embedding service not found")
+        raise HTTPException(status_code=404, detail=SYSTEM_EMBEDDING_SERVICE_NOT_FOUND)
 
     rows = db.query(Silo, App).join(App, Silo.app_id == App.app_id).filter(
         Silo.embedding_service_id == service_id
@@ -692,10 +738,131 @@ async def delete_system_embedding_service(
 
     svc = EmbeddingServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
-        raise HTTPException(status_code=404, detail="System embedding service not found")
+        raise HTTPException(status_code=404, detail=SYSTEM_EMBEDDING_SERVICE_NOT_FOUND)
 
     # Nullify references in silos before deleting
     db.query(Silo).filter(Silo.embedding_service_id == service_id).update(
         {Silo.embedding_service_id: None}, synchronize_session='fetch'
     )
     EmbeddingServiceRepository.delete(db, svc)
+
+
+# ==================== PROVIDER MODEL DISCOVERY (system) ====================
+
+
+@router.post(
+    "/system-ai-services/list-models",
+    response_model=ListProviderModelsResponse,
+)
+async def list_system_ai_service_provider_models(
+    body: ListProviderModelsRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """List models for a provider using the credentials in the body.
+    Used by the System AI Service wizard (OMNIADMIN only).
+    """
+    body.purpose = "chat"
+    try:
+        return ProviderModelsService.list_models(body)
+    except ProviderListingError as exc:
+        raise HTTPException(
+            status_code=PROVIDER_ERROR_STATUS.get(exc.code, 500),
+            detail=exc.message,
+        )
+    except Exception as e:
+        logger.error(
+            "Unexpected error listing system AI models (provider: %s): %s",
+            body.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Failed to list provider models")
+
+
+@router.post(
+    "/system-embedding-services/list-models",
+    response_model=ListProviderModelsResponse,
+)
+async def list_system_embedding_service_provider_models(
+    body: ListProviderModelsRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """List embedding models for a provider using the credentials in the
+    body. Used by the System Embedding Service wizard (OMNIADMIN only).
+    """
+    body.purpose = "embedding"
+    try:
+        return ProviderModelsService.list_models(body)
+    except ProviderListingError as exc:
+        raise HTTPException(
+            status_code=PROVIDER_ERROR_STATUS.get(exc.code, 500),
+            detail=exc.message,
+        )
+    except Exception as e:
+        logger.error(
+            "Unexpected error listing system embedding models (provider: %s): %s",
+            body.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Failed to list provider models")
+
+
+@router.post("/system-ai-services/test-connection")
+async def test_system_ai_service_connection_with_config(
+    config: CreateUpdateAIServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """Test a system AI service connection with the provided config (OMNIADMIN)."""
+    from services.ai_service_service import AIServiceService
+
+    try:
+        service_config = {
+            "provider": config.provider,
+            "description": config.model_name,
+            "api_key": config.api_key,
+            "endpoint": config.base_url,
+            "api_version": getattr(config, "api_version", None),
+        }
+        result = AIServiceService.test_connection_with_config(service_config)
+        if isinstance(result, dict) and len(str(result.get("response", ""))) > 500:
+            result["response"] = str(result["response"])[:500] + "... (truncated)"
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Error testing system AI service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Test failed")
+
+
+@router.post("/system-embedding-services/test-connection")
+async def test_system_embedding_service_connection_with_config(
+    config: CreateUpdateEmbeddingServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+):
+    """Test a system embedding service connection with the provided config (OMNIADMIN)."""
+    from services.embedding_service_service import EmbeddingServiceService
+
+    try:
+        service_config = {
+            "provider": config.provider,
+            "description": config.model_name,
+            "api_key": config.api_key,
+            "endpoint": config.base_url,
+        }
+        return EmbeddingServiceService.test_connection_with_config(service_config)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Error testing system embedding service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Test failed")

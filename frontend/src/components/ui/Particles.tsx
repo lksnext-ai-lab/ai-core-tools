@@ -235,7 +235,6 @@ const Particles: React.FC<ParticlesProps> = ({
         gl.canvas.remove();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     particleCount,
     particleSpread,

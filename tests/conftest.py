@@ -306,6 +306,66 @@ def owner_headers(fake_user, fake_app, client, db):
 
 
 # ---------------------------------------------------------------------------
+# Domain / Crawl fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="function")
+def fake_silo(db, fake_app):
+    """A test Silo linked to fake_app (for domain tests)."""
+    from models.silo import Silo
+
+    silo = Silo(
+        name="Test Domain Silo",
+        description="Silo for domain testing",
+        silo_type="DOMAIN",
+        app_id=fake_app.app_id,
+    )
+    db.add(silo)
+    db.flush()
+    return silo
+
+
+@pytest.fixture(scope="function")
+def fake_domain(db, fake_app, fake_silo):
+    """A test Domain with an associated CrawlPolicy (inactive default)."""
+    from models.domain import Domain
+    from models.crawl_policy import CrawlPolicy
+    from datetime import datetime
+
+    domain = Domain(
+        name="Test Domain",
+        description="Domain for testing",
+        base_url="https://example.com",
+        content_tag="body",
+        app_id=fake_app.app_id,
+        silo_id=fake_silo.silo_id,
+        create_date=datetime.now(),
+    )
+    db.add(domain)
+    db.flush()
+
+    # Create default inactive crawl policy
+    policy = CrawlPolicy(
+        domain_id=domain.domain_id,
+        seed_url="https://example.com",
+        manual_urls=[],
+        max_depth=2,
+        include_globs=[],
+        exclude_globs=[],
+        rate_limit_rps=1.0,
+        refresh_interval_hours=168,
+        respect_robots_txt=True,
+        is_active=False,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(policy)
+    db.flush()
+    return domain
+
+
+# ---------------------------------------------------------------------------
 # Auto-markers
 # ---------------------------------------------------------------------------
 

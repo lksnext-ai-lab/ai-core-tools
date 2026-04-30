@@ -63,18 +63,19 @@ Look for issues labeled `good-first-issue` or `help-wanted` — these are specif
 ```bash
 # Clone the repository
 git clone https://github.com/lksnext-ai-lab/ai-core-tools.git
-cd ai-core-tools
+cd ai-core-tools/docker
 
 # Copy and configure environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env — DATABASE_PASSWORD and SECRET_KEY are required
 
-# Start all services
-docker-compose up -d
+# Pull published images (fast) OR build locally with your changes
+docker compose pull backend frontend && docker compose up -d   # pull from GHCR
+# docker compose up -d --build                                  # build from source
 
-# Frontend: http://localhost:3000
-# Backend:  http://localhost:8000
-# API Docs: http://localhost:8000/docs/internal
+# Everything is served from the same origin via Caddy:
+#   App:       http://localhost/
+#   API Docs:  http://localhost/docs/internal
 ```
 
 ### Option 2: Local Development

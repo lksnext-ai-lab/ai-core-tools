@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Bot, MessageCircle, Paperclip, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
-import { LoadingState } from '../components/ui/LoadingState';
-import { ErrorState } from '../components/ui/ErrorState';
+import StreamingMessage from '../components/playground/StreamingMessage';
 import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
 import type { PanelFile } from '../components/playground/AttachedFilesPanel';
-
+import { LoadingState } from '../components/ui/LoadingState';
+import { ErrorState } from '../components/ui/ErrorState';
+import { useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
+import { errorMessage } from '../constants/messages';
 
 interface ChatMessage {
   readonly id: string;
@@ -16,29 +19,53 @@ interface ChatMessage {
   readonly timestamp: Date;
 }
 
+interface RawAttachedFile {
+  readonly file_id: string;
+  readonly filename: string;
+  readonly file_type?: string;
+  readonly processing_status?: string;
+  readonly file_size_display?: string;
+  readonly has_extractable_content?: boolean;
+  readonly content_preview?: string;
+}
+
+interface QuotaInfo {
+  readonly call_count: number;
+  readonly quota: number;
+  readonly is_exempt: boolean;
+}
+
 /**
- * Marketplace chat page — simplified consumer-focused chat experience.
- * URL: /marketplace/chat/:conversationId
+ * Marketplace chat page — consumer-facing chat with the same streaming UX
+ * as the playground (`ChatInterface`). Uses `useStreamingChat` bound to the
+ * marketplace SSE endpoint so tool/thinking pills, token streaming, abort
+ * and scroll behaviour match exactly.
  */
 export default function MarketplaceChatPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
   const numericId = Number(conversationId);
 
-  // Conversation & agent state
   const [agentId, setAgentId] = useState<number | null>(null);
   const [agentName, setAgentName] = useState('Agent');
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
 
-  // Messages
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [persistentFiles, setPersistentFiles] = useState<RawAttachedFile[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  // Quota
-  const [quotaInfo, setQuotaInfo] = useState<{ call_count: number; quota: number; is_exempt: boolean } | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastStreamedMsgIdRef = useRef<string | null>(null);
+  const userScrolledUpRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
   const isQuotaExceeded =
     quotaInfo !== null &&
@@ -46,65 +73,117 @@ export default function MarketplaceChatPage() {
     !quotaInfo.is_exempt &&
     quotaInfo.call_count >= quotaInfo.quota;
 
-  // Persistent files (server-side, scoped to this conversation)
-  const [persistentFiles, setPersistentFiles] = useState<any[]>([]);
-  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const marketplaceStream = useCallback(
+    (message: string, opts: StreamFnOptions) =>
+      apiService.chatMarketplaceStream(numericId, message, {
+        files: opts.files,
+        fileReferences: persistentFiles.length > 0 ? persistentFiles.map((f) => f.file_id) : undefined,
+        onEvent: opts.onEvent,
+        signal: opts.signal,
+      }),
+    [numericId, persistentFiles],
+  );
 
-  // Refs
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
+    useStreamingChat(marketplaceStream);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const [holdStreamingContent, setHoldStreamingContent] = useState(false);
+  const showStreaming = isStreaming || holdStreamingContent;
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+  }, []);
+
+  const resetScrollLock = useCallback(() => {
+    userScrolledUpRef.current = false;
+    setShowScrollToBottom(false);
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const threshold = 80;
+    lastScrollTopRef.current = container.scrollTop;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight < threshold;
+      const scrolledUp = scrollTop < lastScrollTopRef.current;
+      lastScrollTopRef.current = scrollTop;
+
+      if (atBottom) {
+        if (userScrolledUpRef.current) {
+          userScrolledUpRef.current = false;
+          setShowScrollToBottom(false);
+        }
+        return;
+      }
+
+      if (scrolledUp && !userScrolledUpRef.current) {
+        userScrolledUpRef.current = true;
+        setShowScrollToBottom(true);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!userScrolledUpRef.current) {
+      scrollToBottom();
+    }
   }, [messages, scrollToBottom]);
 
-  // Fetch quota usage
+  useEffect(() => {
+    if (isStreaming && !userScrolledUpRef.current) {
+      scrollToBottom('instant');
+    }
+  }, [streamingContent, isStreaming, scrollToBottom]);
+
   const fetchQuotaInfo = useCallback(async () => {
     try {
       const data = await apiService.getMarketplaceQuotaUsage();
       setQuotaInfo(data);
     } catch {
-      // Non-critical — quota display stays hidden
+      // Quota display is informational; failing silently is acceptable.
     }
   }, []);
 
-  // Load quota on mount
   useEffect(() => {
     fetchQuotaInfo();
   }, [fetchQuotaInfo]);
 
-  // Load conversation history
   useEffect(() => {
     if (!numericId || Number.isNaN(numericId)) {
-      setError('Invalid conversation ID');
+      setHistoryError('Invalid conversation ID');
       setLoadingHistory(false);
       return;
     }
 
+    let isMounted = true;
+
     const loadHistory = async () => {
       setLoadingHistory(true);
-      setError(null);
+      setHistoryError(null);
       try {
         const data = await apiService.getMarketplaceConversationHistory(numericId);
+        if (!isMounted) return;
         setAgentId(data.agent_id);
         setConversationTitle(data.title);
 
-        // Try to get agent display name from marketplace conversations
         try {
           const convData = await apiService.getMarketplaceConversations(100, 0);
-          const match = convData.conversations.find(
-            (c) => c.conversation_id === numericId,
-          );
+          if (!isMounted) return;
+          const match = convData.conversations.find((c) => c.conversation_id === numericId);
           if (match) {
             setAgentName(match.agent_display_name);
           }
         } catch {
-          // Non-critical — keep default name
+          // Non-critical
         }
 
         if (data.messages && data.messages.length > 0) {
@@ -119,46 +198,56 @@ export default function MarketplaceChatPage() {
           setMessages(loaded);
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to load conversation';
-        setError(msg);
+        if (!isMounted) return;
+        setHistoryError(errorMessage(err, 'Failed to load conversation'));
       } finally {
-        setLoadingHistory(false);
+        if (isMounted) setLoadingHistory(false);
       }
     };
 
     loadHistory();
+    return () => {
+      isMounted = false;
+    };
   }, [numericId]);
 
-  // Load persistent files whenever the conversation changes
   useEffect(() => {
     if (!numericId || Number.isNaN(numericId)) return;
+    let isMounted = true;
     const loadFiles = async () => {
       try {
         const response = await apiService.listMarketplaceFiles(numericId);
-        setPersistentFiles(response.files || []);
+        if (isMounted) setPersistentFiles(response.files || []);
       } catch {
-        setPersistentFiles([]);
+        if (isMounted) setPersistentFiles([]);
       }
     };
     loadFiles();
+    return () => {
+      isMounted = false;
+    };
   }, [numericId]);
 
-  // Auto-resize textarea
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setInputMessage(e.target.value);
-      const el = e.target;
-      el.style.height = 'auto';
-      el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-    },
-    [],
-  );
+  const refreshFileList = useCallback(async () => {
+    try {
+      const response = await apiService.listMarketplaceFiles(numericId);
+      setPersistentFiles(response.files || []);
+    } catch {
+      // Non-critical
+    }
+  }, [numericId]);
 
-  // Send message
-  const handleSend = useCallback(async () => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputMessage(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, []);
+
+  const handleSendMessage = useCallback(async () => {
     const trimmed = inputMessage.trim();
     if (!trimmed && persistentFiles.length === 0) return;
-    if (isSending) return;
+    if (isStreaming) return;
     if (isQuotaExceeded) return;
 
     const userMsg: ChatMessage = {
@@ -170,86 +259,83 @@ export default function MarketplaceChatPage() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInputMessage('');
-    setIsSending(true);
-
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+    resetScrollLock();
+    setTimeout(() => scrollToBottom('instant'), 50);
 
     try {
-      const fileRefs = persistentFiles.length > 0
-        ? persistentFiles.map((f) => f.file_id)
-        : undefined;
-      const response = await apiService.sendMarketplaceMessage(
-        numericId,
-        trimmed,
-        fileRefs,
-      );
+      setHoldStreamingContent(true);
+      const result = await sendMessage(trimmed, {
+        conversationId: numericId,
+      });
 
-      let responseContent = response.response || 'No response received';
-      if (typeof responseContent === 'object') {
-        responseContent = JSON.stringify(responseContent, null, 2);
-      }
+      const rawResponse = result.response || '';
+      const responseContent: string =
+        typeof rawResponse === 'object'
+          ? JSON.stringify(rawResponse, null, 2)
+          : rawResponse;
 
-      const agentMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'agent',
-        content: responseContent,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, agentMsg]);
+      const agentMsgId = (Date.now() + 1).toString();
+      lastStreamedMsgIdRef.current = agentMsgId;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: agentMsgId,
+          type: 'agent',
+          content: responseContent,
+          timestamp: new Date(),
+        },
+      ]);
+      setHoldStreamingContent(false);
 
-      // Refresh quota after successful send
-      fetchQuotaInfo();
-
-      // Refresh file list — agent may have generated new files
-      try {
-        const fileResponse = await apiService.listMarketplaceFiles(numericId);
-        setPersistentFiles(fileResponse.files || []);
-      } catch {
-        // Non-critical — panel stays as-is
-      }
+      void refreshFileList();
+      void fetchQuotaInfo();
     } catch (err) {
+      setHoldStreamingContent(false);
       const isQuotaError =
         err instanceof Error &&
         (err.message.toLowerCase().includes('quota') ||
           err.message.toLowerCase().includes('429') ||
           err.message.toLowerCase().includes('limit'));
-
-      let errorContent = 'Failed to send message. Please try again.';
-      if (isQuotaError) {
-        errorContent = 'Marketplace call quota exceeded. Your quota resets at the start of next month.';
-      } else if (err instanceof Error) {
-        errorContent = err.message;
-      }
-
-      const errMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'error',
-        content: errorContent,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errMsg]);
-      // Refetch quota in case backend enforced it (e.g. 429)
-      fetchQuotaInfo();
-    } finally {
-      setIsSending(false);
+      const content = isQuotaError
+        ? 'Marketplace call quota exceeded. Your quota resets at the start of next month.'
+        : errorMessage(err, 'Failed to send message. Please try again.');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          type: 'error',
+          content,
+          timestamp: new Date(),
+        },
+      ]);
+      void fetchQuotaInfo();
     }
-  }, [inputMessage, persistentFiles, isSending, numericId, isQuotaExceeded, fetchQuotaInfo]);
+  }, [
+    inputMessage,
+    persistentFiles.length,
+    isStreaming,
+    isQuotaExceeded,
+    sendMessage,
+    numericId,
+    resetScrollLock,
+    scrollToBottom,
+    refreshFileList,
+    fetchQuotaInfo,
+  ]);
 
-  // Handle Enter key
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        handleSendMessage();
       }
     },
-    [handleSend],
+    [handleSendMessage],
   );
 
-  // File handling — upload to server so files persist across navigation
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files ? Array.from(e.target.files) : [];
@@ -257,23 +343,23 @@ export default function MarketplaceChatPage() {
       if (files.length === 0) return;
 
       setIsLoadingFiles(true);
+      const failed: string[] = [];
       for (const file of files) {
         try {
           await apiService.uploadMarketplaceFile(numericId, file);
         } catch (err) {
+          failed.push(file.name);
           console.error(`Error uploading file ${file.name}:`, err);
         }
       }
-      try {
-        const response = await apiService.listMarketplaceFiles(numericId);
-        setPersistentFiles(response.files || []);
-      } catch {
-        // keep existing list
-      } finally {
-        setIsLoadingFiles(false);
+      await refreshFileList();
+      setIsLoadingFiles(false);
+
+      if (failed.length > 0) {
+        toast.error(`Failed to upload: ${failed.join(', ')}`);
       }
     },
-    [numericId],
+    [numericId, refreshFileList],
   );
 
   const resolveFileUrl = useCallback(
@@ -287,8 +373,8 @@ export default function MarketplaceChatPage() {
       try {
         const url = await resolveFileUrl(fileId);
         window.open(url, '_blank');
-      } catch (error) {
-        console.error('Error getting download URL:', error);
+      } catch (err) {
+        toast.error(errorMessage(err, 'Failed to download file'));
       }
     },
     [resolveFileUrl],
@@ -298,36 +384,32 @@ export default function MarketplaceChatPage() {
     async (fileId: string) => {
       try {
         await apiService.removeMarketplaceFile(numericId, fileId);
-        const response = await apiService.listMarketplaceFiles(numericId);
-        setPersistentFiles(response.files || []);
+        await refreshFileList();
       } catch (err) {
-        console.error(`Error removing file ${fileId}:`, err);
+        toast.error(errorMessage(err, 'Failed to remove file'));
       }
     },
-    [numericId],
+    [numericId, refreshFileList],
   );
 
-  // New chat with same agent
   const handleNewChat = useCallback(async () => {
     if (!agentId) return;
     try {
       const conv = await apiService.createMarketplaceConversation(agentId);
       navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create conversation');
+      toast.error(errorMessage(err, 'Failed to create conversation'));
     }
   }, [agentId, navigate]);
 
-  // Loading state
   if (loadingHistory) {
     return <LoadingState message="Loading conversation..." />;
   }
 
-  // Error state (fatal)
-  if (error && messages.length === 0) {
+  if (historyError && messages.length === 0) {
     return (
       <div className="space-y-4">
-        <ErrorState error={error} onRetry={() => globalThis.location.reload()} />
+        <ErrorState error={historyError} onRetry={() => globalThis.location.reload()} />
         <div className="text-center">
           <Link
             to="/marketplace"
@@ -350,188 +432,291 @@ export default function MarketplaceChatPage() {
     content_preview: f.content_preview,
   }));
 
+  const canSend =
+    !isStreaming && !isQuotaExceeded && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
-      {/* Chat column */}
-      <div className="flex-1 flex flex-col min-w-0">
-
-      {/* Top bar */}
-      <div className="flex items-center justify-between border-b bg-white px-4 py-3 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Bot className="w-6 h-6 text-blue-500" aria-hidden="true" />
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">{agentName}</h2>
-            <p className="text-xs text-gray-500">
-              {conversationTitle || 'New conversation'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Quota usage badge */}
-          {quotaInfo && quotaInfo.quota > 0 && !quotaInfo.is_exempt && (
-            <span
-              className={`text-xs rounded-full px-3 py-1 ${
-                isQuotaExceeded
-                  ? 'bg-red-100 text-red-700 font-medium'
-                  : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              {quotaInfo.call_count}/{quotaInfo.quota} Marketplace Usage
-            </span>
-          )}
-          {agentId && (
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              New Chat
-            </button>
-          )}
-          {agentId && (
-            <Link
-              to={`/marketplace/agents/${agentId}`}
-              className="text-sm px-3 py-1.5 text-gray-600 hover:text-gray-800"
-            >
-              Agent Details
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* Chat messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
-            <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" aria-hidden="true" />
-            <p className="text-sm">Send a message to start chatting with this agent.</p>
-          </div>
-        )}
-
-        {messages.map((msg) => (
-          <ChatBubble key={msg.id} message={msg} resolveFileUrl={resolveFileUrl} />
-        ))}
-
-        {isSending && (
-          <div className="flex items-start gap-3">
-            <Bot className="w-5 h-5 flex-shrink-0 text-blue-400" aria-hidden="true" />
-            <div className="bg-gray-100 rounded-lg px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
-                Thinking...
-              </div>
+    <div className="flex gap-4 items-start h-full min-h-0">
+      <div className="flex-1 pg-glass rounded-2xl flex flex-col h-full min-h-[480px]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-white/20 dark:border-gray-700/30 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+              <Bot className="w-5 h-5 text-indigo-500" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {agentName}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {conversationTitle || 'New conversation'}
+              </p>
             </div>
           </div>
-        )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {quotaInfo && quotaInfo.quota > 0 && !quotaInfo.is_exempt && (
+              <span
+                className={`text-xs rounded-full px-3 py-1 ${
+                  isQuotaExceeded
+                    ? 'bg-red-100 text-red-700 font-medium'
+                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {quotaInfo.call_count}/{quotaInfo.quota} Marketplace usage
+              </span>
+            )}
+            {agentId && (
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg
+                           text-gray-600 dark:text-gray-300
+                           hover:text-indigo-600 dark:hover:text-indigo-400
+                           hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                           border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800/40
+                           transition-all duration-150"
+              >
+                <Plus className="w-3.5 h-3.5" /> New chat
+              </button>
+            )}
+            {agentId && (
+              <Link
+                to={`/marketplace/agents/${agentId}`}
+                className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              >
+                Agent details
+              </Link>
+            )}
+          </div>
+        </div>
 
-        <div ref={messagesEndRef} />
-      </div>
+        {/* Messages */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-3
+                     bg-gradient-to-b from-gray-50/50 to-white/30
+                     dark:from-gray-900/50 dark:to-gray-800/30
+                     scroll-smooth"
+        >
+          {messages.length === 0 && !showStreaming && (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+              <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <MessageCircle className="w-6 h-6 text-indigo-500" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  Start chatting with {agentName}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  Type a message below to begin
+                </p>
+              </div>
+            </div>
+          )}
 
-      {/* Input area */}
-      <div className="border-t bg-white px-4 py-3 flex-shrink-0">
-        {/* Quota exceeded alert */}
-        {isQuotaExceeded && quotaInfo && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 flex items-start gap-2">
-            <span className="text-red-500 flex-shrink-0" aria-hidden="true">⚠️</span>
-            <span className="text-red-600 text-sm font-medium">
-              You have reached your monthly marketplace call limit ({quotaInfo.call_count}/{quotaInfo.quota}).
-              Your quota will reset at the start of next month (UTC).
-            </span>
+          {messages.map((message) => {
+            if (message.type === 'user') {
+              return (
+                <div key={message.id} className="flex justify-end animate-slide-in-right">
+                  <div className="max-w-[85%] lg:max-w-[75%]">
+                    <div className="pg-bubble-user">
+                      <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
+                    </div>
+                    <div className="text-right mt-1">
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {message.timestamp.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            if (message.type === 'error') {
+              return (
+                <div key={message.id} className="flex justify-start animate-slide-in-left">
+                  <div className="max-w-[85%] lg:max-w-[75%]">
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 text-red-700 dark:text-red-300 rounded-2xl rounded-bl-sm px-4 py-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold uppercase tracking-wide">Error</span>
+                      </div>
+                      <p className="text-sm">{message.content}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            const wasStreamed = message.id === lastStreamedMsgIdRef.current;
+            return (
+              <div
+                key={message.id}
+                className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+              >
+                <div className="max-w-[90%] lg:max-w-[80%]">
+                  <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
+                    <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      {message.timestamp.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {showStreaming && (
+            <StreamingMessage
+              content={streamingContent}
+              isStreaming={isStreaming}
+              activeTools={activeTools}
+              thinkingMessage={thinkingMessage}
+            />
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {showScrollToBottom && (
+          <div className="relative h-0 pointer-events-none">
+            <button
+              type="button"
+              onClick={() => {
+                resetScrollLock();
+                scrollToBottom();
+              }}
+              className="pg-scroll-fab pointer-events-auto"
+              aria-label="Scroll to bottom"
+            >
+              <svg
+                className="w-4 h-4 text-gray-600 dark:text-gray-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
           </div>
         )}
-        <div className="flex items-end gap-2">
-          {/* File upload button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isQuotaExceeded}
-            className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
-          >
-            <Paperclip className="w-5 h-5" />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileSelect}
-            className="hidden"
-          />
 
-          {/* Message input */}
-          <textarea
-            ref={textareaRef}
-            value={inputMessage}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message... (Shift+Enter for new line)"
-            rows={1}
-            className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+        {/* Input */}
+        <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30 flex-shrink-0">
+          {isQuotaExceeded && quotaInfo && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 rounded-lg p-3 mb-3 flex items-start gap-2">
+              <span className="text-red-500 flex-shrink-0" aria-hidden="true">⚠️</span>
+              <span className="text-red-600 dark:text-red-300 text-sm font-medium">
+                You've reached your monthly marketplace call limit
+                ({quotaInfo.call_count}/{quotaInfo.quota}).
+                Your quota resets at the start of next month (UTC).
+              </span>
+            </div>
+          )}
 
-          {/* Send button */}
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={isSending || isQuotaExceeded || (!inputMessage.trim() && persistentFiles.length === 0)}
-            className="flex-shrink-0 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Send
-          </button>
+          <div className="pg-glass rounded-xl px-3 py-2.5 flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              id="marketplace-file-upload"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isStreaming || isQuotaExceeded}
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
+                         hover:text-indigo-600 dark:hover:text-indigo-400
+                         hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                         disabled:opacity-40 disabled:cursor-not-allowed
+                         transition-all duration-150"
+              title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
+              aria-label="Attach file"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+
+            <textarea
+              ref={textareaRef}
+              value={inputMessage}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message ${agentName}…`}
+              disabled={isStreaming || isQuotaExceeded}
+              rows={1}
+              className="flex-1 bg-transparent border-none outline-none resize-none
+                         text-sm text-gray-800 dark:text-gray-100
+                         placeholder:text-gray-400 dark:placeholder:text-gray-500
+                         disabled:opacity-50
+                         max-h-40 input-login"
+              style={{ minHeight: '1.5rem' }}
+            />
+
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={abortStream}
+                className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
+                           hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
+                           active:scale-95 shrink-0"
+                aria-label="Stop generating"
+                title="Stop generating"
+              >
+                <Square className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={!canSend}
+                className="pg-btn-send shrink-0 !p-2"
+                aria-label="Send message"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">
+            Press Enter to send, Shift+Enter for new line
+          </p>
         </div>
       </div>
 
-      </div> {/* end chat column */}
-
-      {/* Attached Files Panel */}
-      <div className="border-l">
-        <AttachedFilesPanel
-          files={panelFiles}
-          isLoading={isLoadingFiles}
-          onRemoveFile={handleRemoveFile}
-          onDownloadFile={handleDownloadFile}
-        />
-      </div>
-    </div>
-  );
-}
-
-/* ========== Sub-components ========== */
-
-interface ChatBubbleProps {
-  readonly message: ChatMessage;
-  readonly resolveFileUrl: (fileId: string) => Promise<string>;
-}
-
-function ChatBubble({ message, resolveFileUrl }: ChatBubbleProps) {
-  if (message.type === 'user') {
-    return (
-      <div className="flex items-start gap-3 justify-end">
-        <div className="bg-blue-600 text-white rounded-lg px-4 py-3 max-w-[75%]">
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (message.type === 'error') {
-    return (
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-500" aria-hidden="true" />
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 max-w-[75%]">
-          <p className="text-sm text-red-700">{message.content}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Agent message
-  return (
-    <div className="flex items-start gap-3">
-      <Bot className="w-5 h-5 flex-shrink-0 text-blue-400" aria-hidden="true" />
-      <div className="bg-gray-100 rounded-lg px-4 py-3 max-w-[75%]">
-        <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
-      </div>
+      <AttachedFilesPanel
+        files={panelFiles}
+        isLoading={isLoadingFiles}
+        onRemoveFile={handleRemoveFile}
+        onDownloadFile={handleDownloadFile}
+      />
     </div>
   );
 }

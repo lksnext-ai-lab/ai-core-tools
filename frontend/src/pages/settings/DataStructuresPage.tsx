@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2, CheckCircle2, XCircle, X, Lightbulb, FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2, Lightbulb, FileText } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
@@ -12,6 +13,9 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import ImportModal, { type ConflictMode, type ImportResponse } from '../../components/ui/ImportModal';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useApiMutation } from '../../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../../constants/messages';
 
 interface DataStructure {
   parser_id: number;
@@ -26,16 +30,15 @@ function DataStructuresPage() {
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStructure, setEditingStructure] = useState<any>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [structureToDelete, setStructureToDelete] = useState<DataStructure | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingParserId, setExportingParserId] = useState<number | null>(null);
-  const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
 
   // Load data structures from cache or API
   useEffect(() => {
@@ -87,26 +90,30 @@ function DataStructuresPage() {
     }
   }
 
-  function handleDelete(structure: DataStructure) {
-    setStructureToDelete(structure);
-    setShowDeleteModal(true);
-  }
+  async function handleDelete(structure: DataStructure) {
+    if (!appId) return;
 
-  async function confirmDeleteStructure() {
-    if (!structureToDelete || !appId) return;
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('data structure'),
+      message: `Are you sure you want to delete "${structure.name}"? This action cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
 
-    try {
-      await apiService.deleteOutputParser(Number.parseInt(appId), structureToDelete.parser_id);
-      const newDataStructures = dataStructures.filter(ds => ds.parser_id !== structureToDelete.parser_id);
-      setDataStructures(newDataStructures);
-      // Update cache
-      settingsCache.setDataStructures(appId, newDataStructures);
-      setShowDeleteModal(false);
-      setStructureToDelete(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete data structure');
-      console.error('Error deleting data structure:', err);
-    }
+    const result = await mutate(
+      () => apiService.deleteOutputParser(Number.parseInt(appId), structure.parser_id),
+      {
+        loading: MESSAGES.DELETING('data structure'),
+        success: MESSAGES.DELETED('data structure'),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('data structure')),
+      },
+    );
+    if (result === undefined) return;
+
+    const newDataStructures = dataStructures.filter((ds) => ds.parser_id !== structure.parser_id);
+    setDataStructures(newDataStructures);
+    settingsCache.setDataStructures(appId, newDataStructures);
   }
 
   async function handleCreateStructure() {
@@ -139,23 +146,29 @@ function DataStructuresPage() {
   async function handleSaveStructure(data: any) {
     if (!appId) return;
 
+    const isUpdate = Boolean(editingStructure && editingStructure.parser_id !== 0);
+
+    const result = await mutate(
+      () =>
+        isUpdate
+          ? apiService.updateOutputParser(Number.parseInt(appId), editingStructure.parser_id, data)
+          : apiService.createOutputParser(Number.parseInt(appId), data),
+      {
+        loading: isUpdate ? MESSAGES.UPDATING('data structure') : MESSAGES.CREATING('data structure'),
+        success: isUpdate ? MESSAGES.UPDATED('data structure') : MESSAGES.CREATED('data structure'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('data structure')),
+      },
+    );
+    if (result === undefined) return;
+
+    settingsCache.invalidateDataStructures(appId);
     try {
-      if (editingStructure && editingStructure.parser_id !== 0) {
-        // Update existing structure - no need to invalidate cache
-        await apiService.updateOutputParser(Number.parseInt(appId), editingStructure.parser_id, data);
-        await loadDataStructures();
-      } else {
-        // Create new structure - invalidate cache and force reload
-        await apiService.createOutputParser(Number.parseInt(appId), data);
-        settingsCache.invalidateDataStructures(appId);
-        await forceReloadDataStructures();
-      }
-      
-      setIsModalOpen(false);
-      setEditingStructure(null);
+      await forceReloadDataStructures();
     } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to save data structure');
+      console.error('Refetch after save failed:', err);
     }
+    setIsModalOpen(false);
+    setEditingStructure(null);
   }
 
   function handleCloseModal() {
@@ -166,18 +179,16 @@ function DataStructuresPage() {
   async function handleExport(parserId: number) {
     if (!appId) return;
     setExportingParserId(parserId);
-    
+
     try {
       const blob = await apiService.exportOutputParser(Number.parseInt(appId), parserId);
-      
-      // Find parser name for filename
-      const parser = dataStructures.find(p => p.parser_id === parserId);
+
+      const parser = dataStructures.find((p) => p.parser_id === parserId);
       const parserName = parser?.name || 'output-parser';
       const sanitizedName = parserName.replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
       const timestamp = new Date().toISOString().split('T')[0];
       const filename = `output-parser-${sanitizedName}-${timestamp}.json`;
-      
-      // Create download link
+
       const url = globalThis.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -186,12 +197,9 @@ function DataStructuresPage() {
       a.click();
       globalThis.URL.revokeObjectURL(url);
       a.remove();
+      toast.success(MESSAGES.EXPORTED('data structure'));
     } catch (err) {
-      setNotification({
-        message: err instanceof Error ? err.message : 'Failed to export parser',
-        type: 'error'
-      });
-      setTimeout(() => setNotification(null), 5000);
+      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('data structure')));
     } finally {
       setExportingParserId(null);
     }
@@ -213,27 +221,14 @@ function DataStructuresPage() {
       );
       
       if (result.success) {
-        // Close modal immediately
         setShowImportModal(false);
-        // Show success notification
-        setNotification({
-          message: result.message || 'Import completed successfully',
-          type: 'success'
-        });
-        // Refresh the list
+        toast.success(result.message || MESSAGES.IMPORTED('data structure'));
         await forceReloadDataStructures();
-        // Auto-dismiss notification after 5 seconds
-        setTimeout(() => setNotification(null), 5000);
       }
-      
+
       return result;
     } catch (err) {
-      // Show error notification
-      setNotification({
-        message: err instanceof Error ? err.message : 'Import failed',
-        type: 'error'
-      });
-      setTimeout(() => setNotification(null), 5000);
+      toast.error(errorMessage(err, MESSAGES.IMPORT_FAILED('data structure')));
       throw err;
     }
   }
@@ -294,41 +289,6 @@ function DataStructuresPage() {
         
         {/* Read-only banner for non-admins */}
         {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
-
-        {/* Notification Banner */}
-        {notification && (
-          <div className={`mb-4 rounded-lg p-4 ${
-            notification.type === 'success' 
-              ? 'bg-green-50 border border-green-200' 
-              : 'bg-red-50 border border-red-200'
-          }`}>
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                {notification.type === 'success'
-                  ? <CheckCircle2 className="w-5 h-5 text-green-400" />
-                  : <XCircle className="w-5 h-5 text-red-400" />}
-              </div>
-              <div className="ml-3 flex-1">
-                <p className={`text-sm font-medium ${
-                  notification.type === 'success' ? 'text-green-800' : 'text-red-800'
-                }`}>
-                  {notification.message}
-                </p>
-              </div>
-              <button
-                onClick={() => setNotification(null)}
-                className={`ml-3 inline-flex rounded-md p-1.5 ${
-                  notification.type === 'success'
-                    ? 'text-green-500 hover:bg-green-100'
-                    : 'text-red-500 hover:bg-red-100'
-                } focus:outline-none`}
-              >
-                <span className="sr-only">Dismiss</span>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Data Structures Table */}
         <Table
@@ -399,7 +359,7 @@ function DataStructuresPage() {
                       },
                       {
                         label: 'Delete',
-                        onClick: () => handleDelete(structure),
+                        onClick: () => { void handleDelete(structure); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
@@ -488,39 +448,6 @@ function DataStructuresPage() {
             onSubmit={handleSaveStructure}
             onCancel={handleCloseModal}
           />
-        </Modal>
-
-        {/* Delete Confirmation Modal */}
-        <Modal
-          isOpen={showDeleteModal}
-          onClose={() => {
-            setShowDeleteModal(false);
-            setStructureToDelete(null);
-          }}
-          title="Delete Data Structure"
-        >
-          <div className="p-6">
-            <p className="text-gray-700 mb-6">
-              Are you sure you want to delete "{structureToDelete?.name}"? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setStructureToDelete(null);
-                }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteStructure}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
         </Modal>
 
         {/* Import Modal */}

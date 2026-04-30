@@ -27,7 +27,7 @@ def get_embeddings_model(embedding_service):
     """Returns the appropriate embeddings model based on the service configuration"""
     if embedding_service is None:
         raise ValueError("No embedding service provided")
-    
+
     logger.info(f"Proveedor {embedding_service.provider}")
 
     if embedding_service.provider == EmbeddingProvider.OpenAI.value:
@@ -35,13 +35,13 @@ def get_embeddings_model(embedding_service):
             model=embedding_service.name,
             api_key=embedding_service.api_key
         )
-    
+
     elif embedding_service.provider == EmbeddingProvider.MistralAI.value:
         return MistralAIEmbeddings(
             model=embedding_service.name,
             api_key=embedding_service.api_key
         )
-    
+
     elif embedding_service.provider == EmbeddingProvider.Custom.value:
         client = InferenceClient(
             model=embedding_service.endpoint,

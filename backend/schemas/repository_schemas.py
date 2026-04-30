@@ -41,17 +41,35 @@ class RepositoryDetailSchema(BaseModel):
     metadata_fields: Optional[List[MetadataFieldSchema]] = []
     media: List[MediaResponse] = []
     ai_services: List[Dict[str, Any]] = []
+    transcription_service_id: Optional[int] = None
+    video_ai_service_id: Optional[int] = None
     
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateRepositorySchema(BaseModel):
-    """Schema for creating or updating a repository"""
+class CreateRepositorySchema(BaseModel):
+    """Schema for creating a new repository (vector_db_type is settable on creation only)"""
     name: str
     type: Optional[str] = None
     status: Optional[str] = None
     embedding_service_id: Optional[int] = None
     vector_db_type: Optional[str] = None
+    transcription_service_id: Optional[int] = None
+    video_ai_service_id: Optional[int] = None
+
+
+class UpdateRepositorySchema(BaseModel):
+    """Schema for updating an existing repository (vector_db_type is immutable after creation)"""
+    name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
+    embedding_service_id: Optional[int] = None
+    transcription_service_id: Optional[int] = None
+    video_ai_service_id: Optional[int] = None
+
+
+# Backward-compatible alias used by internal callers that haven't been updated yet
+CreateUpdateRepositorySchema = CreateRepositorySchema
 
 
 class RepositorySearchSchema(BaseModel):

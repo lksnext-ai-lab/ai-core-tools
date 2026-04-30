@@ -83,6 +83,8 @@ class AppRepository:
             app.max_file_size_mb = data['max_file_size_mb']
         if 'agent_cors_origins' in data:
             app.agent_cors_origins = data['agent_cors_origins']
+        if 'enable_openai_api' in data:
+            app.enable_openai_api = data['enable_openai_api']
         if 'onboarding_dismissed' in data:
             app.onboarding_dismissed = data['onboarding_dismissed']
     
@@ -135,8 +137,8 @@ class AppRepository:
     
     def get_urls_by_domain_id(self, domain_id: int):
         """Get all URLs for a domain"""
-        from models.url import Url
-        return self.db.query(Url).filter(Url.domain_id == domain_id).all()
+        from models.domain_url import DomainUrl
+        return self.db.query(DomainUrl).filter(DomainUrl.domain_id == domain_id).all()
 
     def get_skills_by_app_id(self, app_id: int):
         """Get all skills for an app"""

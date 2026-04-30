@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useApiMutation } from './useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 type ApiFns<T> = {
   getAll: (appId: number) => Promise<T[]>;
@@ -15,7 +19,20 @@ type CacheFns<T> = {
   invalidate: (appId: string) => void;
 };
 
-export function useServicesManager<T = any>(appId: string | undefined, api: ApiFns<T>, cache: CacheFns<T>) {
+interface ServicesManagerOptions {
+  /** Singular entity label used in toasts and confirmation dialogs (e.g. "AI service"). */
+  readonly entity?: string;
+}
+
+export function useServicesManager<T = any>(
+  appId: string | undefined,
+  api: ApiFns<T>,
+  cache: CacheFns<T>,
+  options: ServicesManagerOptions = {},
+) {
+  const entity = options.entity ?? 'item';
+  const confirm = useConfirm();
+  const mutate = useApiMutation();
   const [services, setServices] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +41,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appId]);
 
   async function load() {
@@ -45,7 +61,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       cache.set(appId, response || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
-      // eslint-disable-next-line no-console
       console.error('Error loading services:', err);
     } finally {
       setLoading(false);
@@ -62,7 +77,6 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       cache.set(appId, response || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
-      // eslint-disable-next-line no-console
       console.error('Error reloading services:', err);
     } finally {
       setLoading(false);
@@ -70,18 +84,29 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Are you sure you want to delete this item?')) return;
     if (!appId) return;
-    try {
-      await api.delete(Number.parseInt(appId), id);
-      const newServices = services.filter((s: any) => s.service_id !== id);
-      setServices(newServices);
-      cache.set(appId, newServices);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete item');
-      // eslint-disable-next-line no-console
-      console.error('Error deleting item:', err);
-    }
+
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE(entity),
+      message: MESSAGES.CONFIRM_DELETE_MESSAGE(entity),
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+
+    const result = await mutate(
+      () => api.delete(Number.parseInt(appId), id),
+      {
+        loading: MESSAGES.DELETING(entity),
+        success: MESSAGES.DELETED(entity),
+        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED(entity)),
+      },
+    );
+    if (result === undefined) return;
+
+    const newServices = services.filter((s: any) => s.service_id !== id);
+    setServices(newServices);
+    cache.set(appId, newServices);
   }
 
   async function handleEdit(id: number) {
@@ -91,42 +116,51 @@ export function useServicesManager<T = any>(appId: string | undefined, api: ApiF
       setEditingService(item);
       setIsModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load item');
-      // eslint-disable-next-line no-console
-      console.error('Error loading item:', err);
+      const message = errorMessage(err, MESSAGES.LOAD_FAILED(entity));
+      toast.error(message);
+      console.error(`Error loading ${entity}:`, err);
     }
   }
 
   async function handleCopy(id: number) {
     if (!appId || !api.copy) return;
-    try {
-      await api.copy(Number.parseInt(appId), id);
-      cache.invalidate(appId);
-      await forceReload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to copy item');
-      // eslint-disable-next-line no-console
-      console.error('Error copying item:', err);
-    }
+
+    const result = await mutate(
+      () => api.copy!(Number.parseInt(appId), id),
+      {
+        loading: MESSAGES.COPYING(entity),
+        success: MESSAGES.COPIED(entity),
+        error: (err) => errorMessage(err, MESSAGES.COPY_FAILED(entity)),
+      },
+    );
+    if (result === undefined) return;
+
+    cache.invalidate(appId);
+    await forceReload();
   }
 
   async function handleSave(data: any) {
     if (!appId) return;
-    try {
-      if (editingService && editingService.service_id !== 0 && api.update) {
-        await api.update(Number.parseInt(appId), editingService.service_id, data);
-        cache.invalidate(appId);
-        await forceReload();
-      } else {
-        await api.create(Number.parseInt(appId), data);
-        cache.invalidate(appId);
-        await forceReload();
-      }
-      setIsModalOpen(false);
-      setEditingService(null);
-    } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to save item');
-    }
+
+    const isUpdate = Boolean(editingService && editingService.service_id !== 0 && api.update);
+
+    const result = await mutate(
+      () =>
+        isUpdate
+          ? api.update!(Number.parseInt(appId), editingService.service_id, data)
+          : api.create(Number.parseInt(appId), data),
+      {
+        loading: isUpdate ? MESSAGES.UPDATING(entity) : MESSAGES.CREATING(entity),
+        success: isUpdate ? MESSAGES.UPDATED(entity) : MESSAGES.CREATED(entity),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED(entity)),
+      },
+    );
+    if (result === undefined) return;
+
+    cache.invalidate(appId);
+    await forceReload();
+    setIsModalOpen(false);
+    setEditingService(null);
   }
 
   function handleCreate() {

@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useApiMutation } from '../hooks/useApiMutation';
+import { MESSAGES, errorMessage } from '../constants/messages';
 
 interface RepositoryFormData {
   name: string;
   embedding_service_id?: number;
   vector_db_type: string;
+  transcription_service_id?: number;
+  video_ai_service_id?: number;
 }
 
 interface EmbeddingService {
@@ -21,18 +25,28 @@ interface VectorDbOption {
   label: string;
 }
 
+interface AIService {
+  service_id: number;
+  name: string;
+  supports_video?: boolean;
+}
+
 const RepositoryFormPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
   const navigate = useNavigate();
+  const mutate = useApiMutation();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
+  const [aiServices, setAiServices] = useState<AIService[]>([]);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
   const [formData, setFormData] = useState<RepositoryFormData>({
     name: '',
     embedding_service_id: undefined,
     vector_db_type: 'PGVECTOR',
+    transcription_service_id: undefined,
+    video_ai_service_id: undefined,
   });
 
   const isNewRepository = repositoryId === '0';
@@ -69,6 +83,7 @@ const RepositoryFormPage: React.FC = () => {
 
         setEmbeddingServices(servicesToUse);
         setVectorDbOptions(availableVectorDbOptions);
+        setAiServices(repository.ai_services ?? []);
 
         const normalizedVectorDbType = (repository.vector_db_type || 'PGVECTOR').toUpperCase();
         const resolvedVectorDbType = availableVectorDbOptions.some((option) => option.code === normalizedVectorDbType)
@@ -82,6 +97,8 @@ const RepositoryFormPage: React.FC = () => {
           name: repository.name ?? '',
           embedding_service_id: nextEmbeddingServiceId,
           vector_db_type: resolvedVectorDbType,
+          transcription_service_id: repository.transcription_service_id ?? undefined,
+          video_ai_service_id: repository.video_ai_service_id ?? undefined,
         });
       } catch (err) {
         console.error('Error loading repository:', err);
@@ -96,7 +113,7 @@ const RepositoryFormPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!appId) {
       setError('Invalid application context');
       return;
@@ -114,7 +131,7 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
-    if (!formData.vector_db_type) {
+    if (isNewRepository && !formData.vector_db_type) {
       setError('Vector database selection is required');
       return;
     }
@@ -131,30 +148,35 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
-    try {
-      setSaving(true);
-      setError(null);
+    const payload = {
+      name: trimmedName,
+      embedding_service_id: formData.embedding_service_id,
+      vector_db_type: normalizedVectorDbType,
+      transcription_service_id: formData.transcription_service_id,
+      video_ai_service_id: formData.video_ai_service_id,
+    };
 
-      if (isNewRepository) {
-        await apiService.createRepository(appIdNumber, { 
-          name: trimmedName,
-          embedding_service_id: formData.embedding_service_id,
-          vector_db_type: normalizedVectorDbType
-        });
-      } else {
-        await apiService.updateRepository(appIdNumber, repositoryIdNumber, { 
-          name: trimmedName,
-          embedding_service_id: formData.embedding_service_id,
-          vector_db_type: normalizedVectorDbType
-        });
-      }
+    setError(null);
+    setSaving(true);
+    const result = await mutate(
+      () =>
+        isNewRepository
+          ? apiService.createRepository(appIdNumber, payload)
+          : apiService.updateRepository(appIdNumber, repositoryIdNumber, payload),
+      {
+        loading: isNewRepository
+          ? MESSAGES.CREATING('repository')
+          : MESSAGES.UPDATING('repository'),
+        success: isNewRepository
+          ? MESSAGES.CREATED('repository')
+          : MESSAGES.UPDATED('repository'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('repository')),
+      },
+    );
+    setSaving(false);
 
+    if (result !== undefined) {
       navigate(`/apps/${appId}/repositories`);
-    } catch (err) {
-      console.error('Error saving repository:', err);
-      setError('Failed to save repository');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -228,8 +250,9 @@ const RepositoryFormPage: React.FC = () => {
                   vector_db_type: e.target.value.toUpperCase(),
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              required={isNewRepository}
+              disabled={!isNewRepository}
             >
               {vectorDbOptions.length === 0
                 ? (
@@ -242,9 +265,15 @@ const RepositoryFormPage: React.FC = () => {
                   ))
                 )}
             </select>
-            <p className="text-sm text-gray-500 mt-1">
-              Select where embeddings for this repository will be stored.
-            </p>
+            {isNewRepository ? (
+              <p className="text-sm text-gray-500 mt-1">
+                Select where embeddings for this repository will be stored.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-600 mt-1">
+                The vector database cannot be changed after a repository is created.
+              </p>
+            )}
           </div>
 
           {/* Embedding Service (only for new repositories) */}
@@ -274,6 +303,62 @@ const RepositoryFormPage: React.FC = () => {
               </select>
               <p className="text-sm text-gray-500 mt-1">
                 This embedding service will be used for the silo that's automatically created with this repository
+              </p>
+            </div>
+          )}
+
+          {/* Transcription Service */}
+          {aiServices.length > 0 && (
+            <div>
+              <label htmlFor="transcription_service_id" className="block text-sm font-medium text-gray-700 mb-2">
+                Transcription Service (Whisper)
+              </label>
+              <select
+                id="transcription_service_id"
+                value={formData.transcription_service_id || ''}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  transcription_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">None (no transcription analysis) </option>
+                {aiServices.map((service) => (
+                  <option key={service.service_id} value={service.service_id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                Transcription service used for all media uploads in this repository.
+              </p>
+            </div>
+          )}
+
+          {/* Video AI Service */}
+          {aiServices.filter(s => s.supports_video).length > 0 && (
+            <div>
+              <label htmlFor="video_ai_service_id" className="block text-sm font-medium text-gray-700 mb-2">
+                Video Analysis Service (Gemini)
+              </label>
+              <select
+                id="video_ai_service_id"
+                value={formData.video_ai_service_id || ''}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  video_ai_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">None (no visual analysis)</option>
+                {aiServices.filter(s => s.supports_video).map((service) => (
+                  <option key={service.service_id} value={service.service_id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                When set, media uploaded in multimodal mode will use this service for visual frame analysis.
               </p>
             </div>
           )}
