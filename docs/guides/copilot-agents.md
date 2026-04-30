@@ -100,14 +100,18 @@ Manages all documentation in `docs/`:
 
 Comprehensive Git and GitHub CLI agent:
 
-- Branch management with `type/description` naming (`feature/`, `bug/`, `fix/`, `clean/`)
+- Branch management with `type/description` naming (`feature/`, `bug/`, `fix/`, `clean/`, `release/<version>`, `hotfix/<description>`)
+- **GitFlow release workflow**: cut `release/<version>` from `develop` → bump version → PR to `main` → tag → back-merge → next dev version
+- **GitFlow hotfix workflow**: branch from `main` → fix → PR to `main` → tag → back-merge to `develop`
 - Conventional Commits format: `type(scope): description`
 - GPG-signed commits (`git commit -S`)
 - GitHub CLI operations (issues, PRs, releases) using `--body-file`
 - Multi-remote operations: GitHub (`origin`) + GitLab (`lks`)
 - Release management with `gh release`
 
-**Companion instructions**: `.gh-commit.instructions.md` (GPG signing), `.gh-issues.instructions.md` (`--body-file` rule)
+**Companion instructions**: `.gh-commit.instructions.md` (GPG signing), `.gh-issues.instructions.md` (`--body-file` rule), `.git-github.instructions.md` (global rules including GitFlow)
+
+**See**: [Git Workflow & Release Process](git-workflow.md) — full GitFlow documentation
 
 **Delegates to**: `@backend-expert` / `@react-expert` (code), `@alembic-expert` (migrations), `@version-bumper` (versioning)
 

@@ -6,28 +6,33 @@
 # what commits need to be analyzed, then advances the baseline after updating.
 
 last_synced_commit: "d40b51d52e32c9e6fd46c53ea85e1a5dd56a6567"
-last_synced_date: "2026-04-27T00:00:00+00:00"
+last_synced_date: "2026-04-30T00:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
     - "docs/index.md"
-    - "docs/ai/rag-vector-stores.md"
-    - "docs/api/internal-api.md"
+    - "docs/guides/copilot-agents.md"
     - "docs/.doc-metadata.yaml"
-  files_created: []
+  files_created:
+    - "docs/guides/git-workflow.md"
   files_deleted: []
   commits_covered: null
-  commit_range: "manual-scan-2026-03-30..d40b51d"
+  commit_range: "d40b51d..HEAD (release/0.4.1 branch)"
   notes: >
-    Silo Playground Revamp (plan silo-playground-revamp, PR #152, all 8 phases shipped):
-    (1) Enhanced retriever controls — search_type (similarity/mmr/similarity_score_threshold),
-    score_threshold, fetch_k, lambda_mult, content-length filters (min/max_content_length),
-    DEFAULT_SEARCH_LIMIT=100/MAX_SEARCH_LIMIT=200. Bug fix: search_type was silently ignored
-    in get_silo_retriever (now correctly passed as top-level LangChain as_retriever() kwarg).
-    (2) New silo endpoints: GET /documents/neighbors, GET /metadata/{field}/values,
-    POST /documents/count, DELETE /documents (bulk), POST /resources/{id}/reindex.
+    GitFlow Release Workflow documentation (release/0.4.1 branch changes):
+    (1) Added .github/agents/git-github.agent.md workflow: "When Creating a GitFlow Release Branch"
+    (11 steps: sync develop → cut release/<version> → bump version in pyproject.toml → signed commit →
+    push → PR to main → tag main → back-merge to develop → bump next dev version → delete release branch)
+    and "When Creating a GitFlow Hotfix Branch" (4 steps).
+    (2) Added .github/instructions/.git-github.instructions.md section "GitFlow Release Workflow"
+    (8 steps) and branch naming entries: release/<version>, hotfix/<description>.
+    (3) pyproject.toml version bumped from 0.4.1.dev0 → 0.4.1 on release/0.4.1 branch.
+    Documentation created: docs/guides/git-workflow.md (full GitFlow guide: branch naming, versioning
+    convention x.y.z.devN, release workflow, hotfix workflow, commit signing, remote config, GitHub CLI rules).
+    docs/guides/copilot-agents.md updated: @git-github section expanded with GitFlow capabilities and
+    link to new guide. docs/index.md updated: new guide added to Guides TOC.
     (3) X-Server-Time-Ms response header on search. (4) Frontend playground: result inspection
     with score bar/source badge/expand-collapse/copy/neighbors; faceted filter builder with
     autocomplete; curator tools (multi-select bulk delete, delete-by-filter w/ dry-run guard,
