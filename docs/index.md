@@ -35,6 +35,7 @@
 - [Multimodal Video RAG](architecture/multimodal-rag.md) — Video analysis pipeline, audio/visual chunk splitting, and retrieval
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
+- [RFC: Sandbox Provider Integration](ai/rfc-sandbox-providers.md) — Design for isolated code execution with multi-provider support (OpenSandbox, E2B, subprocess)
 
 ### API Reference
 - [Internal API](api/internal-api.md) — Frontend-backend communication endpoints (session/OIDC auth)
