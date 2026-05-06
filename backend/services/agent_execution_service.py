@@ -246,6 +246,66 @@ class AgentExecutionService:
         if working_dir and os.path.isdir(working_dir):
             pre_existing_files = set(os.listdir(working_dir))
 
+        # 11. Sandbox session + file push (IT-4)
+        # Derives a stable session key then obtains (or reuses) a sandbox handle
+        # for the conversation.  For non-subprocess providers, user-uploaded files
+        # are pushed into the remote sandbox workspace so LLM code can access them
+        # with a simple open('filename') call.
+        sandbox_handle = None
+        sandbox_provider = None
+        sandbox_session_key = None
+        pre_existing_remote_files: set = set()
+
+        if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
+            from tools.sandbox.factory import resolve_provider
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            sandbox_session_key = (
+                f"conv_{agent_id}_{effective_conv_id}"
+                if effective_conv_id
+                else f"agent_{agent_id}_anon_{id(session_id_for_cache)}"
+            )
+            sandbox_provider = resolve_provider(fresh_agent)
+            sandbox_handle = _sss.get_or_create(
+                sandbox_session_key, sandbox_provider, working_dir
+            )
+
+            # Only remote (non-subprocess) providers need explicit push/pull.
+            # SubprocessProvider uses working_dir directly so nothing to do here.
+            if sandbox_handle.provider_name != "subprocess":
+                # Snapshot remote files BEFORE this turn so finalize can diff
+                try:
+                    pre_existing_remote_files = set(sandbox_provider.list_files(sandbox_handle))
+                except Exception as _snap_exc:
+                    logger.warning(
+                        "IT4: could not snapshot remote files before turn (%s): %s",
+                        sandbox_session_key,
+                        _snap_exc,
+                    )
+
+                # Push user-uploaded files into the sandbox workspace
+                for pf in processed_files:
+                    _filename = pf.get("filename", "")
+                    _file_path = pf.get("file_path")
+                    if not _filename:
+                        continue
+                    try:
+                        if _file_path and os.path.isfile(_file_path):
+                            with open(_file_path, "rb") as _fh:
+                                _raw = _fh.read()
+                        else:
+                            _content = pf.get("content", "")
+                            _raw = _content.encode("utf-8") if isinstance(_content, str) else bytes(_content)
+                        sandbox_provider.write_file(sandbox_handle, f"/workspace/{_filename}", _raw)
+                        logger.debug("IT4: pushed '%s' into sandbox %s", _filename, sandbox_session_key)
+                    except Exception as _push_exc:
+                        logger.warning(
+                            "IT4: failed to push file '%s' into sandbox %s: %s",
+                            _filename,
+                            sandbox_session_key,
+                            _push_exc,
+                        )
+
         return AgentExecutionContext(
             agent_id=agent_id,
             agent=agent,
@@ -258,6 +318,10 @@ class AgentExecutionService:
             session_id_for_cache=session_id_for_cache,
             working_dir=working_dir,
             pre_existing_files=pre_existing_files,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            pre_existing_remote_files=pre_existing_remote_files,
             processed_files=processed_files,
             search_params=search_params,
             user_context=user_context,
@@ -294,6 +358,47 @@ class AgentExecutionService:
 
         response = raw_response
         files_data: List[Dict[str, Any]] = []
+
+        # 0 (IT-4). Pull new files from remote sandbox into working_dir BEFORE sync.
+        # SubprocessProvider writes directly to working_dir so no pull is needed there.
+        if (
+            ctx.sandbox_handle is not None
+            and ctx.sandbox_provider is not None
+            and ctx.working_dir
+            and ctx.sandbox_handle.provider_name != "subprocess"
+        ):
+            try:
+                remote_files = ctx.sandbox_provider.list_files(ctx.sandbox_handle)
+                for remote_path in remote_files:
+                    # Skip skill resources written by the activation machinery
+                    if "/workspace/.skills/" in remote_path or remote_path.startswith(".skills/"):
+                        continue
+                    if remote_path in ctx.pre_existing_remote_files:
+                        continue
+                    # Security: normalize the remote path and require it to be inside /workspace/
+                    import posixpath as _posixpath
+                    norm_remote = _posixpath.normpath(remote_path)
+                    if not norm_remote.startswith("/workspace/"):
+                        logger.warning("IT4: skipping non-workspace remote path '%s'", remote_path)
+                        continue
+                    # Derive a safe local filename (last component, no hidden/traversal names)
+                    basename = _posixpath.basename(norm_remote)
+                    if not basename or basename.startswith("."):
+                        logger.warning("IT4: skipping unsafe remote path '%s'", remote_path)
+                        continue
+                    try:
+                        file_bytes = ctx.sandbox_provider.read_file(ctx.sandbox_handle, remote_path)
+                        dest = os.path.join(ctx.working_dir, basename)
+                        os.makedirs(ctx.working_dir, exist_ok=True)
+                        with open(dest, "wb") as _fh:
+                            _fh.write(file_bytes)
+                        logger.debug("IT4: pulled '%s' → %s", remote_path, dest)
+                    except Exception as _pull_exc:
+                        logger.warning(
+                            "IT4: failed to pull remote file '%s': %s", remote_path, _pull_exc
+                        )
+            except Exception as _list_exc:
+                logger.warning("IT4: could not list remote files for pull: %s", _list_exc)
 
         # 1 + 2. Sync output files and inject markers
         if ctx.working_dir:
