@@ -193,6 +193,19 @@
 
 ---
 
+### Step 20 — Unit tests: plugin registry, GraphClient, and sync service
+**Started**: 2026-05-06
+**Completed**: 2026-05-06
+**Files changed**:
+- `tests/unit/plugins/__init__.py` — created (empty)
+- `tests/unit/plugins/test_plugin_registry.py` — created (8 tests, all green)
+- `tests/unit/plugins/test_graph_client.py` — created (7 tests, all green)
+- `tests/unit/plugins/test_sharepoint_sync_service.py` — created (9 tests, all green)
+**Test result**: passed (24/24)
+**Notes**: pytest.ini overrides pyproject.toml asyncio_mode to STRICT — had to add @pytest.mark.asyncio to all async tests. Lazy imports in run_sync (SessionLocal, SiloService) require patching at their source module path (`db.database.SessionLocal`, `services.silo_service.SiloService`), not at `mattin_sharepoint.service.*`. Same lazy-import pitfall: GraphClient and repository classes are patched at `mattin_sharepoint.service.GraphClient` (module-level imports), while SiloService/SessionLocal needed source-path patches. 410 test: assertion was that delta_token is None after retry, but service sets it to new_delta at the end — corrected to assert the second call used delta_token=None.
+
+---
+
 ### Step 19 — Install mattin-sharepoint as a dev dependency and verify end-to-end
 **Started**: 2026-05-06
 **Completed**: 2026-05-06

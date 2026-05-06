@@ -838,7 +838,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
 
   Use `@pytest.mark.anyio` or `asyncio.run()` for async tests. All imports from `mattin_sharepoint` package.
 - **Acceptance**: `pytest tests/unit/plugins/ -v` passes (all tests green).
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
