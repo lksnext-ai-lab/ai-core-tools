@@ -55,7 +55,7 @@ interface Agent {
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
-  skills: Array<{ skill_id: number; name: string; description?: string }>;
+  skills: Array<{ skill_id: number; name: string; description?: string; runtime?: string; is_builtin?: boolean }>;
 }
 
 interface AgentFormData {
@@ -1377,9 +1377,17 @@ function AgentFormPage() {
                                 />
                                 <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
                               </div>
-                              <div className={`w-2 h-2 rounded-full ${
-                                formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
-                              }`} />
+                              <div className="flex items-center gap-2">
+                                {skill.runtime === 'python-sandbox' && (
+                                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">sandbox</span>
+                                )}
+                                {skill.is_builtin && (
+                                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">builtin</span>
+                                )}
+                                <div className={`w-2 h-2 rounded-full ${
+                                  formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
+                                }`} />
+                              </div>
                             </div>
                             {skill.description && (
                               <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>

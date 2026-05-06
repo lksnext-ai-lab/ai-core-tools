@@ -16,6 +16,18 @@ settings:
     category: "platform"
     description: "Agent ID for the platform-wide chatbot widget. -1 = disabled."
 
+  sandbox_default_provider:
+    value: "subprocess"
+    type: "string"
+    category: "sandbox"
+    description: "Default sandbox provider when an app has no explicit override. Options: subprocess, opensandbox."
+
+  sandbox_allowed_providers:
+    value: "subprocess,opensandbox"
+    type: "string"
+    category: "sandbox"
+    description: "Comma-separated list of sandbox providers that apps may select. Restricts app-level overrides to this set."
+
 # Tier configuration defaults - used when no DB override exists
 # -1 means unlimited
 tier_config:

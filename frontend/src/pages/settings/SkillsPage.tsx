@@ -240,6 +240,23 @@ function SkillsPage() {
             className: 'px-6 py-4'
           },
           {
+            header: 'Type',
+            render: (skill) => (
+              <div className="flex items-center gap-2">
+                {(skill as any).runtime === 'python-sandbox' && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">sandbox</span>
+                )}
+                {(skill as any).is_builtin && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">builtin</span>
+                )}
+                {!(skill as any).runtime && !(skill as any).is_builtin && (
+                  <span className="text-xs text-gray-400">prompt-only</span>
+                )}
+              </div>
+            ),
+            className: 'px-6 py-4'
+          },
+          {
             header: 'Created',
             render: (skill) => skill.created_at ? new Date(skill.created_at).toLocaleDateString() : 'N/A',
             className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
