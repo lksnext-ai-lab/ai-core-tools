@@ -26,7 +26,7 @@ from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
-from tools.python_sandbox_tools import create_python_repl_tool
+from tools.sandbox import resolve_provider, create_sandbox_repl_tool
 
 logger = get_logger(__name__)
 
@@ -248,7 +248,9 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     if agent.enable_code_interpreter and working_dir:
         os.makedirs(working_dir, exist_ok=True)
-        python_tool = create_python_repl_tool(working_dir=working_dir)
+        sandbox_provider = resolve_provider(agent)
+        sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
+        python_tool = create_sandbox_repl_tool(sandbox_handle, sandbox_provider)
         tools.append(python_tool)
         logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
 

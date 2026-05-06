@@ -518,6 +518,15 @@ class AgentExecutionService:
                 # Reset the session object (clears messages and memory)
                 # This should be done after invalidating checkpointer to ensure we have the session ID
                 await self.session_service.reset_user_session(agent_id, user_context)
+
+            # Destroy any active sandbox for this conversation session (IT-1)
+            if agent.enable_code_interpreter:
+                from services.sandbox_session_service import sandbox_session_service
+                session = await self.session_service.get_user_session(agent_id, user_context)
+                if session:
+                    session_key = f"thread_{agent_id}_{session.id}"
+                    sandbox_session_service.destroy(session_key)
+                    logger.info(f"Sandbox destroyed on conversation reset for key {session_key}")
             
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService

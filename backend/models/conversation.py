@@ -33,6 +33,19 @@ class Conversation(Base):
         default=ConversationSource.PLAYGROUND
     )
 
+    # Sandbox session tracking (IT-1 / Q5)
+    # Stores the provider's sandbox ID so the backend can attempt to reconnect
+    # after a restart.  NULL when no sandbox has been created yet or when the
+    # sandbox has been destroyed.
+    sandbox_session_id = Column(String(255), nullable=True)
+
+    # Sandbox session tracking (IT-1 / Q5)
+    # Stores the provider's sandbox ID so the backend can attempt to reconnect
+    # after a restart.  NULL when no sandbox has been created yet or when the
+    # sandbox has been destroyed.
+    sandbox_session_id = Column(String(255), nullable=True)
+
+    # Relationships
     agent = relationship("Agent", backref="conversations")
     user = relationship("User", backref="conversations", foreign_keys=[user_id])
     

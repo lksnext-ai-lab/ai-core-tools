@@ -8,16 +8,19 @@
 
 This RFC proposes replacing the current unprotected subprocess-based code interpreter with a
 **provider-abstracted sandbox layer**. A `SandboxProvider` protocol defines a common interface;
-multiple backend implementations plug in — subprocess (backward-compatible default), OpenSandbox
-(primary self-hosted target), E2B (cloud-managed alternative), and future adapters such as Modal,
-Daytona, CodeSandbox SDK, or Microsandbox. Sandboxes are scoped to a conversation, persist state
+multiple backend implementations plug in — subprocess (backward-compatible default) and
+OpenSandbox (primary self-hosted target) in the current implementation scope. Future adapters
+such as E2B, Modal, Daytona, CodeSandbox SDK, or Microsandbox can plug into the same interface
+later. Sandboxes are scoped to a conversation, persist state
 across turns, and support **Skills** — Mattin skills stored as portable packages centered on a
 `SKILL.md` file with YAML frontmatter, Markdown instructions, and optional supporting resources
-such as scripts, references, templates, and assets. Agents attach skills from one place; some
-skills only provide instructions, some include executable resources and dependency metadata that
-bootstrap sandbox capabilities, and some do both to unlock advanced operations such as document
-generation, data visualisation, spreadsheet processing, presentation building, and report
-assembly.
+such as scripts, references, templates, and assets. Agents attach skills from one place; those
+attached skills define what the agent is allowed to load. During a conversation the agent can
+lazily activate only the Skills it needs inside the sandbox, inspect which Skills are already
+active, and then execute code against that enriched environment. Some Skills only provide
+instructions, some include executable resources and dependency metadata, and some do both to
+unlock advanced operations such as document generation, data visualisation, spreadsheet
+processing, presentation building, and report assembly.
 
 ---
 
@@ -83,8 +86,8 @@ reach production multi-tenant deployments.
 ### Capability gap
 
 The current interpreter only provides a bare Python environment plus the packages installed in
-the backend virtual environment. There is no mechanism to pre-load domain-specific libraries
-(e.g., `python-docx`, `reportlab`, `matplotlib`) per-agent without polluting the global
+the backend virtual environment. There is no mechanism to activate domain-specific libraries
+(e.g., `python-docx`, `reportlab`, `matplotlib`) for a conversation without polluting the global
 backend environment.
 
 ---
@@ -97,10 +100,11 @@ backend environment.
 | G2 | Preserve backward compatibility — existing agents with `enable_code_interpreter = true` must work unchanged using the subprocess provider |
 | G3 | Single abstraction seam — swapping providers requires no changes outside `SandboxProvider` implementations and one routing call in `agentTools.py` |
 | G4 | Conversation-scoped state persistence — a sandbox survives across turns of the same conversation so that variables, files, and installed packages remain available |
-| G5 | Skills — agents declare skills from the existing skill library; skills with dependency metadata and executable resources bootstrap the sandbox before the first turn |
+| G5 | Skills — agents declare skills from the existing skill library; attached Skills define what the agent may lazily activate inside a conversation sandbox |
 | G6 | File round-trip — files written inside the sandbox surface in the existing `working_dir` files panel |
-| G7 | Support OpenSandbox as primary self-hosted provider and E2B as managed-cloud alternative |
+| G7 | Support OpenSandbox as the primary self-hosted provider for the current implementation; keep E2B as a future managed-cloud adapter |
 | G8 | Make the boundary between Mattin-managed sandbox generation and provider-native hosted tools explicit |
+| G9 | Agent control — agents can inspect active sandbox Skills and choose when to activate additional attached Skills |
 
 ---
 
@@ -213,7 +217,6 @@ backend/tools/sandbox/
     provider.py          ← SandboxProvider ABC + SandboxHandle dataclass
     subprocess_provider.py   ← current behaviour (default/backward-compat)
     opensandbox_provider.py  ← OpenSandbox (Alibaba)
-    e2b_provider.py          ← E2B (e2b.dev)
     modal_provider.py        ← optional future adapter
     daytona_provider.py      ← optional future adapter
     factory.py           ← resolve_provider(agent) → SandboxProvider
@@ -234,11 +237,12 @@ from typing import Any, Optional
 @dataclass
 class SandboxHandle:
     """Opaque reference to an active sandbox session."""
-    provider: str           # "subprocess" | "opensandbox" | "e2b" | ...
+    provider: str           # "subprocess" | "opensandbox" | future provider names
     session_key: str        # unique key: f"{agent_id}_{conversation_id}"
     raw: Any = None         # provider-specific object (Sandbox, None, …)
     interpreter: Any = None # provider-specific interpreter object (CodeInterpreter, …)
-    runtime_ready: bool = False
+    active_skills: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # key: skill.name; value: activation metadata such as dependencies, timestamp, files path
 ```
 
 #### `SandboxProvider` ABC
@@ -256,13 +260,33 @@ class SandboxProvider(abc.ABC):
     async def create_sandbox(
         self,
         session_key: str,
-        runtime_skills: List["Skill"] | None = None,
     ) -> SandboxHandle:
         """Create (or reconnect to) an isolated execution environment.
 
-        If ``runtime_skills`` are provided, each skill's sandbox requirements
-        are installed and its setup script is executed before the handle is returned.
+        The sandbox starts minimal. Skills are activated lazily through
+        ``ensure_skill`` when the agent decides a capability is needed.
         """
+
+    @abc.abstractmethod
+    async def ensure_skill(
+        self,
+        handle: SandboxHandle,
+        skill: "Skill",
+    ) -> None:
+        """Idempotently activate one Skill inside the sandbox.
+
+        Activation writes referenced Skill files into the sandbox, installs
+        dependency metadata relevant to this provider/runtime, executes the
+        bootstrap script if configured, and records the Skill in
+        ``handle.active_skills``.
+        """
+
+    @abc.abstractmethod
+    async def list_active_skills(
+        self,
+        handle: SandboxHandle,
+    ) -> List[str]:
+        """Return the Skill names currently active in this sandbox."""
 
     @abc.abstractmethod
     async def run_code(
@@ -313,28 +337,29 @@ from tools.sandbox.provider import SandboxProvider
 
 
 def resolve_provider(agent: Agent) -> SandboxProvider:
-    """Return the correct SandboxProvider for the given agent.
+    """Return the correct SandboxProvider for the agent's app.
 
     Selection priority:
-      1. agent.sandbox_provider  (explicit per-agent config)
-      2. SANDBOX_DEFAULT_PROVIDER env var (app-level default)
+      1. agent.app.sandbox_provider  (explicit app-level config)
+      2. SANDBOX_DEFAULT_PROVIDER env var (system-level default)
       3. "subprocess"  (backward-compatible fallback)
     """
     from utils.config import get_app_config
     from tools.sandbox.subprocess_provider import SubprocessProvider
     from tools.sandbox.opensandbox_provider import OpenSandboxProvider
-    from tools.sandbox.e2b_provider import E2BProvider
 
+    cfg = get_app_config()
     provider_name = (
-        getattr(agent, "sandbox_provider", None)
-        or get_app_config().get("SANDBOX_DEFAULT_PROVIDER", "subprocess")
+        getattr(getattr(agent, "app", None), "sandbox_provider", None)
+        or cfg.get("SANDBOX_DEFAULT_PROVIDER", "subprocess")
     )
+    allowed = set(cfg.get("SANDBOX_ALLOWED_PROVIDERS", "subprocess,opensandbox").split(","))
+    if provider_name not in allowed:
+        provider_name = cfg.get("SANDBOX_DEFAULT_PROVIDER", "subprocess")
 
     match provider_name:
         case "opensandbox":
             return OpenSandboxProvider()
-        case "e2b":
-            return E2BProvider()
         case _:
             return SubprocessProvider()
 ```
@@ -346,7 +371,8 @@ def resolve_provider(agent: Agent) -> SandboxProvider:
 #### SubprocessProvider (backward-compatible default)
 
 Wraps the current `python_sandbox_tools.py` logic so existing behaviour is fully preserved.
-`create_sandbox` is a no-op; `run_code` spawns the subprocess exactly as today.
+`create_sandbox` is a no-op; `ensure_skill` records lazy Skill activation in the local
+conversation context; `run_code` spawns the subprocess exactly as today.
 
 ```python
 # backend/tools/sandbox/subprocess_provider.py
@@ -361,8 +387,18 @@ class SubprocessProvider(SandboxProvider):
     WARNING: No isolation. Do not use in multi-tenant or production environments.
     """
 
-    async def create_sandbox(self, session_key, runtime_skills=None):
+    async def create_sandbox(self, session_key):
         return SandboxHandle(provider="subprocess", session_key=session_key)
+
+    async def ensure_skill(self, handle, skill):
+        if skill.name in handle.active_skills:
+            return
+        # Development-only provider. It cannot isolate dependencies from the backend
+        # environment, so real dependency installation should be avoided here.
+        handle.active_skills[skill.name] = {"provider": "subprocess"}
+
+    async def list_active_skills(self, handle):
+        return sorted(handle.active_skills)
 
     async def run_code(self, handle, code, timeout=30):
         working_dir = _working_dir_from_key(handle.session_key)
@@ -432,7 +468,7 @@ class OpenSandboxProvider(SandboxProvider):
             api_key=cfg["OPENSANDBOX_API_KEY"],
         )
 
-    async def create_sandbox(self, session_key, runtime_skills=None):
+    async def create_sandbox(self, session_key):
         sandbox = await Sandbox.create(
             "opensandbox/code-interpreter:v1.0.2",
             connection_config=self._config(),
@@ -447,8 +483,6 @@ class OpenSandboxProvider(SandboxProvider):
             raw=sandbox,
             interpreter=interpreter,
         )
-        if runtime_skills:
-            await self._bootstrap_runtime_skills(handle, runtime_skills)
         return handle
 
     async def run_code(self, handle, code, timeout=30):
@@ -459,10 +493,11 @@ class OpenSandboxProvider(SandboxProvider):
         text   = result.result[0].text if result.result else stdout
         return text[:20_000]
 
-    async def _bootstrap_runtime_skills(self, handle, runtime_skills):
-        reqs = []
-        for skill in runtime_skills:
-            reqs.extend(_python_requirements_from_dependencies(skill.dependencies or []))
+    async def ensure_skill(self, handle, skill):
+        if skill.name in handle.active_skills:
+            return
+        await _write_skill_files(handle, skill, base_dir=f"/workspace/.skills/{skill.name}")
+        reqs = _python_requirements_from_dependencies(skill.dependencies or [])
         if reqs:
             reqs_json = json.dumps(reqs)
             await self.run_code(
@@ -472,11 +507,16 @@ class OpenSandboxProvider(SandboxProvider):
                 "subprocess.run(['pip', 'install', '-q', *reqs], check=True)",
                 timeout=120,
             )
-        for skill in runtime_skills:
-            if skill.bootstrap_script_path:
-                script = _read_skill_file_text(skill, skill.bootstrap_script_path)
-                await self.run_code(handle, script, timeout=60)
-        handle.runtime_ready = True
+        if skill.bootstrap_script_path:
+            script = _read_skill_file_text(skill, skill.bootstrap_script_path)
+            await self.run_code(handle, script, timeout=60)
+        handle.active_skills[skill.name] = {
+            "dependencies": reqs,
+            "files_dir": f"/workspace/.skills/{skill.name}",
+        }
+
+    async def list_active_skills(self, handle):
+        return sorted(handle.active_skills)
 
     async def write_file(self, handle, remote_path, data):
         from opensandbox.models import WriteEntry
@@ -495,69 +535,6 @@ class OpenSandboxProvider(SandboxProvider):
         await handle.raw.kill()
 ```
 
-#### E2BProvider (cloud-managed alternative)
-
-Uses the `e2b-code-interpreter` SDK. Suited for SaaS deployments where self-hosting
-infrastructure is undesirable.
-
-```python
-# backend/tools/sandbox/e2b_provider.py  (sketch)
-
-import json
-from e2b_code_interpreter import Sandbox
-from tools.sandbox.provider import SandboxProvider, SandboxHandle
-
-
-class E2BProvider(SandboxProvider):
-
-    async def create_sandbox(self, session_key, runtime_skills=None):
-        sandbox = await Sandbox.create()
-        handle = SandboxHandle(
-            provider="e2b",
-            session_key=session_key,
-            raw=sandbox,
-        )
-        if runtime_skills:
-            await self._bootstrap_runtime_skills(handle, runtime_skills)
-        return handle
-
-    async def run_code(self, handle, code, timeout=30):
-        execution = await handle.raw.run_code(code)
-        return (execution.text or "")[:20_000]
-
-    async def _bootstrap_runtime_skills(self, handle, runtime_skills):
-        reqs = []
-        for skill in runtime_skills:
-            reqs.extend(_python_requirements_from_dependencies(skill.dependencies or []))
-        if reqs:
-            reqs_json = json.dumps(reqs)
-            await self.run_code(
-                handle,
-                "import json, subprocess\n"
-                f"reqs = json.loads({reqs_json!r})\n"
-                "subprocess.run(['pip', 'install', '-q', *reqs], check=True)",
-                timeout=120,
-            )
-        for skill in runtime_skills:
-            if skill.bootstrap_script_path:
-                script = _read_skill_file_text(skill, skill.bootstrap_script_path)
-                await self.run_code(handle, script, timeout=60)
-        handle.runtime_ready = True
-
-    async def write_file(self, handle, remote_path, data):
-        await handle.raw.files.write(remote_path, data)
-
-    async def read_file(self, handle, remote_path):
-        return await handle.raw.files.read(remote_path)
-
-    async def list_files(self, handle, remote_dir="/workspace"):
-        entries = await handle.raw.files.list(remote_dir)
-        return [e.path for e in entries]
-
-    async def destroy_sandbox(self, handle):
-        await handle.raw.kill()
-```
-
 #### Additional provider candidates researched on May 1, 2026
 
 These providers fit the same `SandboxProvider` protocol but are not recommended for Phase 1
@@ -565,6 +542,7 @@ implementation unless product requirements change.
 
 | Provider | Why consider it | Fit / caveats |
 |----------|-----------------|---------------|
+| E2B | Managed cloud code interpreter / sandbox infrastructure; useful where self-hosting OpenSandbox is undesirable | Future managed adapter, intentionally excluded from the current implementation scope |
 | Modal Sandboxes | Managed secure containers for untrusted user or agent code; supports arbitrary commands, custom images, volumes, filesystem APIs, timeouts up to 24h, and `Sandbox.from_id` reconnects | Strong fit for cloud deployments that already use Modal; not self-hosted and the file API has recently changed, so it is a Phase 5+ adapter candidate |
 | Daytona Sandboxes | Managed isolated "full computer" environments with SDKs for Python/TypeScript/Ruby/Go/Java, Python/TypeScript/JavaScript direct execution, snapshots, resources, regions, and per-sandbox firewall settings | Good managed alternative for longer-running coding-agent workflows; broader dev-environment surface than Mattin needs for initial content generation |
 | CodeSandbox SDK | Together/CodeSandbox microVM sandboxes with Python/JS/shell execution, filesystem API, fork/clone, hibernation, snapshots, Docker-based templates, and regional infrastructure | Interesting for agent development environments and A/B cloning; JavaScript-first SDK and commercial hosted dependency make it a later candidate |
@@ -584,7 +562,8 @@ Not selected for this RFC:
 ### 5.3 SandboxSessionService
 
 Manages the mapping from conversation session keys to `SandboxHandle` objects, ensuring one
-sandbox per conversation and proper cleanup on reset or expiry.
+sandbox per conversation, tracking which Skills are active in that sandbox, and handling cleanup
+on reset or expiry.
 
 ```
 backend/services/sandbox_session_service.py
@@ -613,14 +592,32 @@ class SandboxSessionService:
         cls,
         key: str,
         provider: SandboxProvider,
-        runtime_skills: Optional[List] = None,
     ) -> SandboxHandle:
         async with cls._lock:
             if key not in cls._handles:
-                cls._handles[key] = await provider.create_sandbox(
-                    key, runtime_skills=runtime_skills
-                )
+                cls._handles[key] = await provider.create_sandbox(key)
             return cls._handles[key]
+
+    @classmethod
+    async def ensure_skill(
+        cls,
+        key: str,
+        provider: SandboxProvider,
+        skill,
+    ) -> SandboxHandle:
+        handle = await cls.get_or_create(key, provider)
+        async with cls._lock:
+            await provider.ensure_skill(handle, skill)
+            return handle
+
+    @classmethod
+    async def list_active_skills(
+        cls,
+        key: str,
+        provider: SandboxProvider,
+    ) -> List[str]:
+        handle = await cls.get_or_create(key, provider)
+        return await provider.list_active_skills(handle)
 
     @classmethod
     async def destroy(cls, key: str) -> None:
@@ -667,9 +664,11 @@ This gives Mattin three skill shapes without fragmenting the UI or API:
 | Runtime skill | Short usage guidance | `dependencies` metadata plus `scripts/` and templates | `word-generation`, `charts`, `data-analysis` |
 | Hybrid skill | Required | Dependencies, scripts, references, templates, assets | "Board report writer" instructions plus document, spreadsheet, and charting helpers |
 
-The current `load_skill` tool remains responsible for prompt instructions. The sandbox bootstrap
-path reads the same attached skills and extracts dependency metadata and executable resources, so
-agents still attach skills from one library.
+The current `load_skill` tool remains responsible for prompt instructions. Sandbox Skill
+activation is lazy: attached Skills define the allowed capability set, and the agent activates a
+runtime-capable Skill only when the conversation actually needs it. The same attached skill list
+therefore powers three decisions: which instructions can be loaded, which sandbox capabilities can
+be activated, and which Skills are already active in the current conversation sandbox.
 
 #### Skill package shape
 
@@ -717,8 +716,8 @@ Compatibility rules:
 - `description` is required and should explain both what the skill does and when to use it.
   It must not contain XML tags. Mattin should store up to 1024 characters, while export flows
   may warn when targeting surfaces with shorter limits.
-- `dependencies` is optional metadata. Mattin uses Python package entries to bootstrap its
-  sandbox; non-Python entries are preserved for export and future runtimes.
+- `dependencies` is optional metadata. Mattin uses Python package entries during lazy Skill
+  activation; non-Python entries are preserved for export and future runtimes.
 - `allowed-tools` may be preserved for Claude Code compatibility, but Mattin should enforce tool
   policy through its own agent/tool permissions.
 - Supporting files are loaded progressively: `SKILL.md` metadata is always visible, the body is
@@ -781,7 +780,7 @@ Design notes:
 - `content` is still the agent-facing usage guide and is loaded through the existing `load_skill`
   tool.
 - `dependencies`, `bootstrap_script_path`, selected `SkillFile` entries, and `runtime_options`
-  are consumed by the sandbox service.
+  are consumed by the sandbox service when a Skill is activated lazily.
 - Mattin should generate `SKILL.md` from `name`, `description`, `frontmatter`, and `content` on
   export, and parse those same fields on import.
 - No new agent association table is needed. `agent_skills` remains the single attachment model,
@@ -805,25 +804,48 @@ whether they add instructions, runtime dependencies, or both.
 | `email-html` | `jinja2>=3.1`, `premailer>=3.10` | HTML email template rendering |
 | `markdown-publishing` | `markdown>=3.6`, `pyyaml>=6.0`, `python-frontmatter>=1.1` | Markdown/HTML publishing workflows |
 
-#### Bootstrap flow
+#### Authorized vs active Skills
+
+The agent's attached Skills are the **authorized** set: they define what the agent may use in a
+conversation. The sandbox's active Skills are the **loaded** set: they define what has already
+been installed, copied, and initialized in that specific conversation sandbox.
+
+This RFC intentionally keeps those sets separate:
+
+- Attaching a Skill to an agent does **not** install it in every sandbox.
+- `load_skill(name)` loads the Skill instructions into the agent's context.
+- `activate_sandbox_skill(name)` lazily prepares that Skill's runtime resources inside the
+  sandbox, but only if the Skill is attached to the agent.
+- `list_active_sandbox_skills()` lets the agent inspect current sandbox state before deciding
+  whether more activation is needed.
+
+#### Lazy activation flow
 
 ```
-Agent turn 1
+Agent turn N
   └─ attached_skills = agent.skill_associations[*].skill
-  └─ runtime_skills = [skill for skill in attached_skills if skill.runtime == "python-sandbox"]
-  └─ SandboxSessionService.get_or_create(key, provider, runtime_skills=runtime_skills)
-       └─ provider.create_sandbox(key, runtime_skills)
-            └─ for each runtime skill:
-                 write referenced SkillFile resources into /workspace/.skills/<skill.name>/
-                 pip install Python entries from <skill.dependencies>
-                 exec <skill.bootstrap_script_path> when present
-            └─ handle.runtime_ready = True
-  └─ tool registered: python_repl(handle, provider)
-  └─ load_skill remains available for the same attached skills
+  └─ sandbox = SandboxSessionService.get_or_create(key, provider)
+  └─ tools available to the agent:
+       load_skill(name)                 # read Skill instructions
+       activate_sandbox_skill(name)     # lazy runtime activation, authorized by agent_skills
+       list_active_sandbox_skills()     # inspect active sandbox capabilities
+       python_repl(code)                # execute code
 
-Agent turn 2+
-  └─ SandboxSessionService.get_or_create(key, ...) → cached handle
-  └─ runtime dependencies already installed — state persists
+Agent identifies a need for document generation
+  └─ load_skill("word-generation")
+  └─ activate_sandbox_skill("word-generation")
+       └─ verify "word-generation" is attached to this agent
+       └─ if not active:
+            write referenced SkillFile resources into /workspace/.skills/word-generation/
+            pip install Python entries from <skill.dependencies>
+            exec <skill.bootstrap_script_path> when present
+            mark "word-generation" active on the SandboxHandle
+       └─ if already active: no-op
+  └─ python_repl(...) uses the activated runtime
+
+Later turns
+  └─ list_active_sandbox_skills() → ["word-generation", ...]
+  └─ activated dependencies, files, imports, and created artifacts persist while the sandbox lives
 ```
 
 #### Example: Word document generation agent
@@ -832,8 +854,10 @@ A content-writing agent configured with:
 - `sandbox_provider = "opensandbox"`
 - `skill_associations = [word-generation]`
 
-The attached skill exposes concise usage guidance through `load_skill` and installs `python-docx`
-in the sandbox before the first turn runs. The agent can then:
+The attached skill exposes concise usage guidance through `load_skill`. When the user asks for a
+Word document, the agent calls `activate_sandbox_skill("word-generation")`; that installs
+`python-docx`, writes any Skill resources into `/workspace/.skills/word-generation/`, and marks
+the Skill active for the rest of the conversation. The agent can then:
 
 ```python
 # Code generated by LLM, executed in sandbox
@@ -871,16 +895,17 @@ if agent.enable_code_interpreter:
     sandbox_handle = await _get_or_create_sandbox_handle(agent, session_id)
     if sandbox_handle:
         tools.append(create_sandbox_repl_tool(sandbox_handle, provider))
+        tools.extend(create_sandbox_skill_tools(sandbox_handle, provider, agent.skill_associations))
 ```
 
 where `create_sandbox_repl_tool` returns a LangChain `@tool` that delegates `run_code` calls
 to the provider through the handle. The tool signature and docstring remain identical to the
 current `python_repl` tool so existing agents require no system-prompt changes.
 
-`_get_or_create_sandbox_handle()` uses `agent.skill_associations` to collect attached skills with
-`runtime = "python-sandbox"` and passes them to
-`SandboxSessionService.get_or_create(..., runtime_skills=...)`. The existing skill prompt section
-and `load_skill` tool continue to use the same associations.
+`_get_or_create_sandbox_handle()` creates or retrieves the conversation sandbox without installing
+any Skill dependencies. `create_sandbox_skill_tools()` uses `agent.skill_associations` as the
+authorization boundary: the agent may only activate Skills already attached to it. The existing
+skill prompt section and `load_skill` tool continue to use the same associations.
 
 ```python
 # backend/tools/sandbox/tool_factory.py
@@ -909,6 +934,40 @@ def create_sandbox_repl_tool(handle: SandboxHandle, provider: SandboxProvider):
         return await provider.run_code(handle, code)
 
     return python_repl
+
+
+def create_sandbox_skill_tools(
+    handle: SandboxHandle,
+    provider: SandboxProvider,
+    skill_associations: list,
+):
+    allowed_skills = {
+        assoc.skill.name.lower().strip(): assoc.skill
+        for assoc in skill_associations
+        if assoc.skill and assoc.skill.runtime == "python-sandbox"
+    }
+
+    @tool
+    async def activate_sandbox_skill(skill_name: str) -> str:
+        """Activate one attached Skill inside the conversation sandbox.
+
+        Use this before running code that depends on a Skill's Python packages,
+        scripts, templates, references, or assets.
+        """
+        key = skill_name.lower().strip()
+        skill = allowed_skills.get(key)
+        if not skill:
+            return f"Skill '{skill_name}' is not available for sandbox activation."
+        await provider.ensure_skill(handle, skill)
+        return f"Skill '{skill.name}' is active in the sandbox."
+
+    @tool
+    async def list_active_sandbox_skills() -> str:
+        """List Skills currently active in the conversation sandbox."""
+        active = await provider.list_active_skills(handle)
+        return ", ".join(active) if active else "No Skills are active in the sandbox."
+
+    return [activate_sandbox_skill, list_active_sandbox_skills]
 ```
 
 ---
@@ -926,6 +985,8 @@ _finalize_turn()
   └─ if ctx.sandbox_handle is not None:
        remote_files = provider.list_files(handle, "/workspace")
        for path in remote_files:
+           if path.startswith("/workspace/.skills/"):
+               continue  # Skill resources are internal sandbox inputs
            if path not in pre_existing_remote_files:
                data = provider.read_file(handle, path)
                write to working_dir/basename(path)
@@ -950,7 +1011,7 @@ Mattin-managed workspace.
 
 | Capability | Covered by this RFC? | Notes |
 |------------|----------------------|-------|
-| Word documents | Yes | `word-generation` installs `python-docx`; files are written to `/workspace` and synced to the files panel |
+| Word documents | Yes | `word-generation` lazily activates `python-docx`; files are written to `/workspace` and synced to the files panel |
 | PDFs and printable reports | Yes | `pdf-generation` supports `reportlab` and HTML-to-PDF workflows; generated files round-trip through `working_dir` |
 | Spreadsheets and CSV exports | Yes | `data-analysis` covers `pandas`, `openpyxl`, and `numpy` |
 | Charts and data visualisations | Yes | `charts` emits PNG/SVG assets; `sync_output_files()` registers the generated files |
@@ -980,23 +1041,23 @@ generation, but it should not be treated as the complete design for all media ge
 
 ## 6. Data Model Changes
 
-### Agent table
+### App table
 
 ```sql
-ALTER TABLE "Agent"
+ALTER TABLE "App"
   ADD COLUMN sandbox_provider VARCHAR(50)
-    NOT NULL DEFAULT 'subprocess';
+    NULL;
 ```
 
-Values: `'subprocess'` (default, backward-compat), `'opensandbox'`, `'e2b'`.
+Values in current scope: `NULL` (inherit system default), `'subprocess'`, `'opensandbox'`.
+Future adapters such as `'e2b'` may be enabled later through the same column when implemented
+and allowed at the system level.
 
 ```python
-# backend/models/agent.py (addition)
+# backend/models/app.py (addition)
 sandbox_provider = Column(
     String(50),
-    nullable=False,
-    default='subprocess',
-    server_default='subprocess',
+    nullable=True,
 )
 ```
 
@@ -1036,7 +1097,7 @@ to agents.
 
 ### Alembic migration
 
-One migration file covering the `Agent` column and `Skill` table additions, following the
+One migration file covering the `App` column and `Skill` table additions, following the
 project's [Alembic conventions](./.alembic.instructions.md). Seed data should create the
 platform built-in Skills with `app_id = NULL`.
 
@@ -1052,34 +1113,55 @@ for unresolved collisions.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SANDBOX_DEFAULT_PROVIDER` | `subprocess` | Platform-wide default when agent has no explicit `sandbox_provider` |
+| `SANDBOX_DEFAULT_PROVIDER` | `subprocess` | System-level default when an app has no explicit `sandbox_provider` |
+| `SANDBOX_ALLOWED_PROVIDERS` | `subprocess,opensandbox` | Comma-separated provider names apps may select in the current deployment |
 | `OPENSANDBOX_DOMAIN` | — | OpenSandbox server host:port (e.g. `opensandbox:8080` in Docker) |
 | `OPENSANDBOX_API_KEY` | — | API key for OpenSandbox server |
-| `E2B_API_KEY` | — | API key for E2B cloud service |
 | `SANDBOX_DEFAULT_TIMEOUT_S` | `30` | Default per-execution timeout (seconds) |
 | `SANDBOX_SESSION_TTL_H` | `2` | Max sandbox lifetime in hours |
-| `SANDBOX_PACKAGE_INSTALL_TIMEOUT_S` | `120` | Timeout for `pip install` during bootstrap |
+| `SANDBOX_SKILL_INSTALL_TIMEOUT_S` | `120` | Timeout for `pip install` during lazy Skill activation |
+
+### Provider selection
+
+Sandbox provider selection is configured at two levels:
+
+| Level | Field / variable | Purpose |
+|-------|------------------|---------|
+| System | `SANDBOX_DEFAULT_PROVIDER` | Deployment-wide default provider |
+| System | `SANDBOX_ALLOWED_PROVIDERS` | Restricts which providers apps can choose |
+| App | `App.sandbox_provider` | Optional app-level override; `NULL` means inherit the system default |
+
+Selection order:
+
+1. If `App.sandbox_provider` is set and included in `SANDBOX_ALLOWED_PROVIDERS`, use it.
+2. Otherwise use `SANDBOX_DEFAULT_PROVIDER`.
+3. If the resolved value is invalid or unavailable, fall back to `subprocess` and log a warning.
+
+Agent configuration does not select the sandbox provider directly. Agents inherit the provider
+from their app, which keeps operational policy centralized while still allowing different apps to
+use different sandbox backends.
 
 ---
 
 ## 8. Provider Comparison
 
-### Phase 1 provider shortlist
+### Current implementation shortlist
 
-| Dimension | `subprocess` | OpenSandbox | E2B |
-|-----------|-------------|-------------|-----|
-| **Isolation** | None — host process | Container runtime, with optional gVisor/Kata/Firecracker hardening | Cloud sandbox / microVM-oriented isolation |
-| **Self-hosting** | N/A | Docker or Kubernetes | Possible via E2B infra, but not the simple path |
-| **Managed service** | N/A | Available | Primary path |
-| **Session persistence** | Per process only; no interpreter state | Default language context persists across runs | Code contexts, pause/resume, lifecycle options |
-| **Multi-language** | Python only | Python, Java, Node.js/TypeScript, Go, Bash via Code Interpreter SDK/runtime | Python code interpreter plus shell/command APIs |
-| **Package install** | Backend venv | `pip` or prebuilt sandbox image | `pip` or custom template |
-| **File I/O** | Local `working_dir` | Sandbox files API | Sandbox files API |
-| **Network control** | None | Runtime egress policy / secure runtime configuration | Provider network configuration, internet access toggle |
-| **Best fit** | Local dev only | Self-hosted production and Docker/Kubernetes-first deployments | SaaS / managed cloud deployments |
+| Dimension | `subprocess` | OpenSandbox |
+|-----------|-------------|-------------|
+| **Isolation** | None — host process | Container runtime, with optional gVisor/Kata/Firecracker hardening |
+| **Self-hosting** | N/A | Docker or Kubernetes |
+| **Managed service** | N/A | Available, but self-hosted is the target for this RFC |
+| **Session persistence** | Per process only; no interpreter state | Default language context persists across runs |
+| **Multi-language** | Python only | Python, Java, Node.js/TypeScript, Go, Bash via Code Interpreter SDK/runtime |
+| **Package install** | Backend venv | `pip` or prebuilt sandbox image |
+| **File I/O** | Local `working_dir` | Sandbox files API |
+| **Network control** | None | Runtime egress policy / secure runtime configuration |
+| **Best fit** | Local dev only | Self-hosted production and Docker/Kubernetes-first deployments |
 
-**Primary recommendation**: OpenSandbox for self-hosted deployments (matches existing Docker
-Compose stack). E2B for SaaS deployments or when infrastructure management is undesirable.
+**Primary recommendation for this implementation**: OpenSandbox for self-hosted deployments
+(matches existing Docker Compose stack). `subprocess` remains only for local development and
+backward compatibility.
 
 ### Adapter watchlist
 
@@ -1126,6 +1208,7 @@ Backend configuration for this setup:
 
 ```env
 SANDBOX_DEFAULT_PROVIDER=opensandbox
+SANDBOX_ALLOWED_PROVIDERS=subprocess,opensandbox
 OPENSANDBOX_DOMAIN=opensandbox:8080
 OPENSANDBOX_API_KEY=<shared-local-secret>
 ```
@@ -1154,9 +1237,9 @@ backend but without kernel-level syscall filtering.
 
 | Risk | Mitigation |
 |------|-----------|
-| LLM-generated code reads host secrets | Sandbox process has no access to host env vars — eliminated for `opensandbox` and `e2b` providers |
+| LLM-generated code reads host secrets | Sandbox process has no access to host env vars — eliminated for the `opensandbox` provider |
 | Unbounded resource consumption | `resourceLimits` (CPU, memory) set at sandbox creation; `timeout` per execution |
-| Network egress from sandbox | OpenSandbox: configure egress controls in `~/.sandbox.toml`; E2B: managed at infrastructure level |
+| Network egress from sandbox | OpenSandbox: configure egress controls in `~/.sandbox.toml` |
 | Sandbox escape via kernel vulnerability | gVisor/Kata/Firecracker provide defence-in-depth; `subprocess` provider remains unsafe |
 | Malicious packages in `Skill.dependencies` | Dependency metadata is set by ADMINISTRATOR users or trusted built-in seed data, not by the LLM at runtime |
 | Secrets in skill scripts | Scripts are stored as `SkillFile` records; treat executable files in skill packages as sensitive configuration — require ADMINISTRATOR role to create/edit runtime-capable skills |
@@ -1164,7 +1247,7 @@ backend but without kernel-level syscall filtering.
 
 > **Important**: The `subprocess` provider must never be the default in any deployment that
 > serves multiple tenants or exposes the Public API. Set `SANDBOX_DEFAULT_PROVIDER=opensandbox`
-> or `SANDBOX_DEFAULT_PROVIDER=e2b` in all production `.env` files.
+> in production `.env` files and restrict `SANDBOX_ALLOWED_PROVIDERS` accordingly.
 
 ---
 
@@ -1174,11 +1257,12 @@ backend but without kernel-level syscall filtering.
 - Create `backend/tools/sandbox/` package.
 - Implement `SubprocessProvider` wrapping existing `python_sandbox_tools.py`.
 - Replace the direct call in `agentTools.py` with `resolve_provider` + `create_sandbox_repl_tool`.
-- All agents with `sandbox_provider = 'subprocess'` behave identically to today.
+- All apps that inherit the system default `subprocess` provider behave identically to today.
 
 ### Phase 1 — Data model
-- Add `sandbox_provider` column to `Agent` (default `'subprocess'`).
-- Add runtime capability fields to `Skill`; keep `agent_skills` as the single association table.
+- Add nullable `sandbox_provider` column to `App` (inherits `SANDBOX_DEFAULT_PROVIDER` when `NULL`).
+- Add runtime capability fields to `Skill`; keep `agent_skills` as the single association and
+  authorization table.
 - Alembic migration + downgrade tested.
 - `SandboxSessionService` service created.
 
@@ -1193,7 +1277,8 @@ backend but without kernel-level syscall filtering.
   package fields and `SkillFile` resources.
 - Add import/export for skill directories and zip files containing `SKILL.md`.
 - Keep one skill assignment flow: attach skills to agents through `agent_skills`.
-- Bootstrap flow in `SandboxSessionService.get_or_create`.
+- Lazy activation flow through `activate_sandbox_skill`; `SandboxSessionService.get_or_create`
+  creates a minimal sandbox.
 - Seed built-in Skills catalogue.
 
 ### Phase 4 — File round-trip
@@ -1201,21 +1286,21 @@ backend but without kernel-level syscall filtering.
 - `_finalize_turn`: pull new sandbox files into `working_dir`.
 - Existing `sync_output_files` flow unchanged.
 
-### Phase 5 — E2B provider
-- Implement `E2BProvider`.
-- Add `e2b-code-interpreter` to optional dependencies.
-- Document SaaS deployment variant.
+### Phase 5 — Future provider adapter evaluation
+- Re-evaluate E2B, Modal, Daytona, CodeSandbox SDK, and Microsandbox after OpenSandbox is
+  implemented and operationally validated.
+- Add an adapter only when a concrete deployment requirement justifies it.
 
 ### Phase 6 — Frontend
-- Agent configuration form: `sandbox_provider` selector + unified skill picker with capability badges.
+- System settings: configure `SANDBOX_DEFAULT_PROVIDER` and `SANDBOX_ALLOWED_PROVIDERS`.
+- App settings: `sandbox_provider` selector with an "inherit system default" option.
+- Agent configuration form: unified skill picker with capability badges.
 - Skills management page: `SKILL.md` editor, metadata validation, and supporting-file manager.
 - Content capabilities view that maps friendly options to `enable_code_interpreter`,
   Skills, and supported `server_tools`.
 
 ### Phase 7 — Optional provider adapters
-- Re-evaluate Modal, Daytona, CodeSandbox SDK, and Microsandbox after OpenSandbox/E2B are
-  implemented.
-- Add adapters only when a concrete deployment or product requirement justifies them.
+- Implement a future adapter selected in Phase 5, such as E2B for managed-cloud deployments.
 
 ---
 
@@ -1227,7 +1312,7 @@ backend but without kernel-level syscall filtering.
 | Q2 | Should sandbox files be **scoped to the conversation** (deleted on reset) or survive across conversations? | Per-conversation is safer; cross-conversation adds value for long-running workflows |
 | Q3 | Should the `subprocess` provider emit a **deprecation warning** when used with `enable_code_interpreter = true`? | Opt-in warning via env flag |
 | Q4 | Should Skills support **pre-built Docker images** as a Mattin extension to `dependencies`? | Images give faster cold starts; pip install is more flexible for user-defined skills |
-| Q5 | How should the `SandboxSessionService` handle backend **restarts**? Sandboxes are destroyed; conversations appear to resume but without sandbox state. | Surface a "sandbox unavailable, state lost" message; or reconnect by ID (E2B supports `Sandbox.connect(id)`) |
+| Q5 | How should the `SandboxSessionService` handle backend **restarts**? Sandboxes are destroyed; conversations appear to resume but without sandbox state. | Surface a "sandbox unavailable, state lost" message; reconnect by provider sandbox ID only when a provider supports it |
 | Q6 | Should Mattin expose a higher-level **content capabilities** UI instead of raw `server_tools` and individual skills? | Higher-level UI is easier for users; raw config remains useful for administrators |
 | Q7 | Should generated images from provider-native tools be editable inside the Mattin sandbox by default? | Auto-push generated images into `/workspace` for image-processing agents; otherwise leave them in `working_dir` only |
 
@@ -1244,21 +1329,23 @@ backend but without kernel-level syscall filtering.
 | Layer | Current file | Change type |
 |-------|-------------|-------------|
 | Tool | `backend/tools/python_sandbox_tools.py` | Wrapped by `SubprocessProvider`; no longer called directly |
-| Tool | `backend/tools/agentTools.py` (lines 244–248) | Single integration point: replace direct `create_python_repl_tool` call with `resolve_provider` + `create_sandbox_repl_tool` |
-| Tool | `backend/tools/skill_tools.py` | Extended to read `skill.dependencies` and `skill.runtime` for bootstrap |
-| Model | `backend/models/agent.py` | +1 column: `sandbox_provider VARCHAR(50) DEFAULT 'subprocess'` |
+| Tool | `backend/tools/agentTools.py` (lines 244–248) | Single integration point: replace direct `create_python_repl_tool` call with `resolve_provider` + sandbox REPL and Skill activation tools |
+| Tool | `backend/tools/skill_tools.py` | Existing `load_skill` remains instruction-only; sandbox activation tools use the same `agent_skills` authorization set |
+| Model | `backend/models/app.py` | +1 nullable column: `sandbox_provider VARCHAR(50)` for app-level override |
 | Model | `backend/models/skill.py` | +8 columns; `name` widened to 64; `description` widened to 1024; new `SkillFile` table |
 | Service | `backend/services/agent_execution_service.py` | `_prepare_turn` → push user files into sandbox; `_finalize_turn` → pull new sandbox files before `sync_output_files()` |
-| Service | `backend/services/sandbox_session_service.py` | **New** — manages `SandboxHandle` lifecycle per conversation |
+| Service | `backend/services/sandbox_session_service.py` | **New** — manages `SandboxHandle` lifecycle and active Skill state per conversation |
+| API | `backend/routers/internal/apps.py` | Expose app-level `sandbox_provider` selection and inherit/default state |
+| API | `backend/routers/internal/skills.py` | Extend existing Skill endpoints with package metadata, files, import/export, and runtime-capable Skill validation |
 | Infrastructure | `docker/docker-compose.yaml` | +`opensandbox` service on internal network (no host port) |
-| Config | `.env` / `backend/config.py` | 7 new environment variables (see §7) |
-| Migrations | `alembic/versions/` | 1 new migration: `Agent` column + `Skill` columns + `SkillFile` table + seed data |
+| Config | `.env` / `backend/config.py` | system default and allowed sandbox providers (see §7) |
+| Migrations | `alembic/versions/` | 1 new migration: `App` column + `Skill` columns + `SkillFile` table + seed data |
 
 #### Files **not** impacted
 
 - `agent_skills` association table — remains the single Agent↔Skill join
 - `FileManagementService.sync_output_files()` — called unchanged from `_finalize_turn`
-- All internal and public router files — no API surface changes
+- Public router files — no public API surface changes in this RFC
 - Frontend (deferred to IT-6)
 
 ---
@@ -1273,7 +1360,7 @@ The diagram below reflects the **actual call chain** in the codebase after the f
 │                                                           │
 │  _prepare_turn()                                          │
 │    └─ [new] SandboxSessionService.get_or_create(          │
-│              key, provider, runtime_skills)               │
+│              key, provider)                               │
 │    └─ [new] for each user file:                           │
 │              provider.write_file(handle, name, bytes)     │
 │                                                           │
@@ -1281,8 +1368,12 @@ The diagram below reflects the **actual call chain** in the codebase after the f
 │    └─ create_agent(agent, ..., working_dir)               │
 │         └─ agentTools.create_agent()                      │
 │              └─ resolve_provider(agent)                   │
-│              └─ create_sandbox_repl_tool(handle, prov)    │
-│                   (same tool name: python_repl)           │
+│              └─ create_sandbox_repl_tool(...)             │
+│                   tool: python_repl                       │
+│              └─ create_sandbox_skill_tools(handle, prov,  │
+│                    agent.skill_associations)              │
+│                   tools: activate_sandbox_skill,          │
+│                          list_active_sandbox_skills       │
 │                                                           │
 │  _finalize_turn()                                         │
 │    └─ [new] remote_files = provider.list_files(handle)    │
@@ -1293,15 +1384,17 @@ The diagram below reflects the **actual call chain** in the codebase after the f
          SandboxProvider (ABC)
          ┌─────────────────────────┐
          │  create_sandbox()       │
+         │  ensure_skill()         │
+         │  list_active_skills()   │
          │  run_code()             │
          │  write_file()           │
          │  read_file()            │
          │  list_files()           │
          │  destroy_sandbox()      │
          └─────────────────────────┘
-                  ▲         ▲         ▲
-     SubprocessProvider  OpenSandbox  E2BProvider
-     (default / dev)     (self-hosted) (SaaS)
+                  ▲         ▲
+     SubprocessProvider  OpenSandbox
+     (default / dev)     (self-hosted)
 ```
 
 Key observations from the real code:
@@ -1311,7 +1404,7 @@ Key observations from the real code:
 - `_prepare_turn()` already snapshots `pre_existing_files` in `working_dir`; the same pattern
   applies to sandbox files before each turn.
 - `skill_associations` are already loaded eagerly via `get_agent_with_relationships()`, so
-  runtime skill filtering requires no extra DB query.
+  activation authorization and Skill lookup require no extra DB query.
 - The `server_tools` path (OpenAI `image_generation`, Anthropic `code_interpreter`, etc.) is
   a separate conditional block in `agentTools.py` and is not touched by this RFC.
 
@@ -1326,10 +1419,9 @@ backend/
 │       ├── __init__.py
 │       ├── provider.py              ← SandboxProvider ABC + SandboxHandle dataclass
 │       ├── factory.py               ← resolve_provider(agent) → SandboxProvider
-│       ├── tool_factory.py          ← create_sandbox_repl_tool(handle, provider)
+│       ├── tool_factory.py          ← python_repl + activate/list sandbox Skill tools
 │       ├── subprocess_provider.py   ← wraps existing python_sandbox_tools.py logic
-│       ├── opensandbox_provider.py  ← primary self-hosted provider
-│       └── e2b_provider.py          ← managed cloud alternative
+│       └── opensandbox_provider.py  ← primary self-hosted provider
 └── services/
     └── sandbox_session_service.py   ← new: SandboxHandle lifecycle per conversation
 ```
@@ -1357,21 +1449,21 @@ Each iteration is self-contained, testable, and non-breaking.
 
 #### IT-1 — Data model + SandboxSessionService
 
-**Goal**: Conversation-scoped sandbox lifecycle; Agent knows its provider.
+**Goal**: Conversation-scoped sandbox lifecycle; system and apps can select providers.
 
 | Task | Detail |
 |------|--------|
-| `Agent.sandbox_provider` | `VARCHAR(50) NOT NULL DEFAULT 'subprocess'` |
+| `App.sandbox_provider` | Nullable `VARCHAR(50)`; `NULL` inherits `SANDBOX_DEFAULT_PROVIDER` |
 | `Skill` column additions | `display_name`, `frontmatter`, `dependencies`, `allowed_tools`, `runtime`, `bootstrap_script_path`, `runtime_options`, `is_builtin`; widen `name` to 64, `description` to 1024 |
 | `SkillFile` table | `file_id`, `skill_id`, `path`, `media_type`, `content_text`, `content_bytes`, `checksum_sha256` |
 | Alembic migration | Upgrade + downgrade tested; data migration derives slug from current `name` into `display_name` where needed |
-| `SandboxSessionService` | `get_or_create()`, `destroy()`, `destroy_all_for_agent()` |
+| `SandboxSessionService` | `get_or_create()`, `ensure_skill()`, `list_active_skills()`, `destroy()`, `destroy_all_for_agent()` |
 | Lifecycle hooks | `reset_agent_conversation()` calls `destroy(key)`; agent deletion calls `destroy_all_for_agent(agent_id)` |
 
 **Verification**:
 - `alembic upgrade head` + `alembic downgrade -1` clean
 - Unit test: `SandboxSessionService.get_or_create()` with mocked `SubprocessProvider`
-- Existing agents unchanged (`sandbox_provider='subprocess'` by default)
+- Existing apps unchanged when `sandbox_provider=NULL` and `SANDBOX_DEFAULT_PROVIDER=subprocess`
 
 ---
 
@@ -1381,35 +1473,38 @@ Each iteration is self-contained, testable, and non-breaking.
 
 | Task | Detail |
 |------|--------|
-| `OpenSandboxProvider` | Implement all six abstract methods; state persists via `CodeInterpreter` context |
+| `OpenSandboxProvider` | Implement all abstract methods; state persists via `CodeInterpreter` context |
 | Dependencies | `opensandbox` + `opensandbox-code-interpreter` as optional group in `requirements.txt` |
 | Docker Compose | Add `opensandbox` service on internal network; no host port exposed |
-| Config | Document `SANDBOX_DEFAULT_PROVIDER`, `OPENSANDBOX_DOMAIN`, `OPENSANDBOX_API_KEY` in `.env.example` |
+| Config | Document `SANDBOX_DEFAULT_PROVIDER`, `SANDBOX_ALLOWED_PROVIDERS`, `OPENSANDBOX_DOMAIN`, `OPENSANDBOX_API_KEY` in `.env.example` |
 | Startup warning | Log `WARNING` if `SANDBOX_DEFAULT_PROVIDER=subprocess` and `AICT_LOGIN != FAKE` |
 
 **Verification**:
-- Integration test: `create_sandbox → pip install pandas → run code → list_files → destroy`
-- Agent with `sandbox_provider='opensandbox'` cannot read `os.environ` of the backend process
-- Agent with `sandbox_provider='subprocess'` still works unchanged
+- Integration test: `create_sandbox → ensure_skill(data-analysis) → run code → list_files → destroy`
+- Agent in an app with `sandbox_provider='opensandbox'` cannot read `os.environ` of the backend process
+- Agent in an app inheriting `subprocess` still works unchanged
 
 ---
 
-#### IT-3 — Skills with runtime capabilities
+#### IT-3 — Lazy Skill activation
 
-**Goal**: Skills evolve from prompt-only to portable packages; sandbox bootstraps from attached skills.
+**Goal**: Skills evolve from prompt-only to portable packages; the agent lazily activates runtime
+capabilities inside the conversation sandbox when needed.
 
 | Task | Detail |
 |------|--------|
 | Extend `SkillRepository`, `SkillService` | CRUD for new columns and `SkillFile` records |
 | Update Pydantic schemas | Request/response schemas include `dependencies`, `runtime`, `is_builtin`, `files` |
 | Import/export | Round-trip a skill as a ZIP or directory with `SKILL.md` and supporting files |
-| Bootstrap flow | `agentTools.py` filters `runtime_skills`; passes to `SandboxSessionService.get_or_create()` |
+| Activation tools | `agentTools.py` adds `activate_sandbox_skill` and `list_active_sandbox_skills` when code interpreter is enabled |
+| Lazy activation flow | `activate_sandbox_skill(name)` validates the Skill is attached to the agent, then calls `provider.ensure_skill(handle, skill)` |
 | `skill_tools.py` | `load_skill` continues unchanged; `generate_skills_system_prompt_section` unchanged |
 | Built-in Skills seed | Data migration creates `word-generation`, `data-analysis`, `charts`, `pdf-generation`, `presentation-generation` with `app_id=NULL`, `is_builtin=True` |
 | Access control | Create/edit of runtime-capable skills (non-null `runtime`) requires role ≥ `ADMINISTRATOR` |
 
 **Verification**:
-- Agent with `word-generation` skill attached can execute `from docx import Document` without manual install
+- Agent with `word-generation` skill attached can call `activate_sandbox_skill("word-generation")` and then execute `from docx import Document`
+- `list_active_sandbox_skills()` returns only Skills activated in the current sandbox
 - Agent without runtime skills is unaffected
 - Import → export → re-import of a skill package is lossless
 
@@ -1432,17 +1527,19 @@ Each iteration is self-contained, testable, and non-breaking.
 
 ---
 
-#### IT-5 — E2B provider
+#### IT-5 — Future provider evaluation
 
-**Goal**: Cloud-managed alternative for SaaS deployments.
+**Goal**: Decide whether a managed or alternative provider adapter is needed after OpenSandbox is
+implemented and operationally validated.
 
 | Task | Detail |
 |------|--------|
-| `E2BProvider` | Implement all six methods using `e2b-code-interpreter` SDK |
-| Dependencies | `e2b-code-interpreter` as optional group |
-| Config | Document `E2B_API_KEY` in `.env.example` |
+| Evaluate E2B | Managed-cloud candidate for deployments that do not want to self-host sandbox infrastructure |
+| Evaluate other adapters | Modal, Daytona, CodeSandbox SDK, and Microsandbox remain candidates |
+| Decision gate | Implement an adapter only with a concrete deployment requirement, security review, and cost model |
 
-**Verification**: End-to-end test identical to IT-2 using E2B sandbox, no local infrastructure required.
+**Verification**: Written decision record selecting a provider or explicitly deferring all future
+adapters.
 
 ---
 
@@ -1452,8 +1549,9 @@ Each iteration is self-contained, testable, and non-breaking.
 
 | Task | Detail |
 |------|--------|
-| Agent config form | `sandbox_provider` selector (subprocess / opensandbox / e2b) |
-| Skill picker | Badges per skill: `instructions`, `runtime`, or `hybrid` |
+| System settings | Configure default provider and allowed app-selectable providers |
+| App settings | `sandbox_provider` selector (`inherit`, `subprocess`, `opensandbox`) filtered by system allowed providers |
+| Agent config form | Unified skill picker with capability badges; no direct provider selector |
 | Content capabilities view | Friendly switches map to `enable_code_interpreter` + Skills + `server_tools` |
 | Skill management page | `SKILL.md` editor, metadata validation, `SkillFile` manager, import/export UI |
 
@@ -1467,14 +1565,15 @@ Each iteration is self-contained, testable, and non-breaking.
 IT-0 (abstraction layer)
   └─► IT-1 (data model + session service)
          └─► IT-2 (OpenSandbox provider)
-               └─► IT-3 (Skills runtime)
+               └─► IT-3 (lazy Skill activation)
                      └─► IT-4 (file round-trip)
-                           └─► IT-5 (E2B provider)
+                           └─► IT-5 (future provider evaluation)
 
 IT-1 ──────────────────────────────────────────────► IT-6 (frontend)
 ```
 
-IT-5 and IT-6 are independent of each other once IT-4 is complete.
+IT-5 and IT-6 are independent of each other once IT-4 is complete. IT-5 is evaluative unless a
+future provider adapter is explicitly selected for implementation.
 
 ---
 
@@ -1484,7 +1583,7 @@ The questions from §12 are re-ordered by implementation risk:
 
 | Priority | # | Question | Recommended resolution |
 |----------|---|----------|------------------------|
-| **High** | Q5 | Backend restart destroys active sandboxes; conversation appears to resume but sandbox state is lost | Store `sandbox_session_id` on `Conversation`; reconnect via `Sandbox.connect(id)` where supported (E2B). Otherwise surface a clear "sandbox state reset" message to the user. |
+| **High** | Q5 | Backend restart destroys active sandboxes; conversation appears to resume but sandbox state is lost | Store `sandbox_session_id` on `Conversation`; reconnect by provider sandbox ID where supported. Otherwise surface a clear "sandbox state reset" message to the user. |
 | **High** | Q3 | Should `subprocess` emit a deprecation warning in production? | Log `WARNING` at app startup if `SANDBOX_DEFAULT_PROVIDER=subprocess` and `AICT_LOGIN != FAKE`. Hard block is not required. |
 | **Medium** | Q1 | How do apps override built-in Skills? | `app_id=NULL` + `is_builtin=True` → globally readable. App can clone a built-in into its own scope and customise it. |
 | **Medium** | Q2 | Should sandbox files persist across conversations? | Scope to conversation (per-conversation `working_dir` pattern already in place). Cross-conversation persistence is a later opt-in. |
@@ -1501,9 +1600,9 @@ The questions from §12 are re-ordered by implementation risk:
 | IT-0 | No change. Establishes the seam that later iterations make secure. |
 | IT-1 | No change. Data model ready for secure providers. |
 | IT-2 | **Primary fix**: LLM-generated code no longer has access to `os.environ` of the backend process (eliminates OWASP A02:2021 — Cryptographic Failures / secret exposure). CPU and memory bounded by sandbox resource limits. |
-| IT-3 | Skill dependency metadata is set only by `ADMINISTRATOR`+ users or trusted built-in seed data, never by the LLM at runtime (prevents supply-chain package injection). |
+| IT-3 | Skill dependency metadata is set only by `ADMINISTRATOR`+ users or trusted built-in seed data, never by the LLM at runtime. The agent may activate only Skills already attached to it, preventing arbitrary package injection. |
 | IT-4 | Files transit through `working_dir` under controlled paths; sandbox cannot write to arbitrary backend filesystem locations. |
-| IT-5 | Network egress policy delegated to E2B infrastructure; same isolation guarantees as IT-2 without self-hosted overhead. |
+| IT-5 | No implementation change unless a future provider adapter is selected; any managed provider must meet the same isolation and egress-control bar as OpenSandbox. |
 
 > The `subprocess` provider **must not** be set as `SANDBOX_DEFAULT_PROVIDER` in any deployment
 > that exposes the Public API or serves multiple tenants. See §10 for the full risk table.
