@@ -217,3 +217,19 @@
 **Notes**: `plugins/pyproject.toml` had wrong build backend `setuptools.backends.legacy:build` which doesn't exist; corrected to `setuptools.build_meta`. Plugin installed via `pip install -e plugins/`. Entry point verified: `[EntryPoint(name='sharepoint', value='mattin_sharepoint.plugin:register', group='mattin.plugins')]`. Router imports with 9 routes from PYTHONPATH=backend context.
 
 ---
+
+## Session 2 — 2026-05-06
+
+### Step 21 — Integration tests: SharePoint sources CRUD and RBAC
+**Started**: 2026-05-06
+**Completed**: 2026-05-06
+**Files changed**:
+- `tests/integration/routers/internal/test_sharepoint_sources.py` — written (25 tests; file already had full content from interrupted session, fixtures fixed)
+- `plugins/mattin_sharepoint/worker.py` — modified (event-loop resilience in _worker_loop, _get_queue, and stop_sharepoint_worker)
+**Test result**: passed (25/25)
+**Notes**: Two issues fixed from interrupted session:
+  1. `_worker_loop` infinite loop when event loop changes between tests — fixed by catching RuntimeError with "bound to a different event loop" and breaking out.
+  2. RBAC fixtures (viewer_headers, editor_headers) used `fake_user` (the app owner) — owner always resolves to OWNER role regardless of collaborator record. Fixed by creating a separate user via `UserFactory` for each RBAC role fixture, matching the pattern in `test_silos_authorization.py`.
+  3. `stop_sharepoint_worker` raised ValueError on cross-loop tasks — fixed to filter tasks by current loop before gather.
+
+---

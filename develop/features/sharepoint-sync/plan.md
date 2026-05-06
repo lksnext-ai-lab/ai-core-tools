@@ -903,7 +903,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
   - `test_sharepoint_file_table_exists`.
   - `test_sharepoint_sync_status_enum_exists`: use `text("SELECT 1 FROM pg_type WHERE typname = 'sharepoint_sync_status'")`.
 - **Acceptance**: `pytest tests/integration/routers/internal/test_sharepoint_sources.py -v` passes.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
