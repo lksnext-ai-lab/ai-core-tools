@@ -127,3 +127,27 @@ class SubprocessProvider(SandboxProvider):
 
     def list_files(self, handle: SandboxHandle) -> list[str]:
         return os.listdir(handle.working_dir)
+
+    # ------------------------------------------------------------------
+    # Skill activation (IT-3)
+    # ------------------------------------------------------------------
+
+    def ensure_skill(self, handle: SandboxHandle, skill) -> None:
+        """Record skill as active.
+
+        SubprocessProvider cannot isolate dependencies from the backend
+        environment, so this method only records activation state.  Real
+        dependency installation is the responsibility of the operator who
+        sets up the development environment.
+        """
+        active = handle.metadata.setdefault("active_skills", {})
+        if skill.name not in active:
+            active[skill.name] = {"provider": self.PROVIDER_NAME}
+            logger.info(
+                "SubprocessProvider: skill '%s' marked active (no isolation).",
+                skill.name,
+            )
+
+    def list_active_skills(self, handle: SandboxHandle) -> list[str]:
+        """Return names of skills recorded as active in this handle."""
+        return sorted(handle.metadata.get("active_skills", {}).keys())

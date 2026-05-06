@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import Response
 from typing import List, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
@@ -35,7 +36,7 @@ async def list_skills(
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
     """
-    List all skills for a specific app.
+    List all skills visible to the app (owned + global builtins).
     """
     try:
         return SkillService.list_skills(db, app_id)
@@ -94,6 +95,7 @@ async def create_or_update_skill(
 ):
     """
     Create a new skill or update an existing one.
+    Skills with a non-null ``runtime`` require ADMINISTRATOR role (enforced here).
     """
     try:
         skill = SkillService.create_or_update_skill(db, app_id, skill_id, skill_data)
@@ -127,7 +129,7 @@ async def delete_skill(
     role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
     """
-    Delete a skill.
+    Delete a skill.  Built-in skills cannot be deleted.
     """
     try:
         success = SkillService.delete_skill(db, app_id, skill_id)
@@ -147,3 +149,71 @@ async def delete_skill(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting skill: {str(e)}"
         )
+
+
+# ==================== IMPORT / EXPORT (IT-3) ====================
+
+
+@skills_router.get("/{skill_id}/export",
+                   summary="Export skill as ZIP",
+                   tags=["Skills"])
+async def export_skill(
+    app_id: int,
+    skill_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """
+    Export a skill as a ZIP archive containing SKILL.md and supporting files.
+    """
+    try:
+        zip_bytes = SkillService.export_skill_zip(db, app_id, skill_id)
+        if zip_bytes is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=SKILL_NOT_FOUND_ERROR,
+            )
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename=skill-{skill_id}.zip"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error exporting skill: {str(e)}",
+        )
+
+
+@skills_router.post("/import",
+                    summary="Import skill from ZIP",
+                    tags=["Skills"],
+                    response_model=SkillDetailSchema)
+async def import_skill(
+    app_id: int,
+    file: Annotated[UploadFile, File(description="ZIP archive produced by skill export")],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    """
+    Import a skill from a ZIP archive.  If a skill with the same name already
+    exists in the app it is overwritten; built-in skills are never overwritten.
+    """
+    try:
+        zip_bytes = await file.read()
+        skill = SkillService.import_skill_zip(db, app_id, zip_bytes)
+        return await get_skill(app_id, skill.skill_id, auth_context, db, role)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error importing skill: {str(e)}",
+        )
+

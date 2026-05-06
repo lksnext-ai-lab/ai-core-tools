@@ -1,6 +1,7 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from models.skill import Skill
+from sqlalchemy import or_
+from models.skill import Skill, SkillFile
 from models.agent import AgentSkill
 
 
@@ -9,16 +10,26 @@ class SkillRepository:
 
     @staticmethod
     def get_all_by_app_id(db: Session, app_id: int) -> List[Skill]:
-        """Get all skills for a specific app"""
-        return db.query(Skill).filter(Skill.app_id == app_id).all()
+        """Get all skills visible to an app: owned skills + global builtins."""
+        return db.query(Skill).filter(
+            or_(Skill.app_id == app_id, Skill.app_id.is_(None))
+        ).all()
 
     @staticmethod
     def get_by_id_and_app_id(db: Session, skill_id: int, app_id: int) -> Optional[Skill]:
-        """Get a specific skill by ID and app ID"""
+        """Get a specific skill by ID; must belong to the app or be a builtin."""
         return db.query(Skill).filter(
             Skill.skill_id == skill_id,
-            Skill.app_id == app_id
+            or_(Skill.app_id == app_id, Skill.app_id.is_(None)),
         ).first()
+
+    @staticmethod
+    def get_builtin_skills(db: Session) -> List[Skill]:
+        """Get all globally available built-in skills (app_id=NULL, is_builtin=True)."""
+        return db.query(Skill).filter(
+            Skill.app_id.is_(None),
+            Skill.is_builtin.is_(True),
+        ).all()
 
     @staticmethod
     def create(db: Session, skill: Skill) -> Skill:
@@ -45,8 +56,11 @@ class SkillRepository:
 
     @staticmethod
     def delete_by_id_and_app_id(db: Session, skill_id: int, app_id: int) -> bool:
-        """Delete a skill by ID and app ID"""
-        skill = SkillRepository.get_by_id_and_app_id(db, skill_id, app_id)
+        """Delete a skill by ID and app ID (builtins cannot be deleted via this method)."""
+        skill = db.query(Skill).filter(
+            Skill.skill_id == skill_id,
+            Skill.app_id == app_id,  # Strict: only owned skills may be deleted
+        ).first()
         if skill:
             SkillRepository.delete(db, skill)
             return True
@@ -54,23 +68,79 @@ class SkillRepository:
 
     @staticmethod
     def get_valid_skill_ids_for_app(db: Session, skill_ids: set, app_id: int) -> set:
-        """Get skill IDs that exist and belong to the specified app
-        
+        """Get skill IDs that are visible to the app (owned or builtin).
+
         Args:
             db: Database session
             skill_ids: Set of skill IDs to validate
             app_id: App ID to check ownership against
-            
+
         Returns:
-            Set of valid skill IDs that exist and belong to the app
+            Set of valid skill IDs that the app can use
         """
         if not skill_ids:
             return set()
-        
-        # Query to find skills that exist and belong to the app
+
         valid_skills = db.query(Skill.skill_id).filter(
             Skill.skill_id.in_(skill_ids),
-            Skill.app_id == app_id
+            or_(Skill.app_id == app_id, Skill.app_id.is_(None)),
         ).all()
-        
+
         return {skill.skill_id for skill in valid_skills}
+
+    # ------------------------------------------------------------------
+    # SkillFile operations (IT-3)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_skill_files(db: Session, skill_id: int) -> List[SkillFile]:
+        """Get all files for a skill."""
+        return db.query(SkillFile).filter(SkillFile.skill_id == skill_id).all()
+
+    @staticmethod
+    def upsert_skill_file(
+        db: Session,
+        skill_id: int,
+        path: str,
+        media_type: Optional[str],
+        content_text: Optional[str],
+        content_bytes: Optional[bytes],
+        checksum_sha256: Optional[str],
+    ) -> SkillFile:
+        """Create or update a SkillFile record identified by (skill_id, path)."""
+        existing = db.query(SkillFile).filter(
+            SkillFile.skill_id == skill_id,
+            SkillFile.path == path,
+        ).first()
+
+        if existing:
+            existing.media_type = media_type
+            existing.content_text = content_text
+            existing.content_bytes = content_bytes
+            existing.checksum_sha256 = checksum_sha256
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+            return existing
+
+        sf = SkillFile(
+            skill_id=skill_id,
+            path=path,
+            media_type=media_type,
+            content_text=content_text,
+            content_bytes=content_bytes,
+            checksum_sha256=checksum_sha256,
+        )
+        db.add(sf)
+        db.commit()
+        db.refresh(sf)
+        return sf
+
+    @staticmethod
+    def delete_skill_files(db: Session, skill_id: int) -> None:
+        """Delete all SkillFile records for a skill."""
+        db.query(SkillFile).filter(SkillFile.skill_id == skill_id).delete(
+            synchronize_session=False
+        )
+        db.commit()
+

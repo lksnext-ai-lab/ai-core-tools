@@ -26,7 +26,7 @@ from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
-from tools.sandbox import resolve_provider, create_sandbox_repl_tool
+from tools.sandbox import resolve_provider, create_sandbox_repl_tool, create_sandbox_skill_tools
 
 logger = get_logger(__name__)
 
@@ -253,6 +253,20 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         python_tool = create_sandbox_repl_tool(sandbox_handle, sandbox_provider)
         tools.append(python_tool)
         logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
+
+        # IT-3: lazy skill activation tools (only when runtime skills are attached)
+        skill_associations = getattr(agent, 'skill_associations', None) or []
+        sandbox_skill_tools = create_sandbox_skill_tools(sandbox_handle, sandbox_provider, skill_associations)
+        if sandbox_skill_tools:
+            tools.extend(sandbox_skill_tools)
+            runtime_skill_count = sum(
+                1 for a in skill_associations
+                if a.skill and a.skill.runtime == "python-sandbox"
+            )
+            logger.info(
+                "Sandbox skill tools added for agent %s (%d runtime skills)",
+                agent.agent_id, runtime_skill_count,
+            )
 
     mcp_client = None
     try:
