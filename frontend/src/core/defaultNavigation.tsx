@@ -8,6 +8,7 @@ import {
   Database,
   FolderOpen,
   Globe,
+  Cloud,
   Plug,
   Zap,
   Settings,
@@ -75,6 +76,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/domains',
       name: 'Domains',
       icon: <Globe size={16} />,
+      section: 'appNavigation'
+    },
+    {
+      path: '/apps/:appId/sharepoint',
+      name: 'SharePoint',
+      icon: <Cloud size={16} />,
       section: 'appNavigation'
     },
     {

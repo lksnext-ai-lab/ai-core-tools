@@ -58,6 +58,7 @@ import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
+import { CapabilitiesProvider } from '../contexts/CapabilitiesContext';
 import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
 import PlatformChatbotWidget from '../components/platform-chatbot/PlatformChatbotWidget';
 import MCPServersPage from '../pages/MCPServersPage';
@@ -67,6 +68,9 @@ import MarketplacePage from '../pages/MarketplacePage';
 import MarketplaceAgentDetailPage from '../pages/MarketplaceAgentDetailPage';
 import MarketplaceChatPage from '../pages/MarketplaceChatPage';
 import MarketplaceHomePage from '../pages/MarketplaceHomePage';
+import SharePointSourcesPage from '../pages/SharePointSourcesPage';
+import SharePointWizardPage from '../pages/SharePointWizardPage';
+import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -144,6 +148,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         <UserProvider>
           <SettingsCacheProvider>
             <DeploymentModeProvider>
+            <CapabilitiesProvider>
             <PlatformChatbotProvider>
             <Router>
               <ScrollToTop />
@@ -282,6 +287,25 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     <ProtectedLayoutRoute {...commonLayoutProps}>
                       <DomainDetailPage />
                     </ProtectedLayoutRoute>
+                } />
+
+                {/* SharePoint routes */}
+                <Route path="/apps/:appId/sharepoint" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SharePointSourcesPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/sharepoint/new" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SharePointWizardPage />
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/sharepoint/:sourceId" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SharePointSourceDetailPage />
+                  </ProtectedLayoutRoute>
                 } />
 
                 {/* MCP Servers routes */}
@@ -455,6 +479,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
               </ConfirmProvider>
             </Router>
             </PlatformChatbotProvider>
+            </CapabilitiesProvider>
             </DeploymentModeProvider>
           </SettingsCacheProvider>
         </UserProvider>
