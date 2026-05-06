@@ -125,6 +125,18 @@ class AppService:
             # 5. Get domains (for later deletion; DomainUrl/CrawlPolicy/CrawlJob cascade from domain FK)
             domains = self.app_repo.get_domains_by_app_id(app_id)
 
+            # 5b. Delete SharePoint sources and their silos (before main silo deletion)
+            from repositories.sharepoint_source_repository import SharePointSourceRepository
+            sp_sources = SharePointSourceRepository.list_by_app(app_id, self.db)
+            for sp_source in sp_sources:
+                logger.info(f"Deleting SharePoint source {sp_source.id}: {sp_source.name}")
+                silo_id = sp_source.silo_id
+                # SharePointFile rows cascade-delete via FK; vectors are orphaned (acceptable for app deletion)
+                self.db.delete(sp_source)
+                self.db.flush()
+                if silo_id:
+                    silo_service.delete_silo(silo_id, self.db)
+
             # 6. Delete repositories (they depend on silos)
             for repository in repositories:
                 logger.info(f"Deleting repository {repository.repository_id}: {repository.name}")
