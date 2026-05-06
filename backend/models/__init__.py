@@ -25,6 +25,8 @@ from .domain import Domain
 from .domain_url import DomainUrl
 from .crawl_policy import CrawlPolicy
 from .crawl_job import CrawlJob
+from .sharepoint_source import SharePointSource
+from .sharepoint_file import SharePointFile
 from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
 from .system_setting import SystemSetting
@@ -39,7 +41,7 @@ __all__ = [
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill',
     'Agent', 'AgentMarketplaceProfile', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
     'Repository', 'Resource', 'Folder', 'Domain',
-    'DomainUrl', 'CrawlPolicy', 'CrawlJob',
+    'DomainUrl', 'CrawlPolicy', 'CrawlJob', 'SharePointSource', 'SharePointFile',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
     'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain',
     'Media',

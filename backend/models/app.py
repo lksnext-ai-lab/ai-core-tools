@@ -35,6 +35,7 @@ class App(Base):
     ai_services = relationship('AIService', back_populates='app', lazy=True)
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
+    sharepoint_sources = relationship('SharePointSource', back_populates='app', cascade='all, delete-orphan', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')
     is_frozen = Column(Boolean, default=False, nullable=False)
     enable_openai_api = Column(Boolean, default=False, nullable=False, server_default='false')
