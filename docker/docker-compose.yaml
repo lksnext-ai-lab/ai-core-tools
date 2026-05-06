@@ -82,6 +82,15 @@ services:
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
+
+      # Sandbox provider (IT-2)
+      SANDBOX_DEFAULT_PROVIDER: ${SANDBOX_DEFAULT_PROVIDER:-subprocess}
+      SANDBOX_ALLOWED_PROVIDERS: ${SANDBOX_ALLOWED_PROVIDERS:-subprocess,opensandbox}
+      OPENSANDBOX_DOMAIN: ${OPENSANDBOX_DOMAIN:-opensandbox:8080}
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+      SANDBOX_DEFAULT_TIMEOUT_S: ${SANDBOX_DEFAULT_TIMEOUT_S:-30}
+      SANDBOX_SESSION_TTL_H: ${SANDBOX_SESSION_TTL_H:-2}
+      SANDBOX_SKILL_INSTALL_TIMEOUT_S: ${SANDBOX_SKILL_INSTALL_TIMEOUT_S:-120}
     volumes:
       - ../backend/data:/aict_backend/data
       - ../backend/logs:/aict_backend/logs
@@ -118,6 +127,24 @@ services:
     networks:
       - mattin-network
     restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # OpenSandbox — isolated code execution server (IT-2)
+  # Runs on the internal Docker network only; no port is exposed to the host.
+  # Enable by setting SANDBOX_DEFAULT_PROVIDER=opensandbox in .env.
+  # ---------------------------------------------------------------------------
+  opensandbox:
+    image: opensandbox/open-sandbox:latest
+    container_name: mattin-opensandbox
+    environment:
+      OPEN_SANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - mattin-network
+    restart: unless-stopped
+    profiles:
+      - opensandbox
 
   db_test:
     image: pgvector/pgvector:pg17

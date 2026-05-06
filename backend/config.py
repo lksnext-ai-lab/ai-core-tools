@@ -52,4 +52,34 @@ WEAVIATE_API_KEY = os.getenv('WEAVIATE_API_KEY')
 
 CHROMA_PERSIST_DIR = os.getenv('CHROMA_PERSIST_DIR', './chroma_db')
 
+# MCP Server Configuration
+# Base URL for generating MCP endpoint URLs (e.g., https://your-domain.com)
 MCP_BASE_URL = os.getenv('MCP_BASE_URL', 'http://localhost:8000')
+
+# ---------------------------------------------------------------------------
+# Sandbox provider configuration (IT-2)
+# ---------------------------------------------------------------------------
+
+# System-wide default provider when an app has no explicit sandbox_provider.
+# Allowed values: 'subprocess' (dev/unsafe), 'opensandbox' (self-hosted).
+SANDBOX_DEFAULT_PROVIDER = os.getenv('SANDBOX_DEFAULT_PROVIDER', 'subprocess').lower()
+
+# Comma-separated list of provider names apps may select in this deployment.
+SANDBOX_ALLOWED_PROVIDERS = [
+    p.strip()
+    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'subprocess,opensandbox').split(',')
+    if p.strip()
+]
+
+# OpenSandbox server connection.
+OPENSANDBOX_DOMAIN = os.getenv('OPENSANDBOX_DOMAIN', 'localhost:8080')
+OPENSANDBOX_API_KEY = os.getenv('OPENSANDBOX_API_KEY', '')
+
+# Per-execution timeout (seconds).
+SANDBOX_DEFAULT_TIMEOUT_S = int(os.getenv('SANDBOX_DEFAULT_TIMEOUT_S', '30'))
+
+# Maximum sandbox session lifetime (hours).
+SANDBOX_SESSION_TTL_H = float(os.getenv('SANDBOX_SESSION_TTL_H', '2'))
+
+# Timeout for pip install during lazy Skill activation (seconds).
+SANDBOX_SKILL_INSTALL_TIMEOUT_S = int(os.getenv('SANDBOX_SKILL_INSTALL_TIMEOUT_S', '120'))

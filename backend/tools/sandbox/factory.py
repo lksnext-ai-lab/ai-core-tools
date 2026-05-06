@@ -28,10 +28,23 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+
+def _build_registry() -> dict[str, type[SandboxProvider]]:
+    """Build the provider registry, importing optional providers lazily."""
+    registry: dict[str, type[SandboxProvider]] = {
+        SubprocessProvider.PROVIDER_NAME: SubprocessProvider,
+    }
+    try:
+        from .opensandbox_provider import OpenSandboxProvider  # noqa: PLC0415
+        registry[OpenSandboxProvider.PROVIDER_NAME] = OpenSandboxProvider
+    except Exception:
+        # opensandbox package not installed — provider unavailable.
+        pass
+    return registry
+
+
 # Registry maps provider name → class.  Extend here when new providers land.
-_PROVIDER_REGISTRY: dict[str, type[SandboxProvider]] = {
-    SubprocessProvider.PROVIDER_NAME: SubprocessProvider,
-}
+_PROVIDER_REGISTRY: dict[str, type[SandboxProvider]] = _build_registry()
 
 _DEFAULT_PROVIDER_ENV = "SANDBOX_DEFAULT_PROVIDER"
 _ALLOWED_PROVIDERS_ENV = "SANDBOX_ALLOWED_PROVIDERS"
