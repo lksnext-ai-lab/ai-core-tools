@@ -5,6 +5,8 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+pytest.importorskip("mattin_sharepoint", reason="mattin-sharepoint plugin not installed")
+
 from mattin_sharepoint.graph_client import (
     GraphClient,
     GraphAuthError,

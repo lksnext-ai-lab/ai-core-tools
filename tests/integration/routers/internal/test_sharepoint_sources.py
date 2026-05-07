@@ -18,6 +18,8 @@ import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 
+pytest.importorskip("mattin_sharepoint", reason="mattin-sharepoint plugin not installed")
+
 from models.sharepoint_source import SharePointSource
 from models.sharepoint_file import SharePointFile
 from models.enums.sharepoint_sync_status import SharePointSyncStatus

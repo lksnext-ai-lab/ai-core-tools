@@ -7,6 +7,8 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
+pytest.importorskip("mattin_sharepoint", reason="mattin-sharepoint plugin not installed")
+
 from mattin_sharepoint.graph_client import GraphAuthError, GraphDeltaExpiredError
 from mattin_sharepoint.schemas import SharePointSourceCreateRequest
 from models.enums.sharepoint_sync_status import SharePointSyncStatus
