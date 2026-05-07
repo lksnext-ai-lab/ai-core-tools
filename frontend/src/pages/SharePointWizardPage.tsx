@@ -7,7 +7,7 @@ import { TagInput } from '../components/ui/TagInput';
 import Alert from '../components/ui/Alert';
 import { sharepointApi } from '../services/sharepoint';
 import { apiService } from '../services/api';
-import type { MicrosoftSite, MicrosoftDrive } from '../types/sharepoint';
+import type { MicrosoftDrive } from '../types/sharepoint';
 
 const WIZARD_STEPS: StepDefinition[] = [
   { id: 'connect', label: 'Connect' },
@@ -55,7 +55,7 @@ function SharePointWizardPage() {
   const [testingConnection, setTestingConnection] = useState(false);
 
   // Step 2 — site + drive
-  const [siteQuery, setSiteQuery] = useState('');
+  const [_siteQuery, setSiteQuery] = useState('');
   const [siteUrl, setSiteUrl] = useState('');
   const [siteResolving, setSiteResolving] = useState(false);
   const [selectedSite, setSelectedSite] = useState<SiteSelection | null>(null);
@@ -115,24 +115,6 @@ function SharePointWizardPage() {
     }
   }
 
-  async function handleSelectSite(site: MicrosoftSite) {
-    setSelectedSite({
-      site_id: site.id,
-      site_name: site.name,
-      site_url: site.web_url,
-    });
-    setSelectedDrive(null);
-    setDrives([]);
-    setDrivesLoading(true);
-    try {
-      const ds = await sharepointApi.listDrives({ ...creds, site_id: site.id });
-      setDrives(ds);
-    } catch {
-      setDrives([]);
-    } finally {
-      setDrivesLoading(false);
-    }
-  }
 
   async function handleNext() {
     setError(null);

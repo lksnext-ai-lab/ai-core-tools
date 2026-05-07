@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
@@ -20,7 +20,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const { appId } = useParams();
-  const navigate = useNavigate();
   const { user } = useUser();
   const { isSaasMode } = useDeploymentMode();
   const [appName, setAppName] = useState<string | null>(null);
@@ -129,7 +128,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const anyChildActive = item.children.some((child) =>
             isItemActive(appId ? child.path.replace(':appId', appId) : child.path)
           );
-          const cls = useAppStyle ? appItemClass : globalItemClass;
           return (
             <li key={`${section}-${index}`}>
               <button

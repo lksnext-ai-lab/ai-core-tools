@@ -58,7 +58,7 @@ function SharePointSourcesPage() {
       setError(null);
       const data = await sharepointApi.listSources(Number(appId));
       setSources(data || []);
-    } catch (err) {
+    } catch (_err) {
       setError('Failed to load SharePoint sources');
       setSources([]);
     } finally {
