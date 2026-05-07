@@ -251,6 +251,24 @@ poetry run pip install -e ../mattin-ai-plugins/
 
 ---
 
+### Client / production install
+
+For clients who have purchased the EE plugin, swap the dependency in `pyproject.toml` from the local path to the private Git URL before deploying:
+
+```toml
+[tool.poetry.group.sharepoint.dependencies]
+# mattin-sharepoint = {path = "../mattin-ai-plugins", develop = true}  # local dev
+mattin-sharepoint = {git = "https://github.com/lks/mattin-ai-plugins.git"}  # production
+```
+
+The client provides a read-only **deploy key** or **fine-grained PAT** scoped to `mattin-ai-plugins`. Once authentication is configured, the install is the same single command — no editable install step needed:
+
+```bash
+poetry install --with sharepoint
+```
+
+---
+
 ## Architecture
 
 ### Backend
