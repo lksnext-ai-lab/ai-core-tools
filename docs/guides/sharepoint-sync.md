@@ -169,44 +169,70 @@ All endpoints require session or OIDC authentication and are scoped to an app.
 
 ## Plugin Installation
 
-The SharePoint connector is an **Enterprise Edition** module. It ships as a separate Python package (`mattin-sharepoint`) managed through a dedicated Poetry dependency group.
+The SharePoint connector is an **Enterprise Edition** module. It ships as a separate Python package (`mattin-sharepoint`) that lives in the private `mattin-ai-plugins` repository, side-by-side with `ai-core-tools`:
 
-### Install
+```
+LKS/IA-Core-Tools/
+├── ai-core-tools/        ← this repo
+└── mattin-ai-plugins/    ← private EE plugins repo (clone separately)
+```
+
+If you do not have access to `mattin-ai-plugins`, simply skip these steps — the backend runs fine without the plugin. The capabilities endpoint will omit `sharepoint` and the sidebar will show **SharePoint [EE]**.
+
+---
+
+### First-time setup
+
+**Step 1 — Clone the plugins repo** (side-by-side, same parent directory):
 
 ```bash
-# From the project root
+git clone <mattin-ai-plugins-url> ../mattin-ai-plugins
+```
+
+**Step 2 — Install via Poetry:**
+
+```bash
+# From the ai-core-tools root
 poetry install --with sharepoint
 ```
 
-This installs the plugin and makes it discoverable at runtime via a Python entry point. The backend picks it up automatically on next startup — no code changes required.
-
-> **Important — editable install required for development**: `poetry install --with sharepoint` installs a static copy of the plugin into `.venv/site-packages/`. This means changes made to files inside `../mattin-ai-plugins/mattin_sharepoint/` are **not picked up** at runtime until you reinstall. After the first install (or after any `poetry install`), run:
->
-> ```bash
-> poetry run pip install -e ../mattin-ai-plugins/
-> ```
->
-> This converts the install to an editable (in-place) install, so Python loads the plugin directly from the source tree. From that point on, source file changes take effect on the next backend restart — no reinstall needed.
->
-> You can verify the install mode with:
-> ```bash
-> poetry run python -c "import mattin_sharepoint; print(mattin_sharepoint.__file__)"
-> # Editable:     .../mattin-ai-plugins/mattin_sharepoint/__init__.py      ← correct
-> # Static copy:  .../site-packages/mattin_sharepoint/__init__.py           ← stale
-> ```
-
-### Verify installation
+**Step 3 — Switch to editable (in-place) install:**
 
 ```bash
-# Package is importable
-poetry run python -c "import mattin_sharepoint; print('ok')"
+poetry run pip install -e ../mattin-ai-plugins/
+```
 
-# Capability is reported by the API
+> `poetry install --with sharepoint` copies the plugin into `.venv/site-packages/`. Step 3 replaces that static copy with a direct link to the source tree. **Without step 3, code changes in `mattin-ai-plugins/` are invisible to the backend.**
+
+**Step 4 — Verify:**
+
+```bash
+# Should print the path inside mattin-ai-plugins/, not site-packages/
+poetry run python -c "import mattin_sharepoint; print(mattin_sharepoint.__file__)"
+# ✓ .../mattin-ai-plugins/mattin_sharepoint/__init__.py   ← editable (correct)
+# ✗ .../site-packages/mattin_sharepoint/__init__.py        ← static copy (redo step 3)
+
+# Capability visible in API
 curl http://localhost:8000/internal/capabilities
 # → {"sharepoint": true, ...}
 ```
 
 In the frontend sidebar the entry shows as **SharePoint** (without a badge).
+
+---
+
+### Development workflow
+
+Once the editable install is active:
+
+- **Editing plugin source** (`mattin-ai-plugins/mattin_sharepoint/*.py`) — changes take effect on the **next backend restart**. No reinstall needed.
+- **After `poetry install`** (e.g. pulling new dependencies) — Poetry re-copies the static version, overwriting the editable link. Re-run step 3:
+  ```bash
+  poetry run pip install -e ../mattin-ai-plugins/
+  ```
+- **After `git pull` in `mattin-ai-plugins/`** — no action needed; the editable install already points to the live source.
+
+---
 
 ### Uninstall
 
@@ -220,17 +246,7 @@ Restart the backend. The plugin is no longer loaded — the capabilities endpoin
 
 ```bash
 poetry install --with sharepoint
-poetry run pip install -e ../mattin-ai-plugins/   # ensure editable mode
-```
-
-### Check installed state
-
-```bash
-poetry show mattin-sharepoint          # shows version and path
-poetry show --with sharepoint          # shows full dependency tree including group
-
-# Verify editable (source) install is active
-poetry run python -c "import mattin_sharepoint; print(mattin_sharepoint.__file__)"
+poetry run pip install -e ../mattin-ai-plugins/
 ```
 
 ---
