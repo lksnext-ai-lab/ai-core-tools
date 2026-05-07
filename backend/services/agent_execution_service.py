@@ -113,6 +113,8 @@ class AgentExecutionService:
                 ctx.user_context,
                 ctx.image_files,
                 working_dir=ctx.working_dir,
+                sandbox_handle=ctx.sandbox_handle,
+                sandbox_provider=ctx.sandbox_provider,
             )
 
             return await self._finalize_turn(ctx, response, db)
@@ -296,7 +298,7 @@ class AgentExecutionService:
                         else:
                             _content = pf.get("content", "")
                             _raw = _content.encode("utf-8") if isinstance(_content, str) else bytes(_content)
-                        sandbox_provider.write_file(sandbox_handle, f"/workspace/{_filename}", _raw)
+                        sandbox_provider.write_file(sandbox_handle, _filename, _raw)
                         logger.debug("IT4: pushed '%s' into sandbox %s", _filename, sandbox_session_key)
                     except Exception as _push_exc:
                         logger.warning(
@@ -375,9 +377,13 @@ class AgentExecutionService:
                         continue
                     if remote_path in ctx.pre_existing_remote_files:
                         continue
-                    # Security: normalize the remote path and require it to be inside /workspace/
+                    # Security: normalize the remote path and require it to be inside /workspace/.
+                    # Providers may return either bare filenames ("report.docx") or absolute
+                    # workspace paths ("/workspace/report.docx").
                     import posixpath as _posixpath
                     norm_remote = _posixpath.normpath(remote_path)
+                    if not norm_remote.startswith("/workspace/"):
+                        norm_remote = _posixpath.normpath(f"/workspace/{norm_remote}")
                     if not norm_remote.startswith("/workspace/"):
                         logger.warning("IT4: skipping non-workspace remote path '%s'", remote_path)
                         continue
@@ -1089,7 +1095,9 @@ class AgentExecutionService:
         session_id_for_cache: str = None,
         user_context: Dict = None,
         image_files: List[Dict] = None,
-        working_dir: Optional[str] = None
+        working_dir: Optional[str] = None,
+        sandbox_handle: Any = None,
+        sandbox_provider: Any = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
@@ -1107,7 +1115,13 @@ class AgentExecutionService:
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, mcp_client = await create_agent(
-                fresh_agent, search_params, session_id_for_cache, user_context, working_dir
+                fresh_agent,
+                search_params,
+                session_id_for_cache,
+                user_context,
+                working_dir,
+                sandbox_handle=sandbox_handle,
+                sandbox_provider=sandbox_provider,
             )
 
             # Prepare configuration

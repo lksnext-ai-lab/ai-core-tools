@@ -230,7 +230,7 @@ class TestPrepareTurnFilePush:
             )
 
         mock_provider.write_file.assert_called_once_with(
-            mock_handle, "/workspace/data.xlsx", b"XLSX_CONTENT"
+            mock_handle, "data.xlsx", b"XLSX_CONTENT"
         )
 
     def test_no_push_for_subprocess_provider(self, tmp_path):
@@ -357,6 +357,21 @@ class TestFinalizeTurnFilePull:
         dest = tmp_path / "report.docx"
         assert dest.exists()
         assert dest.read_bytes() == b"DOCX_BYTES"
+
+    def test_pulls_new_remote_file_from_bare_filename(self, tmp_path):
+        ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
+        ctx.sandbox_provider.list_files.return_value = ["report.docx"]
+        ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
+        ctx.pre_existing_remote_files = set()
+
+        self._run_finalize(ctx, tmp_path)
+
+        dest = tmp_path / "report.docx"
+        assert dest.exists()
+        assert dest.read_bytes() == b"DOCX_BYTES"
+        ctx.sandbox_provider.read_file.assert_called_once_with(
+            ctx.sandbox_handle, "report.docx"
+        )
 
     def test_skips_pre_existing_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")

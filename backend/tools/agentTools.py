@@ -110,7 +110,15 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
+async def create_agent(
+    agent: Agent,
+    search_params=None,
+    session_id=None,
+    user_context: Optional[Dict] = None,
+    working_dir: Optional[str] = None,
+    sandbox_handle: Optional[Any] = None,
+    sandbox_provider: Optional[Any] = None,
+):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
@@ -118,6 +126,9 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         search_params: Optional search parameters for silo-based retrieval
         session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
         user_context: Optional user context containing authentication tokens for MCP
+        working_dir: Optional per-conversation working directory
+        sandbox_handle: Optional sandbox handle created during turn preparation
+        sandbox_provider: Optional provider matching sandbox_handle
     """
     llm = get_llm(agent)
     if llm is None:
@@ -248,11 +259,24 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     if agent.enable_code_interpreter and working_dir:
         os.makedirs(working_dir, exist_ok=True)
-        sandbox_provider = resolve_provider(agent)
-        sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
+        if sandbox_provider is None:
+            sandbox_provider = resolve_provider(agent)
+        if sandbox_handle is None:
+            logger.warning(
+                "Code interpreter tool requested without prepared sandbox handle; "
+                "creating fallback sandbox during tool assembly for agent %s",
+                agent.agent_id,
+            )
+            sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
         python_tool = create_sandbox_repl_tool(sandbox_handle, sandbox_provider)
         tools.append(python_tool)
-        logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
+        logger.info(
+            "Python REPL tool added for agent %s (working_dir=%s, sandbox_id=%s, provider=%s)",
+            agent.agent_id,
+            working_dir,
+            sandbox_handle.sandbox_id,
+            sandbox_handle.provider_name,
+        )
 
         # IT-3: lazy skill activation tools (only when runtime skills are attached)
         skill_associations = getattr(agent, 'skill_associations', None) or []
@@ -1032,4 +1056,3 @@ def get_retriever_tool(
         args_schema=args_schema,
         response_format="content_and_artifact",
     )
-

@@ -747,7 +747,9 @@ async def create_app(
         owner_name=owner_name,
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
-        agent_cors_origins=app.agent_cors_origins
+        agent_cors_origins=app.agent_cors_origins,
+        enable_openai_api=app.enable_openai_api,
+        sandbox_provider=app.sandbox_provider,
     )
 
 
@@ -1146,4 +1148,3 @@ async def export_full_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Export failed: {str(e)}",
         )
-

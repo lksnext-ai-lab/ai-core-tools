@@ -19,6 +19,9 @@ Open-question resolutions encoded here:
 from __future__ import annotations
 
 import threading
+import time
+import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
@@ -27,12 +30,22 @@ from tools.sandbox.provider import SandboxProvider, SandboxHandle
 
 logger = get_logger(__name__)
 
+_DEFAULT_CREATE_TIMEOUT_S = 60
+
+
+def _create_timeout_s() -> int:
+    try:
+        return int(os.getenv("SANDBOX_CREATE_TIMEOUT_S", str(_DEFAULT_CREATE_TIMEOUT_S)))
+    except (TypeError, ValueError):
+        return _DEFAULT_CREATE_TIMEOUT_S
+
 
 @dataclass
 class _Entry:
     handle: SandboxHandle
     provider: SandboxProvider
     active_skills: list = field(default_factory=list)
+    last_used: float = field(default_factory=time.monotonic)
 
 
 class SandboxSessionService:
@@ -41,9 +54,15 @@ class SandboxSessionService:
     _lock: threading.Lock
     _sessions: Dict[str, _Entry]
 
+    _REAP_INTERVAL_S = 600  # check for stale sessions every 10 minutes
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._sessions: Dict[str, _Entry] = {}
+        self._reaper = threading.Thread(
+            target=self._reaper_loop, daemon=True, name="sandbox-reaper"
+        )
+        self._reaper.start()
 
     # ------------------------------------------------------------------
     # Core lifecycle
@@ -69,6 +88,7 @@ class SandboxSessionService:
         with self._lock:
             entry = self._sessions.get(session_key)
             if entry is not None:
+                entry.last_used = time.monotonic()
                 logger.debug(
                     "SandboxSessionService: reusing handle for %s (sandbox_id=%s)",
                     session_key,
@@ -76,7 +96,13 @@ class SandboxSessionService:
                 )
                 return entry.handle
 
-            handle = provider.create_sandbox(working_dir=working_dir)
+            logger.info(
+                "SandboxSessionService: creating sandbox for %s (provider=%s, timeout_s=%s)",
+                session_key,
+                provider.PROVIDER_NAME,
+                _create_timeout_s(),
+            )
+            handle = self._create_sandbox_with_timeout(provider, working_dir)
             self._sessions[session_key] = _Entry(handle=handle, provider=provider)
             logger.info(
                 "SandboxSessionService: created sandbox for %s (sandbox_id=%s, provider=%s)",
@@ -85,6 +111,31 @@ class SandboxSessionService:
                 handle.provider_name,
             )
             return handle
+
+    def _create_sandbox_with_timeout(
+        self,
+        provider: SandboxProvider,
+        working_dir: str,
+    ) -> SandboxHandle:
+        timeout_s = _create_timeout_s()
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sandbox_create")
+        future = executor.submit(provider.create_sandbox, working_dir=working_dir)
+        try:
+            return future.result(timeout=timeout_s)
+        except TimeoutError as exc:
+            future.cancel()
+            logger.error(
+                "SandboxSessionService: sandbox creation timed out after %ss (provider=%s)",
+                timeout_s,
+                provider.PROVIDER_NAME,
+            )
+            raise RuntimeError(
+                f"Sandbox provider '{provider.PROVIDER_NAME}' did not create a sandbox "
+                f"within {timeout_s}s. Check the OpenSandbox server, Docker socket, "
+                "and sandbox image availability."
+            ) from exc
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def destroy(self, session_key: str) -> None:
         """Destroy the sandbox associated with *session_key* and remove it.
@@ -187,6 +238,51 @@ class SandboxSessionService:
             "SandboxSessionService: marked session as lost (key=%s) — sandbox state reset",
             session_key,
         )
+
+    # ------------------------------------------------------------------
+    # Idle-TTL reaper (background daemon thread)
+    # ------------------------------------------------------------------
+
+    def _reaper_loop(self) -> None:
+        """Daemon loop: periodically reap sandboxes idle longer than the TTL."""
+        while True:
+            time.sleep(self._REAP_INTERVAL_S)
+            try:
+                self._reap_stale()
+            except Exception as exc:
+                logger.warning("SandboxSessionService: reaper error: %s", exc, exc_info=True)
+
+    def _reap_stale(self) -> None:
+        """Destroy sandbox sessions that have been idle for longer than SANDBOX_SESSION_TTL_H."""
+        try:
+            ttl_s = int(os.getenv("SANDBOX_SESSION_TTL_H", "2")) * 3600
+        except (TypeError, ValueError):
+            ttl_s = 2 * 3600
+
+        now = time.monotonic()
+        with self._lock:
+            stale_keys = [
+                k for k, e in self._sessions.items()
+                if (now - e.last_used) > ttl_s
+            ]
+            stale_entries = {k: self._sessions.pop(k) for k in stale_keys}
+
+        if not stale_entries:
+            return
+
+        for key, entry in stale_entries.items():
+            idle_s = now - entry.last_used
+            try:
+                entry.provider.destroy_sandbox(entry.handle)
+                logger.info(
+                    "SandboxSessionService: reaped idle sandbox (key=%s, idle=%.0fs, sandbox_id=%s)",
+                    key, idle_s, entry.handle.sandbox_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "SandboxSessionService: error reaping sandbox (key=%s): %s",
+                    key, exc, exc_info=True,
+                )
 
 
 # Module-level singleton used across the application

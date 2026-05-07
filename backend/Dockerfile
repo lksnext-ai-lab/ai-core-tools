@@ -34,6 +34,14 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false && \
     poetry install --only=main --no-interaction --no-ansi --no-cache
 
+# Optional sandbox provider dependencies.  The backend image is built from
+# pyproject/poetry.lock, while the legacy backend/requirements.txt is not used
+# by this Dockerfile.  Keep these installed in the image so selecting the
+# OpenSandbox provider does not fail at runtime.
+RUN pip install --no-cache-dir \
+    "opensandbox==0.1.7" \
+    "opensandbox-code-interpreter==0.1.2"
+
 # ----------------------------------------------------------------------------
 # Stage 2: Production
 # ----------------------------------------------------------------------------

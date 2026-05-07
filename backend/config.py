@@ -74,6 +74,13 @@ SANDBOX_ALLOWED_PROVIDERS = [
 # OpenSandbox server connection.
 OPENSANDBOX_DOMAIN = os.getenv('OPENSANDBOX_DOMAIN', 'localhost:8080')
 OPENSANDBOX_API_KEY = os.getenv('OPENSANDBOX_API_KEY', '')
+OPENSANDBOX_CODE_INTERPRETER_IMAGE = os.getenv(
+    'OPENSANDBOX_CODE_INTERPRETER_IMAGE',
+    'opensandbox/code-interpreter:v1.0.2',
+)
+
+# Timeout for creating/reconnecting a sandbox (seconds).
+SANDBOX_CREATE_TIMEOUT_S = int(os.getenv('SANDBOX_CREATE_TIMEOUT_S', '60'))
 
 # Per-execution timeout (seconds).
 SANDBOX_DEFAULT_TIMEOUT_S = int(os.getenv('SANDBOX_DEFAULT_TIMEOUT_S', '30'))

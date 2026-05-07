@@ -79,6 +79,21 @@ _META_INTERPRETER = "_interpreter"  # CodeInterpreterSync instance
 _META_CONTEXT = "_context"          # CodeContextSync instance
 
 
+def _workspace_path(filename: str) -> str:
+    """Return an absolute /workspace path for bare or workspace-prefixed input."""
+    import posixpath
+
+    normalized = posixpath.normpath(filename)
+    if normalized.startswith(f"{_SANDBOX_WORKSPACE}/"):
+        return normalized
+    if normalized.startswith("/"):
+        raise ValueError(f"Remote path must be inside {_SANDBOX_WORKSPACE}: {filename}")
+    candidate = posixpath.normpath(f"{_SANDBOX_WORKSPACE}/{normalized}")
+    if candidate != _SANDBOX_WORKSPACE and candidate.startswith(f"{_SANDBOX_WORKSPACE}/"):
+        return candidate
+    raise ValueError(f"Remote path must be inside {_SANDBOX_WORKSPACE}: {filename}")
+
+
 def _get_connection_config():
     """Build a ``ConnectionConfigSync`` from the current environment."""
     try:
@@ -329,7 +344,7 @@ class OpenSandboxProvider(SandboxProvider):
             raise RuntimeError(
                 f"OpenSandboxProvider: no sandbox for handle {handle.sandbox_id}"
             )
-        remote_path = f"{_SANDBOX_WORKSPACE}/{filename}"
+        remote_path = _workspace_path(filename)
         sandbox.files.write_file(remote_path, content)
         logger.debug(
             "OpenSandboxProvider.write_file: wrote %d bytes to %s (sandbox=%s)",
@@ -345,7 +360,7 @@ class OpenSandboxProvider(SandboxProvider):
             raise RuntimeError(
                 f"OpenSandboxProvider: no sandbox for handle {handle.sandbox_id}"
             )
-        remote_path = f"{_SANDBOX_WORKSPACE}/{filename}"
+        remote_path = _workspace_path(filename)
         data = sandbox.files.read_bytes(remote_path)
         logger.debug(
             "OpenSandboxProvider.read_file: read %d bytes from %s (sandbox=%s)",

@@ -30,6 +30,7 @@ def app_payload(
     max_file_size_mb: int = 10,
     langsmith_api_key: str = "",
     agent_cors_origins: list = None,
+    sandbox_provider: str | None = None,
 ) -> dict:
     """Build a valid app creation/update payload."""
     return {
@@ -38,6 +39,7 @@ def app_payload(
         "max_file_size_mb": max_file_size_mb,
         "langsmith_api_key": langsmith_api_key,
         "agent_cors_origins": ",".join(agent_cors_origins) if agent_cors_origins else None,
+        "sandbox_provider": sandbox_provider,
     }
 
 
@@ -340,6 +342,37 @@ class TestUpdateApp:
         )
         assert response.status_code == 200
         assert response.json()["agent_cors_origins"] == "https://app.example.com,https://admin.example.com"
+
+    def test_update_app_changes_sandbox_provider(self, client, fake_app, owner_headers, db):
+        """Updating sandbox provider persists the app-level override."""
+        db.flush()
+        response = client.put(
+            f"/internal/apps/{fake_app.app_id}",
+            json=app_payload(sandbox_provider="opensandbox"),
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["sandbox_provider"] == "opensandbox"
+
+        db.refresh(fake_app)
+        assert fake_app.sandbox_provider == "opensandbox"
+
+    def test_update_app_clears_sandbox_provider(self, client, fake_app, owner_headers, db):
+        """Sending null clears the app-level sandbox provider override."""
+        fake_app.sandbox_provider = "opensandbox"
+        db.add(fake_app)
+        db.commit()
+
+        response = client.put(
+            f"/internal/apps/{fake_app.app_id}",
+            json=app_payload(sandbox_provider=None),
+            headers=owner_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["sandbox_provider"] is None
+
+        db.refresh(fake_app)
+        assert fake_app.sandbox_provider is None
 
     def test_update_app_returns_404_for_missing_app(self, client, owner_headers):
         """Updating non-existent app returns 404."""
