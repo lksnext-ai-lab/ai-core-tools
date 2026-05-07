@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { StepperContainer } from '../components/ui/Stepper';
@@ -56,14 +56,12 @@ function SharePointWizardPage() {
 
   // Step 2 — site + drive
   const [siteQuery, setSiteQuery] = useState('');
-  const [sites, setSites] = useState<MicrosoftSite[]>([]);
-  const [sitesLoading, setSitesLoading] = useState(false);
+  const [siteUrl, setSiteUrl] = useState('');
+  const [siteResolving, setSiteResolving] = useState(false);
   const [selectedSite, setSelectedSite] = useState<SiteSelection | null>(null);
   const [drives, setDrives] = useState<MicrosoftDrive[]>([]);
   const [drivesLoading, setDrivesLoading] = useState(false);
   const [selectedDrive, setSelectedDrive] = useState<DriveSelection | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Step 3 — indexing
   const [siloName, setSiloName] = useState('');
   const [vectorDbType, setVectorDbType] = useState('PGVECTOR');
@@ -86,32 +84,36 @@ function SharePointWizardPage() {
     }
   }, [step, appId]);
 
-  // Debounced site search
+  // Reset site state when entering step 2
   useEffect(() => {
     if (step !== 1) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!siteQuery.trim()) {
-      setSites([]);
-      return;
+    setSiteUrl('');
+    setSiteQuery('');
+    setSelectedSite(null);
+    setSelectedDrive(null);
+    setDrives([]);
+  }, [step]);
+
+  async function handleResolveSite() {
+    if (!siteUrl.trim()) return;
+    setSiteResolving(true);
+    setError(null);
+    setSelectedSite(null);
+    setSelectedDrive(null);
+    setDrives([]);
+    try {
+      const site = await sharepointApi.resolveSite({ ...creds, site_url: siteUrl.trim() });
+      setSelectedSite({ site_id: site.id, site_name: site.name, site_url: site.web_url });
+      setDrivesLoading(true);
+      const ds = await sharepointApi.listDrives({ ...creds, site_id: site.id });
+      setDrives(ds);
+    } catch (err: any) {
+      setError(err?.message ?? 'Site not found. Check the URL and permissions.');
+    } finally {
+      setSiteResolving(false);
+      setDrivesLoading(false);
     }
-    debounceRef.current = setTimeout(async () => {
-      setSitesLoading(true);
-      try {
-        const results = await sharepointApi.searchSites({
-          ...creds,
-          q: siteQuery,
-        });
-        setSites(results);
-      } catch {
-        setSites([]);
-      } finally {
-        setSitesLoading(false);
-      }
-    }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [siteQuery, step]);
+  }
 
   async function handleSelectSite(site: MicrosoftSite) {
     setSelectedSite({
@@ -312,60 +314,56 @@ function SharePointWizardPage() {
             <div className="space-y-4 py-2">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Search SharePoint site <span className="text-red-500">*</span>
+                  SharePoint Site URL <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={siteQuery}
-                  onChange={(e) => {
-                    setSiteQuery(e.target.value);
-                    setSelectedSite(null);
-                    setSelectedDrive(null);
-                  }}
-                  placeholder="Type to search sites..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {sitesLoading && (
-                  <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-                    <RefreshCw className="w-3 h-3 animate-spin" /> Searching...
-                  </div>
-                )}
-                {sites.length > 0 && !selectedSite && (
-                  <ul className="mt-1 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
-                    {sites.map((site) => (
-                      <li key={site.id}>
-                        <button
-                          type="button"
-                          onClick={() => { void handleSelectSite(site); }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                        >
-                          <span className="font-medium text-gray-800">{site.name}</span>
-                          <span className="ml-2 text-xs text-gray-400">{site.web_url}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {selectedSite && (
-                  <p className="mt-1 text-sm text-green-700">
-                    Selected: <strong>{selectedSite.site_name}</strong>
-                  </p>
-                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={siteUrl}
+                    onChange={(e) => { setSiteUrl(e.target.value); setSelectedSite(null); setDrives([]); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleResolveSite(); } }}
+                    placeholder="https://yourtenant.sharepoint.com/sites/Marketing"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { void handleResolveSite(); }}
+                    disabled={!siteUrl.trim() || siteResolving}
+                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {siteResolving ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
+                    Load
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter the URL of your SharePoint site, then click Load.
+                </p>
               </div>
+
+              {selectedSite && (
+                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm">
+                  <span className="font-medium text-green-800">{selectedSite.site_name}</span>
+                  <span className="block text-xs text-green-600 truncate">{selectedSite.site_url}</span>
+                </div>
+              )}
 
               {selectedSite && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Choose Drive <span className="text-red-500">*</span>
+                    Drive <span className="text-red-500">*</span>
                   </label>
                   {drivesLoading ? (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <RefreshCw className="w-3 h-3 animate-spin" /> Loading drives...
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Loading drives...
                     </div>
+                  ) : drives.length === 0 ? (
+                    <p className="text-sm text-gray-500">No drives found for this site.</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
                       {drives.map((drive) => (
-                        <label key={drive.id} className="flex items-center gap-2 cursor-pointer">
+                        <label key={drive.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                          selectedDrive?.drive_id === drive.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        }`}>
                           <input
                             type="radio"
                             name="drive"

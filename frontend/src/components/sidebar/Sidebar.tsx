@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
+import { useCapability } from '../../contexts/CapabilitiesContext';
 import { apiService } from '../../services/api';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
@@ -19,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const { appId } = useParams();
+  const navigate = useNavigate();
   const { user } = useUser();
   const { isSaasMode } = useDeploymentMode();
   const [appName, setAppName] = useState<string | null>(null);
@@ -28,6 +30,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : false;
 
   const [settingsOpen, setSettingsOpen] = useState(isInSettings);
+
+  // Track open state for each group item (keyed by item path)
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({});
 
   const loadAppData = useCallback(async () => {
     if (!appId) { setAppName(null); return; }
@@ -44,32 +49,72 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Auto-open settings group when navigating into a settings page
   useEffect(() => {
-    if (isInSettings) {
-      setSettingsOpen(true);
-    }
+    if (isInSettings) setSettingsOpen(true);
   }, [isInSettings]);
 
-  const isItemActive = (path: string): boolean => {
-    // Dashboard exact match — avoid matching all /apps/:appId/* routes
-    if (appId && path === `/apps/${appId}`) {
-      return location.pathname === path;
+  // Auto-open any group whose child is currently active
+  useEffect(() => {
+    if (!appId || !navigationConfig?.appNavigation) return;
+    const updates: Record<string, boolean> = {};
+    for (const item of navigationConfig.appNavigation) {
+      if (item.children) {
+        const anyChildActive = item.children.some((child) =>
+          location.pathname.startsWith(child.path.replace(':appId', appId))
+        );
+        if (anyChildActive) updates[item.path] = true;
+      }
     }
+    if (Object.keys(updates).length > 0) {
+      setGroupOpen((prev) => ({ ...prev, ...updates }));
+    }
+  }, [location.pathname, appId, navigationConfig?.appNavigation]);
+
+  const isItemActive = (path: string): boolean => {
+    if (appId && path === `/apps/${appId}`) return location.pathname === path;
     return location.pathname.startsWith(path);
   };
 
   const globalItemClass = (active: boolean) =>
     `flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-      active
-        ? 'text-blue-600 bg-blue-50'
-        : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+      active ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
     }`;
 
   const appItemClass = (active: boolean) =>
     `flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-      active
-        ? 'text-gray-900 bg-gray-100'
-        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+      active ? 'text-gray-900 bg-gray-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
     }`;
+
+  // Renders a leaf navigation item, with EE badge support
+  const EnterpriseAwareLink: React.FC<{
+    item: NavigationItem;
+    resolvedPath: string;
+    useAppStyle: boolean;
+  }> = ({ item, resolvedPath, useAppStyle }) => {
+    const isEnabled = useCapability(item.enterpriseFeature ?? '');
+    const isEE = !!item.enterpriseFeature;
+    const locked = isEE && !isEnabled;
+    const cls = useAppStyle ? appItemClass : globalItemClass;
+    const active = !locked && isItemActive(resolvedPath);
+    const label = locked ? `${item.name} [EE]` : item.name;
+    const dest = locked
+      ? `/apps/${appId}/enterprise?feature=${encodeURIComponent(item.name)}`
+      : resolvedPath;
+
+    return (
+      <Link
+        to={dest}
+        className={`${cls(active)} ${locked ? 'opacity-60' : ''}`}
+        title={locked ? `${item.name} — Enterprise Edition` : undefined}
+      >
+        {item.icon && (
+          <span className="mr-3 flex items-center w-4 h-4 shrink-0 text-current">
+            {item.icon}
+          </span>
+        )}
+        <span className="flex-1">{label}</span>
+      </Link>
+    );
+  };
 
   const renderItems = (items: NavigationItem[], section: string, useAppStyle = false) =>
     items
@@ -77,17 +122,73 @@ export const Sidebar: React.FC<SidebarProps> = ({
       .filter(item => !(item.saasOnly && !isSaasMode))
       .map((item, index) => {
         const path = appId ? item.path.replace(':appId', appId) : item.path;
-        const cls = useAppStyle ? appItemClass : globalItemClass;
+
+        // Group item with children — renders as collapsible
+        if (item.children && item.children.length > 0) {
+          const isOpen = groupOpen[item.path] ?? false;
+          const anyChildActive = item.children.some((child) =>
+            isItemActive(appId ? child.path.replace(':appId', appId) : child.path)
+          );
+          const cls = useAppStyle ? appItemClass : globalItemClass;
+          return (
+            <li key={`${section}-${index}`}>
+              <button
+                type="button"
+                onClick={() => setGroupOpen((prev) => ({ ...prev, [item.path]: !prev[item.path] }))}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  useAppStyle
+                    ? anyChildActive ? 'text-gray-900 bg-gray-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    : anyChildActive ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                }`}
+              >
+                <span className="flex items-center">
+                  {item.icon && (
+                    <span className="mr-3 flex items-center w-4 h-4 shrink-0 text-current">
+                      {item.icon}
+                    </span>
+                  )}
+                  {item.name}
+                </span>
+                {isOpen
+                  ? <ChevronDown size={14} className="flex-shrink-0 text-gray-400" />
+                  : <ChevronRight size={14} className="flex-shrink-0 text-gray-400" />
+                }
+              </button>
+
+              {isOpen && (
+                <ul className="mt-1 ml-4 space-y-0.5 border-l border-gray-100 pl-3">
+                  {item.children
+                    .filter(child => !(child.adminOnly && !user?.is_admin))
+                    .filter(child => !(child.saasOnly && !isSaasMode))
+                    .map((child, ci) => {
+                      const childPath = appId ? child.path.replace(':appId', appId) : child.path;
+                      return (
+                        <li key={`${section}-${index}-child-${ci}`}>
+                          <EnterpriseAwareLink item={child} resolvedPath={childPath} useAppStyle={useAppStyle} />
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </li>
+          );
+        }
+
+        // Leaf item (may have enterpriseFeature)
         return (
           <li key={`${section}-${index}`}>
-            <Link to={path} className={cls(isItemActive(path))}>
-              {item.icon && (
-                <span className="mr-3 flex items-center w-4 h-4 shrink-0 text-current">
-                  {item.icon}
-                </span>
-              )}
-              {item.name}
-            </Link>
+            {item.enterpriseFeature ? (
+              <EnterpriseAwareLink item={item} resolvedPath={path} useAppStyle={useAppStyle} />
+            ) : (
+              <Link to={path} className={useAppStyle ? appItemClass(isItemActive(path)) : globalItemClass(isItemActive(path))}>
+                {item.icon && (
+                  <span className="mr-3 flex items-center w-4 h-4 shrink-0 text-current">
+                    {item.icon}
+                  </span>
+                )}
+                {item.name}
+              </Link>
+            )}
           </li>
         );
       });
@@ -118,7 +219,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {navigationConfig.custom && renderItems(navigationConfig.custom, 'custom')}
               </ul>
 
-              {/* App context + navigation — flows directly under My Apps */}
+              {/* App context + navigation */}
               {appId && (appNavItems.length > 0 || settingsTrigger) && (
                 <div className="mt-4">
                   <Link
@@ -135,7 +236,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <ul className="space-y-0.5 ml-2 border-l border-gray-200 pl-2">
                     {renderItems(appNavItems, 'appNavigation', true)}
 
-                    {/* Collapsible Settings */}
+                    {/* Collapsible App Settings */}
                     {settingsTrigger && (
                       <li>
                         <button

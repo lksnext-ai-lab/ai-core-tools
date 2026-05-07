@@ -70,7 +70,9 @@ class SharePointSourceService:
 
         # 2. Create linked silo
         from services.silo_service import SiloService
+        from services.output_parser_service import OutputParserService
         from models.silo import SiloType
+        from repositories.silo_repository import SiloRepository
         silo = SiloService.create_or_update_silo(
             {
                 'silo_id': 0,
@@ -82,9 +84,19 @@ class SharePointSourceService:
                 'embedding_service_id': data.embedding_service_id,
                 'vector_db_type': data.vector_db_type,
             },
-            SiloType.CUSTOM,
+            SiloType.SHAREPOINT,
             db,
         )
+
+        # 2b. Create default data structure and link to silo
+        parser_id = OutputParserService().create_default_filter_for_sharepoint(
+            db=db,
+            silo_id=silo.silo_id,
+            source_name=data.name,
+            app_id=app_id,
+        )
+        silo.metadata_definition_id = parser_id
+        SiloRepository.update(silo, db)
 
         # 3. Create source ORM object
         from models.sharepoint_source import SharePointSource
@@ -147,6 +159,12 @@ class SharePointSourceService:
         if data.description is not None:
             source.description = data.description
         if data.file_extension_filters is not None:
+            old_filters = set(e.lower().lstrip(".") for e in (source.file_extension_filters or []))
+            new_filters = set(e.lower().lstrip(".") for e in data.file_extension_filters)
+            # If new extensions were added (filter expanded), reset delta token so the
+            # next sync does a full re-scan and picks up pre-existing files.
+            if new_filters - old_filters:
+                source.last_delta_token = None
             source.file_extension_filters = data.file_extension_filters
         if data.tenant_id is not None:
             source.tenant_id = data.tenant_id
@@ -264,8 +282,9 @@ class SharePointSyncService:
                 if item.get("file") is not None:
                     name = item.get("name", "")
                     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+                    ext_with_dot = f".{ext}" if ext else ""
 
-                    # Extension filter enforcement
+                    # Extension filter enforcement (filters stored without dot, e.g. ["pdf","docx"])
                     if allowed_extensions:
                         normalised = {e.lower().lstrip(".") for e in allowed_extensions}
                         if ext not in normalised:
@@ -276,20 +295,37 @@ class SharePointSyncService:
                                 SharePointFileRepository.delete_file(existing.id, db)
                             continue
 
-                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=f".{ext}" if ext else "")
+                    # Skip file types the extraction pipeline cannot handle
+                    SUPPORTED_EXTENSIONS = {"pdf", "docx", "txt", "md"}
+                    if ext not in SUPPORTED_EXTENSIONS:
+                        logger.debug(f"Skipping unsupported file type '{ext}': {name}")
+                        continue
+
+                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext_with_dot)
                     os.close(tmp_fd)
                     try:
                         await GraphClient.download_file(token, source.drive_id, item_id, tmp_path)
+
+                        web_url = item.get("webUrl", "")
+                        parent_path = item.get("parentReference", {}).get("path", "")
+                        # parentReference.path is like "/drives/{driveId}/root:/Folder/Sub"
+                        # Strip the "/drives/{id}/root:" prefix to get the folder path
+                        folder_path = parent_path.split("root:", 1)[-1] if "root:" in parent_path else parent_path
+                        file_path = f"{folder_path}/{name}".lstrip("/")
 
                         base_metadata = {
                             "source": "sharepoint",
                             "source_id": source_id,
                             "drive_item_id": item_id,
                             "file_name": name,
+                            "file_path": file_path,
+                            "web_url": web_url,
+                            "site_url": source.site_url or "",
+                            "drive_id": source.drive_id,
                         }
 
                         from services.silo_service import SiloService
-                        docs = SiloService.extract_documents_from_file(tmp_path, ext, base_metadata)
+                        docs = SiloService.extract_documents_from_file(tmp_path, ext_with_dot, base_metadata)
 
                         # Convert Document objects to dict format expected by index_multiple_content
                         doc_dicts = []

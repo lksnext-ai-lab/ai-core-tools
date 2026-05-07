@@ -175,6 +175,33 @@ async def search_microsoft_sites(
 
 
 @router.get(
+    "/microsoft/resolve-site",
+    response_model=MicrosoftSiteResponse,
+)
+async def resolve_microsoft_site(
+    tenant_id: Annotated[str, Query()],
+    client_id: Annotated[str, Query()],
+    client_secret: Annotated[str, Query()],
+    site_url: Annotated[str, Query()],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+):
+    """Resolve a SharePoint site by URL and return its id, name and webUrl."""
+    from mattin_sharepoint.graph_client import GraphClient
+    try:
+        token = await GraphClient.get_token(tenant_id, client_id, client_secret)
+        site = await GraphClient.resolve_site(token, site_url)
+    except GraphAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return MicrosoftSiteResponse(
+        id=site.get("id", ""),
+        name=site.get("displayName") or site.get("name", ""),
+        web_url=site.get("webUrl", ""),
+    )
+
+
+@router.get(
     "/microsoft/drives",
     response_model=list[MicrosoftDriveResponse],
 )

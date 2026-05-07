@@ -227,4 +227,22 @@ class OutputParserService:
         parser.app_id = app_id
         parser.fields = [{"name":"url_id","description":"url id","type":"int"}, {"name":"url","description":"url","type":"str"}, {"name":"domain_id","description":"domain id","type":"int"}, {"name":"page","description":"page of the document or chunk","type":"int"}]
         created_parser = self.repository.create(db, parser)
-        return created_parser.parser_id 
+        return created_parser.parser_id
+
+    def create_default_filter_for_sharepoint(self, db: Session, silo_id: int, source_name: str, app_id: int) -> int:
+        parser = OutputParser()
+        parser.name = f"DEFAULT-SHAREPOINT-FILTER-{silo_id}"
+        parser.description = f"Default filter for SharePoint source ({source_name})"
+        parser.app_id = app_id
+        parser.fields = [
+            {"name": "source_id", "description": "SharePoint source id", "type": "int"},
+            {"name": "drive_item_id", "description": "Microsoft Graph drive item id", "type": "str"},
+            {"name": "file_name", "description": "File name", "type": "str"},
+            {"name": "file_path", "description": "Relative path inside the drive", "type": "str"},
+            {"name": "web_url", "description": "SharePoint web URL to the file", "type": "str"},
+            {"name": "site_url", "description": "SharePoint site URL", "type": "str"},
+            {"name": "drive_id", "description": "Microsoft Graph drive id", "type": "str"},
+            {"name": "page", "description": "Page or chunk number within the file", "type": "int"},
+        ]
+        created_parser = self.repository.create(db, parser)
+        return created_parser.parser_id

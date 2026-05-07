@@ -60,6 +60,16 @@ export const sharepointApi = {
     return apiService.request(`/internal/microsoft/drives?${qs}`);
   },
 
+  resolveSite: (params: {
+    tenant_id: string;
+    client_id: string;
+    client_secret: string;
+    site_url: string;
+  }): Promise<MicrosoftSite> => {
+    const qs = new URLSearchParams(params as Record<string, string>).toString();
+    return apiService.request(`/internal/microsoft/resolve-site?${qs}`);
+  },
+
   testConnection: (data: TestConnectionRequest): Promise<{ ok: boolean; error?: string }> =>
     apiService.request('/internal/microsoft/test-connection', {
       method: 'POST',

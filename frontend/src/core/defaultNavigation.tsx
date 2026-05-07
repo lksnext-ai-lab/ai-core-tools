@@ -61,28 +61,37 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
-      path: '/apps/:appId/silos',
-      name: 'Silos',
+      path: '/apps/:appId/data',
+      name: 'Data',
       icon: <Database size={16} />,
-      section: 'appNavigation'
-    },
-    {
-      path: '/apps/:appId/repositories',
-      name: 'Repositories',
-      icon: <FolderOpen size={16} />,
-      section: 'appNavigation'
-    },
-    {
-      path: '/apps/:appId/domains',
-      name: 'Domains',
-      icon: <Globe size={16} />,
-      section: 'appNavigation'
-    },
-    {
-      path: '/apps/:appId/sharepoint',
-      name: 'SharePoint',
-      icon: <Cloud size={16} />,
-      section: 'appNavigation'
+      section: 'appNavigation',
+      children: [
+        {
+          path: '/apps/:appId/silos',
+          name: 'Silos',
+          icon: <Database size={16} />,
+          section: 'appNavigation'
+        },
+        {
+          path: '/apps/:appId/repositories',
+          name: 'Repositories',
+          icon: <FolderOpen size={16} />,
+          section: 'appNavigation'
+        },
+        {
+          path: '/apps/:appId/domains',
+          name: 'Domains',
+          icon: <Globe size={16} />,
+          section: 'appNavigation'
+        },
+        {
+          path: '/apps/:appId/sharepoint',
+          name: 'SharePoint',
+          icon: <Cloud size={16} />,
+          section: 'appNavigation',
+          enterpriseFeature: 'sharepoint'
+        },
+      ]
     },
     {
       path: '/apps/:appId/mcp-servers',

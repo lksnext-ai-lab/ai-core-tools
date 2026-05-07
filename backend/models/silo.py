@@ -8,6 +8,7 @@ class SiloType(Enum):
     CUSTOM = "CUSTOM"
     REPO = "REPO"
     DOMAIN = "DOMAIN"
+    SHAREPOINT = "SHAREPOINT"
     
 class Silo(Base):
     __tablename__ = 'Silo'

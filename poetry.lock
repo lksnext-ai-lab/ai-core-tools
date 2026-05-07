@@ -2938,7 +2938,7 @@ optional = false
 python-versions = ">=3.11"
 groups = ["sharepoint"]
 files = []
-develop = true
+develop = false
 
 [package.dependencies]
 fastapi = "*"
@@ -7250,4 +7250,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "97384d1f68142f41ea29ad8f3d3f2173d0672942c198ab08da265ed69365ec26"
+content-hash = "3b06b5f2deabca90e126dde96ffda69fc84085556f000a8d5633e9553849af83"

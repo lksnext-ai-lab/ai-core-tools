@@ -71,6 +71,29 @@ class GraphClient:
         return response.json().get("value", [])
 
     @staticmethod
+    async def resolve_site(token: str, site_url: str) -> dict:
+        """Resolve a SharePoint site by its URL.
+
+        Accepts full URLs like https://tenant.sharepoint.com/sites/Marketing
+        or just the hostname https://tenant.sharepoint.com.
+        Returns the site dict (id, displayName, webUrl).
+        Raises GraphAccessError if the site cannot be resolved.
+        """
+        from urllib.parse import urlparse
+        parsed = urlparse(site_url if site_url.startswith("http") else f"https://{site_url}")
+        hostname = parsed.netloc or parsed.path.split("/")[0]
+        path = parsed.path.rstrip("/") or "/"
+        url = f"{GRAPH_BASE}/sites/{hostname}:{path}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        if response.status_code != 200:
+            raise GraphAccessError(
+                response.status_code,
+                f"Site not found ({response.status_code}): {response.text}",
+            )
+        return response.json()
+
+    @staticmethod
     async def list_drives(token: str, site_id: str) -> list[dict]:
         """List all drives for a SharePoint site.
 

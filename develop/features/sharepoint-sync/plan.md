@@ -1013,11 +1013,12 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
   }
   ```
 - **Acceptance**: `npm run build:lib` (or `npm run lint`) in `frontend/` succeeds with no TypeScript errors.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
 ### Step 23 — Frontend: CapabilitiesContext
+
 
 - **Layer**: frontend
 - **Files**:
@@ -1083,7 +1084,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
   };
   ```
 - **Acceptance**: No TypeScript errors, linter passes.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -1139,7 +1140,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
   };
   ```
 - **Acceptance**: `npm run lint` passes. TypeScript compilation succeeds.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -1168,7 +1169,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
 
   RBAC: show Add/Sync/Delete based on `hasMinRole(AppRole.EDITOR)` / `hasMinRole(AppRole.ADMINISTRATOR)`.
 - **Acceptance**: Component renders (no runtime errors). Visible at `/apps/:appId/sharepoint` once route is wired in Step 28.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -1199,7 +1200,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
 
   Progress indicator at top showing step 1/2/3. "Back" button on steps 2 and 3. Entire wizard is a single page component.
 - **Acceptance**: Component renders. Can navigate steps (mock API calls in dev mode).
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -1238,7 +1239,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
   **Danger zone** (bottom, red border):
   - "Delete source" button → confirm modal: "This will delete all indexed content from the silo. This action cannot be undone." → on confirm: `sharepointApi.deleteSource(appId, sourceId)` → navigate to list page.
 - **Acceptance**: Component renders and loads data from the API. All save/sync/delete actions fire the correct API calls.
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
@@ -1308,7 +1309,7 @@ The `mattin-sharepoint` plugin directory lives at `plugins/mattin_sharepoint/` (
 
   Import `Cloud` from `lucide-react` for the icon (not yet used in the nav, acceptable).
 - **Acceptance**: `npm run build:lib` completes without errors. SharePoint nav item appears in the sidebar. Navigating to `/apps/:appId/sharepoint` shows the list page (or redirects to dashboard when plugin not installed due to empty capabilities).
-- **Status**: [ ]
+- **Status**: [x]
 
 ---
 
