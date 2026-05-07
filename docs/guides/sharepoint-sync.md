@@ -180,6 +180,21 @@ poetry install --with sharepoint
 
 This installs the plugin and makes it discoverable at runtime via a Python entry point. The backend picks it up automatically on next startup — no code changes required.
 
+> **Important — editable install required for development**: `poetry install --with sharepoint` installs a static copy of the plugin into `.venv/site-packages/`. This means changes made to files inside `../mattin-ai-plugins/mattin_sharepoint/` are **not picked up** at runtime until you reinstall. After the first install (or after any `poetry install`), run:
+>
+> ```bash
+> poetry run pip install -e ../mattin-ai-plugins/
+> ```
+>
+> This converts the install to an editable (in-place) install, so Python loads the plugin directly from the source tree. From that point on, source file changes take effect on the next backend restart — no reinstall needed.
+>
+> You can verify the install mode with:
+> ```bash
+> poetry run python -c "import mattin_sharepoint; print(mattin_sharepoint.__file__)"
+> # Editable:     .../mattin-ai-plugins/mattin_sharepoint/__init__.py      ← correct
+> # Static copy:  .../site-packages/mattin_sharepoint/__init__.py           ← stale
+> ```
+
 ### Verify installation
 
 ```bash
@@ -205,6 +220,7 @@ Restart the backend. The plugin is no longer loaded — the capabilities endpoin
 
 ```bash
 poetry install --with sharepoint
+poetry run pip install -e ../mattin-ai-plugins/   # ensure editable mode
 ```
 
 ### Check installed state
@@ -212,6 +228,9 @@ poetry install --with sharepoint
 ```bash
 poetry show mattin-sharepoint          # shows version and path
 poetry show --with sharepoint          # shows full dependency tree including group
+
+# Verify editable (source) install is active
+poetry run python -c "import mattin_sharepoint; print(mattin_sharepoint.__file__)"
 ```
 
 ---
@@ -221,7 +240,7 @@ poetry show --with sharepoint          # shows full dependency tree including gr
 ### Backend
 
 ```
-plugins/
+mattin-ai-plugins/          # side-by-side with ai-core-tools (separate private repo)
 └── mattin_sharepoint/
     ├── plugin.py          # Entry point: register(app, registry) — mounts router, starts worker
     ├── graph_client.py    # Microsoft Graph API client (token, delta, download, site resolution)
@@ -232,7 +251,7 @@ plugins/
     └── worker.py          # asyncio.Queue-based background sync worker
 ```
 
-**Plugin discovery** uses Python entry points (`importlib.metadata`). The `pyproject.toml` inside `plugins/` declares:
+**Plugin discovery** uses Python entry points (`importlib.metadata`). The `pyproject.toml` inside `mattin-ai-plugins/` declares:
 
 ```toml
 [project.entry-points."mattin.plugins"]

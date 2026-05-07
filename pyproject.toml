@@ -173,6 +173,7 @@ ffmpeg-python = "^0.2.0"
 dev = "uvicorn backend.main:app --reload --port 8000"
 
 [tool.poetry.group.sharepoint.dependencies]
+mattin-sharepoint = {path = "../mattin-ai-plugins", develop = true}
 
 [tool.poetry.group.test.dependencies]
 pytest = ">=8.0.0,<9.0.0"
@@ -222,5 +223,5 @@ qdrant = [
     "langchain-qdrant (>=1.1.0,<2.0.0)"
 ]
 sharepoint = [
-    "mattin-sharepoint @ file:///home/aritz/data/proiektuak/LKS/IA-Core-Tools/ai-core-tools/plugins"
+    "mattin-sharepoint @ file:///../mattin-ai-plugins"
 ]

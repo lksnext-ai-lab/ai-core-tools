@@ -229,9 +229,9 @@ class OutputParserService:
         created_parser = self.repository.create(db, parser)
         return created_parser.parser_id
 
-    def create_default_filter_for_sharepoint(self, db: Session, silo_id: int, source_name: str, app_id: int) -> int:
+    def create_default_filter_for_sharepoint(self, db: Session, source_name: str, app_id: int) -> int:
         parser = OutputParser()
-        parser.name = f"DEFAULT-SHAREPOINT-FILTER-{silo_id}"
+        parser.name = f"DEFAULT-SHAREPOINT-FILTER-{source_name}"
         parser.description = f"Default filter for SharePoint source ({source_name})"
         parser.app_id = app_id
         parser.fields = [

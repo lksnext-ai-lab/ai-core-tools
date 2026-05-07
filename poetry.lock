@@ -2938,7 +2938,7 @@ optional = false
 python-versions = ">=3.11"
 groups = ["sharepoint"]
 files = []
-develop = false
+develop = true
 
 [package.dependencies]
 fastapi = "*"
@@ -2947,7 +2947,7 @@ sqlalchemy = "*"
 
 [package.source]
 type = "directory"
-url = "plugins"
+url = "../mattin-ai-plugins"
 
 [[package]]
 name = "mcp"
