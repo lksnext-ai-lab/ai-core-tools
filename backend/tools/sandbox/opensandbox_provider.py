@@ -30,6 +30,14 @@ Configuration (env vars)
     Maximum sandbox lifetime in hours (default: 2).  After this the container
     is automatically reaped by the OpenSandbox server.
 
+``OPENSANDBOX_SUPPORTED_LANGUAGES``
+    Comma-separated list of language identifiers the provider will activate
+    inside each sandbox container (default: ``python``).  Supported values
+    depend on the ``SupportedLanguage`` enum exposed by the
+    ``opensandbox-code-interpreter`` SDK.  Example::
+
+        OPENSANDBOX_SUPPORTED_LANGUAGES=python,javascript,bash
+
 The sandbox container image is ``opensandbox/code-interpreter:v1.0.2`` (or
 overridden via ``OPENSANDBOX_CODE_INTERPRETER_IMAGE``).
 
@@ -43,6 +51,7 @@ workspace prefix automatically.  ``list_files`` returns bare filenames only.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -67,8 +76,34 @@ _ENV_API_KEY = "OPENSANDBOX_API_KEY"
 _ENV_IMAGE = "OPENSANDBOX_CODE_INTERPRETER_IMAGE"
 _ENV_TIMEOUT_S = "SANDBOX_DEFAULT_TIMEOUT_S"
 _ENV_TTL_H = "SANDBOX_SESSION_TTL_H"
+_ENV_SUPPORTED_LANGUAGES = "OPENSANDBOX_SUPPORTED_LANGUAGES"
 
 MAX_OUTPUT_CHARS = 20_000
+
+# ---------------------------------------------------------------------------
+# Language → SupportedLanguage enum-member name mapping.
+# Keys are the normalised lower-case language identifiers used throughout
+# this codebase; values are the attribute names on the SDK's SupportedLanguage
+# enum.  Unknown keys are skipped with a warning at sandbox-creation time.
+# ---------------------------------------------------------------------------
+
+_LANGUAGE_ENUM_MAP: dict[str, str] = {
+    "python": "PYTHON",
+    "javascript": "JAVASCRIPT",
+    "typescript": "TYPESCRIPT",
+    "bash": "BASH",
+    "r": "R",
+    "java": "JAVA",
+    "go": "GO",
+    "rust": "RUST",
+    "csharp": "CSHARP",
+    "cpp": "CPP",
+    "c": "C",
+    "php": "PHP",
+    "ruby": "RUBY",
+    "swift": "SWIFT",
+    "kotlin": "KOTLIN",
+}
 
 # ---------------------------------------------------------------------------
 # Metadata keys stored inside SandboxHandle.metadata
@@ -76,7 +111,25 @@ MAX_OUTPUT_CHARS = 20_000
 
 _META_SANDBOX = "_sandbox"          # SandboxSync instance
 _META_INTERPRETER = "_interpreter"  # CodeInterpreterSync instance
-_META_CONTEXT = "_context"          # CodeContextSync instance
+_META_CONTEXTS = "_contexts"        # dict[str, CodeContextSync] — one entry per language
+
+
+def _supported_languages() -> list[str]:
+    """Return the list of language identifiers configured for this provider.
+
+    Reads ``OPENSANDBOX_SUPPORTED_LANGUAGES`` (comma-separated, default
+    ``"python"``).  The returned list is normalised to lowercase and deduplicated
+    while preserving insertion order.
+    """
+    raw = os.getenv(_ENV_SUPPORTED_LANGUAGES, "python")
+    seen: set[str] = set()
+    result: list[str] = []
+    for token in raw.split(","):
+        lang = token.strip().lower()
+        if lang and lang not in seen:
+            seen.add(lang)
+            result.append(lang)
+    return result or ["python"]
 
 
 def _workspace_path(filename: str) -> str:
@@ -148,9 +201,15 @@ class OpenSandboxProvider(SandboxProvider):
     """Sandbox provider that executes code inside an isolated OpenSandbox container.
 
     Each call to :meth:`create_sandbox` spins up a new container via the
-    OpenSandbox server and creates a persistent Python code-interpreter context.
-    State (variables, installed packages, working directory) survives across
-    :meth:`run_code` calls for the lifetime of the sandbox.
+    OpenSandbox server and creates a persistent execution context for every
+    language listed in :meth:`get_supported_languages`.  State (variables,
+    installed packages, working directory) survives across :meth:`run_code`
+    calls for the sandbox lifetime.
+
+    The set of active languages is configured through the
+    ``OPENSANDBOX_SUPPORTED_LANGUAGES`` environment variable (comma-separated,
+    default ``python``).  Any language listed there that the SDK's
+    ``SupportedLanguage`` enum does not recognise is skipped with a warning.
 
     File I/O uses the ``/workspace`` directory inside the container.  Files are
     addressed by bare filename (e.g. ``"report.xlsx"``), not absolute paths.
@@ -162,12 +221,20 @@ class OpenSandboxProvider(SandboxProvider):
 
     PROVIDER_NAME = "opensandbox"
 
+    def get_supported_languages(self) -> list[str]:
+        """Return the language identifiers configured via the environment."""
+        return _supported_languages()
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def create_sandbox(self, working_dir: str, **kwargs) -> SandboxHandle:
-        """Create a new isolated sandbox container and a persistent Python context.
+        """Create a new isolated sandbox container and persistent execution contexts.
+
+        One context is created per language listed in
+        :meth:`get_supported_languages`.  Languages not recognised by the SDK's
+        ``SupportedLanguage`` enum are skipped with a warning.
 
         Args:
             working_dir: Host-side working directory.  Not used for file I/O by
@@ -198,10 +265,12 @@ class OpenSandboxProvider(SandboxProvider):
         image = _sandbox_image()
         ttl = _session_ttl()
 
+        languages = self.get_supported_languages()
         logger.info(
-            "OpenSandboxProvider: creating sandbox (image=%s, ttl=%s)",
+            "OpenSandboxProvider: creating sandbox (image=%s, ttl=%s, languages=%s)",
             image,
             ttl,
+            languages,
         )
 
         sandbox = SandboxSync.create(
@@ -215,12 +284,55 @@ class OpenSandboxProvider(SandboxProvider):
         logger.info("OpenSandboxProvider: sandbox %s created, building interpreter", sandbox.id)
 
         interpreter = CodeInterpreterSync.create(sandbox=sandbox)
-        context = interpreter.codes.create_context(SupportedLanguage.PYTHON)
+
+        # Create one execution context per configured language.
+        contexts: dict[str, object] = {}
+        for lang in languages:
+            enum_name = _LANGUAGE_ENUM_MAP.get(lang)
+            if enum_name is None:
+                logger.warning(
+                    "OpenSandboxProvider: unknown language '%s' — no enum mapping, skipping",
+                    lang,
+                )
+                continue
+            lang_enum = getattr(SupportedLanguage, enum_name, None)
+            if lang_enum is None:
+                logger.warning(
+                    "OpenSandboxProvider: SupportedLanguage has no member '%s' "
+                    "(language='%s') — skipping",
+                    enum_name,
+                    lang,
+                )
+                continue
+            try:
+                context = interpreter.codes.create_context(lang_enum)
+                contexts[lang] = context
+                logger.info(
+                    "OpenSandboxProvider: context created for language '%s' "
+                    "(sandbox=%s, context_id=%s)",
+                    lang,
+                    sandbox.id,
+                    context.id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "OpenSandboxProvider: failed to create context for language '%s': %s",
+                    lang,
+                    exc,
+                )
+
+        if not contexts:
+            # Ensure at least a Python context so the sandbox is usable.
+            logger.warning(
+                "OpenSandboxProvider: no language contexts created; falling back to Python"
+            )
+            context = interpreter.codes.create_context(SupportedLanguage.PYTHON)
+            contexts["python"] = context
 
         logger.info(
-            "OpenSandboxProvider: interpreter ready (sandbox_id=%s, context_id=%s)",
+            "OpenSandboxProvider: interpreter ready (sandbox_id=%s, languages=%s)",
             sandbox.id,
-            context.id,
+            list(contexts.keys()),
         )
 
         return SandboxHandle(
@@ -230,7 +342,7 @@ class OpenSandboxProvider(SandboxProvider):
             metadata={
                 _META_SANDBOX: sandbox,
                 _META_INTERPRETER: interpreter,
-                _META_CONTEXT: context,
+                _META_CONTEXTS: contexts,
             },
         )
 
@@ -270,25 +382,63 @@ class OpenSandboxProvider(SandboxProvider):
     # Execution
     # ------------------------------------------------------------------
 
-    def run_code(self, handle: SandboxHandle, code: str) -> str:
+    def run_code(
+        self,
+        handle: SandboxHandle,
+        code: str,
+        *,
+        language: str = "python",
+        on_stdout: Callable[[str], None] | None = None,
+    ) -> str:
         """Execute *code* inside the sandbox and return combined stdout/result text.
 
         The execution context persists across calls — variables, imports, and
         installed packages survive for the sandbox lifetime.
 
+        Args:
+            handle:    Active sandbox handle.
+            code:      Source code to execute.
+            language:  Language identifier (must be one of the keys created at
+                       sandbox initialisation).
+            on_stdout: Optional callback invoked with each stdout line in real
+                       time.  Uses ``ExecutionHandlersSync`` under the hood.
+
         Returns:
             Truncated combined output string (stdout + results + stderr on error).
         """
         interpreter = handle.metadata.get(_META_INTERPRETER)
-        context = handle.metadata.get(_META_CONTEXT)
+        contexts: dict = handle.metadata.get(_META_CONTEXTS) or {}
+        context = contexts.get(language)
 
-        if interpreter is None or context is None:
+        if interpreter is None:
             return "[Error] OpenSandbox interpreter not initialised for this sandbox."
 
-        timeout_s = _execution_timeout()
+        if context is None:
+            available = list(contexts.keys())
+            return (
+                f"[Error] Language '{language}' is not available in this sandbox. "
+                f"Available languages: {available}"
+            )
+
+        # Build streaming handlers when the caller wants live stdout lines.
+        handlers = None
+        if on_stdout is not None:
+            try:
+                from opensandbox.models.execd_sync import ExecutionHandlersSync
+
+                def _stdout_cb(msg: object) -> None:
+                    text: str = msg.text if hasattr(msg, "text") else str(msg)
+                    try:
+                        on_stdout(text)
+                    except Exception:
+                        pass  # never let callback errors abort execution
+
+                handlers = ExecutionHandlersSync(on_stdout=_stdout_cb)
+            except ImportError:
+                pass  # fall back to batch mode if SDK import fails
 
         try:
-            execution = interpreter.codes.run(code, context=context)
+            execution = interpreter.codes.run(code, context=context, handlers=handlers)
         except Exception as exc:
             logger.error(
                 "OpenSandboxProvider.run_code error (sandbox_id=%s): %s",

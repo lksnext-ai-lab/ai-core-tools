@@ -1,7 +1,7 @@
 # RFC: Sandbox Provider Integration
 
 > Part of [Mattin AI Documentation](../index.md)
-> **Status**: Draft — May 1, 2026 · Architecture Analysis added May 6, 2026
+> **Status**: Draft — May 1, 2026 · Architecture Analysis added May 6, 2026 · Implementation Adjustments added May 7, 2026
 > **Branch**: `exp/sandbox`
 
 ## Overview
@@ -53,7 +53,14 @@ processing, presentation building, and report assembly.
     - 13.5 [Iteration Dependencies](#135-iteration-dependencies)
     - 13.6 [Open Questions — Prioritised](#136-open-questions--prioritised)
     - 13.7 [Security Contracts per Iteration](#137-security-contracts-per-iteration)
-14. [References](#14-references)
+14. [Implementation Adjustments](#14-implementation-adjustments)
+    - 14.1 [SSE Streaming — dispatch\_custom\_event replaced by get\_stream\_writer](#141-sse-streaming--dispatch_custom_event-replaced-by-get_stream_writer)
+    - 14.2 [load\_skill Unified with Sandbox Initialisation](#142-load_skill-unified-with-sandbox-initialisation)
+    - 14.3 [activate\_sandbox\_skill Demoted to Override Tool](#143-activate_sandbox_skill-demoted-to-override-tool)
+    - 14.4 [Code Execution Panel — Real-Time Stdout Visualisation](#144-code-execution-panel--real-time-stdout-visualisation)
+    - 14.5 [Tool Description Improvements for LLM Guidance](#145-tool-description-improvements-for-llm-guidance)
+    - 14.6 [Revised Tool Flow Diagram](#146-revised-tool-flow-diagram)
+15. [References](#15-references)
 
 ---
 
@@ -1609,7 +1616,198 @@ The questions from §12 are re-ordered by implementation risk:
 
 ---
 
-## 14. References
+## 14. Implementation Adjustments
+
+> Added May 7, 2026. Documents deviations from and refinements to the original RFC design
+> discovered during implementation on branch `exp/sandbox`.
+
+---
+
+### 14.1 SSE Streaming — `dispatch_custom_event` replaced by `get_stream_writer`
+
+**Original RFC sketch** implied using LangChain's `dispatch_custom_event` to emit `code_output`
+events from within `python_repl`.
+
+**Problem found**: `dispatch_custom_event` fires on the LangChain callback manager — a pipeline
+entirely separate from LangGraph's `stream_mode="custom"`. Events emitted via
+`dispatch_custom_event` are *never* surfaced through `astream(stream_mode=["custom", ...])`.
+
+**Resolution**: Use `get_stream_writer()` from `langgraph.config`, which writes directly to the
+LangGraph custom stream, accessible from within tool functions:
+
+```python
+from langgraph.config import get_stream_writer
+
+def _emit_line(line: str) -> None:
+    try:
+        writer = get_stream_writer()
+        writer({"type": "code_output", "line": line})
+    except Exception:
+        pass
+```
+
+LangGraph 1.0.x propagates the necessary ContextVar to thread-pool threads via `copy_context()`
+inside `run_in_executor`, so `get_stream_writer()` works correctly from synchronous tools
+executed in executor threads.
+
+The streaming service was updated to include `"custom"` in the stream mode set:
+
+```python
+# backend/services/agent_streaming_service.py
+stream_mode=["messages", "updates", "custom"]
+```
+
+`_map_custom_chunk` in `streaming_utils.py` maps `{"type": "code_output", "line": "..."}` chunks
+to the SSE event type `code_output`.
+
+---
+
+### 14.2 `load_skill` Unified with Sandbox Initialisation
+
+**Original RFC design** (§5.4) kept two separate tools:
+
+| Tool | Responsibility |
+|------|----------------|
+| `load_skill(name)` | Load Skill instructions into model context |
+| `activate_sandbox_skill(name)` | Install dependencies and copy assets into the sandbox |
+
+**Problem observed**: The LLM consistently called `load_skill` to get instructions but failed to
+follow up with `activate_sandbox_skill` before executing code. The two-step requirement was not
+reliably inferred even when the `python_repl` docstring explicitly mentioned it.
+
+**Resolution**: `load_skill` now automatically calls `provider.ensure_skill(handle, skill)` when:
+
+1. `skill.runtime == "python-sandbox"`, **and**
+2. `sandbox_handle` and `sandbox_provider` are available (i.e. the agent has
+   `enable_code_interpreter = true`).
+
+`create_skill_loader_tool` was extended to accept optional `sandbox_handle` and
+`sandbox_provider` parameters:
+
+```python
+def create_skill_loader_tool(
+    skill_associations: List[AgentSkill],
+    sandbox_handle: Any = None,
+    sandbox_provider: Any = None,
+) -> StructuredTool | None:
+```
+
+`agentTools.py` passes the sandbox context when assembling tools:
+
+```python
+skill_tool = create_skill_loader_tool(
+    agent.skill_associations,
+    sandbox_handle=sandbox_handle,
+    sandbox_provider=sandbox_provider,
+)
+```
+
+The `load_skill` response now includes an explicit confirmation message:
+
+```
+> **Sandbox ready** — dependencies installed and assets available for `word-generation`.
+> You can call `python_repl` directly.
+```
+
+**Idempotency**: A `_loaded_skills: set` closure variable tracks which skills have been fully
+processed within the tool instance's lifetime. Re-calling `load_skill` with the same name
+returns an early "already active" confirmation without repeating sandbox initialization.
+
+**Backward compatibility**: When `sandbox_handle` or `sandbox_provider` is `None` (agents
+without `enable_code_interpreter`, or agents using only prompt-only skills), `load_skill`
+behaves identically to the original implementation — it loads and returns the skill content
+without any sandbox interaction.
+
+---
+
+### 14.3 `activate_sandbox_skill` Demoted to Override Tool
+
+Because `load_skill` now handles the primary activation path, the `activate_sandbox_skill` tool
+was demoted from a required workflow step to an explicit **override/recovery** tool.
+
+Its updated description communicates this clearly to the LLM:
+
+> *Normally you do NOT need to call this tool — `load_skill` automatically prepares the sandbox
+> when the skill has `runtime == 'python-sandbox'`. Use this tool only as an explicit override:
+> e.g. to retry sandbox setup after an error, or to activate a skill's runtime without
+> re-loading its instructions.*
+
+The tool is still registered when `enable_code_interpreter = true` and runtime skills are
+attached to the agent. It remains useful for:
+
+- Re-initialization after `load_skill` returned a sandbox warning.
+- Activating a skill's runtime environment in a turn where instructions were already loaded.
+- Diagnostic or administrative invocations during testing.
+
+---
+
+### 14.4 Code Execution Panel — Real-Time Stdout Visualisation
+
+A `CodeExecutionPanel` React component was added to the playground to visualize sandbox stdout
+as the agent executes code.
+
+**Behaviour**:
+- Automatically expands when `python_repl` starts executing (`tool_start` event).
+- Displays a scrollable `<pre>` block (max height `12rem`) with streaming output lines.
+- Shows an animated "running" badge while execution is in progress.
+- Collapses to a compact header bar when execution ends (`tool_end` event).
+- A chevron toggle allows the user to expand/collapse the panel manually after completion.
+- Returns `null` when no code has been run (panel is completely hidden).
+
+**Wiring**:
+
+```
+useStreamingChat hook
+  ├─ codeOutputLines: string[]   ← appended on each "code_output" SSE event
+  ├─ isCodeRunning: boolean       ← true between tool_start and tool_end for python_repl
+  └─ passed as props to <StreamingMessage>
+       └─ renders <CodeExecutionPanel lines={...} isRunning={...} />
+```
+
+Files modified: `useStreamingChat.ts`, `StreamingMessage.tsx`, `ChatInterface.tsx`,
+`MarketplaceChatPage.tsx`, and the new `CodeExecutionPanel.tsx`.
+
+---
+
+### 14.5 Tool Description Improvements for LLM Guidance
+
+Several tool descriptions were updated to improve LLM decision-making:
+
+| Tool | Change |
+|------|--------|
+| `python_repl` | Docstring extended with: *"If this agent has Skills with `runtime == 'python-sandbox'`, call `load_skill` BEFORE running code that requires the skill's packages."* |
+| `activate_sandbox_skill` | Description dynamically includes available skill names at construction time so the LLM knows its options without calling a discovery tool. Description updated to reflect override/recovery role. |
+| `load_skill` | Docstring explains runtime skill behaviour, sandbox auto-setup, and idempotency contract explicitly. |
+| `generate_skills_system_prompt_section` | System-prompt skills list now includes a `*(runtime)*` badge next to runtime-capable skills and clarifies that `load_skill` prepares the sandbox automatically. |
+
+---
+
+### 14.6 Revised Tool Flow Diagram
+
+The original two-step activation flow in §5.4 is replaced by:
+
+```
+Agent turn — runtime skill needed
+  └─ load_skill("word-generation")
+       ├─ [if not yet loaded]
+       │    ├─ write Skill assets to /workspace/.skills/word-generation/
+       │    ├─ pip install python-docx>=1.1
+       │    ├─ exec bootstrap_script (if present)
+       │    └─ mark "word-generation" active on SandboxHandle
+       ├─ [if already loaded] → return "already active" immediately
+       └─ return skill instructions + "Sandbox ready" confirmation
+  └─ python_repl("from docx import Document; ...")   ← runs without extra setup
+
+Explicit override (error recovery)
+  └─ activate_sandbox_skill("word-generation")       ← retry only if needed
+```
+
+The previous two-tool sequence (`load_skill` → `activate_sandbox_skill` → `python_repl`)
+is now a single-tool sequence (`load_skill` → `python_repl`).
+
+---
+
+## 15. References
 
 - [OpenSandbox (Alibaba) — GitHub](https://github.com/alibaba/opensandbox)
 - [OpenSandbox — Secure Container Runtime guide](https://github.com/alibaba/opensandbox/blob/main/docs/secure-container.md)

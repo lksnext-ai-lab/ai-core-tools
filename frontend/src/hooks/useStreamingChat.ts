@@ -2,6 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StreamEvent, ActiveTool } from '../types/streaming';
 import { getStreamingMessage } from '../i18n/streaming';
 
+const CODE_TOOL_NAMES = new Set(['python_repl', 'code_interpreter']);
+
+export interface ToolExecutionRecord {
+  readonly id: string;
+  readonly toolName: string;
+  readonly displayName: string;
+  readonly startedAt: number;
+  readonly endedAt?: number;
+  readonly status: 'running' | 'complete';
+  readonly outputLines: string[];  // stdout for code tools
+  readonly toolInput?: string;     // serialised args from tool_start
+  readonly toolOutput?: string;    // result from tool_end
+}
+
 interface StreamResult {
   response: string | Record<string, unknown>;
   conversationId: number | null;
@@ -30,6 +44,10 @@ interface UseStreamingChatReturn {
   readonly thinkingMessage: string | null;
   readonly isStreaming: boolean;
   readonly streamError: string | null;
+  readonly codeOutputLines: string[];
+  readonly isCodeRunning: boolean;
+  readonly toolExecutionHistory: ToolExecutionRecord[];
+  readonly clearToolHistory: () => void;
   readonly sendMessage: (message: string, options?: SendOptions) => Promise<StreamResult>;
   readonly abortStream: () => void;
 }
@@ -63,6 +81,11 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
   const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [codeOutputLines, setCodeOutputLines] = useState<string[]>([]);
+  const [isCodeRunning, setIsCodeRunning] = useState(false);
+  const [toolExecutionHistory, setToolExecutionHistory] = useState<ToolExecutionRecord[]>([]);
+
+  const clearToolHistory = useCallback(() => setToolExecutionHistory([]), []);
 
   const streamFnRef = useRef(streamFn);
   useEffect(() => {
@@ -88,6 +111,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       setThinkingMessage(getStreamingMessage('thinking'));
       setIsStreaming(true);
       setStreamError(null);
+      setCodeOutputLines([]);
+      setIsCodeRunning(false);
       contentRef.current = '';
       flushRequestedRef.current = false;
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
@@ -133,18 +158,64 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   getStreamingMessage('using_tool', { name: toolName });
                 setThinkingMessage(thinkingMsg);
                 setActiveTools((prev) => [...prev, buildActiveTool(toolName)]);
+                if (CODE_TOOL_NAMES.has(toolName)) {
+                  setCodeOutputLines([]);
+                  setIsCodeRunning(true);
+                }
+                const toolInput = (event.data as { tool_input?: string }).tool_input ?? undefined;
+                const newRecord: ToolExecutionRecord = {
+                  id: `${toolName}-${Date.now()}`,
+                  toolName,
+                  displayName: toolName.replaceAll('_', ' '),
+                  startedAt: Date.now(),
+                  status: 'running',
+                  outputLines: [],
+                  toolInput,
+                };
+                setToolExecutionHistory((prev) => [...prev, newRecord]);
                 break;
               }
 
               case 'tool_end': {
                 const toolName = (event.data as { tool_name?: string }).tool_name || '';
+                const toolOutput = (event.data as { tool_output?: string }).tool_output ?? undefined;
                 setActiveTools(markToolComplete(toolName));
+                if (CODE_TOOL_NAMES.has(toolName)) {
+                  setIsCodeRunning(false);
+                }
+                setToolExecutionHistory((prev) => {
+                  const lastRunningIdx = [...prev].map((r, i) => ({ r, i })).reverse()
+                    .find(({ r }) => r.toolName === toolName && r.status === 'running')?.i ?? -1;
+                  if (lastRunningIdx === -1) return prev;
+                  const updated = [...prev];
+                  updated[lastRunningIdx] = { ...updated[lastRunningIdx], status: 'complete', endedAt: Date.now(), toolOutput };
+                  return updated;
+                });
                 break;
               }
 
               case 'thinking': {
                 const msg = (event.data as { message?: string }).message;
                 if (msg) setThinkingMessage(msg);
+                break;
+              }
+
+              case 'code_output': {
+                const line = (event.data as { line?: string }).line ?? '';
+                if (line) {
+                  setCodeOutputLines((prev) => [...prev, line]);
+                  setToolExecutionHistory((prev) => {
+                    const lastRunningIdx = [...prev].map((r, i) => ({ r, i })).reverse()
+                      .find(({ r }) => CODE_TOOL_NAMES.has(r.toolName) && r.status === 'running')?.i ?? -1;
+                    if (lastRunningIdx === -1) return prev;
+                    const updated = [...prev];
+                    updated[lastRunningIdx] = {
+                      ...updated[lastRunningIdx],
+                      outputLines: [...updated[lastRunningIdx].outputLines, line],
+                    };
+                    return updated;
+                  });
+                }
                 break;
               }
 
@@ -213,6 +284,10 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
     thinkingMessage,
     isStreaming,
     streamError,
+    codeOutputLines,
+    isCodeRunning,
+    toolExecutionHistory,
+    clearToolHistory,
     sendMessage,
     abortStream,
   };

@@ -187,7 +187,7 @@ class AgentStreamingService:
             async for mode, chunk in agent_chain.astream(
                 {"messages": [message_payload]},
                 config=config,
-                stream_mode=["messages", "updates"],
+                stream_mode=["messages", "updates", "custom"],
             ):
                 events = map_stream_event(mode, chunk)
                 if events:

@@ -24,7 +24,7 @@ def create_python_repl_tool(working_dir: str):
 
     @tool
     def python_repl(code: str) -> str:
-        """Execute Python code and return stdout + stderr.
+        """Execute Python or TypeScript code and return stdout + stderr.
 
         Use this tool to read, analyse, transform, and create files.
         Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.

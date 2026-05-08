@@ -26,7 +26,7 @@ from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
-from tools.sandbox import resolve_provider, create_sandbox_repl_tool, create_sandbox_skill_tools
+from tools.sandbox import resolve_provider, create_sandbox_repl_tools, create_sandbox_skill_tools
 
 logger = get_logger(__name__)
 
@@ -180,13 +180,16 @@ async def create_agent(
         )
 
     if agent.enable_code_interpreter and working_dir:
+        _ci_provider = sandbox_provider or resolve_provider(agent)
+        _ci_languages = _ci_provider.get_supported_languages()
+        _tool_names = ", ".join(f"`{lang}_repl`" for lang in _ci_languages)
         system_prompt_content = (
             system_prompt_content
             + "\n\n<code_interpreter>\n"
-            + "You have access to a `python_repl` tool that executes Python code.\n"
+            + f"You have access to the following code execution tools: {_tool_names}.\n"
+            + "Each tool accepts source code in the corresponding language and returns stdout + stderr.\n"
             + "Reference uploaded files by filename only (e.g. 'report.xlsx').\n"
             + "Save output files to the working directory and print the filename so the user can download it.\n"
-            + "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n"
             + "</code_interpreter>"
         )
 
@@ -268,11 +271,12 @@ async def create_agent(
                 agent.agent_id,
             )
             sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
-        python_tool = create_sandbox_repl_tool(sandbox_handle, sandbox_provider)
-        tools.append(python_tool)
+        repl_tools = create_sandbox_repl_tools(sandbox_handle, sandbox_provider)
+        tools.extend(repl_tools)
         logger.info(
-            "Python REPL tool added for agent %s (working_dir=%s, sandbox_id=%s, provider=%s)",
+            "REPL tools added for agent %s (languages=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
             agent.agent_id,
+            [t.name for t in repl_tools],
             working_dir,
             sandbox_handle.sandbox_id,
             sandbox_handle.provider_name,
@@ -308,7 +312,11 @@ async def create_agent(
 
     # Add skill loader tool if agent has skills
     if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        skill_tool = create_skill_loader_tool(agent.skill_associations)
+        skill_tool = create_skill_loader_tool(
+            agent.skill_associations,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+        )
         if skill_tool:
             tools.append(skill_tool)
             logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")

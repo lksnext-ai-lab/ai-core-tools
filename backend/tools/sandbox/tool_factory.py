@@ -1,10 +1,14 @@
 """
 Sandbox tool factory.
 
-``create_sandbox_repl_tool`` produces the ``python_repl`` LangChain tool
-backed by whatever ``SandboxProvider`` is passed in.  The tool docstring
-is kept identical to the original in ``python_sandbox_tools.py`` so the
-LLM receives the same guidance as before.
+``create_sandbox_repl_tool`` produces a language-specific REPL LangChain tool
+backed by whatever ``SandboxProvider`` is passed in.  For Python it is a
+drop-in replacement for the original ``python_repl`` tool; other languages
+produce tools named ``<language>_repl`` (e.g. ``javascript_repl``).
+
+``create_sandbox_repl_tools`` (plural) produces one tool per language listed
+in ``provider.get_supported_languages()``, making it the preferred entry point
+when the agent builder wants to expose all provider-supported languages.
 
 ``create_sandbox_skill_tools`` (IT-3) returns ``activate_sandbox_skill`` and
 ``list_active_sandbox_skills`` tools.  Only Skills with ``runtime == "python-sandbox"``
@@ -14,38 +18,195 @@ that are attached to the agent may be activated.
 from __future__ import annotations
 
 from langchain_core.tools import tool
+from langgraph.config import get_stream_writer
 
 from .provider import SandboxProvider, SandboxHandle
 
+# ---------------------------------------------------------------------------
+# Per-language metadata used to customise each REPL tool's name and docstring.
+# ---------------------------------------------------------------------------
 
-def create_sandbox_repl_tool(handle: SandboxHandle, provider: SandboxProvider):
-    """Return a ``python_repl`` LangChain tool bound to *handle* and *provider*.
+_LANGUAGE_META: dict[str, dict[str, str]] = {
+    "python": {
+        "tool_name": "python_repl",
+        "display": "Python",
+        "description_extra": (
+            "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n\n"
+            "If this agent has Skills with ``runtime == 'python-sandbox'``, call\n"
+            "``activate_sandbox_skill`` BEFORE running code that requires the skill's\n"
+            "packages, scripts, or assets."
+        ),
+    },
+    "javascript": {
+        "tool_name": "javascript_repl",
+        "display": "JavaScript",
+        "description_extra": "Runs in a Node.js environment inside the sandbox.",
+    },
+    "typescript": {
+        "tool_name": "typescript_repl",
+        "display": "TypeScript",
+        "description_extra": "Compiled and executed inside the sandbox (e.g. via ts-node).",
+    },
+    "bash": {
+        "tool_name": "bash_repl",
+        "display": "Bash",
+        "description_extra": "Standard POSIX shell commands are available.",
+    },
+    "r": {
+        "tool_name": "r_repl",
+        "display": "R",
+        "description_extra": "Statistical computing with R. Common packages (tidyverse, ggplot2) may be available.",
+    },
+    "java": {
+        "tool_name": "java_repl",
+        "display": "Java",
+        "description_extra": "Runs inside a JVM context in the sandbox.",
+    },
+    "go": {
+        "tool_name": "go_repl",
+        "display": "Go",
+        "description_extra": "Compiled and run via the Go toolchain inside the sandbox.",
+    },
+    "rust": {
+        "tool_name": "rust_repl",
+        "display": "Rust",
+        "description_extra": "Compiled and run via the Rust toolchain inside the sandbox.",
+    },
+    "csharp": {
+        "tool_name": "csharp_repl",
+        "display": "C#",
+        "description_extra": "Runs inside the .NET runtime in the sandbox.",
+    },
+    "cpp": {
+        "tool_name": "cpp_repl",
+        "display": "C++",
+        "description_extra": "Compiled and run via a C++ toolchain inside the sandbox.",
+    },
+    "c": {
+        "tool_name": "c_repl",
+        "display": "C",
+        "description_extra": "Compiled and run via a C toolchain inside the sandbox.",
+    },
+    "php": {
+        "tool_name": "php_repl",
+        "display": "PHP",
+        "description_extra": "Executed via the PHP CLI inside the sandbox.",
+    },
+    "ruby": {
+        "tool_name": "ruby_repl",
+        "display": "Ruby",
+        "description_extra": "Executed via the Ruby runtime inside the sandbox.",
+    },
+    "swift": {
+        "tool_name": "swift_repl",
+        "display": "Swift",
+        "description_extra": "Compiled and run via the Swift toolchain inside the sandbox.",
+    },
+    "kotlin": {
+        "tool_name": "kotlin_repl",
+        "display": "Kotlin",
+        "description_extra": "Compiled and run via the Kotlin toolchain inside the sandbox.",
+    },
+}
 
-    The returned tool is a drop-in replacement for the tool previously
-    created by ``python_sandbox_tools.create_python_repl_tool``.
+# Fallback metadata for any language not listed above.
+_DEFAULT_LANGUAGE_META: dict[str, str] = {
+    "display": "{language}",
+    "description_extra": "",
+}
+
+
+def _get_language_meta(language: str) -> dict[str, str]:
+    """Return metadata for *language*, falling back to a generic entry."""
+    if language in _LANGUAGE_META:
+        return _LANGUAGE_META[language]
+    return {
+        "tool_name": f"{language}_repl",
+        "display": language.capitalize(),
+        "description_extra": "",
+    }
+
+
+def create_sandbox_repl_tool(
+    handle: SandboxHandle,
+    provider: SandboxProvider,
+    language: str = "python",
+):
+    """Return a language-specific REPL LangChain tool bound to *handle* and *provider*.
+
+    The tool name follows the ``<language>_repl`` convention (e.g.
+    ``python_repl``, ``javascript_repl``).  For ``"python"`` this is a
+    drop-in replacement for the tool previously created by
+    ``python_sandbox_tools.create_python_repl_tool``.
+
+    Args:
+        handle:   Active sandbox handle.
+        provider: Resolved ``SandboxProvider`` instance.
+        language: Language identifier (default ``"python"``).
+
+    Returns:
+        A LangChain tool whose name is ``{language}_repl``.
     """
+    meta = _get_language_meta(language)
+    tool_name: str = meta["tool_name"]
+    display: str = meta["display"]
+    extra: str = meta["description_extra"]
 
-    @tool
-    def python_repl(code: str) -> str:
-        """Execute Python code and return stdout + stderr.
+    base_doc = (
+        f"Execute {display} code and return stdout + stderr.\n\n"
+        "Use this tool to read, analyse, transform, and create files.\n"
+    )
+    if extra:
+        base_doc += f"\n{extra}\n"
+    base_doc += (
+        "\nFiles uploaded by the user are in the current working directory — reference\n"
+        "them by filename only (e.g. 'report.xlsx', not a full path).\n\n"
+        "Save output files to the current working directory and print the filename\n"
+        "so the user knows what to download."
+    )
 
-        Use this tool to read, analyse, transform, and create files.
-        Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.
+    def _emit_line(line: str) -> None:
+        """Forward a stdout line to the LangGraph custom stream as a code_output event."""
+        try:
+            writer = get_stream_writer()
+            writer({"type": "code_output", "line": line})
+        except Exception:
+            pass  # never let streaming errors abort execution
 
-        Files uploaded by the user are in the current working directory — reference
-        them by filename only (e.g. 'report.xlsx', not a full path).
+    # Build the tool function dynamically so that its __name__ matches
+    # tool_name (LangChain uses __name__ as the tool name when @tool is applied
+    # to a plain function without an explicit name argument).
+    def _repl_fn(code: str) -> str:
+        return provider.run_code(handle, code, language=language, on_stdout=_emit_line)
 
-        Save output files to the current working directory and print the filename
-        so the user knows what to download.
+    _repl_fn.__name__ = tool_name
+    _repl_fn.__doc__ = base_doc
 
-        Example:
-            import pandas as pd
-            df = pd.read_excel('data.xlsx')
-            print(df.shape)
-        """
-        return provider.run_code(handle, code)
+    return tool(_repl_fn)
 
-    return python_repl
+
+def create_sandbox_repl_tools(
+    handle: SandboxHandle,
+    provider: SandboxProvider,
+) -> list:
+    """Return one REPL tool per language supported by *provider*.
+
+    This is the preferred entry point when assembling the tool list for an
+    agent — it automatically exposes all languages the provider was configured
+    for without requiring the caller to enumerate them manually.
+
+    Args:
+        handle:   Active sandbox handle.
+        provider: Resolved ``SandboxProvider`` instance.
+
+    Returns:
+        A list of LangChain tools, one per language returned by
+        ``provider.get_supported_languages()``.
+    """
+    return [
+        create_sandbox_repl_tool(handle, provider, lang)
+        for lang in provider.get_supported_languages()
+    ]
 
 
 def create_sandbox_skill_tools(
@@ -83,11 +244,11 @@ def create_sandbox_skill_tools(
     def activate_sandbox_skill(skill_name: str) -> str:
         """Activate one attached Skill inside the conversation sandbox.
 
-        Use this before running code that depends on a Skill's Python packages,
-        scripts, templates, or assets.  Activation is idempotent — calling it
-        again for an already-active Skill is a no-op.
-
-        Only Skills that are explicitly attached to this agent may be activated.
+        ALWAYS call this tool BEFORE running code that depends on a Skill's
+        Python packages, scripts, templates, or assets.  Activation installs
+        all the Skill's dependencies and copies its assets into the working
+        directory.  Activation is idempotent — calling it again for an
+        already-active Skill is a no-op.
 
         Args:
             skill_name: Name of the skill to activate (case-insensitive).
@@ -111,6 +272,25 @@ def create_sandbox_skill_tools(
                 f"dependencies are already installed."
             )
         return f"Skill '{skill.name}' is active in the sandbox."
+
+    # Inject the available skill names into the tool description so the LLM
+    # knows which skills it can activate without needing to call a discovery
+    # tool first.
+    # NOTE: `load_skill` already triggers sandbox setup automatically for runtime
+    # skills.  Use `activate_sandbox_skill` only as an explicit override —
+    # e.g. to re-initialize a skill after a sandbox error, or when you need to
+    # activate a skill's runtime without re-loading its instructions.
+    activate_sandbox_skill.description = (
+        "Explicitly activate one attached Skill's sandbox environment.\n\n"
+        "Normally you do NOT need to call this tool — `load_skill` automatically "
+        "prepares the sandbox when the skill has `runtime == 'python-sandbox'`. "
+        "Use this tool only as an explicit override: e.g. to retry sandbox setup "
+        "after an error, or to activate a skill's runtime without re-loading its "
+        "instructions.\n\n"
+        f"Available runtime skills for this agent: {available_names}\n\n"
+        "Args:\n"
+        "    skill_name: Name of the skill to activate (case-insensitive)."
+    )
 
     @tool
     def list_active_sandbox_skills() -> str:

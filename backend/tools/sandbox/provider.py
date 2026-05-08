@@ -11,6 +11,7 @@ implementations they don't need yet.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -30,7 +31,28 @@ class SandboxHandle:
 
 
 class SandboxProvider(ABC):
-    """Abstract base class for sandbox execution backends."""
+    """Abstract base class for sandbox execution backends.
+
+    Class attribute ``SUPPORTED_LANGUAGES`` declares which language identifiers
+    this provider can execute.  Concrete providers override it as a class-level
+    list; the default is ``["python"]`` for backward compatibility.
+
+    Language identifiers are lowercase strings (e.g. ``"python"``,
+    ``"javascript"``, ``"bash"``).  The set of recognised identifiers is
+    intentionally open-ended — providers map them to the runtime primitives they
+    support (subprocess interpreters, SDK enum values, etc.).
+    """
+
+    SUPPORTED_LANGUAGES: list[str] = ["python"]
+
+    def get_supported_languages(self) -> list[str]:
+        """Return the list of language identifiers this provider supports.
+
+        Concrete providers that compute the list dynamically (e.g. by reading
+        an environment variable) should override this method instead of the
+        class attribute.
+        """
+        return list(self.SUPPORTED_LANGUAGES)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -49,8 +71,27 @@ class SandboxProvider(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def run_code(self, handle: SandboxHandle, code: str) -> str:
-        """Execute *code* inside the sandbox and return combined stdout/stderr."""
+    def run_code(
+        self,
+        handle: SandboxHandle,
+        code: str,
+        *,
+        language: str = "python",
+        on_stdout: Callable[[str], None] | None = None,
+    ) -> str:
+        """Execute *code* inside the sandbox and return combined stdout/stderr.
+
+        Args:
+            handle:    Active sandbox handle.
+            code:      Source code to execute.
+            language:  Language identifier (e.g. ``"python"``, ``"javascript"``).
+                       Must be one of the values returned by
+                       :meth:`get_supported_languages`.
+            on_stdout: Optional callback invoked with each stdout line as it
+                       arrives.  Useful for streaming live output to the caller
+                       (e.g. via SSE).  Called from the same thread as
+                       ``run_code`` — the implementation must be non-blocking.
+        """
 
     # ------------------------------------------------------------------
     # File I/O

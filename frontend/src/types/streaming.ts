@@ -3,6 +3,7 @@ export type StreamEventType =
   | 'tool_start'
   | 'tool_end'
   | 'thinking'
+  | 'code_output'
   | 'metadata'
   | 'error'
   | 'done';

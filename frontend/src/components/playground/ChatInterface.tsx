@@ -7,6 +7,7 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import ToolHistoryPanel from './ToolHistoryPanel';
 
 interface Message {
   id: string;
@@ -88,7 +89,7 @@ function ChatInterface({
     [appId, agentId],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream, toolExecutionHistory, clearToolHistory } =
     useStreamingChat(playgroundStream);
 
   // Hold streaming content visible briefly after isStreaming flips to false,
@@ -312,6 +313,7 @@ function ChatInterface({
       setPersistentFiles([]);
       setFilterMetadata(undefined);
       setFiltersKey((prev) => prev + 1);
+      clearToolHistory();
     } catch (error) {
       console.error('Error resetting conversation:', error);
     }
@@ -875,6 +877,12 @@ function ChatInterface({
           isLoading={isLoadingFiles}
           onRemoveFile={handleRemovePersistentFile}
           onDownloadFile={handleDownloadFile}
+        />
+
+        {/* Tool Execution History Panel */}
+        <ToolHistoryPanel
+          history={toolExecutionHistory}
+          onClear={clearToolHistory}
         />
       </div>
     </div>
