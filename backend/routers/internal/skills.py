@@ -47,6 +47,36 @@ async def list_skills(
         )
 
 
+@skills_router.post("/import",
+                    summary="Import skill from ZIP",
+                    tags=["Skills"],
+                    response_model=SkillDetailSchema)
+async def import_skill(
+    app_id: int,
+    file: Annotated[UploadFile, File(description="Agent Skills ZIP package")],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    """
+    Import a skill from a ZIP archive. If a skill with the same name already
+    exists in the app it is overwritten; built-in skills are never overwritten.
+    """
+    try:
+        zip_bytes = await file.read()
+        skill = SkillService.import_skill_zip(db, app_id, zip_bytes)
+        return await get_skill(app_id, skill.skill_id, auth_context, db, role)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error importing skill: {str(e)}",
+        )
+
+
 @skills_router.get("/{skill_id}",
                    summary="Get skill details",
                    tags=["Skills"],
@@ -185,35 +215,5 @@ async def export_skill(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error exporting skill: {str(e)}",
-        )
-
-
-@skills_router.post("/import",
-                    summary="Import skill from ZIP",
-                    tags=["Skills"],
-                    response_model=SkillDetailSchema)
-async def import_skill(
-    app_id: int,
-    file: Annotated[UploadFile, File(description="ZIP archive produced by skill export")],
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
-):
-    """
-    Import a skill from a ZIP archive.  If a skill with the same name already
-    exists in the app it is overwritten; built-in skills are never overwritten.
-    """
-    try:
-        zip_bytes = await file.read()
-        skill = SkillService.import_skill_zip(db, app_id, zip_bytes)
-        return await get_skill(app_id, skill.skill_id, auth_context, db, role)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error importing skill: {str(e)}",
         )
 

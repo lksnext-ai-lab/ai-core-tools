@@ -722,6 +722,67 @@ class ApiService {
     });
   }
 
+  async importSkillPackage(appId: number, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/skills/import`, {
+      method: 'POST',
+      headers: this.prepareHeaders({ body: formData }),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async exportSkillPackage(appId: number, skillId: number) {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/skills/${skillId}/export`, {
+      method: 'GET',
+      headers: this.prepareHeaders({}),
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async importSkillPackage(appId: number, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/skills/import`, {
+      method: 'POST',
+      headers: this.prepareHeaders({ body: formData }),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async exportSkillPackage(appId: number, skillId: number) {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/skills/${skillId}/export`, {
+      method: 'GET',
+      headers: this.prepareHeaders({}),
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+  
+// ==================== MCP SERVERS (Expose Agents as MCP Tools) ====================
   async getMCPServers(appId: number) {
     return this.request(`/internal/apps/${appId}/mcp-servers/`);
   }

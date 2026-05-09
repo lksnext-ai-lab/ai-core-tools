@@ -452,10 +452,11 @@ class SkillPackageRepository:
             ValueError: If the skill is not found.
         """
         from models.skill import Skill
+        from sqlalchemy import or_
 
         skill = db.query(Skill).filter(
             Skill.skill_id == skill_id,
-            Skill.app_id == app_id,
+            or_(Skill.app_id == app_id, Skill.app_id.is_(None)),
         ).first()
         if skill is None:
             raise ValueError(f"Skill {skill_id} not found for app {app_id}.")

@@ -7,8 +7,7 @@ interface SkillFormData {
   display_name: string;
   description: string;
   content: string;
-  runtime: string;
-  dependencies: string;  // comma-separated pip packages
+  bootstrap_script_path: string;
 }
 
 interface Skill {
@@ -17,8 +16,7 @@ interface Skill {
   display_name?: string;
   description: string;
   content: string;
-  runtime?: string;
-  dependencies?: string[];
+  bootstrap_script_path?: string | null;
   is_builtin?: boolean;
   created_at: string;
 }
@@ -35,8 +33,7 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
     display_name: '',
     description: '',
     content: '',
-    runtime: '',
-    dependencies: '',
+    bootstrap_script_path: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +48,7 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
         display_name: skill.display_name || '',
         description: skill.description || '',
         content: skill.content || '',
-        runtime: skill.runtime || '',
-        dependencies: skill.dependencies ? skill.dependencies.join(', ') : '',
+        bootstrap_script_path: skill.bootstrap_script_path || '',
       });
     }
   }, [skill]);
@@ -90,9 +86,7 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
     try {
       const submitData = {
         ...formData,
-        dependencies: formData.runtime === 'python-sandbox' && formData.dependencies
-          ? formData.dependencies.split(',').map(d => d.trim()).filter(Boolean)
-          : [],
+        bootstrap_script_path: formData.bootstrap_script_path.trim() || null,
       };
       await onSubmit(submitData as any);
     } catch (err) {
@@ -127,7 +121,7 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
           required
         />
         <p className="mt-1 text-xs text-gray-500">
-          Internal identifier (snake_case). Used to reference the skill in prompts.
+          Package identifier from SKILL.md frontmatter. Use lowercase letters, numbers, and separators.
         </p>
       </div>
 
@@ -151,49 +145,6 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
         </p>
       </div>
 
-      {/* Runtime Field */}
-      <div>
-        <label htmlFor="runtime" className="block text-sm font-medium text-gray-700 mb-1">
-          Runtime
-        </label>
-        <select
-          id="runtime"
-          name="runtime"
-          value={formData.runtime}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500"
-          disabled={isSubmitting}
-        >
-          <option value="">Prompt-only (no code execution)</option>
-          <option value="python-sandbox">Python Sandbox (runs code in isolated environment)</option>
-        </select>
-        <p className="mt-1 text-xs text-gray-500">
-          Choose "Python Sandbox" if this skill needs to execute code.
-        </p>
-      </div>
-
-      {/* Dependencies Field (shown only for sandbox runtime) */}
-      {formData.runtime === 'python-sandbox' && (
-        <div>
-          <label htmlFor="dependencies" className="block text-sm font-medium text-gray-700 mb-1">
-            Pip Dependencies
-          </label>
-          <input
-            type="text"
-            id="dependencies"
-            name="dependencies"
-            value={formData.dependencies}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500"
-            placeholder="e.g., pandas, numpy, matplotlib"
-            disabled={isSubmitting}
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Comma-separated list of pip packages required by this skill's code.
-          </p>
-        </div>
-      )}
-
       {/* Description Field */}
       <div>
         <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
@@ -211,7 +162,7 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
           required
         />
         <p className="mt-1 text-xs text-gray-500">
-          The agent sees this description to decide when the skill is relevant
+          Router metadata. Make this self-contained so the agent can decide when the skill is relevant.
         </p>
       </div>
 
@@ -245,6 +196,26 @@ When reviewing code, follow these steps...
         </p>
       </div>
 
+      {/* Bootstrap Path Field */}
+      <div>
+        <label htmlFor="bootstrap_script_path" className="block text-sm font-medium text-gray-700 mb-1">
+          Bootstrap Script Path
+        </label>
+        <input
+          type="text"
+          id="bootstrap_script_path"
+          name="bootstrap_script_path"
+          value={formData.bootstrap_script_path}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 font-mono text-sm"
+          placeholder="scripts/bootstrap.py"
+          disabled={isSubmitting}
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Optional package-root path to a reviewed script that runs after resources are copied into the sandbox.
+        </p>
+      </div>
+
       {/* Info Box */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
@@ -254,7 +225,7 @@ When reviewing code, follow these steps...
           <div className="ml-3 text-sm text-blue-700">
             <p>
               <strong>Tip:</strong> The <strong>description</strong> helps the agent recognize when to use this skill.
-              The <strong>instructions</strong> below are loaded on-demand when the skill is activated.
+              The <strong>instructions</strong> below are loaded on-demand when the skill is activated. Put runtime setup guidance in SKILL.md or a reviewed bootstrap script, not in a dependency registry.
             </p>
           </div>
         </div>

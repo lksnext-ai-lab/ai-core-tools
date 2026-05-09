@@ -84,9 +84,25 @@ export interface MCPConfig {
 export interface Skill {
   skill_id: number;
   name: string;
+  display_name?: string | null;
   description?: string;
   content?: string;
-  created_at: string;
+  bootstrap_script_path?: string | null;
+  file_count?: number;
+  allowed_tools?: string[] | null;
+  runtime_options?: unknown;
+  files?: SkillFile[];
+  is_builtin?: boolean;
+  is_frozen?: boolean;
+  created_at?: string | null;
+}
+
+export interface SkillFile {
+  file_id: number;
+  path: string;
+  media_type?: string | null;
+  content_text?: string | null;
+  checksum_sha256?: string | null;
 }
 
 // MCP Server types - for exposing agents as MCP tools

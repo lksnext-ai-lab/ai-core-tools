@@ -1,8 +1,8 @@
-"""add_sandbox_state_to_conversation
+"""fix_sandbox_state_conversation_table
 
-Revision ID: 1f4948188f41
-Revises: sandbox_it3_builtins
-Create Date: 2025-05-10 00:30:00.000000
+Revision ID: 8a1d9c3f4b2e
+Revises: 1f4948188f41
+Create Date: 2026-05-10 00:00:00.000000
 
 """
 from typing import Any, Sequence, Union
@@ -12,13 +12,13 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '1f4948188f41'
-down_revision: Union[str, None] = 'sandbox_it3_builtins'
+revision: str = '8a1d9c3f4b2e'
+down_revision: Union[str, None] = '1f4948188f41'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-_TABLE_NAME = 'conversations'
+_TABLE_NAME = 'Conversation'
 _COLUMN_NAME = 'sandbox_state'
 
 
@@ -34,7 +34,10 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
-    if _has_table(inspector, _TABLE_NAME) and not _has_column(inspector, _TABLE_NAME, _COLUMN_NAME):
+    if not _has_table(inspector, _TABLE_NAME):
+        raise RuntimeError(f"Expected table {_TABLE_NAME!r} to exist before applying migration {revision}")
+
+    if not _has_column(inspector, _TABLE_NAME, _COLUMN_NAME):
         op.add_column(
             _TABLE_NAME,
             sa.Column(_COLUMN_NAME, sa.Text(), nullable=True),

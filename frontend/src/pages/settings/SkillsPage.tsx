@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Target, Pencil, Trash2, Lightbulb } from 'lucide-react';
+import { Target, Pencil, Trash2, Lightbulb, Upload, Download, Package } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import SkillForm from '../../components/forms/SkillForm';
 import { apiService } from '../../services/api';
@@ -28,6 +28,8 @@ function SkillsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<any>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Load skills from cache or API
   useEffect(() => {
@@ -165,6 +167,53 @@ function SkillsPage() {
     setEditingSkill(null);
   }
 
+  function handleImportClick() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    if (!appId) return;
+
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      setIsImporting(true);
+      setError(null);
+      await apiService.importSkillPackage(Number.parseInt(appId), file);
+      await _forceReloadSkills();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import skill package');
+      console.error('Error importing skill package:', err);
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  async function handleExportSkill(skill: Skill) {
+    if (!appId) return;
+
+    try {
+      const blob = await apiService.exportSkillPackage(Number.parseInt(appId), skill.skill_id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${skill.name || `skill-${skill.skill_id}`}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export skill package');
+      console.error('Error exporting skill package:', err);
+    }
+  }
+
+  function getResourceCount(skill: Skill) {
+    return skill.file_count ?? (skill as any).files?.length ?? 0;
+  }
+
   if (loading) {
     return (
       <div className="p-6 text-center">
@@ -188,16 +237,33 @@ function SkillsPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Skills</h2>
-          <p className="text-gray-600">Manage prompt-driven specializations for your agents</p>
+          <p className="text-gray-600">Manage portable Skill packages with SKILL.md and bundled resources</p>
         </div>
         {canEdit && (
-          <button
-            onClick={handleCreateSkill}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}Add Skill
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="hidden"
+              onChange={(event) => { void handleImportFileChange(event); }}
+            />
+            <button
+              onClick={handleImportClick}
+              disabled={isImporting}
+              className="border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60 text-gray-700 px-4 py-2 rounded-lg flex items-center"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? 'Importing...' : 'Import ZIP'}
+            </button>
+            <button
+              onClick={handleCreateSkill}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
+            >
+              <span className="mr-2">+</span>
+              Add Skill
+            </button>
+          </div>
         )}
       </div>
 
@@ -240,17 +306,43 @@ function SkillsPage() {
             className: 'px-6 py-4'
           },
           {
-            header: 'Type',
+            header: 'Package',
             render: (skill) => (
               <div className="flex items-center gap-2">
-                {(skill as any).runtime === 'python-sandbox' && (
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">sandbox</span>
-                )}
                 {(skill as any).is_builtin && (
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">builtin</span>
                 )}
-                {!(skill as any).runtime && !(skill as any).is_builtin && (
-                  <span className="text-xs text-gray-400">prompt-only</span>
+                {(skill as any).is_frozen && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">frozen</span>
+                )}
+                {!(skill as any).is_builtin && !(skill as any).is_frozen && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">package</span>
+                )}
+              </div>
+            ),
+            className: 'px-6 py-4'
+          },
+          {
+            header: 'Resources',
+            render: (skill) => {
+              const count = getResourceCount(skill);
+              return (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Package className="w-4 h-4 text-gray-400" />
+                  {count === 0 ? 'SKILL.md only' : `${count} bundled ${count === 1 ? 'file' : 'files'}`}
+                </div>
+              );
+            },
+            className: 'px-6 py-4 whitespace-nowrap'
+          },
+          {
+            header: 'Activation',
+            render: (skill) => (
+              <div className="text-sm text-gray-600">
+                {(skill as any).bootstrap_script_path ? (
+                  <span className="font-mono text-xs text-gray-700">{(skill as any).bootstrap_script_path}</span>
+                ) : (
+                  <span className="text-gray-400">no bootstrap</span>
                 )}
               </div>
             ),
@@ -265,33 +357,37 @@ function SkillsPage() {
             header: 'Actions',
             className: 'relative',
             render: (skill) => (
-              canEdit ? (
-                <ActionDropdown
-                  actions={[
-                    {
-                      label: 'Edit',
-                      onClick: () => { void handleEditSkill(skill.skill_id); },
-                      icon: <Pencil className="w-4 h-4" />,
-                      variant: 'primary'
-                    },
-                    {
-                      label: 'Delete',
-                      onClick: () => { void handleDelete(skill.skill_id); },
-                      icon: <Trash2 className="w-4 h-4" />,
-                      variant: 'danger'
-                    }
-                  ]}
-                  size="sm"
-                />
-              ) : (
-                <span className="text-gray-400 text-sm">View only</span>
-              )
+              <ActionDropdown
+                actions={[
+                  {
+                    label: 'Export ZIP',
+                    onClick: () => { void handleExportSkill(skill); },
+                    icon: <Download className="w-4 h-4" />,
+                    variant: 'secondary'
+                  },
+                  {
+                    label: 'Edit',
+                    onClick: () => { void handleEditSkill(skill.skill_id); },
+                    icon: <Pencil className="w-4 h-4" />,
+                    variant: 'primary',
+                    disabled: !canEdit || Boolean((skill as any).is_builtin || (skill as any).is_frozen)
+                  },
+                  {
+                    label: 'Delete',
+                    onClick: () => { void handleDelete(skill.skill_id); },
+                    icon: <Trash2 className="w-4 h-4" />,
+                    variant: 'danger',
+                    disabled: !canEdit || Boolean((skill as any).is_builtin || (skill as any).is_frozen)
+                  }
+                ]}
+                size="sm"
+              />
             )
           }
         ]}
         emptyIcon={<Target className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Skills"
-        emptySubMessage="Add your first skill to create specialized behaviors for your agents."
+        emptySubMessage="Create or import a Skill package to add reusable agent capabilities."
         loading={loading}
       />
 
@@ -318,17 +414,16 @@ function SkillsPage() {
             </h3>
             <div className="mt-2 text-sm text-purple-700">
               <p>
-                Skills are prompt-driven specializations that agents can dynamically load on-demand.
-                When an agent has skills assigned, it gains a <code className="bg-purple-100 px-1 rounded">load_skill</code> tool
-                that allows it to activate specialized behavior when needed.
+                Skills are portable packages built around <code className="bg-purple-100 px-1 rounded">SKILL.md</code>.
+                Agents see metadata first, load instructions when relevant, and copy bundled resources into the sandbox only when needed.
               </p>
               <div className="mt-2">
-                <strong>Example Skills:</strong>
+                <strong>Package structure:</strong>
                 <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Code Review Guidelines - Best practices for reviewing code</li>
-                  <li>Technical Writing - Formatting and style for documentation</li>
-                  <li>Data Analysis - Steps for analyzing datasets</li>
-                  <li>Customer Support - Tone and process for handling inquiries</li>
+                  <li>SKILL.md - metadata and activation instructions</li>
+                  <li>scripts/ - optional reviewed setup or helper scripts</li>
+                  <li>references/ - optional detailed documentation loaded on demand</li>
+                  <li>assets/ - optional templates, images, or binary resources</li>
                 </ul>
               </div>
             </div>

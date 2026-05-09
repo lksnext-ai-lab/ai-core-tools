@@ -1,11 +1,8 @@
 import hashlib
-import io
 import json
-import re
-import zipfile
 from typing import Optional, List
 
-from models.skill import Skill, SkillFile
+from models.skill import Skill
 from repositories.skill_repository import SkillRepository
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -89,6 +86,8 @@ class SkillService:
                 display_name=skill.display_name,
                 description=skill.description or "",
                 runtime=skill.runtime,
+                bootstrap_script_path=skill.bootstrap_script_path,
+                file_count=len(skill.files or []),
                 is_builtin=skill.is_builtin,
                 created_at=skill.create_date,
                 is_frozen=skill.is_frozen,
@@ -182,202 +181,17 @@ class SkillService:
 
     @staticmethod
     def export_skill_zip(db: Session, app_id: int, skill_id: int) -> Optional[bytes]:
-        """Export a skill as a ZIP archive with SKILL.md and supporting files.
+        """Export a skill as a canonical Agent Skills ZIP package."""
+        from repositories.skill_package_repository import SkillPackageRepository
 
-        The archive layout:
-            SKILL.md                 — YAML frontmatter + markdown content
-            files/<path>             — each SkillFile entry
-
-        Returns:
-            ZIP bytes, or None if the skill is not found.
-        """
-        skill = SkillRepository.get_by_id_and_app_id(db, skill_id, app_id)
-        if not skill:
+        try:
+            return SkillPackageRepository.export_package(db, app_id, skill_id)
+        except ValueError:
             return None
-
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-            # --- SKILL.md ---
-            skill_md = _build_skill_md(skill)
-            zf.writestr("SKILL.md", skill_md)
-
-            # --- Supporting files ---
-            for sf in (skill.files or []):
-                arc_path = f"files/{sf.path.lstrip('/')}"
-                if sf.content_bytes is not None:
-                    zf.writestr(arc_path, sf.content_bytes)
-                elif sf.content_text is not None:
-                    zf.writestr(arc_path, sf.content_text.encode())
-
-        return buf.getvalue()
 
     @staticmethod
     def import_skill_zip(db: Session, app_id: int, zip_bytes: bytes) -> Skill:
-        """Import a skill from a ZIP archive produced by ``export_skill_zip``.
+        """Import a canonical Agent Skills ZIP package, accepting legacy files/ input."""
+        from repositories.skill_package_repository import SkillPackageRepository
 
-        If a skill with the same name already exists in the app, it is
-        overwritten.  Built-in skills are never overwritten.
-
-        Args:
-            db:        Database session.
-            app_id:    Target app.
-            zip_bytes: Raw ZIP bytes from the uploaded file.
-
-        Returns:
-            The created or updated Skill.
-
-        Raises:
-            ValueError: If SKILL.md is missing or malformed.
-        """
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            names = zf.namelist()
-            if "SKILL.md" not in names:
-                raise ValueError("Invalid skill package: SKILL.md not found.")
-
-            skill_md = zf.read("SKILL.md").decode("utf-8")
-            skill_data = _parse_skill_md(skill_md)
-
-            # Find existing app-owned skill by name (builtins are excluded)
-            existing = db.query(Skill).filter(
-                Skill.app_id == app_id,
-                Skill.name == skill_data["name"],
-            ).first()
-
-            if existing:
-                skill = existing
-            else:
-                from services.tier_enforcement_service import TierEnforcementService
-                TierEnforcementService.check_resource_limit(db, app_id, 'skills')
-                skill = Skill()
-                skill.app_id = app_id
-                skill.create_date = datetime.now()
-
-            skill.name = skill_data["name"]
-            skill.display_name = skill_data.get("display_name")
-            skill.description = skill_data.get("description", "")
-            skill.content = skill_data.get("content", "")
-            # dependencies silently dropped — field removed in v2
-            skill.allowed_tools = _to_json_text(skill_data.get("allowed_tools"))
-            skill.runtime = skill_data.get("runtime")
-            skill.bootstrap_script_path = skill_data.get("bootstrap_script_path")
-            skill.runtime_options = _to_json_text(skill_data.get("runtime_options"))
-
-            if existing:
-                skill = SkillRepository.update(db, skill)
-            else:
-                skill = SkillRepository.create(db, skill)
-
-            # Replace SkillFiles
-            SkillRepository.delete_skill_files(db, skill.skill_id)
-            for arc_path in names:
-                if not arc_path.startswith("files/"):
-                    continue
-                rel_path = arc_path[len("files/"):]
-                if not rel_path:
-                    continue
-                raw = zf.read(arc_path)
-                media_type = _guess_media_type(rel_path)
-                try:
-                    content_text = raw.decode("utf-8")
-                    content_bytes = None
-                except UnicodeDecodeError:
-                    content_text = None
-                    content_bytes = raw
-                SkillRepository.upsert_skill_file(
-                    db,
-                    skill_id=skill.skill_id,
-                    path=rel_path,
-                    media_type=media_type,
-                    content_text=content_text,
-                    content_bytes=content_bytes,
-                    checksum_sha256=_sha256_hex(raw),
-                )
-
-            db.refresh(skill)
-            return skill
-
-
-# ---------------------------------------------------------------------------
-# SKILL.md helpers
-# ---------------------------------------------------------------------------
-
-def _build_skill_md(skill: Skill) -> str:
-    """Serialize a Skill to a SKILL.md string (YAML frontmatter + body)."""
-    fm_lines = [f"name: {skill.name}"]
-    if skill.display_name:
-        fm_lines.append(f"display_name: {skill.display_name}")
-    if skill.description:
-        fm_lines.append(f"description: >-")
-        for line in skill.description.splitlines():
-            fm_lines.append(f"  {line}")
-    if skill.runtime:
-        fm_lines.append(f"runtime: {skill.runtime}")
-    # dependencies omitted from export — field removed in v2
-    tools = _parse_json_field(skill.allowed_tools)
-    if tools:
-        fm_lines.append("allowed-tools:")
-        for t in tools:
-            fm_lines.append(f"  - {t}")
-    if skill.bootstrap_script_path:
-        fm_lines.append(f"bootstrap_script_path: {skill.bootstrap_script_path}")
-    frontmatter = "\n".join(fm_lines)
-    return f"---\n{frontmatter}\n---\n\n{skill.content or ''}"
-
-
-def _parse_skill_md(text: str) -> dict:
-    """Parse a SKILL.md string into a dict with name, description, content, etc."""
-    try:
-        import yaml  # PyYAML — available in backend requirements
-    except ImportError:
-        yaml = None  # type: ignore
-
-    frontmatter = {}
-    content = text
-
-    fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)", text, re.DOTALL)
-    if fm_match:
-        fm_text, content = fm_match.group(1), fm_match.group(2).lstrip("\n")
-        if yaml is not None:
-            try:
-                frontmatter = yaml.safe_load(fm_text) or {}
-            except Exception:
-                pass
-        else:
-            # Minimal key: value parser (no YAML dependency fallback)
-            for line in fm_text.splitlines():
-                if ":" in line and not line.startswith(" "):
-                    k, _, v = line.partition(":")
-                    frontmatter[k.strip()] = v.strip()
-
-    name = str(frontmatter.get("name", "")).strip()
-    if not name:
-        raise ValueError("SKILL.md frontmatter must include a 'name' field.")
-
-    return {
-        "name": name,
-        "display_name": frontmatter.get("display_name"),
-        "description": str(frontmatter.get("description", "")).strip(),
-        "content": content,
-        "runtime": frontmatter.get("runtime"),
-        "dependencies": frontmatter.get("dependencies"),
-        "allowed_tools": frontmatter.get("allowed-tools") or frontmatter.get("allowed_tools"),
-        "bootstrap_script_path": frontmatter.get("bootstrap_script_path"),
-        "runtime_options": frontmatter.get("runtime_options"),
-    }
-
-
-def _guess_media_type(path: str) -> Optional[str]:
-    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-    return {
-        "py": "text/x-python",
-        "md": "text/markdown",
-        "txt": "text/plain",
-        "json": "application/json",
-        "yaml": "text/yaml",
-        "yml": "text/yaml",
-        "html": "text/html",
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    }.get(ext)
-
+        return SkillPackageRepository.import_package(db, app_id, zip_bytes)

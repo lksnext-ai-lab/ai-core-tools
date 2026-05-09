@@ -34,6 +34,8 @@ class SkillListItemSchema(BaseModel):
     display_name: Optional[str] = None
     description: Optional[str] = ""
     runtime: Optional[str] = None
+    bootstrap_script_path: Optional[str] = None
+    file_count: int = 0
     is_builtin: bool = False
     created_at: Optional[datetime] = None
     is_frozen: bool = False
@@ -73,4 +75,3 @@ class CreateUpdateSkillSchema(BaseModel):
     bootstrap_script_path: Optional[str] = None
     runtime_options: Optional[Any] = None
     files: Optional[List[CreateSkillFileSchema]] = None
-
