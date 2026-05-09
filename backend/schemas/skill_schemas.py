@@ -48,7 +48,7 @@ class SkillDetailSchema(BaseModel):
     display_name: Optional[str] = None
     description: Optional[str] = ""
     content: str
-    dependencies: Optional[List[str]] = None
+    # dependencies removed in v2 (field still exists in DB for backward compatibility)
     allowed_tools: Optional[List[str]] = None
     runtime: Optional[str] = None
     bootstrap_script_path: Optional[str] = None
@@ -67,7 +67,7 @@ class CreateUpdateSkillSchema(BaseModel):
     display_name: Optional[str] = None
     description: Optional[str] = ""
     content: str
-    dependencies: Optional[List[str]] = None
+    # dependencies removed in v2 (silently dropped if present for backward compatibility)
     allowed_tools: Optional[List[str]] = None
     runtime: Optional[str] = None
     bootstrap_script_path: Optional[str] = None

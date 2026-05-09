@@ -16,6 +16,8 @@ class Skill(Base):
     # Runtime capability fields (IT-1)
     display_name = Column(String(255), nullable=True)          # Human-readable label
     frontmatter = Column(Text, nullable=True)                  # Raw YAML frontmatter from SKILL.md
+    # DEPRECATED in v2: dependencies is retained in DB for backward compatibility but
+    # is no longer exposed via API schemas. Do not use in new code.
     dependencies = Column(Text, nullable=True)                 # JSON list of pip packages
     allowed_tools = Column(Text, nullable=True)                # JSON list of allowed tool names
     runtime = Column(String(50), nullable=True)                # e.g. 'python', None = prompt-only
@@ -41,14 +43,21 @@ class Skill(Base):
 
 
 class SkillFile(Base):
-    """Supporting file bundled with a Skill package (scripts, templates, assets)."""
+    """Supporting file bundled with a Skill package (scripts, templates, assets).
+
+    path: Package-root-relative path such as 'scripts/setup.py',
+          'references/api.md', or 'assets/logo.png'.
+          Must never be absolute, start with '..', or normalize
+          outside the package root (e.g., '../escape.py').
+          Validated at the repository layer before persistence.
+    """
     __tablename__ = 'SkillFile'
 
     file_id = Column(Integer, primary_key=True)
     skill_id = Column(Integer, ForeignKey('Skill.skill_id'), nullable=False)
 
-    # Path relative to the skill root, e.g. "scripts/setup.py" or "templates/report.docx"
-    path = Column(String(500), nullable=False)
+    # Package-root-relative path, e.g. "scripts/setup.py" or "templates/report.docx"
+    path = Column(String(500), nullable=False)  # package-root-relative
     media_type = Column(String(100), nullable=True)  # MIME type
 
     # Exactly one of content_text / content_bytes should be set

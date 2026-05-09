@@ -65,7 +65,7 @@ def _skill_to_detail(skill: Skill) -> SkillDetailSchema:
         display_name=skill.display_name,
         description=skill.description or "",
         content=skill.content or "",
-        dependencies=_parse_json_field(skill.dependencies),
+        # dependencies omitted — field removed from schema in v2
         allowed_tools=_parse_json_field(skill.allowed_tools),
         runtime=skill.runtime,
         bootstrap_script_path=skill.bootstrap_script_path,
@@ -141,7 +141,7 @@ class SkillService:
         skill.display_name = skill_data.display_name
         skill.description = skill_data.description
         skill.content = skill_data.content
-        skill.dependencies = _to_json_text(skill_data.dependencies)
+        # dependencies removed in v2 — not written on create/update
         skill.allowed_tools = _to_json_text(skill_data.allowed_tools)
         skill.runtime = skill_data.runtime
         skill.bootstrap_script_path = skill_data.bootstrap_script_path
@@ -256,7 +256,7 @@ class SkillService:
             skill.display_name = skill_data.get("display_name")
             skill.description = skill_data.get("description", "")
             skill.content = skill_data.get("content", "")
-            skill.dependencies = _to_json_text(skill_data.get("dependencies"))
+            # dependencies silently dropped — field removed in v2
             skill.allowed_tools = _to_json_text(skill_data.get("allowed_tools"))
             skill.runtime = skill_data.get("runtime")
             skill.bootstrap_script_path = skill_data.get("bootstrap_script_path")
@@ -312,11 +312,7 @@ def _build_skill_md(skill: Skill) -> str:
             fm_lines.append(f"  {line}")
     if skill.runtime:
         fm_lines.append(f"runtime: {skill.runtime}")
-    deps = _parse_json_field(skill.dependencies)
-    if deps:
-        fm_lines.append("dependencies:")
-        for dep in deps:
-            fm_lines.append(f"  - {dep}")
+    # dependencies omitted from export — field removed in v2
     tools = _parse_json_field(skill.allowed_tools)
     if tools:
         fm_lines.append("allowed-tools:")
