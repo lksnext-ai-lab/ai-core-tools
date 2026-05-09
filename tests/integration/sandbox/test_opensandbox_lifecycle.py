@@ -8,6 +8,7 @@ OpenSandbox connection is required.
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -189,6 +190,30 @@ def test_ensure_skill_file_write_success(provider, mock_skill_with_files):
 
     assert result["phases"]["files"] == "ok"
     assert mock_write.call_count == len(mock_skill_with_files.files)
+
+
+def test_ensure_skill_skips_directory_placeholders(provider):
+    """Directory entries from ZIP packages must not be uploaded as files."""
+    prov, _ = provider
+    handle = MagicMock()
+    handle.sandbox_id = "sbx_1"
+    handle.active_skills = {}
+    skill = SimpleNamespace(
+        skill_id=103,
+        name="pptx",
+        bootstrap_script_path=None,
+        files=[
+            SimpleNamespace(path="scripts/", content_text="", content_bytes=None),
+            SimpleNamespace(path="scripts/__init__.py", content_text="", content_bytes=None),
+        ],
+    )
+
+    with patch.object(prov, "write_file") as mock_write:
+        result = prov.ensure_skill(handle, skill)
+
+    assert result["phases"]["files"] == "ok"
+    mock_write.assert_called_once()
+    assert mock_write.call_args.args[1] == "/workspace/.skills/pptx/scripts/__init__.py"
 
 
 def test_ensure_skill_no_bootstrap_skips_phase(provider, mock_skill_with_files):

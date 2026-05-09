@@ -257,6 +257,12 @@ def _write_skill_files(
 ) -> None:
     """Write all SkillFile records for *skill* into the sandbox under *files_dir*."""
     for skill_file in skill.files:
+        if str(skill_file.path).endswith("/"):
+            logger.debug(
+                "OpenSandboxProvider.ensure_skill: skipping directory placeholder %s",
+                skill_file.path,
+            )
+            continue
         dest_path = f"{files_dir}/{skill_file.path}"
         content = skill_file.content_bytes or (
             skill_file.content_text.encode("utf-8") if skill_file.content_text else b""
@@ -914,4 +920,3 @@ class OpenSandboxProvider(SandboxProvider):
     def list_active_skills(self, handle: SandboxHandle) -> dict[str, dict[str, Any]]:
         """Return the typed Skill activation state from ``handle.active_skills``."""
         return dict(handle.active_skills)
-

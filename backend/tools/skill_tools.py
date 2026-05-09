@@ -74,7 +74,20 @@ def load_skill(skill: Any, handle: Any, provider: Any) -> str:
     if has_package and handle is not None and provider is not None:
         try:
             phase_status = provider.ensure_skill(handle, skill)
-            logger.info("Sandbox environment prepared for skill: %s", skill.name)
+            phases = phase_status.get("phases", {})
+            failed_phases = {
+                phase: status
+                for phase, status in phases.items()
+                if isinstance(status, str) and status.startswith("failed:")
+            }
+            if failed_phases:
+                logger.warning(
+                    "Sandbox environment preparation failed for skill %s: %s",
+                    skill.name,
+                    failed_phases,
+                )
+            else:
+                logger.info("Sandbox environment prepared for skill: %s", skill.name)
         except Exception as exc:
             logger.error(
                 "Error preparing sandbox for skill %s: %s", skill.name, exc, exc_info=True
@@ -285,4 +298,3 @@ def create_skill_loader_tool(
         return load_skill(skill, sandbox_handle, sandbox_provider)
 
     return load_skill_tool
-

@@ -268,7 +268,10 @@ class SkillPackageRepository:
 
             # Path safety checks
             seen_normalized: set[str] = set()
-            for arc_name in names:
+            for info in infos:
+                if info.is_dir():
+                    continue
+                arc_name = info.filename
                 if arc_name == "SKILL.md":
                     continue
                 # Normalize legacy files/ prefix for path checks
@@ -404,7 +407,10 @@ class SkillPackageRepository:
 
             # Replace SkillFiles
             SkillRepository.delete_skill_files(db, skill.skill_id)
-            for arc_name in names:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                arc_name = info.filename
                 if arc_name == "SKILL.md":
                     continue
                 # Normalize legacy files/ prefix
