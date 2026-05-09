@@ -88,5 +88,14 @@ SANDBOX_DEFAULT_TIMEOUT_S = int(os.getenv('SANDBOX_DEFAULT_TIMEOUT_S', '30'))
 # Maximum sandbox session lifetime (hours).
 SANDBOX_SESSION_TTL_H = float(os.getenv('SANDBOX_SESSION_TTL_H', '2'))
 
-# Timeout for pip install during lazy Skill activation (seconds).
-SANDBOX_SKILL_INSTALL_TIMEOUT_S = int(os.getenv('SANDBOX_SKILL_INSTALL_TIMEOUT_S', '120'))
+# Maximum number of characters returned by run_code (truncates at this limit).
+SANDBOX_MAX_OUTPUT_CHARS = int(os.getenv('SANDBOX_MAX_OUTPUT_CHARS', '20000'))
+
+# Maximum number of REPL executions per agent turn (budget guard).
+SANDBOX_MAX_EXECUTIONS_PER_TURN = int(os.getenv('SANDBOX_MAX_EXECUTIONS_PER_TURN', '5'))
+
+# Minutes before a sandbox TTL is proactively renewed.
+SANDBOX_RENEW_MINUTES = int(os.getenv('SANDBOX_RENEW_MINUTES', '30'))
+
+# Timeout for the Skill bootstrap script (seconds).
+SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S = int(os.getenv('SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S', '60'))

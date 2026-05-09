@@ -153,7 +153,7 @@ def mock_sdk():
 @pytest.fixture()
 def provider_and_handle(mock_sdk):
     """Create a real OpenSandboxProvider and call create_sandbox with mocked SDK."""
-    from tools.sandbox.opensandbox_provider import OpenSandboxProvider, _META_SANDBOX, _META_INTERPRETER, _META_CONTEXT
+    from tools.sandbox.opensandbox_provider import OpenSandboxProvider, _META_SANDBOX, _META_INTERPRETER, _META_CONTEXTS
     from opensandbox.sync.sandbox import SandboxSync
     from code_interpreter.sync.code_interpreter import CodeInterpreterSync
     from code_interpreter.models.code import SupportedLanguage
@@ -174,7 +174,7 @@ def provider_and_handle(mock_sdk):
             metadata={
                 _META_SANDBOX: mock_sdk["sandbox"],
                 _META_INTERPRETER: mock_sdk["interpreter"],
-                _META_CONTEXT: mock_sdk["context"],
+                _META_CONTEXTS: {"python": mock_sdk["context"]},
             },
         )
         return provider, handle
@@ -226,7 +226,13 @@ class TestOpenSandboxProviderRunCode:
         mock_interpreter.codes.run.return_value = execution
 
         result = provider.run_code(handle, "pass")
-        assert len(result) <= 20_000
+        # v2: output is truncated at max_output_chars then a marker is appended,
+        # so total length exceeds max_output_chars by the marker length.
+        assert "[Output truncated at 20000 characters]" in result
+        # The text content before the marker must be exactly 20000 chars
+        marker = "\n[Output truncated at 20000 characters]"
+        assert result.endswith(marker)
+        assert len(result) == 20_000 + len(marker)
 
     def test_no_access_to_backend_env(self, provider_and_handle):
         """

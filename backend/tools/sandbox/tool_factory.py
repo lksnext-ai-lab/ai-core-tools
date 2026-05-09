@@ -17,6 +17,7 @@ that are attached to the agent may be activated.
 
 from __future__ import annotations
 
+import config as settings
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
@@ -169,15 +170,40 @@ def create_sandbox_repl_tool(
         """Forward a stdout line to the LangGraph custom stream as a code_output event."""
         try:
             writer = get_stream_writer()
-            writer({"type": "code_output", "line": line})
+            writer({"type": "code_output", "stream": "stdout", "line": line})
         except Exception:
             pass  # never let streaming errors abort execution
+
+    def _emit_stderr(line: str) -> None:
+        """Forward a stderr line to the LangGraph custom stream."""
+        try:
+            writer = get_stream_writer()
+            writer({"type": "code_output", "stream": "stderr", "line": line})
+        except Exception:
+            pass
+
+    # Per-turn execution budget: mutable counter shared across calls within
+    # one agent turn.  LangChain re-creates the tool per turn so this resets
+    # automatically between turns.
+    _budget: dict[str, int] = {"count": 0}
 
     # Build the tool function dynamically so that its __name__ matches
     # tool_name (LangChain uses __name__ as the tool name when @tool is applied
     # to a plain function without an explicit name argument).
     def _repl_fn(code: str) -> str:
-        return provider.run_code(handle, code, language=language, on_stdout=_emit_line)
+        _budget["count"] += 1
+        max_executions: int = settings.SANDBOX_MAX_EXECUTIONS_PER_TURN
+        if _budget["count"] > max_executions:
+            return (
+                f"[Execution budget exceeded: {max_executions} executions per turn]"
+            )
+        return provider.run_code(
+            handle,
+            code,
+            language=language,
+            on_stdout=_emit_line,
+            on_stderr=_emit_stderr,
+        )
 
     _repl_fn.__name__ = tool_name
     _repl_fn.__doc__ = base_doc

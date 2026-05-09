@@ -12,9 +12,9 @@ Verification criteria from the RFC:
   4. ``list_active_sandbox_skills`` returns whatever ``provider.list_active_skills``
      returns, formatted as a newline-separated string.
   5. ``SubprocessProvider.ensure_skill`` records the skill in
-     ``handle.metadata["active_skills"]``.
-  6. ``SubprocessProvider.list_active_skills`` returns a sorted list from
-     ``handle.metadata["active_skills"]``.
+     ``handle.active_skills`` (v2 typed field).
+  6. ``SubprocessProvider.list_active_skills`` returns a dict from
+     ``handle.active_skills`` (v2 changed return type from list to dict).
 """
 
 from __future__ import annotations
@@ -146,8 +146,8 @@ class TestActivateSandboxSkillSuccess:
 
         result = activate.invoke({"skill_name": "word-generation"})
         assert "word-generation" in result
-        # Verify recorded in metadata
-        assert "word-generation" in handle.metadata.get("active_skills", {})
+        # Verify recorded in v2 active_skills field
+        assert "word-generation" in handle.active_skills
 
     def test_handles_not_implemented_error_gracefully(self):
         from tools.sandbox.tool_factory import create_sandbox_skill_tools
@@ -231,8 +231,7 @@ class TestSubprocessProviderEnsureSkill:
         skill = SimpleNamespace(name="word-generation", dependencies='["python-docx>=1.1"]')
         provider.ensure_skill(handle, skill)
 
-        active = handle.metadata.get("active_skills", {})
-        assert "word-generation" in active
+        assert "word-generation" in handle.active_skills
 
     def test_multiple_skills_accumulated(self):
         from tools.sandbox.subprocess_provider import SubprocessProvider
@@ -243,7 +242,7 @@ class TestSubprocessProviderEnsureSkill:
             skill = SimpleNamespace(name=name, dependencies="[]")
             provider.ensure_skill(handle, skill)
 
-        active = handle.metadata.get("active_skills", {})
+        active = handle.active_skills
         assert len(active) == 3
         assert "charts" in active
 
@@ -256,7 +255,7 @@ class TestSubprocessProviderEnsureSkill:
         provider.ensure_skill(handle, skill)
         provider.ensure_skill(handle, skill)
 
-        active = handle.metadata.get("active_skills", {})
+        active = handle.active_skills
         assert len(active) == 1
 
 
@@ -272,9 +271,10 @@ class TestSubprocessProviderListActiveSkills:
         provider = SubprocessProvider()
         handle = _make_handle()
         result = provider.list_active_skills(handle)
-        assert result == []
+        # v2: returns dict, not list
+        assert result == {}
 
-    def test_returns_sorted_list(self):
+    def test_returns_dict_of_skill_states(self):
         from tools.sandbox.subprocess_provider import SubprocessProvider
 
         provider = SubprocessProvider()
@@ -284,4 +284,8 @@ class TestSubprocessProviderListActiveSkills:
             provider.ensure_skill(handle, skill)
 
         result = provider.list_active_skills(handle)
-        assert result == sorted(["word-generation", "charts", "data-analysis"])
+        # v2: returns dict[str, dict], not a sorted list of names
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"word-generation", "charts", "data-analysis"}
+        for state in result.values():
+            assert "phases" in state

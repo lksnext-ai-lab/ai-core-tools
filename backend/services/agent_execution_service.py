@@ -260,16 +260,16 @@ class AgentExecutionService:
 
         if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
             from tools.sandbox.factory import resolve_provider
-            from services.sandbox_session_service import sandbox_session_service as _sss
+            from services.sandbox_session_service import sandbox_session_service as _sss, SandboxSessionService
 
-            sandbox_session_key = (
-                f"conv_{agent_id}_{effective_conv_id}"
-                if effective_conv_id
-                else f"agent_{agent_id}_anon_{id(session_id_for_cache)}"
-            )
+            sandbox_session_key = SandboxSessionService.session_key(agent_id, effective_conv_id)
             sandbox_provider = resolve_provider(fresh_agent)
             sandbox_handle = _sss.get_or_create(
-                sandbox_session_key, sandbox_provider, working_dir
+                sandbox_session_key,
+                sandbox_provider,
+                working_dir,
+                conversation=conversation,
+                db=db,
             )
 
             # Only remote (non-subprocess) providers need explicit push/pull.
@@ -632,12 +632,26 @@ class AgentExecutionService:
 
             # Destroy any active sandbox for this conversation session (IT-1)
             if agent.enable_code_interpreter:
-                from services.sandbox_session_service import sandbox_session_service
-                session = await self.session_service.get_user_session(agent_id, user_context)
-                if session:
-                    session_key = f"thread_{agent_id}_{session.id}"
-                    sandbox_session_service.destroy(session_key)
-                    logger.info(f"Sandbox destroyed on conversation reset for key {session_key}")
+                from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
+                # conversation_id may only be defined when has_memory is True
+                _reset_conv_id = user_context.get("conversation_id") if user_context else None
+                _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
+                sandbox_session_service.destroy(_sandbox_key)
+                logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
+                # Clear DB sandbox state
+                if _reset_conv_id and db:
+                    try:
+                        from services.conversation_service import ConversationService
+                        _conv = ConversationService.get_conversation(
+                            db, _reset_conv_id, user_context
+                        )
+                        if _conv:
+                            _conv.sandbox_session_id = None
+                            _conv.sandbox_state = None
+                            db.add(_conv)
+                            db.commit()
+                    except Exception as _exc:
+                        logger.warning("Could not clear sandbox DB state on reset: %s", _exc)
             
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService

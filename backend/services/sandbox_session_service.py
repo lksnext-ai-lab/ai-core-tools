@@ -1,32 +1,38 @@
 """
 SandboxSessionService — manages SandboxHandle lifecycle per conversation.
 
-A sandbox is keyed by ``session_key`` (typically the LangGraph thread_id,
-i.e. ``f"thread_{agent_id}_{session_id}"``).  One active handle is kept
-in memory per key; the underlying sandbox is created lazily on first use.
+A sandbox is keyed by ``session_key`` produced by the static helper
+``SandboxSessionService.session_key(agent_id, conversation_id)``.  One active
+handle is kept in memory per key; the underlying sandbox is created lazily on
+first use and its state is persisted to ``Conversation.sandbox_state`` so that
+server restarts can attempt to resume the same remote sandbox.
 
 Open-question resolutions encoded here:
 
-- Q2 (sandbox file scope): sandboxes are scoped to the conversation
-  (session_key).  Cross-conversation persistence is deferred.
-- Q5 (backend restart): the ``sandbox_session_id`` stored on
-  ``Conversation`` records the provider's opaque sandbox ID.  When a
-  conversation is resumed after a backend restart the sandbox is gone
-  from memory; the service exposes ``mark_session_lost`` so callers can
-  surface a "sandbox state reset" message to the user.
+- Q2 (sandbox file scope): sandboxes are scoped to the conversation.
+- Q5 (backend restart): ``Conversation.sandbox_session_id`` / ``sandbox_state``
+  record provider state.  ``get_or_create`` loads this on cache miss and passes
+  ``existing_sandbox_id`` to the provider so it can attempt a resume.
 """
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional, TYPE_CHECKING
+
+from sqlalchemy.orm import Session
 
 from utils.logger import get_logger
-from tools.sandbox.provider import SandboxProvider, SandboxHandle
+from tools.sandbox.provider import SandboxProvider, SandboxHandle, SandboxExpiredError
+
+if TYPE_CHECKING:
+    from models.conversation import Conversation
 
 logger = get_logger(__name__)
 
@@ -38,6 +44,80 @@ def _create_timeout_s() -> int:
         return int(os.getenv("SANDBOX_CREATE_TIMEOUT_S", str(_DEFAULT_CREATE_TIMEOUT_S)))
     except (TypeError, ValueError):
         return _DEFAULT_CREATE_TIMEOUT_S
+
+
+def _renew_duration() -> timedelta:
+    try:
+        import config as settings  # type: ignore[import]
+        return timedelta(minutes=settings.SANDBOX_RENEW_MINUTES)
+    except Exception:
+        return timedelta(minutes=30)
+
+
+# ---------------------------------------------------------------------------
+# DB state helpers (Phase 2)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SavedSandboxState:
+    """Deserialized snapshot of ``Conversation.sandbox_state``."""
+    provider: str
+    session_key: str
+    sandbox_id: str
+    active_skills: dict[str, dict[str, Any]]
+    updated_at: str
+
+
+def _load_sandbox_state(conversation: "Conversation | None") -> SavedSandboxState | None:
+    """Deserialize ``Conversation.sandbox_state`` JSON.  Returns None if absent or unparseable."""
+    if conversation is None:
+        return None
+    raw = getattr(conversation, "sandbox_state", None)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return SavedSandboxState(
+            provider=data.get("provider", ""),
+            session_key=data.get("session_key", ""),
+            sandbox_id=data.get("sandbox_id", ""),
+            active_skills=data.get("active_skills", {}),
+            updated_at=data.get("updated_at", ""),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+def _persist_sandbox_state(
+    conversation: "Conversation | None",
+    handle: SandboxHandle,
+    *,
+    db: Session | None,
+) -> None:
+    """Serialize SandboxHandle state into ``Conversation.sandbox_state`` and commit."""
+    if conversation is None or db is None:
+        return
+    state = {
+        "provider": handle.provider_name,
+        "session_key": handle.session_key,
+        "sandbox_id": handle.sandbox_id,
+        "active_skills": handle.active_skills,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    conversation.sandbox_state = json.dumps(state)
+    conversation.sandbox_session_id = handle.sandbox_id
+    db.add(conversation)
+    db.commit()
+
+
+def _get_provider_by_name(name: str) -> SandboxProvider | None:
+    """Return a provider instance by its ``PROVIDER_NAME``.  Returns None if unknown."""
+    try:
+        from tools.sandbox.factory import _PROVIDER_REGISTRY  # type: ignore[import]
+        cls = _PROVIDER_REGISTRY.get(name)
+        return cls() if cls is not None else None
+    except Exception:
+        return None
 
 
 @dataclass
@@ -65,6 +145,29 @@ class SandboxSessionService:
         self._reaper.start()
 
     # ------------------------------------------------------------------
+    # Session key helper (Phase 2, step 2.3)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def session_key(
+        agent_id: int,
+        conversation_id: int | str | None,
+        session_id: str | None = None,
+    ) -> str:
+        """Return a canonical sandbox session key.
+
+        Priority:
+        1. If *conversation_id* is given → ``"conv_{agent_id}_{conversation_id}"``
+        2. If *session_id* is given       → ``"thread_{agent_id}_{session_id}"``
+        3. Otherwise                       → ``"anon_{agent_id}"``
+        """
+        if conversation_id is not None:
+            return f"conv_{agent_id}_{conversation_id}"
+        if session_id is not None:
+            return f"thread_{agent_id}_{session_id}"
+        return f"anon_{agent_id}"
+
+    # ------------------------------------------------------------------
     # Core lifecycle
     # ------------------------------------------------------------------
 
@@ -73,14 +176,23 @@ class SandboxSessionService:
         session_key: str,
         provider: SandboxProvider,
         working_dir: str,
+        *,
+        conversation: "Conversation | None" = None,
+        db: Session | None = None,
     ) -> SandboxHandle:
         """Return an existing sandbox handle or create one.
 
+        Cache-hit path: renew the sandbox TTL and return the existing handle.
+        Cache-miss path: load state from DB (if available), create a new sandbox
+        (passing ``existing_sandbox_id`` so the provider can attempt a resume),
+        persist state to DB, and cache the handle.
+
         Args:
-            session_key:  Unique key for the conversation, e.g.
-                          ``"thread_{agent_id}_{session_id}"``.
-            provider:     Resolved ``SandboxProvider`` instance.
-            working_dir:  Filesystem path the provider may use.
+            session_key:   Canonical key, typically from ``session_key()``.
+            provider:      Resolved ``SandboxProvider`` instance.
+            working_dir:   Filesystem path the provider may use.
+            conversation:  ORM ``Conversation`` object for DB persistence.
+            db:            SQLAlchemy session.  Required for DB persistence.
 
         Returns:
             A live ``SandboxHandle``.
@@ -88,38 +200,71 @@ class SandboxSessionService:
         with self._lock:
             entry = self._sessions.get(session_key)
             if entry is not None:
-                entry.last_used = time.monotonic()
-                logger.debug(
-                    "SandboxSessionService: reusing handle for %s (sandbox_id=%s)",
-                    session_key,
-                    entry.handle.sandbox_id,
-                )
-                return entry.handle
+                try:
+                    provider.renew_sandbox(entry.handle, _renew_duration())
+                    entry.last_used = time.monotonic()
+                    logger.debug(
+                        "SandboxSessionService: reusing handle for %s (sandbox_id=%s)",
+                        session_key,
+                        entry.handle.sandbox_id,
+                    )
+                    return entry.handle
+                except SandboxExpiredError:
+                    self._sessions.pop(session_key, None)
+                    logger.info(
+                        "SandboxSessionService: cached sandbox expired for %s — recreating",
+                        session_key,
+                    )
 
-            logger.info(
-                "SandboxSessionService: creating sandbox for %s (provider=%s, timeout_s=%s)",
-                session_key,
-                provider.PROVIDER_NAME,
-                _create_timeout_s(),
-            )
-            handle = self._create_sandbox_with_timeout(provider, working_dir)
+        saved_state = _load_sandbox_state(conversation)
+        logger.info(
+            "SandboxSessionService: creating sandbox for %s (provider=%s, timeout_s=%s)",
+            session_key,
+            provider.PROVIDER_NAME,
+            _create_timeout_s(),
+        )
+        handle = self._create_sandbox_with_timeout(
+            provider,
+            working_dir,
+            session_key=session_key,
+            existing_sandbox_id=saved_state.sandbox_id if saved_state else None,
+        )
+
+        # If the provider created a fresh sandbox (resume failed), clear old skill state
+        if saved_state and saved_state.sandbox_id != handle.sandbox_id:
+            handle.active_skills = {}
+        elif saved_state:
+            handle.active_skills = dict(saved_state.active_skills)
+
+        _persist_sandbox_state(conversation, handle, db=db)
+
+        with self._lock:
             self._sessions[session_key] = _Entry(handle=handle, provider=provider)
-            logger.info(
-                "SandboxSessionService: created sandbox for %s (sandbox_id=%s, provider=%s)",
-                session_key,
-                handle.sandbox_id,
-                handle.provider_name,
-            )
-            return handle
+
+        logger.info(
+            "SandboxSessionService: created sandbox for %s (sandbox_id=%s, provider=%s)",
+            session_key,
+            handle.sandbox_id,
+            handle.provider_name,
+        )
+        return handle
 
     def _create_sandbox_with_timeout(
         self,
         provider: SandboxProvider,
         working_dir: str,
+        *,
+        session_key: str | None = None,
+        existing_sandbox_id: str | None = None,
     ) -> SandboxHandle:
         timeout_s = _create_timeout_s()
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sandbox_create")
-        future = executor.submit(provider.create_sandbox, working_dir=working_dir)
+        future = executor.submit(
+            provider.create_sandbox,
+            working_dir=working_dir,
+            session_key=session_key,
+            existing_sandbox_id=existing_sandbox_id,
+        )
         try:
             return future.result(timeout=timeout_s)
         except TimeoutError as exc:
@@ -166,12 +311,12 @@ class SandboxSessionService:
     def destroy_all_for_agent(self, agent_id: int) -> None:
         """Destroy all sandboxes that belong to *agent_id*.
 
-        Called when an agent is deleted, so no orphaned sandboxes leak.
-        Session keys follow the pattern ``"thread_{agent_id}_{session_id}"``.
+        Called when an agent is deleted.  Matches all key patterns:
+        ``conv_{agent_id}_*``, ``thread_{agent_id}_*``, and ``anon_{agent_id}``.
         """
-        prefix = f"thread_{agent_id}_"
+        prefixes = (f"conv_{agent_id}_", f"thread_{agent_id}_", f"anon_{agent_id}")
         with self._lock:
-            matching = [k for k in self._sessions if k.startswith(prefix)]
+            matching = [k for k in self._sessions if any(k.startswith(p) for p in prefixes)]
             entries = {k: self._sessions.pop(k) for k in matching}
 
         for key, entry in entries.items():
@@ -252,13 +397,18 @@ class SandboxSessionService:
             except Exception as exc:
                 logger.warning("SandboxSessionService: reaper error: %s", exc, exc_info=True)
 
-    def _reap_stale(self) -> None:
-        """Destroy sandbox sessions that have been idle for longer than SANDBOX_SESSION_TTL_H."""
+    def _reap_stale(self, *, db: Session | None = None) -> None:
+        """Destroy sandbox sessions that have been idle for longer than SANDBOX_SESSION_TTL_H.
+
+        When *db* is provided, also clears DB-persisted sandbox state for stale
+        conversations (useful after server restarts when the in-memory cache is empty).
+        """
         try:
             ttl_s = int(os.getenv("SANDBOX_SESSION_TTL_H", "2")) * 3600
         except (TypeError, ValueError):
             ttl_s = 2 * 3600
 
+        # --- Reap in-memory stale entries ---
         now = time.monotonic()
         with self._lock:
             stale_keys = [
@@ -266,9 +416,6 @@ class SandboxSessionService:
                 if (now - e.last_used) > ttl_s
             ]
             stale_entries = {k: self._sessions.pop(k) for k in stale_keys}
-
-        if not stale_entries:
-            return
 
         for key, entry in stale_entries.items():
             idle_s = now - entry.last_used
@@ -283,6 +430,60 @@ class SandboxSessionService:
                     "SandboxSessionService: error reaping sandbox (key=%s): %s",
                     key, exc, exc_info=True,
                 )
+
+        # --- NEW: reap DB-persisted stale sandbox state ---
+        if db is None:
+            return
+
+        try:
+            from models.conversation import Conversation  # type: ignore[import]
+        except Exception:
+            return
+
+        cutoff = datetime.utcnow() - timedelta(seconds=ttl_s)
+        try:
+            stale_conversations = (
+                db.query(Conversation)
+                .filter(Conversation.sandbox_session_id.isnot(None))
+                .all()
+            )
+        except Exception as exc:
+            logger.warning("SandboxSessionService: DB reap query failed: %s", exc)
+            return
+
+        for conv in stale_conversations:
+            state = _load_sandbox_state(conv)
+            if state is None:
+                # Orphaned sandbox_session_id with no state — just clear it
+                conv.sandbox_session_id = None
+                conv.sandbox_state = None
+                db.add(conv)
+                continue
+            try:
+                updated_at = datetime.fromisoformat(state.updated_at.rstrip("Z"))
+            except (ValueError, AttributeError):
+                updated_at = datetime.min
+            if updated_at < cutoff:
+                # Best-effort remote destroy
+                try:
+                    provider = _get_provider_by_name(state.provider)
+                    if provider:
+                        handle = SandboxHandle(
+                            sandbox_id=state.sandbox_id,
+                            working_dir="",
+                            provider_name=state.provider,
+                            session_key=state.session_key,
+                        )
+                        provider.destroy_sandbox(handle)
+                except Exception:
+                    pass  # Best effort; clear DB state regardless
+                conv.sandbox_session_id = None
+                conv.sandbox_state = None
+                db.add(conv)
+        try:
+            db.commit()
+        except Exception as exc:
+            logger.warning("SandboxSessionService: DB reap commit failed: %s", exc)
 
 
 # Module-level singleton used across the application

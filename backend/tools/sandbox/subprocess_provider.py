@@ -9,6 +9,17 @@ LLM-generated code from the backend process environment.
     ``SubprocessProvider`` must **not** be the default in any deployment that
     serves multiple tenants or exposes the Public API.  Set
     ``SANDBOX_DEFAULT_PROVIDER=opensandbox`` in production ``.env`` files.
+
+v2 changes (sandbox-v2-migration Phase 1):
+- Environment variables are filtered through ``_safe_env()`` to prevent
+  secret leaks into subprocess code (API keys, DB URIs, etc.).
+- ``run_code`` honours ``timeout`` and ``max_output_chars`` parameters.
+- Truncated output ends with ``[Output truncated at N characters]``.
+- ``on_stderr`` callback is forwarded in real time (streaming path).
+- ``ensure_skill`` records phaseful activation state in ``handle.active_skills``.
+- ``list_files`` returns workspace-relative paths; ``.skills/`` excluded.
+- ``create_sandbox`` accepts ``session_key`` and ``existing_sandbox_id``
+  (resume not supported — always creates a fresh sandbox).
 """
 
 from __future__ import annotations
@@ -19,15 +30,58 @@ import sys
 import tempfile
 import threading
 import uuid
+import warnings
 from collections.abc import Callable
+from datetime import timedelta
+from typing import Any
 
+import config as settings
 from utils.logger import get_logger
 from .provider import SandboxProvider, SandboxHandle
 
 logger = get_logger(__name__)
 
-MAX_OUTPUT_CHARS = 20_000
-DEFAULT_TIMEOUT = 30  # seconds
+# ---------------------------------------------------------------------------
+# Environment filtering — prevent backend secrets from leaking into code
+# ---------------------------------------------------------------------------
+
+BLOCKED_ENV_PATTERNS: tuple[str, ...] = (
+    "API_KEY",
+    "SECRET",
+    "DATABASE_URI",
+    "PASSWORD",
+    "TOKEN",
+    "PRIVATE_KEY",
+    "SQLALCHEMY",
+    "OPENAI",
+    "ANTHROPIC",
+    "MISTRAL",
+    "LANGSMITH",
+    "AICT_",
+)
+
+
+def _safe_env() -> dict[str, str]:
+    """Return a filtered copy of ``os.environ`` with secret-looking vars removed.
+
+    Any environment variable whose upper-cased name contains one of the
+    ``BLOCKED_ENV_PATTERNS`` substrings is excluded.  A comma-separated
+    explicit allowlist can be added via ``SANDBOX_SUBPROCESS_ALLOW_ENV``
+    (e.g. ``PYTHONPATH,HOME``) — those variables are always included.
+    """
+    allow_extra: set[str] = {
+        v.strip()
+        for v in os.getenv("SANDBOX_SUBPROCESS_ALLOW_ENV", "").split(",")
+        if v.strip()
+    }
+    result: dict[str, str] = {}
+    for k, v in os.environ.items():
+        if k in allow_extra:
+            result[k] = v
+            continue
+        if not any(p in k.upper() for p in BLOCKED_ENV_PATTERNS):
+            result[k] = v
+    return result
 
 
 class SubprocessProvider(SandboxProvider):
@@ -40,12 +94,25 @@ class SubprocessProvider(SandboxProvider):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def create_sandbox(self, working_dir: str, **kwargs) -> SandboxHandle:
+    def create_sandbox(
+        self,
+        working_dir: str,
+        *,
+        session_key: str | None = None,
+        existing_sandbox_id: str | None = None,
+    ) -> SandboxHandle:
+        """Create a new local sandbox (resume is not supported by this provider)."""
+        if existing_sandbox_id:
+            logger.debug(
+                "SubprocessProvider: resume not supported — ignoring existing_sandbox_id=%s",
+                existing_sandbox_id,
+            )
         os.makedirs(working_dir, exist_ok=True)
         return SandboxHandle(
             sandbox_id=str(uuid.uuid4()),
             working_dir=working_dir,
             provider_name=self.PROVIDER_NAME,
+            session_key=session_key,
         )
 
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
@@ -63,7 +130,10 @@ class SubprocessProvider(SandboxProvider):
         code: str,
         *,
         language: str = "python",
+        timeout: int | None = None,
+        max_output_chars: int | None = None,
         on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> str:
         """Execute *code* in a subprocess under *handle.working_dir*.
 
@@ -74,12 +144,24 @@ class SubprocessProvider(SandboxProvider):
         real time via a reader thread; stderr is still collected and appended
         to the final output string.  When *on_stdout* is ``None`` the
         implementation falls back to the simpler ``subprocess.run`` path.
+
+        Output is truncated to *max_output_chars* characters and a marker
+        appended when truncation occurs.
         """
         if language not in self.SUPPORTED_LANGUAGES:
             return (
                 f"[Error] Language '{language}' is not supported by SubprocessProvider. "
                 f"Supported languages: {self.SUPPORTED_LANGUAGES}"
             )
+
+        effective_timeout: int = (
+            timeout if timeout is not None else settings.SANDBOX_DEFAULT_TIMEOUT_S
+        )
+        effective_limit: int = (
+            max_output_chars
+            if max_output_chars is not None
+            else settings.SANDBOX_MAX_OUTPUT_CHARS
+        )
 
         working_dir = handle.working_dir
         script_path = None
@@ -95,16 +177,17 @@ class SubprocessProvider(SandboxProvider):
                 script_path = f.name
 
             logger.info("SubprocessProvider using interpreter: %s", sys.executable)
+            safe_env = _safe_env()
 
-            if on_stdout is None:
+            if on_stdout is None and on_stderr is None:
                 # Fast path: wait for completion and return all output at once.
                 result = subprocess.run(
                     [sys.executable, script_path],
                     capture_output=True,
                     text=True,
-                    timeout=DEFAULT_TIMEOUT,
+                    timeout=effective_timeout,
                     cwd=working_dir,
-                    env=os.environ.copy(),
+                    env=safe_env,
                 )
                 output = result.stdout or ""
                 if result.stderr:
@@ -119,14 +202,14 @@ class SubprocessProvider(SandboxProvider):
                     len(output),
                 )
             else:
-                # Streaming path: forward each stdout line via on_stdout callback.
+                # Streaming path: forward each stdout/stderr line via callbacks.
                 proc = subprocess.Popen(
                     [sys.executable, script_path],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
                     cwd=working_dir,
-                    env=os.environ.copy(),
+                    env=safe_env,
                 )
 
                 stdout_lines: list[str] = []
@@ -136,26 +219,34 @@ class SubprocessProvider(SandboxProvider):
                     assert proc.stdout is not None
                     for line in proc.stdout:
                         stdout_lines.append(line)
-                        try:
-                            on_stdout(line)
-                        except Exception:
-                            pass
+                        if on_stdout is not None:
+                            try:
+                                on_stdout(line)
+                            except Exception:
+                                pass
 
                 def _read_stderr() -> None:
                     assert proc.stderr is not None
                     for line in proc.stderr:
                         stderr_lines.append(line)
+                        if on_stderr is not None:
+                            try:
+                                on_stderr(line)
+                            except Exception:
+                                pass
 
                 t_out = threading.Thread(target=_read_stdout, daemon=True)
                 t_err = threading.Thread(target=_read_stderr, daemon=True)
                 t_out.start()
                 t_err.start()
-                timed_out = not t_out.join(timeout=DEFAULT_TIMEOUT) or False
+                timed_out = not t_out.join(timeout=effective_timeout) or False
                 if timed_out or t_out.is_alive():
                     proc.kill()
                     t_out.join()
                     t_err.join()
-                    return f"[Error] Execution timed out after {DEFAULT_TIMEOUT} seconds."
+                    return (
+                        f"[Error] Execution timed out after {effective_timeout} seconds."
+                    )
                 t_err.join(timeout=2)
                 proc.wait()
 
@@ -173,7 +264,7 @@ class SubprocessProvider(SandboxProvider):
                 )
 
         except subprocess.TimeoutExpired:
-            output = f"[Error] Execution timed out after {DEFAULT_TIMEOUT} seconds."
+            output = f"[Error] Execution timed out after {effective_timeout} seconds."
             logger.warning("SubprocessProvider timed out in %s", working_dir)
         except Exception as exc:
             output = f"[Error] Failed to execute code: {exc}"
@@ -187,7 +278,12 @@ class SubprocessProvider(SandboxProvider):
                 except OSError:
                     pass
 
-        return output[:MAX_OUTPUT_CHARS]
+        if len(output) > effective_limit:
+            output = (
+                output[:effective_limit]
+                + f"\n[Output truncated at {effective_limit} characters]"
+            )
+        return output
 
     # ------------------------------------------------------------------
     # File I/O
@@ -195,6 +291,7 @@ class SubprocessProvider(SandboxProvider):
 
     def write_file(self, handle: SandboxHandle, filename: str, content: bytes) -> None:
         path = os.path.join(handle.working_dir, filename)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(content)
 
@@ -204,28 +301,54 @@ class SubprocessProvider(SandboxProvider):
             return f.read()
 
     def list_files(self, handle: SandboxHandle) -> list[str]:
-        return os.listdir(handle.working_dir)
+        """Return workspace-relative paths of all files; ``.skills/`` excluded."""
+        working_dir = handle.working_dir
+        result: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(working_dir):
+            # Exclude .skills directory in-place so os.walk does not descend
+            dirnames[:] = [d for d in dirnames if d != ".skills"]
+            for fname in filenames:
+                full_path = os.path.join(dirpath, fname)
+                rel = os.path.relpath(full_path, working_dir)
+                result.append(rel)
+        return result
 
     # ------------------------------------------------------------------
-    # Skill activation (IT-3)
+    # Skill activation
     # ------------------------------------------------------------------
 
-    def ensure_skill(self, handle: SandboxHandle, skill) -> None:
-        """Record skill as active.
+    def ensure_skill(
+        self, handle: SandboxHandle, skill: Any, *, retry: bool = False
+    ) -> dict[str, Any]:
+        """Record a Skill as active with phaseful status.
 
-        SubprocessProvider cannot isolate dependencies from the backend
-        environment, so this method only records activation state.  Real
-        dependency installation is the responsibility of the operator who
-        sets up the development environment.
+        ``SubprocessProvider`` cannot isolate dependencies from the backend
+        environment, so file/bootstrap phases are skipped.  Real dependency
+        installation is the responsibility of the operator who sets up the
+        development environment.
         """
-        active = handle.metadata.setdefault("active_skills", {})
-        if skill.name not in active:
-            active[skill.name] = {"provider": self.PROVIDER_NAME}
-            logger.info(
-                "SubprocessProvider: skill '%s' marked active (no isolation).",
-                skill.name,
-            )
+        existing = handle.active_skills.get(skill.name)
+        if (
+            existing is not None
+            and existing.get("sandbox_id") == handle.sandbox_id
+            and not retry
+        ):
+            return existing
 
-    def list_active_skills(self, handle: SandboxHandle) -> list[str]:
-        """Return names of skills recorded as active in this handle."""
-        return sorted(handle.metadata.get("active_skills", {}).keys())
+        state: dict[str, Any] = {
+            "skill_id": getattr(skill, "skill_id", None),
+            "skill_name": skill.name,
+            "sandbox_id": handle.sandbox_id,
+            "phases": {"files": "skipped", "bootstrap": "skipped"},
+            "provider": self.PROVIDER_NAME,
+        }
+        handle.active_skills[skill.name] = state
+        logger.info(
+            "SubprocessProvider: skill '%s' recorded as active (no isolation).",
+            skill.name,
+        )
+        return state
+
+    def list_active_skills(self, handle: SandboxHandle) -> dict[str, dict[str, Any]]:
+        """Return the typed Skill activation state from ``handle.active_skills``."""
+        return dict(handle.active_skills)

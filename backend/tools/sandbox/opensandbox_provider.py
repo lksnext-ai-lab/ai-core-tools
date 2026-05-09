@@ -45,16 +45,28 @@ Workspace convention
 --------------------
 All user-facing files live under ``/workspace`` inside the container.
 ``write_file`` and ``read_file`` accept *bare filenames* and prepend the
-workspace prefix automatically.  ``list_files`` returns bare filenames only.
+workspace prefix automatically.  ``list_files`` returns workspace-relative
+paths (e.g. ``report.xlsx``, ``scripts/setup.py``).  The ``.skills/``
+directory is excluded from ``list_files`` results.
+
+v2 changes (sandbox-v2-migration Phase 1):
+- ``run_code`` honours ``timeout``, ``max_output_chars``, and ``on_stderr``.
+- Truncated output ends with ``[Output truncated at N characters]``.
+- ``ensure_skill`` stub updated — full implementation in Phase 3.
+- ``list_files`` returns workspace-relative paths; ``.skills/`` excluded.
+- ``create_sandbox`` accepts ``session_key`` and ``existing_sandbox_id``
+  (resume implemented in Phase 3 — currently always creates a new sandbox).
 """
 
 from __future__ import annotations
 
 import os
+import posixpath
 from collections.abc import Callable
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import config as settings
 from utils.logger import get_logger
 from .provider import SandboxProvider, SandboxHandle
 
@@ -229,17 +241,30 @@ class OpenSandboxProvider(SandboxProvider):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def create_sandbox(self, working_dir: str, **kwargs) -> SandboxHandle:
+    def create_sandbox(
+        self,
+        working_dir: str,
+        *,
+        session_key: str | None = None,
+        existing_sandbox_id: str | None = None,
+    ) -> SandboxHandle:
         """Create a new isolated sandbox container and persistent execution contexts.
+
+        *existing_sandbox_id* and *session_key* are accepted for API compatibility
+        with the v2 provider contract.  Full resume support is implemented in
+        Phase 3 of the sandbox-v2-migration plan.  For now, this method always
+        creates a new sandbox (existing_sandbox_id is ignored).
 
         One context is created per language listed in
         :meth:`get_supported_languages`.  Languages not recognised by the SDK's
         ``SupportedLanguage`` enum are skipped with a warning.
 
         Args:
-            working_dir: Host-side working directory.  Not used for file I/O by
+            working_dir:         Host-side working directory.  Not used for file I/O by
                 this provider (the container has its own ``/workspace``), but it
                 is stored on the handle for compatibility with other layers.
+            session_key:         Session key stored on the returned handle.
+            existing_sandbox_id: Ignored in Phase 1; resume implemented in Phase 3.
 
         Returns:
             A populated :class:`~tools.sandbox.provider.SandboxHandle`.
@@ -339,6 +364,7 @@ class OpenSandboxProvider(SandboxProvider):
             sandbox_id=sandbox.id,
             working_dir=working_dir,
             provider_name=self.PROVIDER_NAME,
+            session_key=session_key,
             metadata={
                 _META_SANDBOX: sandbox,
                 _META_INTERPRETER: interpreter,
@@ -388,7 +414,10 @@ class OpenSandboxProvider(SandboxProvider):
         code: str,
         *,
         language: str = "python",
+        timeout: int | None = None,
+        max_output_chars: int | None = None,
         on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> str:
         """Execute *code* inside the sandbox and return combined stdout/result text.
 
@@ -396,16 +425,29 @@ class OpenSandboxProvider(SandboxProvider):
         installed packages survive for the sandbox lifetime.
 
         Args:
-            handle:    Active sandbox handle.
-            code:      Source code to execute.
-            language:  Language identifier (must be one of the keys created at
-                       sandbox initialisation).
-            on_stdout: Optional callback invoked with each stdout line in real
-                       time.  Uses ``ExecutionHandlersSync`` under the hood.
+            handle:           Active sandbox handle.
+            code:             Source code to execute.
+            language:         Language identifier (must be one of the keys created at
+                              sandbox initialisation).
+            timeout:          Per-execution timeout in seconds.  Falls back to
+                              ``settings.SANDBOX_DEFAULT_TIMEOUT_S`` when ``None``.
+            max_output_chars: Maximum characters to return.  Falls back to
+                              ``settings.SANDBOX_MAX_OUTPUT_CHARS`` when ``None``.
+                              Truncated output ends with a marker string.
+            on_stdout:        Optional callback invoked with each stdout line in real
+                              time.  Uses ``ExecutionHandlersSync`` under the hood.
+            on_stderr:        Optional callback invoked with each stderr line after
+                              execution completes.
 
         Returns:
             Truncated combined output string (stdout + results + stderr on error).
         """
+        effective_limit: int = (
+            max_output_chars
+            if max_output_chars is not None
+            else settings.SANDBOX_MAX_OUTPUT_CHARS
+        )
+
         interpreter = handle.metadata.get(_META_INTERPRETER)
         contexts: dict = handle.metadata.get(_META_CONTEXTS) or {}
         context = contexts.get(language)
@@ -446,7 +488,7 @@ class OpenSandboxProvider(SandboxProvider):
                 exc,
                 exc_info=True,
             )
-            return f"[Error] Code execution failed: {exc}"[:MAX_OUTPUT_CHARS]
+            return f"[Error] Code execution failed: {exc}"[:effective_limit]
 
         # Collect output: use the ``text`` property which combines stdout +
         # result text, then append stderr/error if present.
@@ -471,6 +513,14 @@ class OpenSandboxProvider(SandboxProvider):
             )
             if stderr_text.strip():
                 output_parts.append(f"\n[stderr]\n{stderr_text}")
+                # Forward stderr lines to callback if provided.
+                if on_stderr is not None:
+                    for line in stderr_lines:
+                        text: str = line.text if hasattr(line, "text") else str(line)
+                        try:
+                            on_stderr(text)
+                        except Exception:
+                            pass
 
         output = "\n".join(output_parts) if output_parts else ""
 
@@ -481,7 +531,12 @@ class OpenSandboxProvider(SandboxProvider):
             len(output),
         )
 
-        return output[:MAX_OUTPUT_CHARS]
+        if len(output) > effective_limit:
+            output = (
+                output[:effective_limit]
+                + f"\n[Output truncated at {effective_limit} characters]"
+            )
+        return output
 
     # ------------------------------------------------------------------
     # File I/O
@@ -521,9 +576,11 @@ class OpenSandboxProvider(SandboxProvider):
         return data
 
     def list_files(self, handle: SandboxHandle) -> list[str]:
-        """Return bare filenames of all files under ``/workspace`` in the sandbox.
+        """Return workspace-relative paths of all files under ``/workspace``.
 
-        Directories are excluded; only files are returned.
+        Paths are relative to ``/workspace`` (e.g. ``report.xlsx``,
+        ``scripts/setup.py``).  Directories and the ``.skills/`` tree are
+        excluded from the result.
         """
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:
@@ -550,20 +607,51 @@ class OpenSandboxProvider(SandboxProvider):
             )
             return []
 
-        filenames: list[str] = []
+        # _SANDBOX_WORKSPACE is "/workspace"; ensure it ends with "/" for prefix strip.
+        workspace_prefix = _SANDBOX_WORKSPACE.rstrip("/") + "/"
+        result: list[str] = []
         for entry in entries:
-            # Include only regular files (size > 0 or size is None — directories
-            # typically have size == 0, but we check by path not having a trailing /)
-            path = entry.path
-            if path and not path.endswith("/"):
-                # Return bare filename relative to workspace
-                basename = os.path.basename(path)
-                if basename:
-                    filenames.append(basename)
+            path: str = entry.path or ""
+            # Directories have trailing "/" — skip them.
+            if not path or path.endswith("/"):
+                continue
+            # Strip the /workspace/ prefix to get a workspace-relative path.
+            if path.startswith(workspace_prefix):
+                rel = path[len(workspace_prefix):]
+            else:
+                rel = posixpath.basename(path)
+            # Exclude .skills/ subtree.
+            if rel.startswith(".skills/") or rel == ".skills":
+                continue
+            if rel:
+                result.append(rel)
 
         logger.debug(
             "OpenSandboxProvider.list_files: found %d files (sandbox=%s)",
-            len(filenames),
+            len(result),
             handle.sandbox_id,
         )
-        return filenames
+        return result
+
+    # ------------------------------------------------------------------
+    # Skill activation
+    # ------------------------------------------------------------------
+
+    def ensure_skill(
+        self, handle: SandboxHandle, skill: Any, *, retry: bool = False
+    ) -> dict[str, Any]:
+        """Not yet implemented — full implementation in Phase 3.
+
+        Raises:
+            NotImplementedError: Always.  See Phase 3 of the sandbox-v2-migration
+                plan for the full implementation (file copy + bootstrap).
+        """
+        raise NotImplementedError(
+            "OpenSandboxProvider.ensure_skill is not yet implemented. "
+            "See Phase 3 of the sandbox-v2-migration plan."
+        )
+
+    def list_active_skills(self, handle: SandboxHandle) -> dict[str, dict[str, Any]]:
+        """Return the typed Skill activation state from ``handle.active_skills``."""
+        return dict(handle.active_skills)
+

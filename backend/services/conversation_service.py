@@ -306,9 +306,12 @@ class ConversationService:
         
         # Destroy any active sandbox for this conversation (sandbox key: conv_{agent_id}_{conversation_id})
         try:
-            from services.sandbox_session_service import sandbox_session_service
-            sandbox_key = f"conv_{conversation.agent_id}_{conversation_id}"
+            from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
+            sandbox_key = SandboxSessionService.session_key(conversation.agent_id, conversation_id)
             sandbox_session_service.destroy(sandbox_key)
+            # Clear sandbox DB state before deletion
+            conversation.sandbox_session_id = None
+            conversation.sandbox_state = None
         except Exception as e:
             logger.error(f"Error destroying sandbox on conversation delete: {e}")
 
