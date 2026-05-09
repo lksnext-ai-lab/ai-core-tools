@@ -24,7 +24,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -179,6 +179,7 @@ class SandboxSessionService:
         *,
         conversation: "Conversation | None" = None,
         db: Session | None = None,
+        skills_loader: "Callable[[list[int]], list[Any]] | None" = None,
     ) -> SandboxHandle:
         """Return an existing sandbox handle or create one.
 
@@ -187,12 +188,20 @@ class SandboxSessionService:
         (passing ``existing_sandbox_id`` so the provider can attempt a resume),
         persist state to DB, and cache the handle.
 
+        When *skills_loader* is provided and the provider had to create a fresh
+        sandbox (resume failed — new sandbox_id differs from saved one), the
+        loader is called to re-activate all skills that were previously active.
+
         Args:
-            session_key:   Canonical key, typically from ``session_key()``.
-            provider:      Resolved ``SandboxProvider`` instance.
-            working_dir:   Filesystem path the provider may use.
-            conversation:  ORM ``Conversation`` object for DB persistence.
-            db:            SQLAlchemy session.  Required for DB persistence.
+            session_key:    Canonical key, typically from ``session_key()``.
+            provider:       Resolved ``SandboxProvider`` instance.
+            working_dir:    Filesystem path the provider may use.
+            conversation:   ORM ``Conversation`` object for DB persistence.
+            db:             SQLAlchemy session.  Required for DB persistence.
+            skills_loader:  Optional callable that accepts a list of skill IDs and
+                            returns a list of :class:`~models.skill.Skill` ORM objects.
+                            Called when a sandbox is re-created after expiry so that
+                            previously-active skills are re-installed.
 
         Returns:
             A live ``SandboxHandle``.
@@ -230,9 +239,29 @@ class SandboxSessionService:
             existing_sandbox_id=saved_state.sandbox_id if saved_state else None,
         )
 
-        # If the provider created a fresh sandbox (resume failed), clear old skill state
-        if saved_state and saved_state.sandbox_id != handle.sandbox_id:
+        is_fresh_sandbox = saved_state and saved_state.sandbox_id != handle.sandbox_id
+        if is_fresh_sandbox:
             handle.active_skills = {}
+            # Phase 3: re-activate previously-active skills if a loader was provided.
+            if skills_loader is not None and saved_state.active_skills:
+                skill_ids = list(saved_state.active_skills.keys())
+                try:
+                    skills = skills_loader(skill_ids)
+                    for skill in skills:
+                        try:
+                            provider.ensure_skill(handle, skill)
+                        except Exception as exc:
+                            logger.warning(
+                                "SandboxSessionService: failed to re-activate skill '%s' "
+                                "after sandbox recreation: %s",
+                                skill.name,
+                                exc,
+                            )
+                except Exception as exc:
+                    logger.warning(
+                        "SandboxSessionService: skills_loader raised during skill reload: %s",
+                        exc,
+                    )
         elif saved_state:
             handle.active_skills = dict(saved_state.active_skills)
 
@@ -281,6 +310,26 @@ class SandboxSessionService:
             ) from exc
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
+
+    def evict(self, session_key: str) -> None:
+        """Remove the cached entry for *session_key* WITHOUT calling destroy_sandbox.
+
+        Use this after a :class:`~tools.sandbox.provider.SandboxExpiredError` is
+        caught — the container is already gone so there is nothing to kill.  The
+        next call to :meth:`get_or_create` will then create a fresh sandbox.
+
+        Safe to call when no entry exists for the key.
+        """
+        with self._lock:
+            entry = self._sessions.pop(session_key, None)
+
+        if entry is not None:
+            logger.info(
+                "SandboxSessionService.evict: removed stale cache entry for %s "
+                "(sandbox_id=%s)",
+                session_key,
+                entry.handle.sandbox_id,
+            )
 
     def destroy(self, session_key: str) -> None:
         """Destroy the sandbox associated with *session_key* and remove it.

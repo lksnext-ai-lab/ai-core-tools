@@ -88,6 +88,29 @@ class SkillRepository:
 
         return {skill.skill_id for skill in valid_skills}
 
+    @staticmethod
+    def get_by_ids(db: Session, app_id: int, skill_ids: list[int]) -> List[Skill]:
+        """Return Skill ORM objects for the given *skill_ids* visible to *app_id*.
+
+        Only skills owned by the app or global builtins (app_id=NULL) are
+        returned.  IDs that do not exist or are not visible are silently skipped.
+
+        Args:
+            db:        Database session.
+            app_id:    App id used to filter owned/builtin skills.
+            skill_ids: List of skill primary-key ids to load.
+
+        Returns:
+            List of matching :class:`~models.skill.Skill` instances with their
+            ``files`` relationship eagerly available (lazy loads still work).
+        """
+        if not skill_ids:
+            return []
+        return db.query(Skill).filter(
+            Skill.skill_id.in_(skill_ids),
+            or_(Skill.app_id == app_id, Skill.app_id.is_(None)),
+        ).all()
+
     # ------------------------------------------------------------------
     # SkillFile operations (IT-3)
     # ------------------------------------------------------------------

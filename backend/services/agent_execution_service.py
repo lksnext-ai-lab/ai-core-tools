@@ -261,15 +261,28 @@ class AgentExecutionService:
         if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
             from tools.sandbox.factory import resolve_provider
             from services.sandbox_session_service import sandbox_session_service as _sss, SandboxSessionService
+            from repositories.skill_repository import SkillRepository as _SkillRepo
 
             sandbox_session_key = SandboxSessionService.session_key(agent_id, effective_conv_id)
             sandbox_provider = resolve_provider(fresh_agent)
+
+            # Phase 3: skills_loader to re-activate skills after sandbox recreation
+            _skill_ids = [
+                assoc.skill_id
+                for assoc in getattr(fresh_agent, "skill_associations", [])
+            ]
+            def _make_skills_loader(_db, _app_id, _ids):
+                def _loader(ids):
+                    return _SkillRepo.get_by_ids(_db, _app_id, ids)
+                return _loader
+
             sandbox_handle = _sss.get_or_create(
                 sandbox_session_key,
                 sandbox_provider,
                 working_dir,
                 conversation=conversation,
                 db=db,
+                skills_loader=_make_skills_loader(db, fresh_agent.app_id, _skill_ids) if _skill_ids else None,
             )
 
             # Only remote (non-subprocess) providers need explicit push/pull.

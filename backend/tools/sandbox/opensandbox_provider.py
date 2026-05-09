@@ -68,12 +68,36 @@ from typing import TYPE_CHECKING, Any
 
 import config as settings
 from utils.logger import get_logger
-from .provider import SandboxProvider, SandboxHandle
+from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
 
 if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Module-level SDK import — makes SandboxSync a patchable name for tests.
+# Falls back to None when the opensandbox package is absent so that the module
+# can still be imported (methods raise RuntimeError on actual use).
+# ---------------------------------------------------------------------------
+try:
+    from opensandbox.sync.sandbox import SandboxSync  # type: ignore[import]
+    from opensandbox.exceptions import (  # type: ignore[import]
+        SandboxApiException,
+        SandboxUnhealthyException,
+        SandboxReadyTimeoutException,
+    )
+    _SDK_EXPIRY_EXCEPTIONS: tuple = (
+        SandboxApiException,
+        SandboxUnhealthyException,
+        SandboxReadyTimeoutException,
+    )
+except ImportError:
+    SandboxSync = None  # type: ignore[assignment,misc]
+    SandboxApiException = None  # type: ignore[assignment]
+    SandboxUnhealthyException = None  # type: ignore[assignment]
+    SandboxReadyTimeoutException = None  # type: ignore[assignment]
+    _SDK_EXPIRY_EXCEPTIONS = ()
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -205,6 +229,55 @@ def _sandbox_image() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Skill activation helpers (Phase 3 step 3.7)
+# ---------------------------------------------------------------------------
+
+
+def _healthy_for_sandbox(state: dict | None, sandbox_id: str) -> bool:
+    """Return True if *state* is healthy for *sandbox_id*.
+
+    Both phases must be ``"ok"`` or ``"skipped"`` and the state must have been
+    recorded for the same sandbox id.
+    """
+    if not state:
+        return False
+    if state.get("sandbox_id") != sandbox_id:
+        return False
+    phases = state.get("phases", {})
+    files_ok = phases.get("files") == "ok"
+    bootstrap_ok = phases.get("bootstrap") in ("ok", "skipped")
+    return files_ok and bootstrap_ok
+
+
+def _write_skill_files(
+    provider: "OpenSandboxProvider",
+    handle: SandboxHandle,
+    skill: Any,
+    files_dir: str,
+) -> None:
+    """Write all SkillFile records for *skill* into the sandbox under *files_dir*."""
+    for skill_file in skill.files:
+        dest_path = f"{files_dir}/{skill_file.path}"
+        content = skill_file.content_bytes or (
+            skill_file.content_text.encode("utf-8") if skill_file.content_text else b""
+        )
+        provider.write_file(handle, dest_path, content)
+
+
+def _read_skill_file_text(skill: Any, relative_path: str) -> str:
+    """Return the text content of one SkillFile by its package-root-relative path."""
+    for sf in skill.files:
+        if sf.path == relative_path:
+            if sf.content_text is not None:
+                return sf.content_text
+            if sf.content_bytes is not None:
+                return sf.content_bytes.decode("utf-8")
+    raise FileNotFoundError(
+        f"Bootstrap script '{relative_path}' not found in Skill '{skill.name}' package."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Provider implementation
 # ---------------------------------------------------------------------------
 
@@ -233,84 +306,68 @@ class OpenSandboxProvider(SandboxProvider):
 
     PROVIDER_NAME = "opensandbox"
 
+    def __init__(self) -> None:
+        """Detect SDK resume/renew capability and store flags.
+
+        Warnings are emitted at construction time when the installed SDK lacks
+        ``SandboxSync.resume`` or ``SandboxSync.renew`` (Phase 3 step 3.1).
+        """
+        if SandboxSync is not None:
+            self._can_resume = hasattr(SandboxSync, "resume")
+            self._can_renew = hasattr(SandboxSync, "renew")
+            if not self._can_resume:
+                logger.warning(
+                    "OpenSandbox SDK does not support SandboxSync.resume — "
+                    "sandbox resume is disabled. All sessions will create new sandboxes."
+                )
+            if not self._can_renew:
+                logger.warning(
+                    "OpenSandbox SDK does not support sandbox.renew — "
+                    "sandbox TTL extension is disabled."
+                )
+        else:
+            self._can_resume = False
+            self._can_renew = False
+
+        self._capabilities = {"resume": self._can_resume, "renew": self._can_renew}
+        # Expiry exception tuple; tests may patch this attribute directly.
+        self._sdk_expiry_exceptions = _SDK_EXPIRY_EXCEPTIONS
+        # Connection config cached after first use (tests may inject directly).
+        self._connection_config = None
+
     def get_supported_languages(self) -> list[str]:
         """Return the language identifiers configured via the environment."""
         return _supported_languages()
 
     # ------------------------------------------------------------------
-    # Lifecycle
+    # Private helpers
     # ------------------------------------------------------------------
 
-    def create_sandbox(
+    def _get_config(self):
+        """Return (and cache) the connection config."""
+        if self._connection_config is None:
+            self._connection_config = _get_connection_config()
+        return self._connection_config
+
+    def _setup_sandbox_handle(
         self,
+        sandbox: Any,
         working_dir: str,
-        *,
-        session_key: str | None = None,
-        existing_sandbox_id: str | None = None,
+        session_key: str | None,
     ) -> SandboxHandle:
-        """Create a new isolated sandbox container and persistent execution contexts.
-
-        *existing_sandbox_id* and *session_key* are accepted for API compatibility
-        with the v2 provider contract.  Full resume support is implemented in
-        Phase 3 of the sandbox-v2-migration plan.  For now, this method always
-        creates a new sandbox (existing_sandbox_id is ignored).
-
-        One context is created per language listed in
-        :meth:`get_supported_languages`.  Languages not recognised by the SDK's
-        ``SupportedLanguage`` enum are skipped with a warning.
-
-        Args:
-            working_dir:         Host-side working directory.  Not used for file I/O by
-                this provider (the container has its own ``/workspace``), but it
-                is stored on the handle for compatibility with other layers.
-            session_key:         Session key stored on the returned handle.
-            existing_sandbox_id: Ignored in Phase 1; resume implemented in Phase 3.
-
-        Returns:
-            A populated :class:`~tools.sandbox.provider.SandboxHandle`.
-
-        Raises:
-            RuntimeError: If the ``opensandbox`` package is not installed.
-            opensandbox.exceptions.SandboxException: If the server is unreachable
-                or sandbox creation fails.
-        """
+        """Build interpreter + contexts for an SDK sandbox object and return a handle."""
         try:
-            from opensandbox.sync.sandbox import SandboxSync
-            from code_interpreter.sync.code_interpreter import CodeInterpreterSync
-            from code_interpreter.models.code import SupportedLanguage
+            from code_interpreter.sync.code_interpreter import CodeInterpreterSync  # type: ignore[import]
+            from code_interpreter.models.code import SupportedLanguage  # type: ignore[import]
         except ImportError as exc:
             raise RuntimeError(
-                "OpenSandboxProvider requires 'opensandbox' and "
-                "'opensandbox-code-interpreter' packages.  "
-                "Install them with: "
-                "pip install opensandbox>=0.1.7 opensandbox-code-interpreter>=0.1.2"
+                "OpenSandboxProvider requires 'opensandbox-code-interpreter'.  "
+                "Install with: pip install opensandbox-code-interpreter>=0.1.2"
             ) from exc
-
-        config = _get_connection_config()
-        image = _sandbox_image()
-        ttl = _session_ttl()
-
-        languages = self.get_supported_languages()
-        logger.info(
-            "OpenSandboxProvider: creating sandbox (image=%s, ttl=%s, languages=%s)",
-            image,
-            ttl,
-            languages,
-        )
-
-        sandbox = SandboxSync.create(
-            image,
-            timeout=ttl,
-            resource={"cpu": "1", "memory": "2Gi"},
-            env={"PYTHONPATH": _SANDBOX_WORKSPACE},
-            connection_config=config,
-        )
-
-        logger.info("OpenSandboxProvider: sandbox %s created, building interpreter", sandbox.id)
 
         interpreter = CodeInterpreterSync.create(sandbox=sandbox)
 
-        # Create one execution context per configured language.
+        languages = self.get_supported_languages()
         contexts: dict[str, object] = {}
         for lang in languages:
             enum_name = _LANGUAGE_ENUM_MAP.get(lang)
@@ -347,7 +404,6 @@ class OpenSandboxProvider(SandboxProvider):
                 )
 
         if not contexts:
-            # Ensure at least a Python context so the sandbox is usable.
             logger.warning(
                 "OpenSandboxProvider: no language contexts created; falling back to Python"
             )
@@ -359,7 +415,6 @@ class OpenSandboxProvider(SandboxProvider):
             sandbox.id,
             list(contexts.keys()),
         )
-
         return SandboxHandle(
             sandbox_id=sandbox.id,
             working_dir=working_dir,
@@ -369,8 +424,129 @@ class OpenSandboxProvider(SandboxProvider):
                 _META_SANDBOX: sandbox,
                 _META_INTERPRETER: interpreter,
                 _META_CONTEXTS: contexts,
+                "provider_capabilities": self._capabilities,
             },
         )
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def create_sandbox(
+        self,
+        working_dir: str,
+        *,
+        session_key: str | None = None,
+        existing_sandbox_id: str | None = None,
+    ) -> SandboxHandle:
+        """Create or resume an isolated sandbox container.
+
+        When *existing_sandbox_id* is provided and the SDK supports
+        ``SandboxSync.resume``, the provider attempts to reconnect to the
+        existing container.  On any expiry or SDK error the method falls back
+        to creating a fresh sandbox (Phase 3 step 3.2).
+
+        Args:
+            working_dir:         Host-side working directory stored on the handle.
+            session_key:         Session key stored on the returned handle.
+            existing_sandbox_id: Provider sandbox id to attempt resuming.
+
+        Returns:
+            A populated :class:`~tools.sandbox.provider.SandboxHandle`.
+
+        Raises:
+            RuntimeError: If the ``opensandbox`` package is not installed.
+            SandboxExpiredError: If SDK raises an unrecognised non-expiry error
+                during resume (signals the session service to create fresh).
+        """
+        if SandboxSync is None:
+            raise RuntimeError(
+                "OpenSandboxProvider requires 'opensandbox' and "
+                "'opensandbox-code-interpreter' packages.  "
+                "Install them with: "
+                "pip install opensandbox>=0.1.7 opensandbox-code-interpreter>=0.1.2"
+            )
+
+        config = self._get_config()
+        image = _sandbox_image()
+        ttl = _session_ttl()
+
+        sandbox = None
+
+        # -- Phase 3: attempt resume when possible --
+        if existing_sandbox_id and self._can_resume:
+            try:
+                sandbox = SandboxSync.resume(
+                    existing_sandbox_id,
+                    connection_config=config,
+                )
+                logger.info(
+                    "OpenSandboxProvider: resumed sandbox %s", existing_sandbox_id
+                )
+            except Exception as exc:
+                if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                    logger.info(
+                        "OpenSandboxProvider: sandbox %s expired or unreachable; creating fresh.",
+                        existing_sandbox_id,
+                    )
+                    sandbox = None
+                else:
+                    raise SandboxExpiredError(
+                        f"Unexpected error resuming sandbox {existing_sandbox_id}: {exc}"
+                    ) from exc
+
+        if sandbox is None:
+            logger.info(
+                "OpenSandboxProvider: creating new sandbox (image=%s, ttl=%s, languages=%s)",
+                image,
+                ttl,
+                self.get_supported_languages(),
+            )
+            sandbox = SandboxSync.create(
+                image,
+                timeout=ttl,
+                resource={"cpu": "1", "memory": "2Gi"},
+                env={"PYTHONPATH": _SANDBOX_WORKSPACE},
+                connection_config=config,
+            )
+            logger.info("OpenSandboxProvider: sandbox %s created", sandbox.id)
+
+        return self._setup_sandbox_handle(sandbox, working_dir, session_key)
+
+    def renew_sandbox(self, handle: SandboxHandle, duration: timedelta) -> None:
+        """Extend the remote sandbox TTL by *duration* (Phase 3 step 3.3).
+
+        No-op when the SDK lacks the ``renew`` method.  Raises
+        :class:`~tools.sandbox.provider.SandboxExpiredError` when the SDK
+        signals the sandbox is gone.
+
+        Args:
+            handle:   Active sandbox handle.
+            duration: How much TTL to add.
+
+        Raises:
+            SandboxExpiredError: When the SDK indicates the sandbox is gone,
+                or when the handle has no live SDK object (e.g. after a server
+                restart — the session service must recreate the sandbox).
+        """
+        if not self._can_renew:
+            return
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                "Sandbox object not in handle metadata — "
+                "sandbox must be recreated (handle reconstructed after restart?)."
+            )
+        try:
+            sandbox.renew(timeout=duration)
+        except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during renew: {exc}"
+                ) from exc
+            raise SandboxExpiredError(
+                f"Sandbox {handle.sandbox_id} renew failed: {exc}"
+            ) from exc
 
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
         """Kill the remote container and release local HTTP resources."""
@@ -482,6 +658,12 @@ class OpenSandboxProvider(SandboxProvider):
         try:
             execution = interpreter.codes.run(code, context=context, handlers=handlers)
         except Exception as exc:
+            # Phase 3: map SDK expiry signals to SandboxExpiredError so the session
+            # service can evict the stale cache entry and recreate on the next turn.
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during run_code: {exc}"
+                ) from exc
             logger.error(
                 "OpenSandboxProvider.run_code error (sandbox_id=%s): %s",
                 handle.sandbox_id,
@@ -546,11 +728,18 @@ class OpenSandboxProvider(SandboxProvider):
         """Write *content* bytes to ``/workspace/{filename}`` in the sandbox."""
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:
-            raise RuntimeError(
-                f"OpenSandboxProvider: no sandbox for handle {handle.sandbox_id}"
+            raise SandboxExpiredError(
+                f"OpenSandboxProvider: no sandbox object for handle {handle.sandbox_id}"
             )
         remote_path = _workspace_path(filename)
-        sandbox.files.write_file(remote_path, content)
+        try:
+            sandbox.files.write_file(remote_path, content)
+        except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during write_file: {exc}"
+                ) from exc
+            raise
         logger.debug(
             "OpenSandboxProvider.write_file: wrote %d bytes to %s (sandbox=%s)",
             len(content),
@@ -562,11 +751,18 @@ class OpenSandboxProvider(SandboxProvider):
         """Return raw bytes of ``/workspace/{filename}`` from the sandbox."""
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:
-            raise RuntimeError(
-                f"OpenSandboxProvider: no sandbox for handle {handle.sandbox_id}"
+            raise SandboxExpiredError(
+                f"OpenSandboxProvider: no sandbox object for handle {handle.sandbox_id}"
             )
         remote_path = _workspace_path(filename)
-        data = sandbox.files.read_bytes(remote_path)
+        try:
+            data = sandbox.files.read_bytes(remote_path)
+        except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during read_file: {exc}"
+                ) from exc
+            raise
         logger.debug(
             "OpenSandboxProvider.read_file: read %d bytes from %s (sandbox=%s)",
             len(data),
@@ -600,6 +796,10 @@ class OpenSandboxProvider(SandboxProvider):
                 SearchEntry(path=_SANDBOX_WORKSPACE, pattern="*")
             )
         except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during list_files: {exc}"
+                ) from exc
             logger.warning(
                 "OpenSandboxProvider.list_files: search failed (sandbox=%s): %s",
                 handle.sandbox_id,
@@ -637,19 +837,79 @@ class OpenSandboxProvider(SandboxProvider):
     # Skill activation
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Skill activation (Phase 3 step 3.7)
+    # ------------------------------------------------------------------
+
     def ensure_skill(
         self, handle: SandboxHandle, skill: Any, *, retry: bool = False
     ) -> dict[str, Any]:
-        """Not yet implemented — full implementation in Phase 3.
+        """Activate *skill* inside the sandbox using a two-phase approach.
 
-        Raises:
-            NotImplementedError: Always.  See Phase 3 of the sandbox-v2-migration
-                plan for the full implementation (file copy + bootstrap).
+        Phase 1 — files: write all ``SkillFile`` records to
+        ``/workspace/.skills/{skill.name}/`` using package-root-relative paths.
+
+        Phase 2 — bootstrap: when ``skill.bootstrap_script_path`` is set, read
+        the matching ``SkillFile`` and execute it via :meth:`run_code`.
+
+        Idempotency: if the skill state for the current ``handle.sandbox_id`` is
+        already healthy (both phases ok or skipped) and *retry* is ``False``,
+        the cached state dict is returned immediately.
+
+        Args:
+            handle: Active sandbox handle.
+            skill:  ORM ``Skill`` instance.  Must have ``skill_id``, ``name``,
+                    ``bootstrap_script_path``, and a ``files`` relationship.
+            retry:  When ``True``, re-run even if the skill is already active.
+
+        Returns:
+            Phase-status dict keyed as
+            ``{"skill_id", "skill_name", "sandbox_id", "files_dir",
+              "phases": {"files": str, "bootstrap": str}, "updated_at": str}``.
         """
-        raise NotImplementedError(
-            "OpenSandboxProvider.ensure_skill is not yet implemented. "
-            "See Phase 3 of the sandbox-v2-migration plan."
-        )
+        from datetime import datetime as _dt
+
+        existing = handle.active_skills.get(skill.name)
+        if _healthy_for_sandbox(existing, handle.sandbox_id) and not retry:
+            return existing
+
+        files_dir = f"/workspace/.skills/{skill.name}"
+        state: dict[str, Any] = {
+            "skill_id": skill.skill_id,
+            "skill_name": skill.name,
+            "sandbox_id": handle.sandbox_id,
+            "files_dir": files_dir,
+            "phases": {},
+            "updated_at": _dt.utcnow().isoformat() + "Z",
+        }
+        handle.active_skills[skill.name] = state
+
+        # Phase 1: write package files into the sandbox
+        try:
+            _write_skill_files(self, handle, skill, files_dir)
+            state["phases"]["files"] = "ok"
+        except Exception as exc:
+            state["phases"]["files"] = f"failed: {exc}"
+            # Bootstrap depends on files being present — stop here.
+            return state
+
+        # Phase 2: run bootstrap script if configured
+        if skill.bootstrap_script_path:
+            try:
+                script = _read_skill_file_text(skill, skill.bootstrap_script_path)
+                self.run_code(
+                    handle,
+                    script,
+                    timeout=settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S,
+                )
+                state["phases"]["bootstrap"] = "ok"
+            except Exception as exc:
+                state["phases"]["bootstrap"] = f"failed: {exc}"
+        else:
+            state["phases"]["bootstrap"] = "skipped"
+
+        state["updated_at"] = _dt.utcnow().isoformat() + "Z"
+        return state
 
     def list_active_skills(self, handle: SandboxHandle) -> dict[str, dict[str, Any]]:
         """Return the typed Skill activation state from ``handle.active_skills``."""

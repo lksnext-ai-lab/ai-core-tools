@@ -17,11 +17,13 @@ that are attached to the agent may be activated.
 
 from __future__ import annotations
 
+from typing import Any
+
 import config as settings
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
-from .provider import SandboxProvider, SandboxHandle
+from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
 
 # ---------------------------------------------------------------------------
 # Per-language metadata used to customise each REPL tool's name and docstring.
@@ -132,6 +134,9 @@ def create_sandbox_repl_tool(
     handle: SandboxHandle,
     provider: SandboxProvider,
     language: str = "python",
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
 ):
     """Return a language-specific REPL LangChain tool bound to *handle* and *provider*.
 
@@ -141,9 +146,13 @@ def create_sandbox_repl_tool(
     ``python_sandbox_tools.create_python_repl_tool``.
 
     Args:
-        handle:   Active sandbox handle.
-        provider: Resolved ``SandboxProvider`` instance.
-        language: Language identifier (default ``"python"``).
+        handle:          Active sandbox handle.
+        provider:        Resolved ``SandboxProvider`` instance.
+        language:        Language identifier (default ``"python"``).
+        session_key:     Optional session key; used to evict the stale cache entry
+                         on :class:`~tools.sandbox.provider.SandboxExpiredError`.
+        session_service: Optional :class:`~services.sandbox_session_service.SandboxSessionService`
+                         instance; called to evict the stale entry before re-raising.
 
     Returns:
         A LangChain tool whose name is ``{language}_repl``.
@@ -197,13 +206,24 @@ def create_sandbox_repl_tool(
             return (
                 f"[Execution budget exceeded: {max_executions} executions per turn]"
             )
-        return provider.run_code(
-            handle,
-            code,
-            language=language,
-            on_stdout=_emit_line,
-            on_stderr=_emit_stderr,
-        )
+        try:
+            return provider.run_code(
+                handle,
+                code,
+                language=language,
+                on_stdout=_emit_line,
+                on_stderr=_emit_stderr,
+            )
+        except SandboxExpiredError:
+            # Evict the stale cache entry so the next agent turn creates a fresh
+            # sandbox.  We re-raise so the LLM receives an error explaining that
+            # the sandbox was reset and it should retry.
+            if session_service is not None and session_key is not None:
+                try:
+                    session_service.evict(session_key)
+                except Exception:
+                    pass  # evict is best-effort
+            raise
 
     _repl_fn.__name__ = tool_name
     _repl_fn.__doc__ = base_doc
