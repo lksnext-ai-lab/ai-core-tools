@@ -385,6 +385,18 @@ class SkillPackageRepository:
             _ro = fm.get("runtime_options")
             skill.runtime_options = json.dumps(_ro) if _ro else None
 
+            # Steps 5.2 + 5.3: store when_to_use and disable_model_invocation as JSON
+            # in the frontmatter column so the router can read them without a migration.
+            _skill_fm: dict = {}
+            _when_to_use = fm.get("when-to-use") or fm.get("when_to_use") or None
+            if _when_to_use:
+                _skill_fm["when_to_use"] = str(_when_to_use)
+            _disable_mi = bool(
+                fm.get("disable-model-invocation") or fm.get("disable_model_invocation") or False
+            )
+            _skill_fm["disable_model_invocation"] = _disable_mi
+            skill.frontmatter = json.dumps(_skill_fm) if _skill_fm else None
+
             if existing:
                 skill = SkillRepository.update(db, skill)
             else:
@@ -473,19 +485,29 @@ class SkillPackageRepository:
         from models.skill import Skill
         from sqlalchemy import or_
 
+        import json
+
         skills = db.query(Skill).filter(
             or_(Skill.app_id == app_id, Skill.app_id.is_(None))
         ).all()
-        return [
-            SkillCatalogItem(
-                skill_id=s.skill_id,
-                name=s.name,
-                description=s.description or "",
-                when_to_use=None,
-                disable_model_invocation=False,
+        result = []
+        for s in skills:
+            fm: dict = {}
+            if s.frontmatter:
+                try:
+                    fm = json.loads(s.frontmatter)
+                except Exception:
+                    pass
+            result.append(
+                SkillCatalogItem(
+                    skill_id=s.skill_id,
+                    name=s.name,
+                    description=s.description or "",
+                    when_to_use=fm.get("when_to_use"),
+                    disable_model_invocation=bool(fm.get("disable_model_invocation", False)),
+                )
             )
-            for s in skills
-        ]
+        return result
 
     # ------------------------------------------------------------------
     # get_activation_payload

@@ -120,31 +120,82 @@ def load_skill(skill: Any, handle: Any, provider: Any) -> str:
 # Public helpers
 # ---------------------------------------------------------------------------
 
-def generate_skills_system_prompt_section(skill_associations: List[AgentSkill]) -> Optional[str]:
-    """
-    Generate a system prompt section that informs the agent about available skills.
+def _is_skill_healthy_in_handle(handle: Any, skill_name: str) -> bool:
+    """Return True if *skill_name* is already active and healthy in *handle*.
 
-    This allows the agent to know upfront what skills are available and decide
-    when to load them based on the current task.
+    A skill is considered healthy when its ``files`` phase is ``"ok"`` and its
+    ``bootstrap`` phase is either ``"ok"`` or ``"skipped"``.
+    """
+    existing = handle.active_skills.get(skill_name)
+    if not existing:
+        return False
+    if existing.get("sandbox_id") != getattr(handle, "sandbox_id", None):
+        return False
+    phases = existing.get("phases", {})
+    return (
+        phases.get("files") == "ok"
+        and phases.get("bootstrap") in ("ok", "skipped")
+    )
+
+
+def generate_skills_system_prompt_section(
+    skill_associations: List[AgentSkill],
+    *,
+    active_skill_names: Optional[set] = None,
+    handle: Any = None,
+) -> Optional[str]:
+    """Generate a system prompt section that informs the agent about available skills.
+
+    When *active_skill_names* is ``None`` (legacy mode), all skills with a
+    populated ``skill`` relationship are included.  When a set is provided
+    (router mode) only skills whose name appears in *active_skill_names* OR
+    that are already active and healthy in *handle* are included, ensuring the
+    LLM retains awareness of skills it has already loaded during the session.
 
     Args:
-        skill_associations: List of AgentSkill associations
+        skill_associations: List of AgentSkill associations.
+        active_skill_names: Optional set of skill names selected by the router.
+            Pass ``None`` for legacy (include-all) behaviour.
+        handle: Optional sandbox handle; used to check ``handle.active_skills``
+            so already-active skills are always shown even if not router-selected.
 
     Returns:
         A formatted string to append to the system prompt, or None if no skills
+        should be shown.
     """
     if not skill_associations:
         return None
 
-    skills_info = []
-    for assoc in skill_associations:
-        if assoc.skill:
-            skill = assoc.skill
-            description = skill.description or "No description available"
-            skills_info.append(f"  - **{skill.name}**: {description}")
+    if active_skill_names is None:
+        # Legacy behaviour: include every skill that has a relationship object.
+        visible_assocs = [a for a in skill_associations if a.skill]
+    else:
+        selected_names = {
+            str(name).lower().strip()
+            for name in active_skill_names
+            if name is not None
+        }
+        visible_assocs = []
+        for assoc in skill_associations:
+            if not assoc.skill:
+                continue
+            skill_name = assoc.skill.name
+            if skill_name.lower().strip() in selected_names:
+                visible_assocs.append(assoc)
+            elif (
+                handle is not None
+                and _is_skill_healthy_in_handle(handle, skill_name)
+            ):
+                visible_assocs.append(assoc)
 
-    if not skills_info:
+    if not visible_assocs:
         return None
+
+    skills_info = []
+    for assoc in visible_assocs:
+        skill = assoc.skill
+        description = skill.description or "No description available"
+        skills_info.append(f"  - **{skill.name}**: {description}")
 
     skills_list = "\n".join(skills_info)
 
@@ -234,5 +285,4 @@ def create_skill_loader_tool(
         return load_skill(skill, sandbox_handle, sandbox_provider)
 
     return load_skill_tool
-
 

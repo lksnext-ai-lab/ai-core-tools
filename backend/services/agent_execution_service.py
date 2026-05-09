@@ -1141,6 +1141,9 @@ class AgentExecutionService:
         mcp_client = None
         try:
             # Create the agent chain with all tools and capabilities
+            # Build a minimal user-message list so the skill router can score skills.
+            _router_messages = [{"role": "user", "content": message}]
+
             agent_chain, mcp_client = await create_agent(
                 fresh_agent,
                 search_params,
@@ -1149,6 +1152,7 @@ class AgentExecutionService:
                 working_dir,
                 sandbox_handle=sandbox_handle,
                 sandbox_provider=sandbox_provider,
+                recent_messages=_router_messages,
             )
 
             # Prepare configuration

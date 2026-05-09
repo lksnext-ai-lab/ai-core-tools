@@ -119,6 +119,8 @@ class AgentStreamingService:
             # ----------------------------------------------------------------
             # 3. Build agent chain
             # ----------------------------------------------------------------
+            _router_messages = [{"role": "user", "content": message}]
+
             agent_chain, mcp_client = await create_agent(
                 ctx.fresh_agent,
                 ctx.search_params,
@@ -127,6 +129,7 @@ class AgentStreamingService:
                 ctx.working_dir,
                 sandbox_handle=ctx.sandbox_handle,
                 sandbox_provider=ctx.sandbox_provider,
+                recent_messages=_router_messages,
             )
 
             config = prepare_agent_config(ctx.fresh_agent)

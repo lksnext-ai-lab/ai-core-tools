@@ -46,6 +46,7 @@ The project aims to simplify the integration and use of AI technologies within L
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
 - [RFC v2: Sandbox Providers, Skills Runtime, and Lifecycle Recovery](ai/rfc-sandbox-providers-v2.md) — Next-iteration sandbox lifecycle, Skill routing, recovery, and security hardening
+- [RFC: Sandbox Providers v2 UI Definition](ai/rfc-sandbox-providers-v2-ui.md) — UI definition for Skill packages, sandbox provider settings, and runtime observability
 
 ### API Reference
 - [Internal API](api/internal-api.md) — Frontend-backend communication endpoints (session/OIDC auth)

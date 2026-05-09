@@ -118,6 +118,7 @@ async def create_agent(
     working_dir: Optional[str] = None,
     sandbox_handle: Optional[Any] = None,
     sandbox_provider: Optional[Any] = None,
+    recent_messages: Optional[List[Dict]] = None,
 ):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
@@ -164,7 +165,60 @@ async def create_agent(
     current_date = datetime.now().strftime("%Y-%m-%d")
     system_prompt_content += f"\n\nToday's date is {current_date}."
     if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+        # Step 5.4: run the skill router to pre-select relevant skills
+        # Router mode: default to an empty selection so unselected catalog
+        # skills stay out of the main prompt. Healthy already-active skills are
+        # reintroduced by generate_skills_system_prompt_section via the handle.
+        router_selected_names: set = set()
+        try:
+            from services.skill_router_service import SkillRouterService
+            import json as _json
+
+            # Build a lightweight catalog from already-loaded ORM objects (no extra DB query)
+            inline_catalog = []
+            for _assoc in agent.skill_associations:
+                _s = _assoc.skill
+                if _s is None:
+                    continue
+                _fm: dict = {}
+                if _s.frontmatter:
+                    try:
+                        _fm = _json.loads(_s.frontmatter)
+                    except Exception:
+                        pass
+                inline_catalog.append({
+                    "skill_id": _s.skill_id,
+                    "name": _s.name,
+                    "description": _s.description or "",
+                    "when_to_use": _fm.get("when_to_use"),
+                    "disable_model_invocation": bool(_fm.get("disable_model_invocation", False)),
+                })
+
+            if inline_catalog:
+                _decision = SkillRouterService().route(
+                    recent_messages or [], inline_catalog
+                )
+                router_selected_names = set(_decision["selected_skill_names"])
+                logger.info(
+                    "Skill router selected %d skills for agent %s: %s — reason: %s",
+                    len(router_selected_names),
+                    agent.agent_id,
+                    router_selected_names,
+                    _decision["reason"],
+                )
+        except Exception as _router_exc:
+            logger.warning(
+                "Skill router failed for agent %s: %s — proceeding without routing",
+                agent.agent_id,
+                _router_exc,
+            )
+            router_selected_names = set()
+
+        skills_section = generate_skills_system_prompt_section(
+            agent.skill_associations,
+            active_skill_names=router_selected_names,
+            handle=sandbox_handle,
+        )
         if skills_section:
             system_prompt_content = system_prompt_content + "\n" + skills_section
 

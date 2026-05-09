@@ -359,3 +359,96 @@ class TestGenerateSkillsSystemPromptSection:
 
         assert result is None
 
+    # ------------------------------------------------------------------
+    # Phase 5 / step 5.5 — router mode (active_skill_names parameter)
+    # ------------------------------------------------------------------
+
+    def test_router_mode_shows_only_selected_skills(self):
+        """Only router-selected skills appear when active_skill_names is provided."""
+        from tools.skill_tools import generate_skills_system_prompt_section
+
+        assocs = [
+            _make_skill_assoc("charts"),
+            _make_skill_assoc("reporting"),
+        ]
+        section = generate_skills_system_prompt_section(
+            assocs, active_skill_names={"charts"}
+        )
+        assert section is not None
+        assert "charts" in section
+        assert "reporting" not in section
+
+    def test_router_mode_includes_already_active_skill(self):
+        """Skills healthy in handle appear even if not in active_skill_names."""
+        from tools.skill_tools import generate_skills_system_prompt_section
+
+        handle = _make_handle()
+        # Manually mark 'reporting' as healthy in the handle
+        handle.active_skills["reporting"] = {
+            "sandbox_id": handle.sandbox_id,
+            "phases": {"files": "ok", "bootstrap": "ok"},
+        }
+
+        assocs = [
+            _make_skill_assoc("charts"),
+            _make_skill_assoc("reporting"),
+        ]
+        section = generate_skills_system_prompt_section(
+            assocs,
+            active_skill_names={"charts"},
+            handle=handle,
+        )
+        assert section is not None
+        assert "charts" in section
+        assert "reporting" in section  # already active → still shown
+
+    def test_router_mode_ignores_active_skill_from_different_sandbox(self):
+        """Stale active_skill state from a previous sandbox is not shown."""
+        from tools.skill_tools import generate_skills_system_prompt_section
+
+        handle = _make_handle("current-sandbox")
+        handle.active_skills["reporting"] = {
+            "sandbox_id": "old-sandbox",
+            "phases": {"files": "ok", "bootstrap": "ok"},
+        }
+
+        assocs = [
+            _make_skill_assoc("charts"),
+            _make_skill_assoc("reporting"),
+        ]
+        section = generate_skills_system_prompt_section(
+            assocs,
+            active_skill_names={"charts"},
+            handle=handle,
+        )
+        assert section is not None
+        assert "charts" in section
+        assert "reporting" not in section
+
+    def test_router_mode_empty_selection_and_no_active_returns_none(self):
+        """When router selects nothing and no skills are active, result is None."""
+        from tools.skill_tools import generate_skills_system_prompt_section
+
+        handle = _make_handle()
+        assocs = [
+            _make_skill_assoc("charts"),
+            _make_skill_assoc("reporting"),
+        ]
+        section = generate_skills_system_prompt_section(
+            assocs,
+            active_skill_names=set(),
+            handle=handle,
+        )
+        assert section is None
+
+    def test_legacy_mode_includes_all_skills(self):
+        """When active_skill_names is None, legacy behaviour: all skills shown."""
+        from tools.skill_tools import generate_skills_system_prompt_section
+
+        assocs = [
+            _make_skill_assoc("charts"),
+            _make_skill_assoc("reporting"),
+        ]
+        section = generate_skills_system_prompt_section(assocs, active_skill_names=None)
+        assert "charts" in section
+        assert "reporting" in section
