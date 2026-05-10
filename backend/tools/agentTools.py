@@ -22,13 +22,220 @@ import os
 import base64
 import mimetypes
 from datetime import datetime
+from urllib.parse import parse_qsl, urlparse
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
-from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.skill_tools import (
+    create_skill_file_reader_tool,
+    create_skill_loader_tool,
+    generate_skills_system_prompt_section,
+)
 from tools.sandbox import resolve_provider, create_sandbox_repl_tools, create_sandbox_skill_tools
 
 logger = get_logger(__name__)
+
+
+_AUTH_QUERY_PARAMS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "api-key",
+    "key",
+    "tavilyapikey",
+    "token",
+}
+
+
+def _url_contains_auth_credentials(url: str) -> bool:
+    try:
+        query_params = parse_qsl(urlparse(url).query, keep_blank_values=False)
+    except ValueError:
+        return False
+    return any(name.lower() in _AUTH_QUERY_PARAMS for name, _value in query_params)
+
+
+def _merge_mcp_auth_headers(
+    server_name: str,
+    server_config: Dict[str, Any],
+    auth_headers: Dict[str, str],
+) -> None:
+    """Add Mattin auth headers without replacing MCP-specific credentials."""
+    if 'url' not in server_config:
+        return
+
+    existing_headers = server_config.setdefault('headers', {})
+    existing_header_names = {str(key).lower() for key in existing_headers}
+    applied_headers = {}
+    has_url_credentials = _url_contains_auth_credentials(str(server_config.get("url", "")))
+
+    for header_name, header_value in auth_headers.items():
+        normalized_header_name = header_name.lower()
+        if normalized_header_name in existing_header_names:
+            logger.info(
+                "Preserving configured MCP header '%s' for server: %s",
+                header_name,
+                server_name,
+            )
+            continue
+        if normalized_header_name == "authorization" and has_url_credentials:
+            logger.info(
+                "Skipping Mattin Authorization header for MCP server with URL credentials: %s",
+                server_name,
+            )
+            continue
+        applied_headers[header_name] = header_value
+
+    if applied_headers:
+        existing_headers.update(applied_headers)
+        logger.info(f"Added auth headers to MCP server: {server_name}")
+
+
+def _redact_mcp_connections(connections: Dict[str, Any]) -> Dict[str, Any]:
+    redacted = {}
+    sensitive_headers = {"authorization", "x-api-key", "api-key"}
+
+    for server_name, server_config in connections.items():
+        if not isinstance(server_config, dict):
+            redacted[server_name] = server_config
+            continue
+
+        safe_config = dict(server_config)
+        headers = safe_config.get("headers")
+        if isinstance(headers, dict):
+            safe_config["headers"] = {
+                key: "<redacted>" if str(key).lower() in sensitive_headers else value
+                for key, value in headers.items()
+            }
+        redacted[server_name] = safe_config
+
+    return redacted
+
+
+def _tool_name_for_language(language: str) -> str:
+    return "python_repl" if language == "python" else f"{language}_repl"
+
+
+def _build_available_tool_metadata(
+    agent: Agent,
+    *,
+    working_dir: Optional[str],
+    code_languages: list[str],
+) -> list[dict[str, str]]:
+    """Return compact tool metadata for the Skill tool router."""
+    metadata: list[dict[str, str]] = [
+        {
+            "name": "get_current_date",
+            "category": "utility",
+            "description": "Get the current date.",
+        }
+    ]
+
+    if working_dir:
+        metadata.append({
+            "name": "download_url_to_workspace",
+            "category": "file",
+            "description": "Download a URL into the conversation working directory.",
+        })
+
+    for tool_name in getattr(agent, "server_tools", None) or []:
+        metadata.append({
+            "name": tool_name,
+            "category": "provider_tool",
+            "description": f"Provider-side tool: {tool_name}.",
+        })
+
+    if getattr(agent, "silo_id", None) is not None:
+        metadata.append({
+            "name": "silo_retriever",
+            "category": "retrieval",
+            "description": "Search the configured knowledge base.",
+        })
+
+    for language in code_languages:
+        tool_name = _tool_name_for_language(language)
+        if language == "typescript":
+            description = (
+                "Run TypeScript directly. Prefer for TypeScript/Node implementations, "
+                "including PPTX generation with PptxGenJS when dependencies are ready."
+            )
+        elif language == "bash":
+            description = (
+                "Run shell commands. Use mainly for setup, dependency checks, "
+                "filesystem inspection, or command-line orchestration."
+            )
+        elif language == "python":
+            description = "Run Python code for Python libraries and data/document workflows."
+        else:
+            description = f"Run {language} code."
+        metadata.append({
+            "name": tool_name,
+            "category": "code_execution",
+            "description": description,
+        })
+
+    if getattr(agent, "skill_associations", None):
+        metadata.extend([
+            {
+                "name": "load_skill",
+                "category": "skill",
+                "description": "Load Skill instructions and prepare bundled sandbox files.",
+            },
+            {
+                "name": "read_skill_file",
+                "category": "skill",
+                "description": "Read supporting files bundled with a loaded Skill.",
+            },
+        ])
+
+    if getattr(agent, "enable_code_interpreter", False) and getattr(agent, "skill_associations", None):
+        metadata.extend([
+            {
+                "name": "activate_sandbox_skill",
+                "category": "recovery",
+                "description": "Retry Skill sandbox activation after load_skill/setup problems.",
+            },
+            {
+                "name": "list_active_sandbox_skills",
+                "category": "debug",
+                "description": "List Skills currently active in the sandbox.",
+            },
+        ])
+
+    return metadata
+
+
+def _build_selected_skill_payloads(skill_associations: list, selected_names: set) -> list[dict]:
+    """Return selected Skill instruction snippets for the tool router."""
+    selected = {str(name).lower().strip() for name in selected_names}
+    if not selected:
+        return []
+
+    payloads: list[dict] = []
+    for assoc in skill_associations:
+        skill = getattr(assoc, "skill", None)
+        if skill is None or skill.name.lower().strip() not in selected:
+            continue
+        allowed_tools = getattr(skill, "allowed_tools", None)
+        if isinstance(allowed_tools, str):
+            try:
+                allowed_tools = json.loads(allowed_tools)
+            except Exception:
+                allowed_tools = None
+        content = getattr(skill, "content", "") or ""
+        payloads.append({
+            "name": skill.name,
+            "description": getattr(skill, "description", "") or "",
+            "instructions": content[:6000],
+            "allowed_tools": allowed_tools or [],
+            "supporting_files": [
+                getattr(file, "path", "")
+                for file in (getattr(skill, "files", None) or [])
+                if getattr(file, "path", "")
+            ],
+        })
+    return payloads
+
 
 class MCPClientManager:
     _instance = None
@@ -66,15 +273,11 @@ class MCPClientManager:
                                 # Prepare headers for MCP server authentication
                                 headers = prepare_mcp_headers(auth_token)
                                 
-                                # Add headers to each connection in the config
+                                # Add headers to each connection in the config,
+                                # preserving provider credentials already configured.
                                 for server_name, server_config in connection_config.items():
                                     if isinstance(server_config, dict):
-                                        # If it's an SSE connection with a URL
-                                        if 'url' in server_config:
-                                            if 'headers' not in server_config:
-                                                server_config['headers'] = {}
-                                            server_config['headers'].update(headers)
-                                            logger.info(f"Added auth headers to MCP server: {server_name}")
+                                        _merge_mcp_auth_headers(server_name, server_config, headers)
                         
                         connections.update(connection_config)
                 except ValueError as e:
@@ -93,7 +296,10 @@ class MCPClientManager:
                             if server_name in connections:
                                 inject_ssl_config({server_name: connections[server_name]}, ssl_verify=False)
                 
-                logger.info(f"Creating new MCP client with connections: {connections}")
+                logger.info(
+                    "Creating new MCP client with connections: %s",
+                    _redact_mcp_connections(connections),
+                )
                 # Create a new client each time - don't reuse the singleton
                 # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
                 client = MultiServerMCPClient(connections=connections)
@@ -158,6 +364,12 @@ async def create_agent(
         checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
+    ci_provider_for_prompt = None
+    ci_languages: list[str] = []
+    if agent.enable_code_interpreter and working_dir:
+        ci_provider_for_prompt = sandbox_provider or resolve_provider(agent)
+        ci_languages = ci_provider_for_prompt.get_supported_languages()
+
     # Build system prompt with optional skills section and format instructions
     # In LangChain v1, system_prompt is a static string passed to create_agent
     system_prompt_content = agent.system_prompt
@@ -165,13 +377,18 @@ async def create_agent(
     current_date = datetime.now().strftime("%Y-%m-%d")
     system_prompt_content += f"\n\nToday's date is {current_date}."
     if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        # Step 5.4: run the skill router to pre-select relevant skills
-        # Router mode: default to an empty selection so unselected catalog
-        # skills stay out of the main prompt. Healthy already-active skills are
-        # reintroduced by generate_skills_system_prompt_section via the handle.
+        # Step 5.4: run the skill router to pre-select relevant skills.
+        # The router makes a small isolated LLM call using only the latest user
+        # text plus Skill catalog metadata. It does not receive file contents,
+        # conversation memory, the agent prompt, or tool traces.
         router_selected_names: set = set()
+        selected_skill_payloads: list[dict] = []
         try:
-            from services.skill_router_service import SkillRouterService
+            from services.skill_router_service import (
+                SkillRouterService,
+                SkillToolRouterService,
+                format_skill_tool_guidance_section,
+            )
             import json as _json
 
             # Build a lightweight catalog from already-loaded ORM objects (no extra DB query)
@@ -195,8 +412,10 @@ async def create_agent(
                 })
 
             if inline_catalog:
-                _decision = SkillRouterService().route(
-                    recent_messages or [], inline_catalog
+                _decision = await SkillRouterService().route_with_llm(
+                    recent_messages or [],
+                    inline_catalog,
+                    llm=llm,
                 )
                 router_selected_names = set(_decision["selected_skill_names"])
                 logger.info(
@@ -206,6 +425,31 @@ async def create_agent(
                     router_selected_names,
                     _decision["reason"],
                 )
+                selected_skill_payloads = _build_selected_skill_payloads(
+                    agent.skill_associations,
+                    router_selected_names,
+                )
+
+                available_tool_metadata = _build_available_tool_metadata(
+                    agent,
+                    working_dir=working_dir,
+                    code_languages=ci_languages,
+                )
+                _tool_decision = await SkillToolRouterService().route_with_llm(
+                    selected_skills=selected_skill_payloads,
+                    available_tools=available_tool_metadata,
+                    llm=llm,
+                )
+                tool_guidance_section = format_skill_tool_guidance_section(_tool_decision)
+                if tool_guidance_section:
+                    system_prompt_content = (
+                        system_prompt_content + "\n" + tool_guidance_section
+                    )
+                    logger.info(
+                        "Skill tool router added guidance for agent %s (%d skills)",
+                        agent.agent_id,
+                        len(selected_skill_payloads),
+                    )
         except Exception as _router_exc:
             logger.warning(
                 "Skill router failed for agent %s: %s — proceeding without routing",
@@ -234,9 +478,9 @@ async def create_agent(
         )
 
     if agent.enable_code_interpreter and working_dir:
-        _ci_provider = sandbox_provider or resolve_provider(agent)
-        _ci_languages = _ci_provider.get_supported_languages()
-        _tool_names = ", ".join(f"`{lang}_repl`" for lang in _ci_languages)
+        _ci_provider = sandbox_provider or ci_provider_for_prompt or resolve_provider(agent)
+        _ci_languages = ci_languages or _ci_provider.get_supported_languages()
+        _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
         system_prompt_content = (
             system_prompt_content
             + "\n\n<code_interpreter>\n"
@@ -374,6 +618,13 @@ async def create_agent(
         if skill_tool:
             tools.append(skill_tool)
             logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")
+        skill_file_tool = create_skill_file_reader_tool(agent.skill_associations)
+        if skill_file_tool:
+            tools.append(skill_file_tool)
+            logger.info(
+                "Skill file reader tool added with %d skills",
+                len(agent.skill_associations),
+            )
 
     if pydantic_model:
         # In LangChain v1, response_format accepts the pydantic model directly.
@@ -656,6 +907,17 @@ class IACTTool(BaseTool):
             )
             if retriever_tool is not None:
                 tools.append(retriever_tool)
+
+        # Add skill tools for sub-agents too. No sandbox handle is available in
+        # this path, but the model can still load prompt instructions and read
+        # packaged reference files.
+        if hasattr(agent, 'skill_associations') and agent.skill_associations:
+            skill_tool = create_skill_loader_tool(agent.skill_associations)
+            if skill_tool:
+                tools.append(skill_tool)
+            skill_file_tool = create_skill_file_reader_tool(agent.skill_associations)
+            if skill_file_tool:
+                tools.append(skill_file_tool)
 
         # Add MCP tools — mirrors create_agent. A failing MCP server degrades the
         # sub-agent but never breaks its construction.

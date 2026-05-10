@@ -244,6 +244,40 @@ def test_ensure_skill_bootstrap_success(provider, mock_skill_with_bootstrap):
     mock_run.assert_called_once()
 
 
+def test_ensure_skill_bootstrap_uses_bash_for_shell_script(provider):
+    """A .sh bootstrap must run in the Bash sandbox context, not Python."""
+    prov, _ = provider
+    handle = MagicMock()
+    handle.sandbox_id = "sbx_1"
+    handle.active_skills = {}
+    skill = SimpleNamespace(
+        skill_id=104,
+        name="shell_bootstrap",
+        bootstrap_script_path="scripts/bootstrap.sh",
+        files=[
+            SimpleNamespace(
+                path="scripts/bootstrap.sh",
+                content_text="#!/usr/bin/env bash\necho ok\n",
+                content_bytes=None,
+            ),
+        ],
+    )
+
+    with patch.object(prov, "write_file"):
+        with patch.object(prov, "run_code", return_value="") as mock_run:
+            result = prov.ensure_skill(handle, skill)
+
+    assert result["phases"]["bootstrap"] == "ok"
+    assert mock_run.call_args.kwargs["language"] == "bash"
+    script = mock_run.call_args.args[1]
+    assert "source /opt/opensandbox/code-interpreter-env.sh python" in script
+    assert "source /opt/opensandbox/code-interpreter-env.sh node" in script
+    assert "sudo() { \"$@\"; }" in script
+    assert "export NODE_PATH=\"$(npm root -g)" in script
+    assert ") 2>&1" in script
+    assert "__AICT_BOOTSTRAP_EXIT_CODE__=" in script
+
+
 def test_ensure_skill_bootstrap_failure(provider, mock_skill_with_bootstrap):
     """ensure_skill with bootstrap exception → phases['bootstrap'] starts with 'failed:'."""
     prov, _ = provider
@@ -256,6 +290,31 @@ def test_ensure_skill_bootstrap_failure(provider, mock_skill_with_bootstrap):
             result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
 
     assert result["phases"]["bootstrap"].startswith("failed:")
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "[Error] SyntaxError: unmatched ')'",
+        "[stderr]\nboom",
+        "__AICT_BOOTSTRAP_EXIT_CODE__=1",
+    ],
+)
+def test_ensure_skill_bootstrap_failure_from_run_code_output(
+    provider, mock_skill_with_bootstrap, output
+):
+    """run_code error/stderr text must not be treated as successful bootstrap."""
+    prov, _ = provider
+    handle = MagicMock()
+    handle.sandbox_id = "sbx_1"
+    handle.active_skills = {}
+
+    with patch.object(prov, "write_file"):
+        with patch.object(prov, "run_code", return_value=output):
+            result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
+
+    assert result["phases"]["bootstrap"].startswith("failed:")
+    assert output in result["phases"]["bootstrap"]
 
 
 def test_ensure_skill_idempotent(provider, mock_skill_with_files):

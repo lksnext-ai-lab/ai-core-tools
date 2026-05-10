@@ -19,7 +19,7 @@ max_sandbox_timeout_seconds = 86400
 # - Non-interactive: set OPENSANDBOX_INSECURE_SERVER=YES
 
 [log]
-level = "INFO"
+level = "DEBUG"
 
 [runtime]
 type = "docker"

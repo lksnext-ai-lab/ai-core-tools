@@ -21,6 +21,8 @@ Verification criteria (updated for Phase 4 / step 4.7-4.10):
   8. ``generate_skills_system_prompt_section`` produces the sandbox auto-setup
      guidance without any ``runtime``-based badge.
   9. ``create_skill_loader_tool`` returns ``None`` when no valid associations exist.
+ 10. ``create_skill_file_reader_tool`` retrieves supporting SkillFile content
+     referenced by loaded instructions.
 """
 
 from __future__ import annotations
@@ -320,7 +322,112 @@ class TestLoadSkillSandboxAutoInit:
 
 
 # ---------------------------------------------------------------------------
-# 4. generate_skills_system_prompt_section
+# 4. read_skill_file companion tool
+# ---------------------------------------------------------------------------
+
+
+class TestReadSkillFileTool:
+    def test_returns_referenced_skill_file_content(self):
+        from tools.skill_tools import create_skill_file_reader_tool
+
+        assoc = _make_skill_assoc(
+            "pptx",
+            files=[
+                SimpleNamespace(
+                    path="pptxgenjs.md",
+                    content_text="# PptxGenJS Tutorial\nUse require('pptxgenjs').",
+                    content_bytes=None,
+                    media_type="text/markdown",
+                )
+            ],
+        )
+        tool = create_skill_file_reader_tool([assoc])
+
+        result = tool.invoke({"skill_name": "pptx", "path": "pptxgenjs.md"})
+
+        assert "[SKILL FILE: pptx/pptxgenjs.md]" in result
+        assert "PptxGenJS Tutorial" in result
+
+    def test_accepts_workspace_skill_path(self):
+        from tools.skill_tools import create_skill_file_reader_tool
+
+        assoc = _make_skill_assoc(
+            "pptx",
+            files=[
+                SimpleNamespace(
+                    path="editing.md",
+                    content_text="# Editing workflow",
+                    content_bytes=None,
+                    media_type="text/markdown",
+                )
+            ],
+        )
+        tool = create_skill_file_reader_tool([assoc])
+
+        result = tool.invoke({
+            "skill_name": "pptx",
+            "path": "/workspace/.skills/pptx/editing.md",
+        })
+
+        assert "[SKILL FILE: pptx/editing.md]" in result
+        assert "Editing workflow" in result
+
+    def test_lists_available_files_when_path_missing(self):
+        from tools.skill_tools import create_skill_file_reader_tool
+
+        assoc = _make_skill_assoc(
+            "pptx",
+            files=[
+                SimpleNamespace(path="pptxgenjs.md", content_text="x"),
+                SimpleNamespace(path="editing.md", content_text="y"),
+            ],
+        )
+        tool = create_skill_file_reader_tool([assoc])
+
+        result = tool.invoke({"skill_name": "pptx", "path": "missing.md"})
+
+        assert "not found" in result.lower()
+        assert "pptxgenjs.md" in result
+        assert "editing.md" in result
+
+    def test_rejects_paths_that_escape_package(self):
+        from tools.skill_tools import create_skill_file_reader_tool
+
+        assoc = _make_skill_assoc(
+            "pptx",
+            files=[SimpleNamespace(path="pptxgenjs.md", content_text="x")],
+        )
+        tool = create_skill_file_reader_tool([assoc])
+
+        result = tool.invoke({"skill_name": "pptx", "path": "../secret.txt"})
+
+        assert "Invalid skill file path" in result
+        assert "escape" in result
+
+    def test_binary_file_returns_metadata_instead_of_raw_bytes(self):
+        from tools.skill_tools import create_skill_file_reader_tool
+
+        assoc = _make_skill_assoc(
+            "pptx",
+            files=[
+                SimpleNamespace(
+                    path="assets/template.pptx",
+                    content_text=None,
+                    content_bytes=b"\x00\xff\x00",
+                    media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
+            ],
+        )
+        tool = create_skill_file_reader_tool([assoc])
+
+        result = tool.invoke({"skill_name": "pptx", "path": "assets/template.pptx"})
+
+        assert "BINARY SKILL FILE" in result
+        assert "3 bytes" in result
+
+
+# ---------------------------------------------------------------------------
+# 5. generate_skills_system_prompt_section
 # ---------------------------------------------------------------------------
 
 

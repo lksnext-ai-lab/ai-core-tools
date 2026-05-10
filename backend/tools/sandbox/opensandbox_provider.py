@@ -32,7 +32,7 @@ Configuration (env vars)
 
 ``OPENSANDBOX_SUPPORTED_LANGUAGES``
     Comma-separated list of language identifiers the provider will activate
-    inside each sandbox container (default: ``python``).  Supported values
+    inside each sandbox container (default: ``python,bash``).  Supported values
     depend on the ``SupportedLanguage`` enum exposed by the
     ``opensandbox-code-interpreter`` SDK.  Example::
 
@@ -62,8 +62,13 @@ from __future__ import annotations
 
 import os
 import posixpath
+import queue
+import threading
+import time
+from contextvars import copy_context
 from collections.abc import Callable
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import config as settings
@@ -116,6 +121,8 @@ _ENV_SUPPORTED_LANGUAGES = "OPENSANDBOX_SUPPORTED_LANGUAGES"
 
 MAX_OUTPUT_CHARS = 20_000
 
+_BOOTSTRAP_EXIT_PREFIX = "__AICT_BOOTSTRAP_EXIT_CODE__="
+
 # ---------------------------------------------------------------------------
 # Language → SupportedLanguage enum-member name mapping.
 # Keys are the normalised lower-case language identifiers used throughout
@@ -148,16 +155,19 @@ _LANGUAGE_ENUM_MAP: dict[str, str] = {
 _META_SANDBOX = "_sandbox"          # SandboxSync instance
 _META_INTERPRETER = "_interpreter"  # CodeInterpreterSync instance
 _META_CONTEXTS = "_contexts"        # dict[str, CodeContextSync] — one entry per language
+_META_CONTEXT_POOLS = "_context_pools"        # dict[str, list[dict]] — pooled execution contexts
+_META_CONTEXT_LANG_ENUMS = "_context_lang_enums"  # dict[str, SupportedLanguage] used for new contexts
+_META_CONTEXT_POOL_LOCK = "_context_pool_lock"    # threading.Lock guarding pool growth
 
 
 def _supported_languages() -> list[str]:
     """Return the list of language identifiers configured for this provider.
 
     Reads ``OPENSANDBOX_SUPPORTED_LANGUAGES`` (comma-separated, default
-    ``"python"``).  The returned list is normalised to lowercase and deduplicated
+    ``"python,bash"``).  The returned list is normalised to lowercase and deduplicated
     while preserving insertion order.
     """
-    raw = os.getenv(_ENV_SUPPORTED_LANGUAGES, "python")
+    raw = os.getenv(_ENV_SUPPORTED_LANGUAGES, "python,bash")
     seen: set[str] = set()
     result: list[str] = []
     for token in raw.split(","):
@@ -165,7 +175,7 @@ def _supported_languages() -> list[str]:
         if lang and lang not in seen:
             seen.add(lang)
             result.append(lang)
-    return result or ["python"]
+    return result or ["python", "bash"]
 
 
 def _workspace_path(filename: str) -> str:
@@ -228,6 +238,22 @@ def _sandbox_image() -> str:
     return os.getenv(_ENV_IMAGE, _DEFAULT_IMAGE)
 
 
+def _max_contexts_per_language() -> int:
+    """Return OpenSandbox context pool size per language.
+
+    A single OpenSandbox code context maps to one interpreter session. Running
+    two snippets against the same context concurrently can raise
+    ``RUNTIME_ERROR: ... session is busy``. A small pool lets independent tool
+    calls run in parallel while preserving the primary context for normal
+    sequential REPL usage.
+    """
+    try:
+        configured = int(getattr(settings, "OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE", 4))
+    except (TypeError, ValueError):
+        configured = 4
+    return max(1, configured)
+
+
 # ---------------------------------------------------------------------------
 # Skill activation helpers (Phase 3 step 3.7)
 # ---------------------------------------------------------------------------
@@ -283,6 +309,59 @@ def _read_skill_file_text(skill: Any, relative_path: str) -> str:
     )
 
 
+def _bootstrap_language_for_path(path: str) -> str:
+    """Infer the sandbox language for a Skill bootstrap script path."""
+    suffix = posixpath.splitext(path.lower())[1]
+    return {
+        ".py": "python",
+        ".js": "javascript",
+        ".mjs": "javascript",
+        ".cjs": "javascript",
+        ".ts": "typescript",
+        ".sh": "bash",
+        ".bash": "bash",
+    }.get(suffix, "python")
+
+
+def _bootstrap_failed(output: str) -> bool:
+    """Return True when run_code output indicates bootstrap execution failed."""
+    if "[Error]" in output or "[stderr]" in output:
+        return True
+    for line in output.splitlines():
+        if not line.startswith(_BOOTSTRAP_EXIT_PREFIX):
+            continue
+        try:
+            return int(line.removeprefix(_BOOTSTRAP_EXIT_PREFIX).strip()) != 0
+        except ValueError:
+            return True
+    return False
+
+
+def _wrap_bootstrap_script(script: str, language: str) -> str:
+    """Wrap bootstrap code so provider-visible output includes stderr and exit code."""
+    if language != "bash":
+        return script
+
+    return (
+        "(\n"
+        "if [ -f /opt/opensandbox/code-interpreter-env.sh ]; then\n"
+        "    source /opt/opensandbox/code-interpreter-env.sh python >/dev/null 2>&1 || true\n"
+        "    source /opt/opensandbox/code-interpreter-env.sh node >/dev/null 2>&1 || true\n"
+        "fi\n"
+        "if ! command -v sudo >/dev/null 2>&1 && [ \"$(id -u)\" -eq 0 ]; then\n"
+        "    sudo() { \"$@\"; }\n"
+        "fi\n"
+        "if command -v npm >/dev/null 2>&1; then\n"
+        "    export NODE_PATH=\"$(npm root -g)${NODE_PATH:+:$NODE_PATH}\"\n"
+        "fi\n"
+        f"{script.rstrip()}\n"
+        ") 2>&1\n"
+        "__aict_bootstrap_exit_code=$?\n"
+        f"printf '\\n{_BOOTSTRAP_EXIT_PREFIX}%s\\n' \"$__aict_bootstrap_exit_code\"\n"
+        "exit \"$__aict_bootstrap_exit_code\"\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Provider implementation
 # ---------------------------------------------------------------------------
@@ -299,7 +378,7 @@ class OpenSandboxProvider(SandboxProvider):
 
     The set of active languages is configured through the
     ``OPENSANDBOX_SUPPORTED_LANGUAGES`` environment variable (comma-separated,
-    default ``python``).  Any language listed there that the SDK's
+    default ``python,bash``).  Any language listed there that the SDK's
     ``SupportedLanguage`` enum does not recognise is skipped with a warning.
 
     File I/O uses the ``/workspace`` directory inside the container.  Files are
@@ -375,6 +454,7 @@ class OpenSandboxProvider(SandboxProvider):
 
         languages = self.get_supported_languages()
         contexts: dict[str, object] = {}
+        context_lang_enums: dict[str, object] = {}
         for lang in languages:
             enum_name = _LANGUAGE_ENUM_MAP.get(lang)
             if enum_name is None:
@@ -395,6 +475,7 @@ class OpenSandboxProvider(SandboxProvider):
             try:
                 context = interpreter.codes.create_context(lang_enum)
                 contexts[lang] = context
+                context_lang_enums[lang] = lang_enum
                 logger.info(
                     "OpenSandboxProvider: context created for language '%s' "
                     "(sandbox=%s, context_id=%s)",
@@ -415,12 +496,17 @@ class OpenSandboxProvider(SandboxProvider):
             )
             context = interpreter.codes.create_context(SupportedLanguage.PYTHON)
             contexts["python"] = context
+            context_lang_enums["python"] = SupportedLanguage.PYTHON
 
         logger.info(
             "OpenSandboxProvider: interpreter ready (sandbox_id=%s, languages=%s)",
             sandbox.id,
             list(contexts.keys()),
         )
+        context_pools = {
+            lang: [{"context": context, "lock": threading.Lock()}]
+            for lang, context in contexts.items()
+        }
         return SandboxHandle(
             sandbox_id=sandbox.id,
             working_dir=working_dir,
@@ -430,9 +516,123 @@ class OpenSandboxProvider(SandboxProvider):
                 _META_SANDBOX: sandbox,
                 _META_INTERPRETER: interpreter,
                 _META_CONTEXTS: contexts,
+                _META_CONTEXT_POOLS: context_pools,
+                _META_CONTEXT_LANG_ENUMS: context_lang_enums,
+                _META_CONTEXT_POOL_LOCK: threading.Lock(),
                 "provider_capabilities": self._capabilities,
             },
         )
+
+    def _ensure_context_pools(self, handle: SandboxHandle) -> dict[str, list[dict[str, Any]]]:
+        """Ensure older handles have pool metadata.
+
+        Tests and resumed handles may only contain ``_META_CONTEXTS``. Convert
+        those primary contexts into one-entry pools lazily so ``run_code`` can
+        use the same acquisition path everywhere.
+        """
+        pools = handle.metadata.get(_META_CONTEXT_POOLS)
+        if isinstance(pools, dict):
+            handle.metadata.setdefault(_META_CONTEXT_POOL_LOCK, threading.Lock())
+            handle.metadata.setdefault(_META_CONTEXT_LANG_ENUMS, {})
+            return pools
+
+        contexts: dict = handle.metadata.get(_META_CONTEXTS) or {}
+        pools = {
+            lang: [{"context": context, "lock": threading.Lock()}]
+            for lang, context in contexts.items()
+        }
+        handle.metadata[_META_CONTEXT_POOLS] = pools
+        handle.metadata.setdefault(_META_CONTEXT_POOL_LOCK, threading.Lock())
+        handle.metadata.setdefault(_META_CONTEXT_LANG_ENUMS, {})
+        return pools
+
+    def _language_enum_for_context(self, handle: SandboxHandle, language: str) -> Any | None:
+        """Return the SDK enum value required to create a new context."""
+        lang_enums: dict = handle.metadata.setdefault(_META_CONTEXT_LANG_ENUMS, {})
+        if language in lang_enums:
+            return lang_enums[language]
+
+        enum_name = _LANGUAGE_ENUM_MAP.get(language)
+        if enum_name is None:
+            return None
+
+        try:
+            from code_interpreter.models.code import SupportedLanguage  # type: ignore[import]
+        except ImportError:
+            return None
+
+        lang_enum = getattr(SupportedLanguage, enum_name, None)
+        if lang_enum is not None:
+            lang_enums[language] = lang_enum
+        return lang_enum
+
+    def _create_context_pool_entry(
+        self,
+        handle: SandboxHandle,
+        language: str,
+    ) -> dict[str, Any] | None:
+        """Create one additional execution context for *language*."""
+        interpreter = handle.metadata.get(_META_INTERPRETER)
+        if interpreter is None:
+            return None
+
+        lang_enum = self._language_enum_for_context(handle, language)
+        if lang_enum is None:
+            return None
+
+        context = interpreter.codes.create_context(lang_enum)
+        logger.info(
+            "OpenSandboxProvider: additional context created for language '%s' "
+            "(sandbox=%s, context_id=%s)",
+            language,
+            handle.sandbox_id,
+            getattr(context, "id", "<unknown>"),
+        )
+        return {"context": context, "lock": threading.Lock()}
+
+    def _acquire_context_entry(
+        self,
+        handle: SandboxHandle,
+        language: str,
+        wait_timeout: int | float,
+    ) -> dict[str, Any] | None:
+        """Acquire a free context for a code run, growing the pool when needed."""
+        pools = self._ensure_context_pools(handle)
+        pool_lock = handle.metadata.setdefault(_META_CONTEXT_POOL_LOCK, threading.Lock())
+        deadline = time.monotonic() + max(float(wait_timeout), 1.0)
+        max_contexts = _max_contexts_per_language()
+
+        while True:
+            with pool_lock:
+                pool = pools.get(language, [])
+                for entry in pool:
+                    entry_lock = entry["lock"]
+                    if entry_lock.acquire(blocking=False):
+                        return entry
+
+                if pool and len(pool) < max_contexts:
+                    entry = self._create_context_pool_entry(handle, language)
+                    if entry is not None:
+                        entry["lock"].acquire(blocking=False)
+                        pool.append(entry)
+                        pools[language] = pool
+                        return entry
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            time.sleep(min(0.05, remaining))
+
+    def _release_context_entry(self, entry: dict[str, Any] | None) -> None:
+        """Release a context entry acquired by ``_acquire_context_entry``."""
+        if entry is None:
+            return
+        entry_lock = entry.get("lock")
+        try:
+            if entry_lock is not None and entry_lock.locked():
+                entry_lock.release()
+        except RuntimeError:
+            pass
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -629,26 +829,52 @@ class OpenSandboxProvider(SandboxProvider):
             if max_output_chars is not None
             else settings.SANDBOX_MAX_OUTPUT_CHARS
         )
+        effective_timeout: int | float = (
+            timeout
+            if timeout is not None
+            else settings.SANDBOX_DEFAULT_TIMEOUT_S
+        )
 
         interpreter = handle.metadata.get(_META_INTERPRETER)
-        contexts: dict = handle.metadata.get(_META_CONTEXTS) or {}
-        context = contexts.get(language)
 
         if interpreter is None:
             return "[Error] OpenSandbox interpreter not initialised for this sandbox."
 
-        if context is None:
-            available = list(contexts.keys())
+        context_pools = self._ensure_context_pools(handle)
+        if language not in context_pools:
+            available = list(context_pools.keys())
             return (
                 f"[Error] Language '{language}' is not available in this sandbox. "
                 f"Available languages: {available}"
             )
 
+        context_entry = self._acquire_context_entry(
+            handle,
+            language,
+            effective_timeout,
+        )
+        if context_entry is None:
+            return (
+                f"[Error] No execution context for language '{language}' became "
+                f"available within {effective_timeout}s. "
+                "The sandbox is busy; try again or increase "
+                "OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE."
+            )[:effective_limit]
+        context = context_entry["context"]
+
         # Build streaming handlers when the caller wants live stdout lines.
+        # Capture the execution id from the init event so a timed-out stream can
+        # be interrupted instead of leaving the Jupyter kernel busy indefinitely.
         handlers = None
-        if on_stdout is not None:
+        execution_id: dict[str, str | None] = {"value": None}
+        if on_stdout is not None or effective_timeout > 0:
             try:
                 from opensandbox.models.execd_sync import ExecutionHandlersSync
+
+                def _init_cb(msg: object) -> None:
+                    execution_id["value"] = (
+                        msg.id if hasattr(msg, "id") else str(msg)
+                    )
 
                 def _stdout_cb(msg: object) -> None:
                     text: str = msg.text if hasattr(msg, "text") else str(msg)
@@ -657,12 +883,65 @@ class OpenSandboxProvider(SandboxProvider):
                     except Exception:
                         pass  # never let callback errors abort execution
 
-                handlers = ExecutionHandlersSync(on_stdout=_stdout_cb)
+                handlers = ExecutionHandlersSync(
+                    on_init=_init_cb,
+                    on_stdout=_stdout_cb if on_stdout is not None else None,
+                )
             except ImportError:
                 pass  # fall back to batch mode if SDK import fails
 
         try:
-            execution = interpreter.codes.run(code, context=context, handlers=handlers)
+            result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+            contextvars_context = copy_context()
+
+            def _run() -> None:
+                try:
+                    execution_result = interpreter.codes.run(
+                        code,
+                        context=context,
+                        handlers=handlers,
+                    )
+                    result_queue.put(("ok", execution_result))
+                except BaseException as exc:  # noqa: BLE001 - re-raised in caller thread
+                    result_queue.put(("error", exc))
+
+            thread = threading.Thread(
+                target=lambda: contextvars_context.run(_run),
+                name=f"opensandbox-run-{handle.sandbox_id}-{language}",
+                daemon=True,
+            )
+            thread.start()
+            thread.join(effective_timeout if effective_timeout > 0 else None)
+
+            if thread.is_alive():
+                exec_id = execution_id["value"]
+                if exec_id:
+                    try:
+                        interpreter.codes.interrupt(exec_id)
+                    except Exception as interrupt_exc:
+                        logger.warning(
+                            "OpenSandboxProvider.run_code timeout interrupt failed "
+                            "(sandbox_id=%s, execution_id=%s): %s",
+                            handle.sandbox_id,
+                            exec_id,
+                            interrupt_exc,
+                        )
+                logger.warning(
+                    "OpenSandboxProvider.run_code timed out "
+                    "(sandbox_id=%s, language=%s, timeout_s=%s, execution_id=%s)",
+                    handle.sandbox_id,
+                    language,
+                    effective_timeout,
+                    exec_id,
+                )
+                return (
+                    f"[Error] Code execution timed out after {effective_timeout}s."
+                )[:effective_limit]
+
+            status, payload = result_queue.get_nowait()
+            if status == "error":
+                raise payload
+            execution = payload
         except Exception as exc:
             # Phase 3: map SDK expiry signals to SandboxExpiredError so the session
             # service can evict the stale cache entry and recreate on the next turn.
@@ -677,6 +956,8 @@ class OpenSandboxProvider(SandboxProvider):
                 exc_info=True,
             )
             return f"[Error] Code execution failed: {exc}"[:effective_limit]
+        finally:
+            self._release_context_entry(context_entry)
 
         # Collect output: use the ``text`` property which combines stdout +
         # result text, then append stderr/error if present.
@@ -693,6 +974,10 @@ class OpenSandboxProvider(SandboxProvider):
                 else f"\n[Error] {execution.error}"
             )
             output_parts.append(err_text)
+
+        exit_code = getattr(execution, "exit_code", 0)
+        if isinstance(exit_code, int) and exit_code != 0 and execution.error is None:
+            output_parts.append(f"\n[Error] Non-zero exit code: {exit_code}")
 
         stderr_lines = execution.logs.stderr if execution.logs else []
         if stderr_lines:
@@ -792,10 +1077,8 @@ class OpenSandboxProvider(SandboxProvider):
 
         try:
             from opensandbox.models.filesystem import SearchEntry
-        except ImportError as exc:
-            raise RuntimeError(
-                "OpenSandboxProvider requires the 'opensandbox' package."
-            ) from exc
+        except ImportError:
+            SearchEntry = SimpleNamespace
 
         try:
             entries = sandbox.files.search(
@@ -903,11 +1186,16 @@ class OpenSandboxProvider(SandboxProvider):
         if skill.bootstrap_script_path:
             try:
                 script = _read_skill_file_text(skill, skill.bootstrap_script_path)
-                self.run_code(
+                language = _bootstrap_language_for_path(skill.bootstrap_script_path)
+                script = _wrap_bootstrap_script(script, language)
+                output = self.run_code(
                     handle,
                     script,
+                    language=language,
                     timeout=settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S,
                 )
+                if _bootstrap_failed(output):
+                    raise RuntimeError(output.strip() or "bootstrap execution failed")
                 state["phases"]["bootstrap"] = "ok"
             except Exception as exc:
                 state["phases"]["bootstrap"] = f"failed: {exc}"

@@ -116,6 +116,160 @@ class TestSkillRouterServiceRoute:
         decision = SkillRouterService().route([_msg("user", "hi")], catalog)
         assert decision["selected_skill_names"] == []
 
+    @pytest.mark.asyncio
+    async def test_llm_route_selects_from_catalog_only(self):
+        from services.skill_router_service import SkillRouterService
+
+        class FakeLLM:
+            async def ainvoke(self, prompt: str):
+                assert "Full conversation" not in prompt
+                return SimpleNamespace(
+                    content=(
+                        '{"selected_skill_names":["charts","not-real"],'
+                        '"reason":"chart request"}'
+                    )
+                )
+
+        catalog = [
+            _item("charts", description="create charts and graphs", skill_id=1),
+            _item("reporting", description="generate reports", skill_id=2),
+        ]
+        decision = await SkillRouterService().route_with_llm(
+            [_msg("user", "create a chart")],
+            catalog,
+            llm=FakeLLM(),
+        )
+
+        assert decision["selected_skill_names"] == ["charts"]
+        assert decision["reason"] == "chart request"
+
+    @pytest.mark.asyncio
+    async def test_llm_route_falls_back_to_keywords_on_error(self):
+        from services.skill_router_service import SkillRouterService
+
+        class BrokenLLM:
+            async def ainvoke(self, _prompt: str):
+                raise RuntimeError("nope")
+
+        catalog = [_item("charts", description="create charts and graphs")]
+        decision = await SkillRouterService().route_with_llm(
+            [_msg("user", "create charts")],
+            catalog,
+            llm=BrokenLLM(),
+        )
+
+        assert decision["selected_skill_names"] == ["charts"]
+        assert "keyword fallback" in decision["reason"]
+
+    @pytest.mark.asyncio
+    async def test_llm_empty_selection_is_respected(self):
+        from services.skill_router_service import SkillRouterService
+
+        class EmptyLLM:
+            async def ainvoke(self, _prompt: str):
+                return SimpleNamespace(
+                    content='{"selected_skill_names":[],"reason":"not a skill task"}'
+                )
+
+        catalog = [_item("charts", description="create charts and graphs")]
+        decision = await SkillRouterService().route_with_llm(
+            [_msg("user", "create charts")],
+            catalog,
+            llm=EmptyLLM(),
+        )
+
+        assert decision["selected_skill_names"] == []
+        assert decision["reason"] == "not a skill task"
+
+
+# ---------------------------------------------------------------------------
+# SkillToolRouterService
+# ---------------------------------------------------------------------------
+
+
+class TestSkillToolRouterService:
+    @pytest.mark.asyncio
+    async def test_routes_selected_skill_to_available_tool(self):
+        from services.skill_router_service import (
+            SkillToolRouterService,
+            format_skill_tool_guidance_section,
+        )
+
+        class FakeLLM:
+            async def ainvoke(self, prompt: str):
+                assert "PptxGenJS" in prompt
+                assert "typescript_repl" in prompt
+                return SimpleNamespace(
+                    content=(
+                        '{"instructions":"Use TypeScript for PPTX construction.",'
+                        '"tool_guidance":[{"skill_name":"pptx",'
+                        '"operation":"create presentation with PptxGenJS",'
+                        '"preferred_tool":"typescript_repl",'
+                        '"fallback_tools":["bash_repl"],'
+                        '"reason":"PptxGenJS is a Node/TypeScript library."}]}'
+                    )
+                )
+
+        decision = await SkillToolRouterService().route_with_llm(
+            selected_skills=[
+                {
+                    "name": "pptx",
+                    "description": "PowerPoint generation",
+                    "instructions": "Use PptxGenJS to create presentations.",
+                }
+            ],
+            available_tools=[
+                {"name": "typescript_repl", "description": "Run TypeScript."},
+                {"name": "bash_repl", "description": "Run shell commands."},
+            ],
+            llm=FakeLLM(),
+        )
+
+        assert decision is not None
+        assert decision["tool_guidance"][0]["preferred_tool"] == "typescript_repl"
+        section = format_skill_tool_guidance_section(decision)
+        assert "prefer `typescript_repl`" in section
+        assert "fallback: `bash_repl`" in section
+
+    @pytest.mark.asyncio
+    async def test_rejects_unknown_skill_and_tool_names(self):
+        from services.skill_router_service import SkillToolRouterService
+
+        class FakeLLM:
+            async def ainvoke(self, _prompt: str):
+                return SimpleNamespace(
+                    content=(
+                        '{"instructions":"x",'
+                        '"tool_guidance":[{"skill_name":"other",'
+                        '"operation":"x","preferred_tool":"missing_tool",'
+                        '"fallback_tools":["bash_repl"],"reason":"x"}]}'
+                    )
+                )
+
+        decision = await SkillToolRouterService().route_with_llm(
+            selected_skills=[{"name": "pptx", "instructions": "Use PptxGenJS."}],
+            available_tools=[{"name": "typescript_repl"}],
+            llm=FakeLLM(),
+        )
+
+        assert decision is None
+
+    @pytest.mark.asyncio
+    async def test_tool_router_failure_returns_none(self):
+        from services.skill_router_service import SkillToolRouterService
+
+        class BrokenLLM:
+            async def ainvoke(self, _prompt: str):
+                raise RuntimeError("boom")
+
+        decision = await SkillToolRouterService().route_with_llm(
+            selected_skills=[{"name": "pptx", "instructions": "Use PptxGenJS."}],
+            available_tools=[{"name": "typescript_repl"}],
+            llm=BrokenLLM(),
+        )
+
+        assert decision is None
+
 
 # ---------------------------------------------------------------------------
 # _extract_last_user_text

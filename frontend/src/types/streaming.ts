@@ -19,11 +19,13 @@ export interface TokenEventData {
 
 export interface ToolStartEventData {
   tool_name: string;
+  tool_call_id?: string;
   tool_input?: string;
 }
 
 export interface ToolEndEventData {
   tool_name: string;
+  tool_call_id?: string;
   tool_output?: string;
 }
 
@@ -51,6 +53,7 @@ export interface DoneEventData {
 
 export interface ActiveTool {
   name: string;
+  toolCallId?: string;
   displayName: string;
   input?: string;
   status: 'running' | 'complete';

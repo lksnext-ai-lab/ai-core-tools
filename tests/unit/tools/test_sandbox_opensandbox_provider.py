@@ -14,7 +14,10 @@ Verification criteria from the RFC:
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
+import sys
+import time
+import threading
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -154,15 +157,8 @@ def mock_sdk():
 def provider_and_handle(mock_sdk):
     """Create a real OpenSandboxProvider and call create_sandbox with mocked SDK."""
     from tools.sandbox.opensandbox_provider import OpenSandboxProvider, _META_SANDBOX, _META_INTERPRETER, _META_CONTEXTS
-    from opensandbox.sync.sandbox import SandboxSync
-    from code_interpreter.sync.code_interpreter import CodeInterpreterSync
-    from code_interpreter.models.code import SupportedLanguage
 
-    with (
-        patch("tools.sandbox.opensandbox_provider._get_connection_config", return_value=MagicMock()),
-        patch("opensandbox.sync.sandbox.SandboxSync", mock_sdk["SandboxSync"]),
-        patch("code_interpreter.sync.code_interpreter.CodeInterpreterSync", mock_sdk["InterpreterSync"]),
-    ):
+    with patch("tools.sandbox.opensandbox_provider._get_connection_config", return_value=MagicMock()):
         provider = OpenSandboxProvider()
         # Directly inject the mocks into the handle instead of calling create_sandbox
         # (which would need complex import patching). We test create_sandbox separately.
@@ -213,6 +209,21 @@ class TestOpenSandboxProviderRunCode:
         result = provider.run_code(handle, "print(x)")
         assert "NameError" in result or "x" in result
 
+    def test_includes_error_info_on_non_zero_exit(self, provider_and_handle):
+        provider, handle = provider_and_handle
+        mock_interpreter = handle.metadata["_interpreter"]
+
+        execution = MagicMock()
+        execution.text = ""
+        execution.error = None
+        execution.logs = MagicMock()
+        execution.logs.stderr = []
+        execution.exit_code = 2
+        mock_interpreter.codes.run.return_value = execution
+
+        result = provider.run_code(handle, "raise SystemExit(2)")
+        assert "[Error] Non-zero exit code: 2" in result
+
     def test_output_truncated_at_20000_chars(self, provider_and_handle):
         provider, handle = provider_and_handle
         mock_interpreter = handle.metadata["_interpreter"]
@@ -233,6 +244,36 @@ class TestOpenSandboxProviderRunCode:
         marker = "\n[Output truncated at 20000 characters]"
         assert result.endswith(marker)
         assert len(result) == 20_000 + len(marker)
+
+    def test_run_code_times_out_and_interrupts_execution(self, provider_and_handle):
+        provider, handle = provider_and_handle
+        mock_interpreter = handle.metadata["_interpreter"]
+
+        class FakeExecutionHandlersSync:
+            def __init__(self, on_init=None, on_stdout=None):
+                self.on_init = on_init
+                self.on_stdout = on_stdout
+
+        execd_sync_module = ModuleType("opensandbox.models.execd_sync")
+        execd_sync_module.ExecutionHandlersSync = FakeExecutionHandlersSync
+
+        def _slow_run(*args, **kwargs):
+            handlers = kwargs.get("handlers")
+            if handlers and handlers.on_init:
+                handlers.on_init(SimpleNamespace(id="exec-timeout-1"))
+            time.sleep(0.2)
+            return MagicMock()
+
+        mock_interpreter.codes.run.side_effect = _slow_run
+
+        with patch.dict(
+            sys.modules,
+            {"opensandbox.models.execd_sync": execd_sync_module},
+        ):
+            result = provider.run_code(handle, "while True: pass", timeout=0.01)
+
+        assert "timed out" in result
+        mock_interpreter.codes.interrupt.assert_called_once_with("exec-timeout-1")
 
     def test_no_access_to_backend_env(self, provider_and_handle):
         """
@@ -259,6 +300,59 @@ class TestOpenSandboxProviderRunCode:
             mock_popen.assert_not_called()
         # The result comes from the SDK mock, not the backend environ
         assert result == "no-env-data"
+
+    def test_parallel_runs_use_additional_context(self, provider_and_handle, monkeypatch):
+        provider, handle = provider_and_handle
+        mock_interpreter = handle.metadata["_interpreter"]
+
+        monkeypatch.setattr(
+            "tools.sandbox.opensandbox_provider._max_contexts_per_language",
+            lambda: 2,
+        )
+
+        primary_context = handle.metadata["_contexts"]["python"]
+        secondary_context = MagicMock()
+        secondary_context.id = "ctx-456"
+        handle.metadata["_context_lang_enums"] = {"python": "python"}
+        mock_interpreter.codes.create_context.return_value = secondary_context
+
+        barrier = threading.Barrier(2)
+        contexts_used = []
+        contexts_lock = threading.Lock()
+
+        def _execution(text: str):
+            execution = MagicMock()
+            execution.text = text
+            execution.error = None
+            execution.logs = MagicMock()
+            execution.logs.stderr = []
+            execution.exit_code = 0
+            return execution
+
+        def _run(code, *, context, handlers=None):
+            with contexts_lock:
+                contexts_used.append(context)
+            barrier.wait(timeout=1)
+            time.sleep(0.02)
+            return _execution(f"ran {code}")
+
+        mock_interpreter.codes.run.side_effect = _run
+
+        results: list[str] = []
+        threads = [
+            threading.Thread(target=lambda code=code: results.append(provider.run_code(handle, code)))
+            for code in ("one", "two")
+        ]
+
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=2)
+
+        assert len(results) == 2
+        assert primary_context in contexts_used
+        assert secondary_context in contexts_used
+        mock_interpreter.codes.create_context.assert_called_once_with("python")
 
 
 class TestOpenSandboxProviderFileIO:

@@ -115,6 +115,7 @@ class AgentExecutionService:
                 working_dir=ctx.working_dir,
                 sandbox_handle=ctx.sandbox_handle,
                 sandbox_provider=ctx.sandbox_provider,
+                router_message=message,
             )
 
             return await self._finalize_turn(ctx, response, db)
@@ -1125,6 +1126,7 @@ class AgentExecutionService:
         working_dir: Optional[str] = None,
         sandbox_handle: Any = None,
         sandbox_provider: Any = None,
+        router_message: Optional[str] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
@@ -1140,9 +1142,10 @@ class AgentExecutionService:
 
         mcp_client = None
         try:
-            # Create the agent chain with all tools and capabilities
-            # Build a minimal user-message list so the skill router can score skills.
-            _router_messages = [{"role": "user", "content": message}]
+            # Create the agent chain with all tools and capabilities. The skill
+            # router gets only the original user text, not the enhanced message
+            # that may include attached file contents.
+            _router_messages = [{"role": "user", "content": router_message or message}]
 
             agent_chain, mcp_client = await create_agent(
                 fresh_agent,

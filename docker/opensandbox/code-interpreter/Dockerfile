@@ -12,8 +12,9 @@
 # This image fixes all three issues:
 #
 #   BUILD TIME: Pre-install all kernel specs (Python, Java, Bash, Go,
-#   TypeScript) and create a stable /usr/local/bin/jupyter symlink so the
-#   binary is on the default PATH.
+#   JavaScript, TypeScript) and create stable /usr/local/bin/jupyter and
+#   /usr/local/bin/tslab symlinks so runtime startup does not depend on
+#   versioned language paths.
 #
 #   RUNTIME: Replace /usr/bin/tail with init.sh, a thin wrapper that detects
 #   the "tail -f /dev/null" invocation, starts Jupyter (with XSRF disabled so
@@ -22,13 +23,20 @@
 
 FROM opensandbox/code-interpreter:v1.0.2
 
-# Pre-install kernel specs and create a stable jupyter symlink.
+# System tools commonly needed by document-processing Skills and code runs:
+# - poppler-utils: pdftoppm/pdfinfo for PDF rendering/extraction workflows.
+# - libreoffice: headless Office document conversion.
+RUN apt-get update -qq && \
+    apt-get install -y -qq poppler-utils libreoffice && \
+    rm -rf /var/lib/apt/lists/*
+
+# Pre-install kernel specs and create stable runtime symlinks.
 #
 # code-interpreter-env.sh sets up PATH for each language (Python, Java, etc.).
 # We source it to get the right binary paths, run the kernel install steps
 # that code-interpreter.sh would normally run at container start, and then
-# create /usr/local/bin/jupyter so init.sh can call it by name without needing
-# the versioned Python path.
+# create stable symlinks so init.sh and Jupyter kernels can call their binaries
+# without needing the versioned language paths.
 RUN bash -c '\
     source /opt/opensandbox/code-interpreter-env.sh python && \
     source /opt/opensandbox/code-interpreter-env.sh java  && \
@@ -41,7 +49,11 @@ RUN bash -c '\
     gonb --install                                         && \
     npm install -g tslab                                   && \
     tslab install                                          && \
-    ln -sf "$(which jupyter)" /usr/local/bin/jupyter \
+    ln -sf "$(which jupyter)" /usr/local/bin/jupyter       && \
+    ln -sf "$(which tslab)" /usr/local/bin/tslab           && \
+    jupyter kernelspec list                                && \
+    test -f /usr/local/share/jupyter/kernels/jslab/kernel.json && \
+    test -f /usr/local/share/jupyter/kernels/tslab/kernel.json \
 '
 
 # Replace the /usr/bin/tail binary with init.sh.

@@ -1,9 +1,93 @@
+import posixpath
 from typing import List, Optional, Any
 from langchain_core.tools import tool
 from models.agent import AgentSkill
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _build_skill_map(skill_associations: List[AgentSkill]) -> dict[str, Any]:
+    """Return skill objects keyed by normalized skill name."""
+    skill_map = {}
+    for assoc in skill_associations:
+        if not assoc.skill:
+            continue
+        skill = assoc.skill
+        normalized_name = skill.name.lower().strip()
+        existing_skill = skill_map.get(normalized_name)
+        if existing_skill is not None and existing_skill is not skill:
+            logger.warning(
+                "Duplicate skill name detected after normalization: '%s'. "
+                "Keeping existing skill '%s' and ignoring new skill '%s'.",
+                normalized_name,
+                getattr(existing_skill, "name", repr(existing_skill)),
+                getattr(skill, "name", repr(skill)),
+            )
+            continue
+        skill_map[normalized_name] = skill
+    return skill_map
+
+
+def _available_skills_text(skill_map: dict[str, Any]) -> str:
+    return ", ".join(sorted({skill.name for skill in skill_map.values()}))
+
+
+def _normalize_skill_file_path(path: str, skill_name: str) -> str:
+    """Normalize a package-root-relative SkillFile path.
+
+    The model may pass the path exactly as referenced in SKILL.md
+    (``pptxgenjs.md``), or as the sandbox path returned by ``load_skill``
+    (``/workspace/.skills/pptx/pptxgenjs.md``). Store and compare paths using
+    the package-root-relative representation.
+    """
+    raw_path = (path or "").strip().replace("\\", "/")
+    if not raw_path:
+        raise ValueError("path must not be empty")
+
+    skill_prefix = skill_name.lower().strip()
+    normalized_lower = raw_path.lower()
+    for prefix in (
+        f"/workspace/.skills/{skill_prefix}/",
+        f"workspace/.skills/{skill_prefix}/",
+        f".skills/{skill_prefix}/",
+    ):
+        if normalized_lower.startswith(prefix):
+            raw_path = raw_path[len(prefix):]
+            break
+
+    while raw_path.startswith("./"):
+        raw_path = raw_path[2:]
+
+    if raw_path.startswith("/"):
+        raise ValueError("path must be relative to the skill package")
+
+    normalized = posixpath.normpath(raw_path)
+    if normalized in ("", ".") or normalized.startswith("../") or normalized == "..":
+        raise ValueError("path must not escape the skill package")
+    return normalized
+
+
+def _decode_skill_file_content(skill_file: Any) -> str:
+    content_text = getattr(skill_file, "content_text", None)
+    if content_text is not None:
+        return content_text
+
+    content_bytes = getattr(skill_file, "content_bytes", None)
+    if content_bytes is None:
+        return ""
+
+    try:
+        return content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        path = getattr(skill_file, "path", "file")
+        media_type = getattr(skill_file, "media_type", None) or "application/octet-stream"
+        return (
+            f"[BINARY SKILL FILE: {path}]\n"
+            f"Media type: {media_type}\n"
+            f"Size: {len(content_bytes)} bytes\n"
+            "This file is binary and cannot be returned as text through this tool."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -115,16 +199,24 @@ def load_skill(skill: Any, handle: Any, provider: Any) -> str:
             "phases": {"files": files_status, "bootstrap": bootstrap_status},
         }
 
-    if isinstance(bootstrap_status, str) and bootstrap_status.startswith("failed:"):
-        preamble = (
-            f"[SKILL ACTIVATED: {skill.name}]\n\n"
-            f"Runtime status: files={files_status}, bootstrap={bootstrap_status}.\n"
-            "Use the instructions below, but do not assume bootstrap-created assets "
-            "are available unless you retry activation successfully or choose a "
-            "fallback implementation.\n\n"
+    preamble = f"[SKILL ACTIVATED: {skill.name}]\n\n"
+    files_dir = phase_status.get("files_dir")
+    if files_dir:
+        preamble += (
+            f"Supporting files are available in `{files_dir}`. "
+            "When the instructions reference another local file, read that file "
+            "from this directory before choosing an implementation path.\n"
         )
-    else:
-        preamble = f"[SKILL ACTIVATED: {skill.name}]\n\n"
+
+    if isinstance(bootstrap_status, str) and bootstrap_status.startswith("failed:"):
+        preamble += (
+            f"Runtime status: files={files_status}, bootstrap={bootstrap_status}.\n"
+            "Use the instructions below, but treat runtime setup as incomplete. "
+            "If the preferred implementation depends on a missing tool or package, "
+            "retry or repair setup before falling back.\n"
+        )
+
+    preamble += "\n"
 
     return preamble + (getattr(skill, "content", "") or "")
 
@@ -218,7 +310,7 @@ You have access to the following specialized skills that you can load on-demand 
 
 {skills_list}
 
-When a user's request matches one of these skills, use the `load_skill` tool with the skill name to load detailed instructions for that specific task. Skills with supporting package files will also automatically prepare the sandbox environment so you can call `python_repl` immediately afterwards. Only load a skill when it's relevant to the current task.
+When a user's request matches one of these skills, use the `load_skill` tool with the skill name to load detailed instructions for that specific task. If the returned instructions reference another file such as `pptxgenjs.md`, `editing.md`, a script, or any other supporting file, use the `read_skill_file` tool to retrieve that file before choosing an implementation path. Skills with supporting package files will also automatically prepare the sandbox environment and copy those files under `/workspace/.skills/<skill-name>`. After loading a skill, follow the returned instructions and use the REPL language or shell commands the skill calls for; do not default to Python when the skill directs you to another runtime. Only load a skill when it's relevant to the current task.
 </available_skills>"""
 
 
@@ -246,29 +338,13 @@ def create_skill_loader_tool(
         skills are available.
     """
     # Build a map of normalized skill names to Skill objects
-    skill_map = {}
-    for assoc in skill_associations:
-        if not assoc.skill:
-            continue
-        skill = assoc.skill
-        normalized_name = skill.name.lower().strip()
-        existing_skill = skill_map.get(normalized_name)
-        if existing_skill is not None and existing_skill is not skill:
-            logger.warning(
-                "Duplicate skill name detected after normalization: '%s'. "
-                "Keeping existing skill '%s' and ignoring new skill '%s'.",
-                normalized_name,
-                getattr(existing_skill, "name", repr(existing_skill)),
-                getattr(skill, "name", repr(skill)),
-            )
-            continue
-        skill_map[normalized_name] = skill
+    skill_map = _build_skill_map(skill_associations)
 
     if not skill_map:
         logger.info("No skills available for this agent")
         return None
 
-    available_skills = ", ".join(sorted({skill.name for skill in skill_map.values()}))
+    available_skills = _available_skills_text(skill_map)
     logger.info("Creating skill loader tool with %d skills: %s", len(skill_map), available_skills)
 
     @tool
@@ -298,3 +374,72 @@ def create_skill_loader_tool(
         return load_skill(skill, sandbox_handle, sandbox_provider)
 
     return load_skill_tool
+
+
+def create_skill_file_reader_tool(skill_associations: List[AgentSkill]):
+    """
+    Create a read_skill_file LangChain tool for retrieving SkillFile contents.
+
+    This complements ``load_skill``: the loader returns the main SKILL.md body,
+    while this tool lets the model fetch supporting files referenced by those
+    instructions without needing to know where the package lives in the sandbox.
+    """
+    skill_map = _build_skill_map(skill_associations)
+    if not skill_map:
+        logger.info("No skills available for skill file reader tool")
+        return None
+
+    available_skills = _available_skills_text(skill_map)
+    logger.info(
+        "Creating skill file reader tool with %d skills: %s",
+        len(skill_map),
+        available_skills,
+    )
+
+    @tool("read_skill_file")
+    def read_skill_file_tool(skill_name: str, path: str) -> str:
+        """Read a supporting file bundled with an attached Skill.
+
+        Use this after ``load_skill`` when the skill instructions reference
+        files such as ``pptxgenjs.md``, ``editing.md``, scripts, templates, or
+        other package resources. The path may be package-relative or the full
+        sandbox path under ``/workspace/.skills/<skill-name>/``.
+
+        Args:
+            skill_name: The name of the skill whose file should be read.
+            path: The referenced file path.
+
+        Returns:
+            Text content for the requested file, or a clear error/listing when
+            the skill or path is not available.
+        """
+        skill_key = skill_name.lower().strip()
+        if skill_key not in skill_map:
+            return f"Skill '{skill_name}' not found. Available skills: {available_skills}"
+
+        skill = skill_map[skill_key]
+        files = list(getattr(skill, "files", None) or [])
+        if not files:
+            return f"Skill '{skill.name}' has no supporting files."
+
+        try:
+            normalized_path = _normalize_skill_file_path(path, skill.name)
+        except ValueError as exc:
+            return f"Invalid skill file path '{path}': {exc}"
+
+        file_map = {getattr(file, "path", ""): file for file in files}
+        skill_file = file_map.get(normalized_path)
+        if skill_file is None:
+            available_files = ", ".join(sorted(p for p in file_map if p)) or "(none)"
+            return (
+                f"Skill file '{normalized_path}' not found for skill '{skill.name}'. "
+                f"Available files: {available_files}"
+            )
+
+        content = _decode_skill_file_content(skill_file)
+        return (
+            f"[SKILL FILE: {skill.name}/{normalized_path}]\n\n"
+            f"{content}"
+        )
+
+    return read_skill_file_tool

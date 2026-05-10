@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Jupyter bootstrap wrapper for opensandbox sandbox containers.
 #
 # The opensandbox-server bootstraps every sandbox container by overriding its
@@ -16,16 +16,25 @@
 # settings execd requires, waits until Jupyter is accepting authenticated
 # connections, and then exec's the real tail binary to keep the container alive.
 #
-# Kernel specs (Python, Java, Bash, Go, TypeScript) are pre-installed at image
-# build time by the Dockerfile so they are available immediately.
-# /usr/local/bin/jupyter is a symlink created at build time so the binary is
-# on the default container PATH.
+# Kernel specs (Python, Java, Bash, Go, JavaScript, TypeScript) are
+# pre-installed at image build time by the Dockerfile so they are available
+# immediately. Stable /usr/local/bin symlinks are also created at build time so
+# Jupyter and tslab can be found even when OpenSandbox replaces the image
+# entrypoint.
 
 JUPYTER_PORT="${JUPYTER_PORT:-44771}"
 JUPYTER_TOKEN="${JUPYTER_TOKEN:-opensandboxcodeinterpreterjupyter}"
 
 case "$*" in
   "-f /dev/null")
+    if [ -f /opt/opensandbox/code-interpreter-env.sh ]; then
+      # Give Jupyter kernels the same language PATH setup as the upstream
+      # code-interpreter entrypoint, including Node for jslab/tslab.
+      . /opt/opensandbox/code-interpreter-env.sh python >/dev/null 2>&1 || true
+      . /opt/opensandbox/code-interpreter-env.sh node >/dev/null 2>&1 || true
+      . /opt/opensandbox/code-interpreter-env.sh go >/dev/null 2>&1 || true
+    fi
+
     jupyter notebook \
         --ip=127.0.0.1 \
         --port="${JUPYTER_PORT}" \
@@ -35,7 +44,7 @@ case "$*" in
         --no-browser \
         --allow-root \
         --notebook-dir=/workspace \
-        >/tmp/jupyter.log 2>&1 &
+        2>&1 &
 
     # Wait until Jupyter is accepting authenticated connections (up to 30 s).
     # Use the token as a query parameter so the health-check request succeeds

@@ -94,6 +94,11 @@ SANDBOX_MAX_OUTPUT_CHARS = int(os.getenv('SANDBOX_MAX_OUTPUT_CHARS', '20000'))
 # Maximum number of REPL executions per agent turn (budget guard).
 SANDBOX_MAX_EXECUTIONS_PER_TURN = int(os.getenv('SANDBOX_MAX_EXECUTIONS_PER_TURN', '5'))
 
+# Maximum number of OpenSandbox code contexts created per language in one
+# sandbox. Values above 1 allow parallel tool executions without sharing a busy
+# interpreter session.
+OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE = int(os.getenv('OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE', '4'))
+
 # Minutes before a sandbox TTL is proactively renewed.
 SANDBOX_RENEW_MINUTES = int(os.getenv('SANDBOX_RENEW_MINUTES', '30'))
 

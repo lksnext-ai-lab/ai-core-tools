@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronRight, ChevronLeft, ChevronDown, Terminal, Trash2, Wrench } from 'lucide-react';
 import type { ToolExecutionRecord } from '../../hooks/useStreamingChat';
 
-const CODE_TOOL_NAMES = new Set(['python_repl', 'code_interpreter']);
+function isCodeTool(toolName: string): boolean {
+  return toolName === 'code_interpreter' || toolName.endsWith('_repl');
+}
 
 function formatDuration(startedAt: number, endedAt?: number): string {
   const ms = (endedAt ?? Date.now()) - startedAt;
@@ -53,16 +55,30 @@ function CodeBlock({
 
 function ToolEntryRow({ record }: Readonly<{ record: ToolExecutionRecord }>) {
   const [expanded, setExpanded] = useState(record.status === 'running');
+  const previousStatusRef = useRef(record.status);
   const stdoutScrollRef = useRef<HTMLPreElement>(null);
-  const isCode = CODE_TOOL_NAMES.has(record.toolName);
+  const isCode = isCodeTool(record.toolName);
 
   const hasInput = Boolean(record.toolInput);
   const hasOutput = Boolean(record.toolOutput);
-  const hasStdout = record.outputLines.length > 0;
-  const canExpand = hasInput || hasOutput || hasStdout;
+  const stdoutLines = record.outputLines
+    .filter((entry) => entry.stream === 'stdout')
+    .map((entry) => entry.line);
+  const stderrLines = record.outputLines
+    .filter((entry) => entry.stream === 'stderr')
+    .map((entry) => entry.line);
+  const hasStdout = stdoutLines.length > 0;
+  const hasStderr = stderrLines.length > 0;
+  const canExpand = hasInput || hasOutput || hasStdout || hasStderr;
 
   useEffect(() => {
-    if (record.status === 'running') setExpanded(true);
+    const previousStatus = previousStatusRef.current;
+    if (record.status === 'running') {
+      setExpanded(true);
+    } else if (previousStatus === 'running') {
+      setExpanded(false);
+    }
+    previousStatusRef.current = record.status;
   }, [record.status]);
 
   // Auto-scroll stdout to bottom while running
@@ -129,9 +145,18 @@ function ToolEntryRow({ record }: Readonly<{ record: ToolExecutionRecord }>) {
           {hasStdout && (
             <CodeBlock
               label="stdout"
-              text={record.outputLines.join('\n')}
+              text={stdoutLines.join('\n')}
               scrollRef={stdoutScrollRef}
               showCursor={record.status === 'running'}
+            />
+          )}
+
+          {hasStderr && (
+            <CodeBlock
+              label="stderr"
+              text={stderrLines.join('\n')}
+              scrollRef={hasStdout ? undefined : stdoutScrollRef}
+              showCursor={record.status === 'running' && !hasStdout}
             />
           )}
 
@@ -231,4 +256,3 @@ export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHist
     </div>
   );
 }
-

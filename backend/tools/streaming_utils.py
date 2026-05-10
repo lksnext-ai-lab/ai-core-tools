@@ -367,7 +367,18 @@ def _map_custom_chunk(chunk: Any) -> list[dict] | None:
         A list containing one event dict.
     """
     if isinstance(chunk, dict) and chunk.get("type") == "code_output":
-        return [{"type": SSE_CODE_OUTPUT, "data": {"line": chunk.get("line", "")}}]
+        stream = chunk.get("stream", "stdout")
+        if stream not in ("stdout", "stderr"):
+            stream = "stdout"
+        return [
+            {
+                "type": SSE_CODE_OUTPUT,
+                "data": {
+                    "line": chunk.get("line", ""),
+                    "stream": stream,
+                },
+            }
+        ]
 
     if isinstance(chunk, str):
         payload = {"message": chunk}

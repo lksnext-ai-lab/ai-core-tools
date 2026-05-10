@@ -127,3 +127,32 @@ class TestMapStreamEventDispatcher:
         )
 
         assert map_stream_event("messages", chunk) is None
+from backend.tools.streaming_utils import SSE_CODE_OUTPUT, map_stream_event
+
+
+def test_code_output_custom_event_preserves_stream():
+    events = map_stream_event(
+        "custom",
+        {"type": "code_output", "stream": "stderr", "line": "warn\n"},
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {"line": "warn\n", "stream": "stderr"},
+        }
+    ]
+
+
+def test_code_output_custom_event_defaults_unknown_stream_to_stdout():
+    events = map_stream_event(
+        "custom",
+        {"type": "code_output", "stream": "invalid", "line": "hello\n"},
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {"line": "hello\n", "stream": "stdout"},
+        }
+    ]

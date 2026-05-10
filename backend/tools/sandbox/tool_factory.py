@@ -10,9 +10,9 @@ produce tools named ``<language>_repl`` (e.g. ``javascript_repl``).
 in ``provider.get_supported_languages()``, making it the preferred entry point
 when the agent builder wants to expose all provider-supported languages.
 
-``create_sandbox_skill_tools`` (IT-3) returns ``activate_sandbox_skill`` and
-``list_active_sandbox_skills`` tools.  Only Skills with ``runtime == "python-sandbox"``
-that are attached to the agent may be activated.
+``create_sandbox_skill_tools`` (IT-3) returns recovery/debug tools for sandbox
+Skill activation. Normal Skill usage should go through ``load_skill``, which
+loads instructions and prepares the sandbox in one step.
 """
 
 from __future__ import annotations
@@ -35,9 +35,8 @@ _LANGUAGE_META: dict[str, dict[str, str]] = {
         "display": "Python",
         "description_extra": (
             "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n\n"
-            "If this agent has Skills with ``runtime == 'python-sandbox'``, call\n"
-            "``activate_sandbox_skill`` BEFORE running code that requires the skill's\n"
-            "packages, scripts, or assets."
+            "If a task requires a Skill, use ``load_skill`` first. That tool\n"
+            "loads the Skill instructions and prepares any bundled sandbox files."
         ),
     },
     "javascript": {
@@ -262,9 +261,11 @@ def create_sandbox_skill_tools(
 ) -> list:
     """Return ``activate_sandbox_skill`` and ``list_active_sandbox_skills`` tools.
 
+    These tools are for explicit recovery/debug activation. The normal path is
+    ``load_skill``, which loads instructions and prepares bundled sandbox files.
     Only Skills with ``runtime == "python-sandbox"`` that are attached to the
-    agent (via *skill_associations*) may be activated.  Skills without a runtime
-    tag are prompt-only and do not appear in the activation map.
+    agent (via *skill_associations*) may be activated here. Skills without a
+    runtime tag are prompt-only and do not appear in the activation map.
 
     Args:
         handle:            Active sandbox handle.
@@ -288,13 +289,13 @@ def create_sandbox_skill_tools(
 
     @tool
     def activate_sandbox_skill(skill_name: str) -> str:
-        """Activate one attached Skill inside the conversation sandbox.
+        """Retry sandbox activation for one attached Skill.
 
-        ALWAYS call this tool BEFORE running code that depends on a Skill's
-        Python packages, scripts, templates, or assets.  Activation installs
-        all the Skill's dependencies and copies its assets into the working
-        directory.  Activation is idempotent — calling it again for an
-        already-active Skill is a no-op.
+        Use this only when ``load_skill`` already loaded the Skill but sandbox
+        setup needs an explicit retry, or when a user/admin explicitly asks to
+        repair Skill activation. Normal task execution should call
+        ``load_skill`` instead. Activation is idempotent — calling it again for
+        an already-active Skill is a no-op.
 
         Args:
             skill_name: Name of the skill to activate (case-insensitive).
@@ -352,4 +353,3 @@ def create_sandbox_skill_tools(
         return ", ".join(active) if active else "No Skills are active in the sandbox."
 
     return [activate_sandbox_skill, list_active_sandbox_skills]
-
