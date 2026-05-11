@@ -439,7 +439,7 @@ function ChatInterface({
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Metadata Filters Section */}
       {metadataFields && metadataFields.length > 0 && (
         <div className="pg-glass rounded-xl overflow-hidden">
@@ -503,9 +503,9 @@ function ChatInterface({
       )}
 
       {/* Chat Interface + File Panel */}
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-1 min-h-0 gap-4 items-stretch">
         {/* Chat card */}
-        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
+        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-full min-h-0">
           {/* Reset button — subtle, top-right corner */}
           <div className="flex justify-end px-4 pt-3 pb-1">
             <button

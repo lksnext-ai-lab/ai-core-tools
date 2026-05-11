@@ -436,8 +436,8 @@ export default function MarketplaceChatPage() {
     !isStreaming && !isQuotaExceeded && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   return (
-    <div className="flex gap-4 items-start h-full min-h-0">
-      <div className="flex-1 pg-glass rounded-2xl flex flex-col h-full min-h-[480px]">
+    <div className="flex gap-4 items-stretch h-full min-h-0">
+      <div className="flex-1 pg-glass rounded-2xl flex flex-col h-full min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-white/20 dark:border-gray-700/30 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">

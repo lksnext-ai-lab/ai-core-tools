@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lightbulb } from 'lucide-react';
+import { File, FileText, Folder, Lightbulb } from 'lucide-react';
 import FormActions from './FormActions';
 
 interface SkillFormData {
@@ -17,14 +17,132 @@ interface Skill {
   description: string;
   content: string;
   bootstrap_script_path?: string | null;
+  files?: SkillFile[];
   is_builtin?: boolean;
   created_at: string;
+}
+
+interface SkillFile {
+  file_id: number;
+  path: string;
+  media_type?: string | null;
+  content_text?: string | null;
+  checksum_sha256?: string | null;
 }
 
 interface SkillFormProps {
   skill?: Skill | null;
   onSubmit: (data: SkillFormData) => Promise<void>;
   onCancel: () => void;
+}
+
+interface FileTreeNode {
+  name: string;
+  path: string;
+  type: 'folder' | 'file';
+  children: Map<string, FileTreeNode>;
+  file?: SkillFile;
+}
+
+function createTreeNode(name: string, path: string, type: FileTreeNode['type'], file?: SkillFile): FileTreeNode {
+  return {
+    name,
+    path,
+    type,
+    children: new Map(),
+    file,
+  };
+}
+
+function buildFileTree(files: SkillFile[]): FileTreeNode[] {
+  const root = new Map<string, FileTreeNode>();
+
+  files
+    .filter((file) => file.path?.trim())
+    .forEach((file) => {
+      const parts = file.path.split('/').filter(Boolean);
+      let currentLevel = root;
+      let currentPath = '';
+
+      parts.forEach((part, index) => {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        const isFile = index === parts.length - 1;
+        const existing = currentLevel.get(part);
+
+        if (!existing) {
+          const node = createTreeNode(part, currentPath, isFile ? 'file' : 'folder', isFile ? file : undefined);
+          currentLevel.set(part, node);
+          currentLevel = node.children;
+          return;
+        }
+
+        if (isFile) {
+          existing.type = 'file';
+          existing.file = file;
+        }
+        currentLevel = existing.children;
+      });
+    });
+
+  return sortTreeNodes([...root.values()]);
+}
+
+function sortTreeNodes(nodes: FileTreeNode[]): FileTreeNode[] {
+  return nodes
+    .map((node) => ({
+      ...node,
+      children: new Map([...node.children.entries()].map(([key, child]) => [key, {
+        ...child,
+        children: new Map(sortTreeNodes([...child.children.values()]).map((sortedChild) => [sortedChild.name, sortedChild])),
+      }])),
+    }))
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+function getFileLabel(file: SkillFile): string {
+  const details = [
+    file.media_type,
+    file.content_text ? 'text preview available' : null,
+  ].filter(Boolean);
+
+  return details.join(' · ');
+}
+
+function FileTree({ nodes, depth = 0 }: Readonly<{ nodes: FileTreeNode[]; depth?: number }>) {
+  return (
+    <ul className={depth === 0 ? 'space-y-0.5' : 'space-y-0.5'}>
+      {nodes.map((node) => {
+        const isFolder = node.type === 'folder';
+        const children = [...node.children.values()];
+
+        return (
+          <li key={node.path}>
+            <div
+              className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-700 hover:bg-gray-50"
+              style={{ paddingLeft: `${0.5 + depth * 1.25}rem` }}
+              title={node.path}
+            >
+              {isFolder ? (
+                <Folder className="w-4 h-4 shrink-0 text-amber-500" />
+              ) : (
+                <File className="w-4 h-4 shrink-0 text-gray-400" />
+              )}
+              <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
+              {!isFolder && node.file && getFileLabel(node.file) && (
+                <span className="ml-auto shrink-0 truncate text-xs text-gray-400 max-w-[12rem]">
+                  {getFileLabel(node.file)}
+                </span>
+              )}
+            </div>
+            {children.length > 0 && <FileTree nodes={children} depth={depth + 1} />}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
@@ -39,6 +157,8 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!skill && skill.skill_id !== 0;
+  const bundledFiles = skill?.files ?? [];
+  const resourceTree = buildFileTree(bundledFiles);
 
   // Initialize form with existing skill data
   useEffect(() => {
@@ -195,6 +315,37 @@ When reviewing code, follow these steps...
           Markdown-formatted instructions that will be loaded when the agent activates this skill
         </p>
       </div>
+
+      {isEditing && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Package Resources
+            </label>
+            <span className="text-xs text-gray-500">
+              {bundledFiles.length === 0
+                ? 'SKILL.md only'
+                : `${bundledFiles.length} bundled ${bundledFiles.length === 1 ? 'file' : 'files'}`}
+            </span>
+          </div>
+          <div className="border border-gray-200 rounded-md bg-white overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 bg-gray-50">
+              <FileText className="w-4 h-4 shrink-0 text-purple-500" />
+              <span className="font-mono text-xs">SKILL.md</span>
+              <span className="ml-auto text-xs text-gray-400">instructions</span>
+            </div>
+            {resourceTree.length > 0 ? (
+              <div className="max-h-64 overflow-y-auto py-1">
+                <FileTree nodes={resourceTree} />
+              </div>
+            ) : (
+              <p className="px-3 py-4 text-sm text-gray-500">
+                This skill does not include bundled resources.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Bootstrap Path Field */}
       <div>
