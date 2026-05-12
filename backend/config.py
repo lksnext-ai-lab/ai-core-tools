@@ -62,13 +62,13 @@ MCP_BASE_URL = os.getenv('MCP_BASE_URL', 'http://localhost:8000')
 
 # System-wide default provider when an app has no explicit sandbox_provider.
 # Allowed values: 'subprocess' (dev/unsafe), 'opensandbox' (self-hosted),
-# 'daytona' (managed SaaS).
+# 'daytona' (managed SaaS), 'e2b' (managed cloud).
 SANDBOX_DEFAULT_PROVIDER = os.getenv('SANDBOX_DEFAULT_PROVIDER', 'subprocess').lower()
 
 # Comma-separated list of provider names apps may select in this deployment.
 SANDBOX_ALLOWED_PROVIDERS = [
     p.strip()
-    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'subprocess,opensandbox,daytona').split(',')
+    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'subprocess,opensandbox,daytona,e2b').split(',')
     if p.strip()
 ]
 
@@ -115,6 +115,12 @@ DAYTONA_TARGET = os.getenv('DAYTONA_TARGET', '')
 DAYTONA_IMAGE = os.getenv('DAYTONA_IMAGE', '')
 DAYTONA_SNAPSHOT = os.getenv('DAYTONA_SNAPSHOT', '')
 DAYTONA_WORKSPACE = os.getenv('DAYTONA_WORKSPACE', 'workspace')
+
+# E2B cloud sandbox connection and creation options. The E2B SDK reads
+# E2B_API_KEY directly from the environment.
+E2B_API_KEY = os.getenv('E2B_API_KEY', '')
+E2B_TEMPLATE = os.getenv('E2B_TEMPLATE', '')
+E2B_WORKSPACE = os.getenv('E2B_WORKSPACE', '/home/user/workspace')
 
 # Minutes before a sandbox TTL is proactively renewed.
 SANDBOX_RENEW_MINUTES = int(os.getenv('SANDBOX_RENEW_MINUTES', '30'))

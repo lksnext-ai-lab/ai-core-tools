@@ -41,7 +41,8 @@ RUN poetry config virtualenvs.create false && \
 RUN pip install --no-cache-dir \
     "opensandbox==0.1.7" \
     "opensandbox-code-interpreter==0.1.2" \
-    "daytona==0.173.0"
+    "daytona==0.173.0" \
+    "e2b-code-interpreter==2.5.0"
 
 # ----------------------------------------------------------------------------
 # Stage 2: Production

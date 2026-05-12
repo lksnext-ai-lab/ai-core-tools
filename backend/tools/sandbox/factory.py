@@ -45,6 +45,11 @@ def _build_registry() -> dict[str, type[SandboxProvider]]:
         registry[DaytonaProvider.PROVIDER_NAME] = DaytonaProvider
     except Exception:
         logger.exception("Failed to register Daytona sandbox provider")
+    try:
+        from .e2b_provider import E2BProvider  # noqa: PLC0415
+        registry[E2BProvider.PROVIDER_NAME] = E2BProvider
+    except Exception:
+        logger.exception("Failed to register E2B sandbox provider")
     return registry
 
 
