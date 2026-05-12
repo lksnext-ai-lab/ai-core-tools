@@ -30,6 +30,7 @@ import posixpath
 import shlex
 from collections.abc import Callable
 from datetime import timedelta
+from math import ceil
 from typing import Any
 
 import config as settings
@@ -134,6 +135,10 @@ def _idle_timeout_s() -> int:
         return max(1, int(getattr(settings, "SANDBOX_IDLE_TIMEOUT_S", 120)))
     except (TypeError, ValueError):
         return 120
+
+
+def _runtime_timeout_s(timeout: int | float) -> int:
+    return max(_idle_timeout_s(), int(ceil(float(timeout))) + _idle_timeout_s())
 
 
 def _truncate(output: str, limit: int) -> str:
@@ -363,12 +368,35 @@ class E2BProvider(SandboxProvider):
                 f"E2BProvider: no sandbox object for handle {handle.sandbox_id}"
             )
         try:
-            if hasattr(sandbox, "set_timeout"):
-                sandbox.set_timeout(_idle_timeout_s())
+            self._set_sandbox_timeout(sandbox, _idle_timeout_s())
         except Exception as exc:
             raise SandboxExpiredError(
                 f"E2B sandbox {handle.sandbox_id} renew failed: {exc}"
             ) from exc
+
+    def _set_sandbox_timeout(
+        self,
+        sandbox: Any,
+        timeout_s: int,
+        *,
+        suppress_errors: bool = False,
+    ) -> None:
+        if not hasattr(sandbox, "set_timeout"):
+            return
+        try:
+            sandbox.set_timeout(timeout_s)
+        except Exception:
+            if suppress_errors:
+                logger.debug("E2BProvider: sandbox timeout refresh failed", exc_info=True)
+                return
+            raise
+
+    def _reset_idle_timeout(self, sandbox: Any, *, suppress_errors: bool = False) -> None:
+        self._set_sandbox_timeout(
+            sandbox,
+            _idle_timeout_s(),
+            suppress_errors=suppress_errors,
+        )
 
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
         sandbox = handle.metadata.get(_META_SANDBOX)
@@ -476,17 +504,22 @@ class E2BProvider(SandboxProvider):
             )
 
         try:
+            self._set_sandbox_timeout(sandbox, _runtime_timeout_s(effective_timeout))
             if language == "bash":
-                result = self._run_bash(
-                    sandbox,
-                    code,
-                    effective_timeout,
-                    on_stdout,
-                    on_stderr,
-                )
+                try:
+                    result = self._run_bash(
+                        sandbox,
+                        code,
+                        effective_timeout,
+                        on_stdout,
+                        on_stderr,
+                    )
+                finally:
+                    self._reset_idle_timeout(sandbox, suppress_errors=True)
                 return _truncate(_command_output(result), effective_limit)
 
             if not hasattr(sandbox, "run_code"):
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
                 return (
                     "[Error] E2B Code Interpreter SDK is required for non-bash "
                     "language execution."
@@ -520,7 +553,10 @@ class E2BProvider(SandboxProvider):
             else:
                 run_kwargs["language"] = language
 
-            execution = sandbox.run_code(code, **run_kwargs)
+            try:
+                execution = sandbox.run_code(code, **run_kwargs)
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
         except Exception as exc:
             logger.error(
                 "E2BProvider.run_code error (sandbox_id=%s): %s",
@@ -538,11 +574,15 @@ class E2BProvider(SandboxProvider):
             raise SandboxExpiredError(
                 f"E2BProvider: no sandbox object for handle {handle.sandbox_id}"
             )
-        sandbox.files.write(
-            _workspace_path(filename),
-            content,
-            request_timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
-        )
+        self._reset_idle_timeout(sandbox)
+        try:
+            sandbox.files.write(
+                _workspace_path(filename),
+                content,
+                request_timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+            )
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
 
     def read_file(self, handle: SandboxHandle, filename: str) -> bytes:
         sandbox = handle.metadata.get(_META_SANDBOX)
@@ -550,11 +590,15 @@ class E2BProvider(SandboxProvider):
             raise SandboxExpiredError(
                 f"E2BProvider: no sandbox object for handle {handle.sandbox_id}"
             )
-        data = sandbox.files.read(
-            _workspace_path(filename),
-            format="bytes",
-            request_timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
-        )
+        self._reset_idle_timeout(sandbox)
+        try:
+            data = sandbox.files.read(
+                _workspace_path(filename),
+                format="bytes",
+                request_timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+            )
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
         return bytes(data)
 
     def list_files(self, handle: SandboxHandle) -> list[str]:
@@ -565,6 +609,7 @@ class E2BProvider(SandboxProvider):
             )
         result: list[str] = []
         try:
+            self._reset_idle_timeout(sandbox)
             entries = sandbox.files.list(
                 _workspace_root(),
                 depth=20,
@@ -577,6 +622,8 @@ class E2BProvider(SandboxProvider):
                 exc,
             )
             return []
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
 
         for entry in entries or []:
             path = str(_get_attr(entry, "path", default=""))

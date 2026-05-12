@@ -68,6 +68,7 @@ import time
 from contextvars import copy_context
 from collections.abc import Callable
 from datetime import timedelta
+from math import ceil
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -232,6 +233,21 @@ def _session_ttl() -> timedelta:
     except (ValueError, TypeError):
         hours = 2.0
     return timedelta(hours=hours)
+
+
+def _idle_timeout_s() -> int:
+    try:
+        return max(1, int(getattr(settings, "SANDBOX_IDLE_TIMEOUT_S", 120)))
+    except (TypeError, ValueError):
+        return 120
+
+
+def _idle_timeout_duration() -> timedelta:
+    return timedelta(seconds=_idle_timeout_s())
+
+
+def _runtime_timeout_duration(timeout: int | float) -> timedelta:
+    return timedelta(seconds=max(_idle_timeout_s(), int(ceil(float(timeout))) + _idle_timeout_s()))
 
 
 def _sandbox_image() -> str:
@@ -675,7 +691,7 @@ class OpenSandboxProvider(SandboxProvider):
 
         config = self._get_config()
         image = _sandbox_image()
-        ttl = _session_ttl()
+        ttl = _idle_timeout_duration()
 
         sandbox = None
 
@@ -720,7 +736,7 @@ class OpenSandboxProvider(SandboxProvider):
         return self._setup_sandbox_handle(sandbox, working_dir, session_key)
 
     def renew_sandbox(self, handle: SandboxHandle, duration: timedelta) -> None:
-        """Extend the remote sandbox TTL by *duration* (Phase 3 step 3.3).
+        """Refresh the remote sandbox TTL to the configured idle window.
 
         No-op when the SDK lacks the ``renew`` method.  Raises
         :class:`~tools.sandbox.provider.SandboxExpiredError` when the SDK
@@ -728,7 +744,8 @@ class OpenSandboxProvider(SandboxProvider):
 
         Args:
             handle:   Active sandbox handle.
-            duration: How much TTL to add.
+            duration: Ignored. The provider uses ``SANDBOX_IDLE_TIMEOUT_S``
+                because OpenSandbox renew sets ``expiresAt = now + timeout``.
 
         Raises:
             SandboxExpiredError: When the SDK indicates the sandbox is gone,
@@ -744,7 +761,7 @@ class OpenSandboxProvider(SandboxProvider):
                 "sandbox must be recreated (handle reconstructed after restart?)."
             )
         try:
-            sandbox.renew(timeout=duration)
+            self._renew_sandbox_timeout(sandbox, _idle_timeout_duration())
         except Exception as exc:
             if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
                 raise SandboxExpiredError(
@@ -753,6 +770,30 @@ class OpenSandboxProvider(SandboxProvider):
             raise SandboxExpiredError(
                 f"Sandbox {handle.sandbox_id} renew failed: {exc}"
             ) from exc
+
+    def _renew_sandbox_timeout(
+        self,
+        sandbox: Any,
+        timeout: timedelta,
+        *,
+        suppress_errors: bool = False,
+    ) -> None:
+        if not self._can_renew:
+            return
+        try:
+            sandbox.renew(timeout=timeout)
+        except Exception:
+            if suppress_errors:
+                logger.debug("OpenSandboxProvider: sandbox TTL refresh failed", exc_info=True)
+                return
+            raise
+
+    def _reset_idle_timeout(self, sandbox: Any, *, suppress_errors: bool = False) -> None:
+        self._renew_sandbox_timeout(
+            sandbox,
+            _idle_timeout_duration(),
+            suppress_errors=suppress_errors,
+        )
 
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
         """Kill the remote container and release local HTTP resources."""
@@ -835,6 +876,12 @@ class OpenSandboxProvider(SandboxProvider):
             else settings.SANDBOX_DEFAULT_TIMEOUT_S
         )
 
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"OpenSandboxProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+
         interpreter = handle.metadata.get(_META_INTERPRETER)
 
         if interpreter is None:
@@ -891,6 +938,10 @@ class OpenSandboxProvider(SandboxProvider):
                 pass  # fall back to batch mode if SDK import fails
 
         try:
+            self._renew_sandbox_timeout(
+                sandbox,
+                _runtime_timeout_duration(effective_timeout),
+            )
             result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
             contextvars_context = copy_context()
 
@@ -957,6 +1008,7 @@ class OpenSandboxProvider(SandboxProvider):
             )
             return f"[Error] Code execution failed: {exc}"[:effective_limit]
         finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
             self._release_context_entry(context_entry)
 
         # Collect output: use the ``text`` property which combines stdout +
@@ -1024,7 +1076,11 @@ class OpenSandboxProvider(SandboxProvider):
             )
         remote_path = _workspace_path(filename)
         try:
-            sandbox.files.write_file(remote_path, content)
+            self._reset_idle_timeout(sandbox)
+            try:
+                sandbox.files.write_file(remote_path, content)
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
         except Exception as exc:
             if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
                 raise SandboxExpiredError(
@@ -1047,7 +1103,11 @@ class OpenSandboxProvider(SandboxProvider):
             )
         remote_path = _workspace_path(filename)
         try:
-            data = sandbox.files.read_bytes(remote_path)
+            self._reset_idle_timeout(sandbox)
+            try:
+                data = sandbox.files.read_bytes(remote_path)
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
         except Exception as exc:
             if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
                 raise SandboxExpiredError(
@@ -1081,9 +1141,13 @@ class OpenSandboxProvider(SandboxProvider):
             SearchEntry = SimpleNamespace
 
         try:
-            entries = sandbox.files.search(
-                SearchEntry(path=_SANDBOX_WORKSPACE, pattern="*")
-            )
+            self._reset_idle_timeout(sandbox)
+            try:
+                entries = sandbox.files.search(
+                    SearchEntry(path=_SANDBOX_WORKSPACE, pattern="*")
+                )
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
         except Exception as exc:
             if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
                 raise SandboxExpiredError(

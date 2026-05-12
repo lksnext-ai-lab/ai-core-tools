@@ -119,17 +119,18 @@ def test_no_resume_when_sdk_lacks_resume(provider):
 # ---------------------------------------------------------------------------
 
 
-def test_renew_sandbox_calls_sdk_renew(provider):
-    """renew_sandbox forwards the timedelta to sandbox.renew."""
+def test_renew_sandbox_refreshes_idle_ttl(provider, monkeypatch):
+    """renew_sandbox refreshes sandbox.renew to the configured idle window."""
     prov, _ = provider
     prov._can_renew = True
+    monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
     mock_sandbox = MagicMock()
     handle = MagicMock()
     handle.metadata = {_META_SANDBOX: mock_sandbox}
 
     prov.renew_sandbox(handle, timedelta(minutes=30))
 
-    mock_sandbox.renew.assert_called_once_with(timeout=timedelta(minutes=30))
+    mock_sandbox.renew.assert_called_once_with(timeout=timedelta(seconds=120))
 
 
 def test_renew_sandbox_noop_when_cannot_renew(provider):

@@ -39,6 +39,7 @@ import posixpath
 import shlex
 from collections.abc import Callable
 from datetime import timedelta
+from math import ceil
 from types import SimpleNamespace
 from typing import Any
 
@@ -276,6 +277,14 @@ def _daytona_auto_stop_interval() -> int:
     return max(1, (idle_seconds + 59) // 60)
 
 
+def _runtime_auto_stop_interval(timeout: int | float) -> int:
+    try:
+        idle_seconds = int(getattr(settings, "SANDBOX_IDLE_TIMEOUT_S", 120))
+    except (TypeError, ValueError):
+        idle_seconds = 120
+    return max(_daytona_auto_stop_interval(), int(ceil((float(timeout) + idle_seconds) / 60)))
+
+
 class DaytonaProvider(SandboxProvider):
     """Sandbox provider that executes code inside Daytona SaaS sandboxes."""
 
@@ -283,7 +292,7 @@ class DaytonaProvider(SandboxProvider):
 
     def __init__(self) -> None:
         self._client = None
-        self._capabilities = {"resume": True, "renew": False}
+        self._capabilities = {"resume": True, "renew": True}
 
     def get_supported_languages(self) -> list[str]:
         return _supported_languages()
@@ -417,8 +426,43 @@ class DaytonaProvider(SandboxProvider):
         return self._setup_handle(client, sandbox, working_dir, session_key)
 
     def renew_sandbox(self, handle: SandboxHandle, duration: timedelta) -> None:
-        """Daytona auto-stop/archive/delete settings are configured at creation time."""
-        return None
+        """Refresh Daytona's idle auto-stop interval for a cached sandbox."""
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"DaytonaProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+        try:
+            self._set_autostop_interval(sandbox, _daytona_auto_stop_interval())
+        except Exception as exc:
+            raise SandboxExpiredError(
+                f"Daytona sandbox {handle.sandbox_id} renew failed: {exc}"
+            ) from exc
+
+    def _set_autostop_interval(
+        self,
+        sandbox: Any,
+        interval_minutes: int,
+        *,
+        suppress_errors: bool = False,
+    ) -> None:
+        setter = getattr(sandbox, "set_autostop_interval", None)
+        if setter is None:
+            return
+        try:
+            setter(interval_minutes)
+        except Exception:
+            if suppress_errors:
+                logger.debug("DaytonaProvider: auto-stop refresh failed", exc_info=True)
+                return
+            raise
+
+    def _reset_idle_timeout(self, sandbox: Any, *, suppress_errors: bool = False) -> None:
+        self._set_autostop_interval(
+            sandbox,
+            _daytona_auto_stop_interval(),
+            suppress_errors=suppress_errors,
+        )
 
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
         sandbox = handle.metadata.get(_META_SANDBOX)
@@ -521,18 +565,25 @@ class DaytonaProvider(SandboxProvider):
             )
 
         try:
-            if language == "python":
-                response = self._run_python(sandbox, code, effective_timeout, on_stdout)
-            elif language == "bash":
-                response = self._run_bash(sandbox, code, effective_timeout)
-            else:
-                proc = _process(sandbox)
-                if proc is None or not hasattr(proc, "code_run"):
-                    return (
-                        f"[Error] Language '{language}' is not supported by DaytonaProvider. "
-                        "Supported persistent execution: python; command execution: bash."
-                    )[:effective_limit]
-                response = _call_with_fallbacks(proc.code_run, code, timeout=effective_timeout)
+            self._set_autostop_interval(
+                sandbox,
+                _runtime_auto_stop_interval(effective_timeout),
+            )
+            try:
+                if language == "python":
+                    response = self._run_python(sandbox, code, effective_timeout, on_stdout)
+                elif language == "bash":
+                    response = self._run_bash(sandbox, code, effective_timeout)
+                else:
+                    proc = _process(sandbox)
+                    if proc is None or not hasattr(proc, "code_run"):
+                        return (
+                            f"[Error] Language '{language}' is not supported by DaytonaProvider. "
+                            "Supported persistent execution: python; command execution: bash."
+                        )[:effective_limit]
+                    response = _call_with_fallbacks(proc.code_run, code, timeout=effective_timeout)
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
         except Exception as exc:
             logger.error(
                 "DaytonaProvider.run_code error (sandbox_id=%s): %s",
@@ -558,19 +609,23 @@ class DaytonaProvider(SandboxProvider):
             raise SandboxExpiredError(
                 f"DaytonaProvider: no sandbox object for handle {handle.sandbox_id}"
             )
+        self._reset_idle_timeout(sandbox)
         remote_path = _workspace_path(filename)
         parent = posixpath.dirname(remote_path)
-        if parent:
-            try:
-                proc = _process(sandbox)
-                if proc is not None and hasattr(proc, "exec"):
-                    proc.exec(f"mkdir -p {shlex.quote(parent)}")
-            except Exception:
-                pass
-        fs = _fs(sandbox)
-        if fs is None or not hasattr(fs, "upload_file"):
-            raise RuntimeError("Daytona sandbox has no fs.upload_file service")
-        fs.upload_file(content, remote_path)
+        try:
+            if parent:
+                try:
+                    proc = _process(sandbox)
+                    if proc is not None and hasattr(proc, "exec"):
+                        proc.exec(f"mkdir -p {shlex.quote(parent)}")
+                except Exception:
+                    pass
+            fs = _fs(sandbox)
+            if fs is None or not hasattr(fs, "upload_file"):
+                raise RuntimeError("Daytona sandbox has no fs.upload_file service")
+            fs.upload_file(content, remote_path)
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
         logger.debug(
             "DaytonaProvider.write_file: wrote %d bytes to %s (sandbox=%s)",
             len(content),
@@ -584,10 +639,14 @@ class DaytonaProvider(SandboxProvider):
             raise SandboxExpiredError(
                 f"DaytonaProvider: no sandbox object for handle {handle.sandbox_id}"
             )
-        fs = _fs(sandbox)
-        if fs is None or not hasattr(fs, "download_file"):
-            raise RuntimeError("Daytona sandbox has no fs.download_file service")
-        data = fs.download_file(_workspace_path(filename))
+        self._reset_idle_timeout(sandbox)
+        try:
+            fs = _fs(sandbox)
+            if fs is None or not hasattr(fs, "download_file"):
+                raise RuntimeError("Daytona sandbox has no fs.download_file service")
+            data = fs.download_file(_workspace_path(filename))
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
         if isinstance(data, str):
             return data.encode("utf-8")
         return bytes(data)
@@ -604,6 +663,7 @@ class DaytonaProvider(SandboxProvider):
 
         result: list[str] = []
         try:
+            self._reset_idle_timeout(sandbox)
             if hasattr(fs, "search_files"):
                 found = fs.search_files(_workspace_root(), "*")
                 files = _get_attr(found, "files", default=found)
@@ -614,6 +674,8 @@ class DaytonaProvider(SandboxProvider):
                 return sorted(set(result))
         except Exception as exc:
             logger.debug("DaytonaProvider.list_files: search_files failed: %s", exc)
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
 
         def _walk(path: str) -> None:
             try:
@@ -632,7 +694,11 @@ class DaytonaProvider(SandboxProvider):
                     result.append(rel)
 
         if hasattr(fs, "list_files"):
-            _walk(_workspace_root())
+            self._reset_idle_timeout(sandbox)
+            try:
+                _walk(_workspace_root())
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
         return sorted(set(result))
 
     def ensure_skill(

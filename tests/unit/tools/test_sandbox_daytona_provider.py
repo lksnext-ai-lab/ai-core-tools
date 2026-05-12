@@ -125,6 +125,20 @@ class TestDaytonaRunCode:
         sandbox.code_interpreter.run_code.assert_called_once()
         assert result == "hello"
 
+    def test_python_extends_auto_stop_for_execution_then_resets_to_idle(
+        self, provider_and_sandbox, monkeypatch, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.delenv("DAYTONA_AUTO_STOP_INTERVAL", raising=False)
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.code_interpreter.run_code.return_value = SimpleNamespace(result="done", exit_code=0)
+
+        result = provider.run_code(handle, "print('done')", language="python", timeout=30)
+
+        assert result == "done"
+        assert [call.args[0] for call in sandbox.set_autostop_interval.call_args_list] == [3, 2]
+
     def test_python_forwards_stdout_callback(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox
         handle = provider.create_sandbox(str(tmp_path))
@@ -149,6 +163,19 @@ class TestDaytonaRunCode:
         assert command.startswith("bash -lc ")
         assert sandbox.process.exec.call_args.kwargs["cwd"] == "workspace"
 
+    def test_bash_extends_auto_stop_for_execution_then_resets_to_idle(
+        self, provider_and_sandbox, monkeypatch, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.delenv("DAYTONA_AUTO_STOP_INTERVAL", raising=False)
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.process.exec.return_value = SimpleNamespace(result="ok", exit_code=0)
+
+        provider.run_code(handle, "echo ok", language="bash", timeout=45)
+
+        assert [call.args[0] for call in sandbox.set_autostop_interval.call_args_list] == [3, 2]
+
     def test_output_truncates(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox
         handle = provider.create_sandbox(str(tmp_path))
@@ -172,14 +199,17 @@ class TestDaytonaRunCode:
 
 
 class TestDaytonaFileIO:
-    def test_write_file_uploads_to_workspace(self, provider_and_sandbox, tmp_path):
+    def test_write_file_uploads_to_workspace(self, provider_and_sandbox, monkeypatch, tmp_path):
         provider, _, sandbox = provider_and_sandbox
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.delenv("DAYTONA_AUTO_STOP_INTERVAL", raising=False)
         handle = provider.create_sandbox(str(tmp_path))
 
         provider.write_file(handle, "nested/out.txt", b"data")
 
         sandbox.process.exec.assert_any_call("mkdir -p workspace/nested")
         sandbox.fs.upload_file.assert_called_once_with(b"data", "workspace/nested/out.txt")
+        assert [call.args[0] for call in sandbox.set_autostop_interval.call_args_list] == [2, 2]
 
     def test_read_file_downloads_from_workspace(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox

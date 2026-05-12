@@ -17,6 +17,7 @@ import os
 import sys
 import time
 import threading
+from datetime import timedelta
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -192,6 +193,31 @@ class TestOpenSandboxProviderRunCode:
         result = provider.run_code(handle, "print('Hello, world!')")
         assert "Hello, world!" in result
 
+    def test_extends_ttl_for_execution_then_resets_to_idle(
+        self, provider_and_handle, monkeypatch
+    ):
+        provider, handle = provider_and_handle
+        provider._can_renew = True
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        mock_interpreter = handle.metadata["_interpreter"]
+        mock_sandbox = handle.metadata["_sandbox"]
+
+        execution = MagicMock()
+        execution.text = "done"
+        execution.error = None
+        execution.logs = MagicMock()
+        execution.logs.stderr = []
+        execution.exit_code = 0
+        mock_interpreter.codes.run.return_value = execution
+
+        result = provider.run_code(handle, "print('done')", timeout=30)
+
+        assert result == "done"
+        assert [call.kwargs["timeout"] for call in mock_sandbox.renew.call_args_list] == [
+            timedelta(seconds=150),
+            timedelta(seconds=120),
+        ]
+
     def test_includes_error_info_on_failure(self, provider_and_handle):
         provider, handle = provider_and_handle
         mock_interpreter = handle.metadata["_interpreter"]
@@ -365,6 +391,19 @@ class TestOpenSandboxProviderFileIO:
         call_args = mock_sandbox.files.write_file.call_args
         remote_path = call_args[0][0]
         assert remote_path == "/workspace/output.csv"
+
+    def test_write_file_refreshes_idle_ttl(self, provider_and_handle, monkeypatch):
+        provider, handle = provider_and_handle
+        provider._can_renew = True
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        mock_sandbox = handle.metadata["_sandbox"]
+
+        provider.write_file(handle, "output.csv", b"col1,col2\n1,2")
+
+        assert [call.kwargs["timeout"] for call in mock_sandbox.renew.call_args_list] == [
+            timedelta(seconds=120),
+            timedelta(seconds=120),
+        ]
 
     def test_read_file_prefixes_workspace(self, provider_and_handle):
         provider, handle = provider_and_handle

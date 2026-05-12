@@ -128,6 +128,23 @@ class TestE2BRunCode:
         assert sandbox.run_code.call_args.kwargs["context"].id == "ctx-python"
         assert result == "hello"
 
+    def test_python_extends_timeout_for_execution_then_resets_to_idle(
+        self, provider_and_sandbox, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.run_code.return_value = SimpleNamespace(
+            text="done",
+            results=[],
+            logs=SimpleNamespace(stdout=[], stderr=[]),
+            error=None,
+        )
+
+        result = provider.run_code(handle, "print('done')", language="python", timeout=30)
+
+        assert result == "done"
+        assert [call.args[0] for call in sandbox.set_timeout.call_args_list] == [150, 120]
+
     def test_javascript_uses_stateful_run_code(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox
         handle = provider.create_sandbox(str(tmp_path))
@@ -205,6 +222,17 @@ class TestE2BRunCode:
         assert command.startswith("bash -lc ")
         assert sandbox.commands.run.call_args.kwargs["cwd"] == "/home/user/workspace"
 
+    def test_bash_extends_timeout_for_execution_then_resets_to_idle(
+        self, provider_and_sandbox, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.commands.run.return_value = SimpleNamespace(stdout="ok", stderr="", exit_code=0)
+
+        provider.run_code(handle, "echo ok", language="bash", timeout=45)
+
+        assert [call.args[0] for call in sandbox.set_timeout.call_args_list] == [165, 120]
+
     def test_output_truncates(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox
         handle = provider.create_sandbox(str(tmp_path))
@@ -241,6 +269,7 @@ class TestE2BFileIO:
             b"data",
             request_timeout=120,
         )
+        assert [call.args[0] for call in sandbox.set_timeout.call_args_list] == [120, 120]
 
     def test_read_file_reads_bytes_from_workspace(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox
