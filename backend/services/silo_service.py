@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 import os
+import re
 from models.media import Media
 from models.silo import Silo
 from models.resource import Resource
@@ -46,6 +47,77 @@ def _get_vector_store(silo: Optional[Silo] = None, vector_db_type: Optional[str]
 
     resolved_type = _resolve_vector_db_type(silo, vector_db_type)
     return VectorStoreFactory.get_vector_store(db_obj, resolved_type)
+
+
+# Patterns produced by PDF loaders when they encounter fonts with non-standard
+# encodings (e.g. Type3 fonts where codepoint 64 maps to a drawn glyph):
+#   PyPDFLoader  → outputs raw decimal codepoints:  "64/64/64/64/..."
+#   PyMuPDFLoader → decodes codepoint 64 as ASCII @: "@@@@@@@@@..."
+# Both represent the same underlying artifact and must be stripped.
+_GARBAGE_PATTERNS = [
+    re.compile(r'(\d+/){8,}'),  # raw decimal codepoint sequences
+    re.compile(r'@{5,}'),       # decoded Type3 font artifacts
+]
+
+# Detects real words: 3+ consecutive Unicode letters (isalpha-equivalent via \w without digits/_)
+# Used to distinguish OCR artifact lines from lines with actual text content.
+_WORD_RE = re.compile(r'[^\W\d_]{3,}', re.UNICODE)
+
+
+def _clean_chunk_text(text: str) -> str:
+    """Remove known PDF extraction artifacts from *text*.
+
+    Two complementary strategies are applied:
+
+    1. **Span-level:** Replace long runs of repeated glyph sequences in a single
+       span (e.g. ``@@@@@`` or ``64/64/64/...``) with a space.
+    2. **Line-level:** Drop entire lines that consist almost entirely of
+       non-alphabetic characters and are very short (≤ 6 chars, < 2 alpha).
+       This catches multi-line Type3 font artifacts such as ``@@h?``, ``@@g``,
+       ``??``, ``?``, ``@@`` — which are Unicode codepoints decoded from glyphs
+       that have no real text mapping (e.g. cp64→@, cp104→h, cp63→?).
+    """
+    # 1. Span-level: strip long repetitive sequences
+    for pattern in _GARBAGE_PATTERNS:
+        text = pattern.sub(' ', text)
+
+    # 2. Line-level: drop lines that are clearly artifact/garbage
+    #    Rule A — very short lines with minimal alpha (@@h?, @@g, ??, @@, …)
+    #    Rule B — short-medium lines with no real word ≥ 3 letters; catches OCR
+    #             image noise such as "r . * * * ! ? *", "^ i * * : * ;",
+    #             "-'Jl", "i i ¥", etc.
+    lines = text.split('\n')
+    clean_lines = []
+    for line in lines:
+        s = line.strip()
+        n = len(s)
+        alpha = sum(c.isalpha() for c in s)
+        if n <= 8 and alpha < 3:          # Rule A
+            continue
+        if n < 50 and not _WORD_RE.search(s):  # Rule B
+            continue
+        clean_lines.append(line)
+    text = '\n'.join(clean_lines)
+
+    # Collapse whitespace runs introduced by replacements
+    text = re.sub(r'[ \t]{2,}', ' ', text)
+    return text.strip()
+
+
+def _is_meaningful_chunk(text: str) -> bool:
+    """Return True if *text* (already cleaned) contains real textual content.
+
+    Rejects chunks that are too short or still dominated by non-alphabetic
+    characters after ``_clean_chunk_text`` has been applied.
+    """
+    stripped = text.strip()
+    if len(stripped) < 20:
+        return False
+    # Generic: fewer than 40 % of characters are letters or spaces → garbage
+    alpha_space = sum(1 for c in stripped if c.isalpha() or c.isspace())
+    if alpha_space / len(stripped) < 0.40:
+        return False
+    return True
 
 
 class SiloService:
@@ -451,15 +523,14 @@ class SiloService:
         """
         from langchain_core.documents import Document
         from langchain_text_splitters import CharacterTextSplitter
-        from langchain_community.document_loaders.pdf import PyPDFLoader
-        from langchain_community.document_loaders import Docx2txtLoader, TextLoader
+        from langchain_community.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader
 
         if base_metadata is None:
             base_metadata = {}
 
         # Determine file type and use appropriate loader
         if file_extension == '.pdf':
-            loader = PyPDFLoader(file_path, extract_images=False)
+            loader = PyMuPDFLoader(file_path)
         elif file_extension == '.docx':
             loader = Docx2txtLoader(file_path)
         elif file_extension in ('.txt', '.md'):
@@ -471,6 +542,18 @@ class SiloService:
         pages = loader.load()
         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         docs = text_splitter.split_documents(pages)
+
+        # Clean known PDF extraction artifacts (e.g. @@@@, 64/64/64/...) from
+        # each chunk's content, then discard chunks that are empty or still
+        # dominated by non-textual characters after cleaning.
+        for doc in docs:
+            doc.page_content = _clean_chunk_text(doc.page_content)
+
+        original_count = len(docs)
+        docs = [doc for doc in docs if _is_meaningful_chunk(doc.page_content)]
+        filtered = original_count - len(docs)
+        if filtered:
+            logger.debug(f"Filtered {filtered} garbage chunk(s) from {file_path}")
 
         for doc in docs:
             doc.metadata.update(base_metadata)
