@@ -37,6 +37,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _DEFAULT_CREATE_TIMEOUT_S = 60
+_DEFAULT_IDLE_TIMEOUT_S = 120
+_DEFAULT_REAP_INTERVAL_S = 30
 
 
 def _create_timeout_s() -> int:
@@ -52,6 +54,26 @@ def _renew_duration() -> timedelta:
         return timedelta(minutes=settings.SANDBOX_RENEW_MINUTES)
     except Exception:
         return timedelta(minutes=30)
+
+
+def _idle_timeout_s() -> int:
+    """Return max idle time before a sandbox is stopped/destroyed."""
+    try:
+        import config as settings  # type: ignore[import]
+        configured = int(getattr(settings, "SANDBOX_IDLE_TIMEOUT_S", _DEFAULT_IDLE_TIMEOUT_S))
+    except Exception:
+        configured = _DEFAULT_IDLE_TIMEOUT_S
+    return max(1, configured)
+
+
+def _reap_interval_s() -> int:
+    """Return how often the background reaper should check idle sandboxes."""
+    try:
+        import config as settings  # type: ignore[import]
+        configured = int(getattr(settings, "SANDBOX_REAPER_INTERVAL_S", _DEFAULT_REAP_INTERVAL_S))
+    except Exception:
+        configured = _DEFAULT_REAP_INTERVAL_S
+    return max(1, min(configured, _idle_timeout_s()))
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +108,17 @@ def _load_sandbox_state(conversation: "Conversation | None") -> SavedSandboxStat
         )
     except (json.JSONDecodeError, KeyError, TypeError):
         return None
+
+
+def _state_is_idle_expired(state: SavedSandboxState | None) -> bool:
+    """Return True if persisted sandbox state is older than the idle timeout."""
+    if state is None:
+        return False
+    try:
+        updated_at = datetime.fromisoformat(state.updated_at.rstrip("Z"))
+    except (ValueError, AttributeError):
+        return True
+    return updated_at < (datetime.utcnow() - timedelta(seconds=_idle_timeout_s()))
 
 
 def _persist_sandbox_state(
@@ -133,8 +166,6 @@ class SandboxSessionService:
 
     _lock: threading.Lock
     _sessions: Dict[str, _Entry]
-
-    _REAP_INTERVAL_S = 600  # check for stale sessions every 10 minutes
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -212,6 +243,7 @@ class SandboxSessionService:
                 try:
                     provider.renew_sandbox(entry.handle, _renew_duration())
                     entry.last_used = time.monotonic()
+                    _persist_sandbox_state(conversation, entry.handle, db=db)
                     logger.debug(
                         "SandboxSessionService: reusing handle for %s (sandbox_id=%s)",
                         session_key,
@@ -226,6 +258,19 @@ class SandboxSessionService:
                     )
 
         saved_state = _load_sandbox_state(conversation)
+        if _state_is_idle_expired(saved_state):
+            logger.info(
+                "SandboxSessionService: persisted sandbox for %s expired by idle timeout; "
+                "creating fresh",
+                session_key,
+            )
+            saved_state = None
+            if conversation is not None:
+                conversation.sandbox_session_id = None
+                conversation.sandbox_state = None
+                if db is not None:
+                    db.add(conversation)
+                    db.commit()
         logger.info(
             "SandboxSessionService: creating sandbox for %s (provider=%s, timeout_s=%s)",
             session_key,
@@ -440,22 +485,19 @@ class SandboxSessionService:
     def _reaper_loop(self) -> None:
         """Daemon loop: periodically reap sandboxes idle longer than the TTL."""
         while True:
-            time.sleep(self._REAP_INTERVAL_S)
+            time.sleep(_reap_interval_s())
             try:
                 self._reap_stale()
             except Exception as exc:
                 logger.warning("SandboxSessionService: reaper error: %s", exc, exc_info=True)
 
     def _reap_stale(self, *, db: Session | None = None) -> None:
-        """Destroy sandbox sessions that have been idle for longer than SANDBOX_SESSION_TTL_H.
+        """Destroy sandbox sessions idle for longer than SANDBOX_IDLE_TIMEOUT_S.
 
         When *db* is provided, also clears DB-persisted sandbox state for stale
         conversations (useful after server restarts when the in-memory cache is empty).
         """
-        try:
-            ttl_s = int(os.getenv("SANDBOX_SESSION_TTL_H", "2")) * 3600
-        except (TypeError, ValueError):
-            ttl_s = 2 * 3600
+        ttl_s = _idle_timeout_s()
 
         # --- Reap in-memory stale entries ---
         now = time.monotonic()

@@ -370,13 +370,16 @@ def _map_custom_chunk(chunk: Any) -> list[dict] | None:
         stream = chunk.get("stream", "stdout")
         if stream not in ("stdout", "stderr"):
             stream = "stdout"
+        data = {
+            "line": chunk.get("line", ""),
+            "stream": stream,
+        }
+        if chunk.get("tool_name"):
+            data["tool_name"] = chunk.get("tool_name")
         return [
             {
                 "type": SSE_CODE_OUTPUT,
-                "data": {
-                    "line": chunk.get("line", ""),
-                    "stream": stream,
-                },
+                "data": data,
             }
         ]
 

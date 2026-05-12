@@ -40,7 +40,8 @@ RUN poetry config virtualenvs.create false && \
 # OpenSandbox provider does not fail at runtime.
 RUN pip install --no-cache-dir \
     "opensandbox==0.1.7" \
-    "opensandbox-code-interpreter==0.1.2"
+    "opensandbox-code-interpreter==0.1.2" \
+    "daytona==0.173.0"
 
 # ----------------------------------------------------------------------------
 # Stage 2: Production

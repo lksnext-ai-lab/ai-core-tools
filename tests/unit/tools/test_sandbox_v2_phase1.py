@@ -24,6 +24,7 @@ Validates the following RFC v2 / sandbox-v2-migration Phase 1 changes:
 from __future__ import annotations
 
 import os
+import threading
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -184,6 +185,54 @@ def test_run_code_on_stderr_callback():
         )
 
     assert any("err_line" in line for line in stderr_lines)
+
+
+def test_repl_tool_streams_stdout_from_provider_thread():
+    from backend.tools.sandbox.provider import SandboxHandle
+    from backend.tools.sandbox.tool_factory import create_sandbox_repl_tool
+
+    events: list[dict] = []
+
+    def run_code(_handle, _code, **kwargs):
+        def emit_from_thread():
+            kwargs["on_stdout"]("hello\n")
+            kwargs["on_stderr"]("warn\n")
+
+        thread = threading.Thread(target=emit_from_thread)
+        thread.start()
+        thread.join()
+        return "done"
+
+    handle = SandboxHandle(
+        sandbox_id="sandbox-1",
+        working_dir="/tmp",
+        provider_name="test",
+    )
+    provider = MagicMock()
+    provider.run_code.side_effect = run_code
+
+    with patch(
+        "backend.tools.sandbox.tool_factory.get_stream_writer",
+        return_value=events.append,
+    ):
+        repl_tool = create_sandbox_repl_tool(handle, provider, "python")
+        result = repl_tool.invoke({"code": "print('hello')"})
+
+    assert result == "done"
+    assert events == [
+        {
+            "type": "code_output",
+            "tool_name": "python_repl",
+            "stream": "stdout",
+            "line": "hello\n",
+        },
+        {
+            "type": "code_output",
+            "tool_name": "python_repl",
+            "stream": "stderr",
+            "line": "warn\n",
+        },
+    ]
 
 
 # ---------------------------------------------------------------------------

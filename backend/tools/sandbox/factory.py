@@ -40,6 +40,11 @@ def _build_registry() -> dict[str, type[SandboxProvider]]:
     except Exception:
         # opensandbox package not installed — provider unavailable.
         pass
+    try:
+        from .daytona_provider import DaytonaProvider  # noqa: PLC0415
+        registry[DaytonaProvider.PROVIDER_NAME] = DaytonaProvider
+    except Exception:
+        logger.exception("Failed to register Daytona sandbox provider")
     return registry
 
 

@@ -283,6 +283,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
 
               case 'code_output': {
                 const line = (event.data as { line?: string }).line ?? '';
+                const toolName = (event.data as { tool_name?: string }).tool_name || undefined;
                 const stream = (event.data as { stream?: 'stdout' | 'stderr' }).stream === 'stderr'
                   ? 'stderr'
                   : 'stdout';
@@ -290,7 +291,11 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   setCodeOutputLines((prev) => [...prev, line]);
                   setToolExecutionHistory((prev) => {
                     const lastRunningIdx = [...prev].map((r, i) => ({ r, i })).reverse()
-                      .find(({ r }) => isCodeTool(r.toolName) && r.status === 'running')?.i ?? -1;
+                      .find(({ r }) =>
+                        isCodeTool(r.toolName) &&
+                        r.status === 'running' &&
+                        (!toolName || r.toolName === toolName),
+                      )?.i ?? -1;
                     if (lastRunningIdx === -1) return prev;
                     const updated = [...prev];
                     updated[lastRunningIdx] = {

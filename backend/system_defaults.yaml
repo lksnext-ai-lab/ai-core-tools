@@ -20,13 +20,19 @@ settings:
     value: "subprocess"
     type: "string"
     category: "sandbox"
-    description: "Default sandbox provider when an app has no explicit override. Options: subprocess, opensandbox."
+    description: "Default sandbox provider when an app has no explicit override. Options: subprocess, opensandbox, daytona."
 
   sandbox_allowed_providers:
-    value: "subprocess,opensandbox"
+    value: "subprocess,opensandbox,daytona"
     type: "string"
     category: "sandbox"
     description: "Comma-separated list of sandbox providers that apps may select. Restricts app-level overrides to this set."
+
+  sandbox_idle_timeout_s:
+    value: "120"
+    type: "integer"
+    category: "sandbox"
+    description: "Maximum idle time in seconds before cached sandboxes are stopped or destroyed."
 
 # Tier configuration defaults - used when no DB override exists
 # -1 means unlimited

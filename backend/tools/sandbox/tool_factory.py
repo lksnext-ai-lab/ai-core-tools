@@ -174,21 +174,25 @@ def create_sandbox_repl_tool(
         "so the user knows what to download."
     )
 
-    def _emit_line(line: str) -> None:
-        """Forward a stdout line to the LangGraph custom stream as a code_output event."""
+    def _get_stream_writer_or_none():
         try:
-            writer = get_stream_writer()
-            writer({"type": "code_output", "stream": "stdout", "line": line})
+            return get_stream_writer()
+        except Exception:
+            return None
+
+    def _emit_code_output(writer: Any | None, stream: str, line: str) -> None:
+        """Forward a sandbox output line to the LangGraph custom stream."""
+        if writer is None:
+            return
+        try:
+            writer({
+                "type": "code_output",
+                "tool_name": tool_name,
+                "stream": stream,
+                "line": line,
+            })
         except Exception:
             pass  # never let streaming errors abort execution
-
-    def _emit_stderr(line: str) -> None:
-        """Forward a stderr line to the LangGraph custom stream."""
-        try:
-            writer = get_stream_writer()
-            writer({"type": "code_output", "stream": "stderr", "line": line})
-        except Exception:
-            pass
 
     # Per-turn execution budget: mutable counter shared across calls within
     # one agent turn.  LangChain re-creates the tool per turn so this resets
@@ -205,13 +209,14 @@ def create_sandbox_repl_tool(
             return (
                 f"[Execution budget exceeded: {max_executions} executions per turn]"
             )
+        stream_writer = _get_stream_writer_or_none()
         try:
             return provider.run_code(
                 handle,
                 code,
                 language=language,
-                on_stdout=_emit_line,
-                on_stderr=_emit_stderr,
+                on_stdout=lambda line: _emit_code_output(stream_writer, "stdout", line),
+                on_stderr=lambda line: _emit_code_output(stream_writer, "stderr", line),
             )
         except SandboxExpiredError:
             # Evict the stale cache entry so the next agent turn creates a fresh

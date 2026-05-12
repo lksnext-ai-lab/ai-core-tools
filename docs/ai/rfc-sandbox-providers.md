@@ -1121,11 +1121,20 @@ for unresolved collisions.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SANDBOX_DEFAULT_PROVIDER` | `subprocess` | System-level default when an app has no explicit `sandbox_provider` |
-| `SANDBOX_ALLOWED_PROVIDERS` | `subprocess,opensandbox` | Comma-separated provider names apps may select in the current deployment |
+| `SANDBOX_ALLOWED_PROVIDERS` | `subprocess,opensandbox,daytona` | Comma-separated provider names apps may select in the current deployment |
 | `OPENSANDBOX_DOMAIN` | — | OpenSandbox server host:port (e.g. `opensandbox:8080` in Docker) |
 | `OPENSANDBOX_API_KEY` | — | API key for OpenSandbox server |
+| `DAYTONA_API_KEY` | — | Daytona API key for managed SaaS sandboxes |
+| `DAYTONA_API_URL` | SDK default | Daytona API URL, usually omitted for Daytona Cloud |
+| `DAYTONA_TARGET` | Org default | Daytona target/region |
+| `DAYTONA_IMAGE` | — | Optional image for Daytona sandbox creation |
+| `DAYTONA_SNAPSHOT` | — | Optional snapshot for Daytona sandbox creation |
+| `DAYTONA_WORKSPACE` | `workspace` | Workspace root inside Daytona sandboxes |
+| `DAYTONA_AUTO_STOP_INTERVAL` | `2` | Daytona auto-stop interval in minutes |
 | `SANDBOX_DEFAULT_TIMEOUT_S` | `30` | Default per-execution timeout (seconds) |
 | `SANDBOX_SESSION_TTL_H` | `2` | Max sandbox lifetime in hours |
+| `SANDBOX_IDLE_TIMEOUT_S` | `120` | Max idle time before cached sandboxes are stopped/destroyed |
+| `SANDBOX_REAPER_INTERVAL_S` | `30` | Backend idle-sandbox reaper interval in seconds |
 | `SANDBOX_SKILL_INSTALL_TIMEOUT_S` | `120` | Timeout for `pip install` during lazy Skill activation |
 
 ### Provider selection

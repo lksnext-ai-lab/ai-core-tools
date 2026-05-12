@@ -1,0 +1,235 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from tools.sandbox.provider import SandboxExpiredError
+
+
+def _make_agent(sandbox_provider: str | None = None) -> SimpleNamespace:
+    return SimpleNamespace(id=1, app=SimpleNamespace(sandbox_provider=sandbox_provider))
+
+
+def _make_sandbox(sandbox_id: str = "daytona-sbx") -> MagicMock:
+    sandbox = MagicMock()
+    sandbox.id = sandbox_id
+    sandbox.fs = MagicMock()
+    sandbox.process = MagicMock()
+    sandbox.code_interpreter = MagicMock()
+    return sandbox
+
+
+class TestDaytonaFactory:
+    def test_returns_daytona_from_app_config(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_DEFAULT_PROVIDER", raising=False)
+
+        from tools.sandbox.daytona_provider import DaytonaProvider
+        from tools.sandbox.factory import _PROVIDER_REGISTRY, resolve_provider
+
+        assert "daytona" in _PROVIDER_REGISTRY
+        assert isinstance(resolve_provider(_make_agent("daytona")), DaytonaProvider)
+
+
+@pytest.fixture()
+def provider_and_sandbox(monkeypatch):
+    from tools.sandbox.daytona_provider import DaytonaProvider
+
+    mock_client = MagicMock()
+    sandbox = _make_sandbox()
+    mock_client.create.return_value = sandbox
+    mock_client.get.return_value = sandbox
+
+    mock_daytona_class = MagicMock(return_value=mock_client)
+    monkeypatch.setattr("tools.sandbox.daytona_provider.Daytona", mock_daytona_class)
+    monkeypatch.setattr("tools.sandbox.daytona_provider.DaytonaConfig", MagicMock())
+
+    provider = DaytonaProvider()
+    return provider, mock_client, sandbox
+
+
+class TestDaytonaLifecycle:
+    def test_create_sandbox_params_are_ephemeral_and_auto_stop_after_two_minutes(
+        self, provider_and_sandbox, monkeypatch, tmp_path
+    ):
+        provider, client, _ = provider_and_sandbox
+        captured: dict = {}
+
+        def _params(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(**kwargs)
+
+        monkeypatch.setattr("tools.sandbox.daytona_provider.CreateSandboxFromSnapshotParams", _params)
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.delenv("DAYTONA_AUTO_STOP_INTERVAL", raising=False)
+
+        provider.create_sandbox(str(tmp_path))
+
+        assert captured["ephemeral"] is True
+        assert captured["auto_stop_interval"] == 2
+        assert client.create.call_args.args[0].ephemeral is True
+
+    def test_create_sandbox_uses_daytona_client(self, provider_and_sandbox, tmp_path):
+        provider, client, sandbox = provider_and_sandbox
+
+        handle = provider.create_sandbox(str(tmp_path), session_key="conv_1_1")
+
+        client.create.assert_called_once()
+        sandbox.fs.create_folder.assert_called_once_with("workspace", "755")
+        assert handle.sandbox_id == "daytona-sbx"
+        assert handle.provider_name == "daytona"
+        assert handle.session_key == "conv_1_1"
+
+    def test_resume_uses_client_get(self, provider_and_sandbox, tmp_path):
+        provider, client, _ = provider_and_sandbox
+
+        handle = provider.create_sandbox(
+            str(tmp_path),
+            session_key="conv_1_1",
+            existing_sandbox_id="existing",
+        )
+
+        client.get.assert_called_once_with("existing")
+        client.create.assert_not_called()
+        assert handle.sandbox_id == "daytona-sbx"
+
+    def test_resume_failure_falls_back_to_create(self, provider_and_sandbox, tmp_path):
+        provider, client, sandbox = provider_and_sandbox
+        client.get.side_effect = RuntimeError("gone")
+        client.create.return_value = sandbox
+
+        handle = provider.create_sandbox(str(tmp_path), existing_sandbox_id="old")
+
+        client.create.assert_called_once()
+        assert handle.sandbox_id == "daytona-sbx"
+
+    def test_destroy_calls_client_delete(self, provider_and_sandbox, tmp_path):
+        provider, client, _ = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+
+        provider.destroy_sandbox(handle)
+
+        client.delete.assert_called_once()
+
+
+class TestDaytonaRunCode:
+    def test_python_uses_stateful_code_interpreter(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        response = SimpleNamespace(result="hello", exit_code=0)
+        sandbox.code_interpreter.run_code.return_value = response
+
+        result = provider.run_code(handle, "print('hello')", language="python")
+
+        sandbox.code_interpreter.run_code.assert_called_once()
+        assert result == "hello"
+
+    def test_python_forwards_stdout_callback(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.code_interpreter.run_code.return_value = SimpleNamespace(result="", exit_code=0)
+        seen: list[str] = []
+
+        provider.run_code(handle, "print('x')", on_stdout=seen.append)
+
+        callback = sandbox.code_interpreter.run_code.call_args.kwargs["on_stdout"]
+        callback(SimpleNamespace(output="streamed"))
+        assert seen == ["streamed"]
+
+    def test_bash_uses_process_exec(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.process.exec.return_value = SimpleNamespace(result="ok", exit_code=0)
+
+        result = provider.run_code(handle, "echo ok", language="bash")
+
+        assert result == "ok"
+        command = sandbox.process.exec.call_args.args[0]
+        assert command.startswith("bash -lc ")
+        assert sandbox.process.exec.call_args.kwargs["cwd"] == "workspace"
+
+    def test_output_truncates(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.code_interpreter.run_code.return_value = SimpleNamespace(
+            result="A" * 100,
+            exit_code=0,
+        )
+
+        result = provider.run_code(handle, "pass", max_output_chars=10)
+
+        assert result.startswith("A" * 10)
+        assert "[Output truncated at 10 characters]" in result
+
+    def test_missing_sandbox_raises_expired(self, provider_and_sandbox, tmp_path):
+        provider, _, _ = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        handle.metadata.clear()
+
+        with pytest.raises(SandboxExpiredError):
+            provider.run_code(handle, "pass")
+
+
+class TestDaytonaFileIO:
+    def test_write_file_uploads_to_workspace(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+
+        provider.write_file(handle, "nested/out.txt", b"data")
+
+        sandbox.process.exec.assert_any_call("mkdir -p workspace/nested")
+        sandbox.fs.upload_file.assert_called_once_with(b"data", "workspace/nested/out.txt")
+
+    def test_read_file_downloads_from_workspace(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.fs.download_file.return_value = b"data"
+
+        assert provider.read_file(handle, "out.txt") == b"data"
+        sandbox.fs.download_file.assert_called_once_with("workspace/out.txt")
+
+    def test_list_files_uses_search_files(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.fs.search_files.return_value = SimpleNamespace(
+            files=["workspace/report.pdf", "workspace/.skills/helper.py", "workspace/data.csv"]
+        )
+
+        assert provider.list_files(handle) == ["data.csv", "report.pdf"]
+
+
+class TestDaytonaSkills:
+    def test_ensure_skill_writes_files_and_skips_bootstrap(self, provider_and_sandbox, tmp_path):
+        provider, _, _ = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        skill = SimpleNamespace(
+            skill_id=10,
+            name="demo",
+            bootstrap_script_path=None,
+            files=[SimpleNamespace(path="helper.py", content_text="x = 1", content_bytes=None)],
+        )
+
+        with patch.object(provider, "write_file") as mock_write:
+            result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"] == {"files": "ok", "bootstrap": "skipped"}
+        mock_write.assert_called_once_with(handle, "workspace/.skills/demo/helper.py", b"x = 1")
+
+    def test_ensure_skill_runs_bash_bootstrap(self, provider_and_sandbox, tmp_path):
+        provider, _, _ = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        skill = SimpleNamespace(
+            skill_id=11,
+            name="demo",
+            bootstrap_script_path="bootstrap.sh",
+            files=[SimpleNamespace(path="bootstrap.sh", content_text="echo ok", content_bytes=None)],
+        )
+
+        with patch.object(provider, "write_file"), patch.object(
+            provider, "run_code", return_value="__AICT_BOOTSTRAP_EXIT_CODE__=0"
+        ) as mock_run:
+            result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"]["bootstrap"] == "ok"
+        assert mock_run.call_args.kwargs["language"] == "bash"

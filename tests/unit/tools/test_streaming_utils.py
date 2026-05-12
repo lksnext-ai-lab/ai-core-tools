@@ -156,3 +156,26 @@ def test_code_output_custom_event_defaults_unknown_stream_to_stdout():
             "data": {"line": "hello\n", "stream": "stdout"},
         }
     ]
+
+
+def test_code_output_custom_event_preserves_tool_name():
+    events = map_stream_event(
+        "custom",
+        {
+            "type": "code_output",
+            "tool_name": "python_repl",
+            "stream": "stdout",
+            "line": "hello\n",
+        },
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {
+                "tool_name": "python_repl",
+                "line": "hello\n",
+                "stream": "stdout",
+            },
+        }
+    ]

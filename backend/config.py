@@ -61,13 +61,14 @@ MCP_BASE_URL = os.getenv('MCP_BASE_URL', 'http://localhost:8000')
 # ---------------------------------------------------------------------------
 
 # System-wide default provider when an app has no explicit sandbox_provider.
-# Allowed values: 'subprocess' (dev/unsafe), 'opensandbox' (self-hosted).
+# Allowed values: 'subprocess' (dev/unsafe), 'opensandbox' (self-hosted),
+# 'daytona' (managed SaaS).
 SANDBOX_DEFAULT_PROVIDER = os.getenv('SANDBOX_DEFAULT_PROVIDER', 'subprocess').lower()
 
 # Comma-separated list of provider names apps may select in this deployment.
 SANDBOX_ALLOWED_PROVIDERS = [
     p.strip()
-    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'subprocess,opensandbox').split(',')
+    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'subprocess,opensandbox,daytona').split(',')
     if p.strip()
 ]
 
@@ -88,6 +89,12 @@ SANDBOX_DEFAULT_TIMEOUT_S = int(os.getenv('SANDBOX_DEFAULT_TIMEOUT_S', '30'))
 # Maximum sandbox session lifetime (hours).
 SANDBOX_SESSION_TTL_H = float(os.getenv('SANDBOX_SESSION_TTL_H', '2'))
 
+# Maximum idle time before cached sandboxes are stopped/destroyed (seconds).
+SANDBOX_IDLE_TIMEOUT_S = int(os.getenv('SANDBOX_IDLE_TIMEOUT_S', '120'))
+
+# How often the in-process sandbox reaper checks for idle sandboxes (seconds).
+SANDBOX_REAPER_INTERVAL_S = int(os.getenv('SANDBOX_REAPER_INTERVAL_S', '30'))
+
 # Maximum number of characters returned by run_code (truncates at this limit).
 SANDBOX_MAX_OUTPUT_CHARS = int(os.getenv('SANDBOX_MAX_OUTPUT_CHARS', '20000'))
 
@@ -98,6 +105,16 @@ SANDBOX_MAX_EXECUTIONS_PER_TURN = int(os.getenv('SANDBOX_MAX_EXECUTIONS_PER_TURN
 # sandbox. Values above 1 allow parallel tool executions without sharing a busy
 # interpreter session.
 OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE = int(os.getenv('OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE', '4'))
+
+# Daytona SaaS sandbox connection and creation options. The Daytona SDK also
+# reads DAYTONA_API_KEY, DAYTONA_API_URL, and DAYTONA_TARGET directly from the
+# environment; these constants document the integration surface.
+DAYTONA_API_KEY = os.getenv('DAYTONA_API_KEY', '')
+DAYTONA_API_URL = os.getenv('DAYTONA_API_URL', '')
+DAYTONA_TARGET = os.getenv('DAYTONA_TARGET', '')
+DAYTONA_IMAGE = os.getenv('DAYTONA_IMAGE', '')
+DAYTONA_SNAPSHOT = os.getenv('DAYTONA_SNAPSHOT', '')
+DAYTONA_WORKSPACE = os.getenv('DAYTONA_WORKSPACE', 'workspace')
 
 # Minutes before a sandbox TTL is proactively renewed.
 SANDBOX_RENEW_MINUTES = int(os.getenv('SANDBOX_RENEW_MINUTES', '30'))
