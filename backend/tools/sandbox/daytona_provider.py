@@ -457,12 +457,59 @@ class DaytonaProvider(SandboxProvider):
                 return
             raise
 
+    def _touch_idle_activity(self, sandbox: Any, *, suppress_errors: bool = False) -> None:
+        """Issue a lightweight Toolbox action so Daytona restarts its idle timer.
+
+        Daytona treats ``set_autostop_interval`` as configuration, not as sandbox
+        activity. A read-only filesystem call gives the platform an external
+        interaction without changing user files. Process execution is kept as a
+        fallback for SDK versions without ``fs.list_files``.
+        """
+        workspace = _workspace_root()
+        fs = _fs(sandbox)
+        if fs is not None and hasattr(fs, "list_files"):
+            try:
+                fs.list_files(workspace)
+                return
+            except Exception:
+                if suppress_errors:
+                    logger.debug(
+                        "DaytonaProvider: idle activity filesystem touch failed",
+                        exc_info=True,
+                    )
+                else:
+                    logger.debug(
+                        "DaytonaProvider: idle activity filesystem touch failed; "
+                        "falling back to process touch",
+                        exc_info=True,
+                    )
+
+        proc = _process(sandbox)
+        if proc is None or not hasattr(proc, "exec"):
+            if suppress_errors:
+                return
+            raise RuntimeError("Daytona sandbox has no toolbox action to refresh idle timer")
+
+        try:
+            _call_with_fallbacks(
+                proc.exec,
+                "true",
+                cwd=workspace,
+                timeout=1,
+            )
+        except Exception:
+            if suppress_errors:
+                logger.debug("DaytonaProvider: idle activity process touch failed", exc_info=True)
+                return
+            raise
+
     def _reset_idle_timeout(self, sandbox: Any, *, suppress_errors: bool = False) -> None:
         self._set_autostop_interval(
             sandbox,
             _daytona_auto_stop_interval(),
             suppress_errors=suppress_errors,
         )
+        self._touch_idle_activity(sandbox, suppress_errors=suppress_errors)
 
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
         sandbox = handle.metadata.get(_META_SANDBOX)

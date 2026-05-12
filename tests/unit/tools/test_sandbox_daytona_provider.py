@@ -138,6 +138,23 @@ class TestDaytonaRunCode:
 
         assert result == "done"
         assert [call.args[0] for call in sandbox.set_autostop_interval.call_args_list] == [3, 2]
+        sandbox.fs.list_files.assert_called_with("workspace")
+
+    def test_idle_reset_falls_back_to_process_touch_when_filesystem_touch_fails(
+        self, provider_and_sandbox, monkeypatch, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.delenv("DAYTONA_AUTO_STOP_INTERVAL", raising=False)
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.fs.list_files.side_effect = RuntimeError("fs unavailable")
+        sandbox.process.exec.return_value = SimpleNamespace(result="", exit_code=0)
+        sandbox.code_interpreter.run_code.return_value = SimpleNamespace(result="done", exit_code=0)
+
+        result = provider.run_code(handle, "print('done')", language="python", timeout=30)
+
+        assert result == "done"
+        sandbox.process.exec.assert_called_once_with("true", cwd="workspace", timeout=1)
 
     def test_python_forwards_stdout_callback(self, provider_and_sandbox, tmp_path):
         provider, _, sandbox = provider_and_sandbox
