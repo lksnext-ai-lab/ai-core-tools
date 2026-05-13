@@ -63,6 +63,34 @@ _GARBAGE_PATTERNS = [
 # Used to distinguish OCR artifact lines from lines with actual text content.
 _WORD_RE = re.compile(r'[^\W\d_]{3,}', re.UNICODE)
 
+# Matches runs of single Unicode letters each separated by exactly one space:
+# e.g. "V I T O R I A" or "p a s a d o". Used to detect and collapse
+# spaced-out OCR output back into normal words.
+_SPACED_WORD_RE = re.compile(r'[^\W\d_](?: [^\W\d_])+', re.UNICODE)
+
+
+def _collapse_spaced_letters(line: str) -> str:
+    """Collapse spaced-out single-letter OCR output into normal words.
+
+    When > 60 % of the whitespace-delimited tokens on a line are single
+    Unicode letters, the line is treated as spaced-out text (e.g. from
+    low-resolution OCR) and consecutive single-letter runs are joined::
+
+        "V I T O R I A .  E l  p a s a d o" → "VITORIA . El pasado"
+
+    Lines that do not meet the threshold are returned unchanged.
+    """
+    tokens = line.split()
+    if len(tokens) < 3:
+        return line
+    single_alpha = sum(1 for t in tokens if len(t) == 1 and t.isalpha())
+    if single_alpha / len(tokens) < 0.6:
+        return line
+    collapsed = _SPACED_WORD_RE.sub(lambda m: m.group(0).replace(' ', ''), line)
+    # Normalize multiple spaces left after joining (e.g. between sections)
+    collapsed = re.sub(r' {2,}', ' ', collapsed)
+    return collapsed.strip()
+
 
 def _clean_chunk_text(text: str) -> str:
     """Remove known PDF extraction artifacts from *text*.
@@ -81,12 +109,16 @@ def _clean_chunk_text(text: str) -> str:
     for pattern in _GARBAGE_PATTERNS:
         text = pattern.sub(' ', text)
 
-    # 2. Line-level: drop lines that are clearly artifact/garbage
+    # 2. Per-line: collapse spaced-out single-letter OCR text BEFORE filtering
+    #    so that "V I T O R I A" → "VITORIA" survives Rule B below.
+    lines = text.split('\n')
+    lines = [_collapse_spaced_letters(line) for line in lines]
+
+    # 3. Line-level: drop lines that are clearly artifact/garbage
     #    Rule A — very short lines with minimal alpha (@@h?, @@g, ??, @@, …)
     #    Rule B — short-medium lines with no real word ≥ 3 letters; catches OCR
     #             image noise such as "r . * * * ! ? *", "^ i * * : * ;",
     #             "-'Jl", "i i ¥", etc.
-    lines = text.split('\n')
     clean_lines = []
     for line in lines:
         s = line.strip()
