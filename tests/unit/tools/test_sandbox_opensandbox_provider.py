@@ -13,8 +13,10 @@ Verification criteria from the RFC:
 
 from __future__ import annotations
 
+import io
 import os
 import sys
+import tarfile
 import time
 import threading
 from datetime import timedelta
@@ -444,6 +446,77 @@ class TestOpenSandboxProviderFileIO:
             files = provider.list_files(handle)
 
         assert files == []
+
+
+class TestOpenSandboxProviderSkills:
+    def test_ensure_skill_uploads_archive_and_skips_bootstrap(self, provider_and_handle):
+        provider, handle = provider_and_handle
+        mock_sandbox = handle.metadata["_sandbox"]
+        skill = SimpleNamespace(
+            skill_id=10,
+            name="demo",
+            bootstrap_script_path=None,
+            files=[SimpleNamespace(path="helper.py", content_text="x = 1", content_bytes=None)],
+        )
+
+        with patch.object(provider, "write_file") as mock_write, patch.object(
+            provider, "run_code", return_value=""
+        ) as mock_run:
+            result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"] == {"files": "ok", "bootstrap": "skipped"}
+        mock_write.assert_not_called()
+        mock_sandbox.files.write_file.assert_called_once()
+        archive_path, archive_bytes = mock_sandbox.files.write_file.call_args.args
+        assert archive_path == "/workspace/.skill_archive_10_demo.tar.gz"
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+            assert archive.getnames() == ["helper.py"]
+            assert archive.extractfile("helper.py").read() == b"x = 1"
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["language"] == "python"
+        assert "/workspace/.skills/demo" in mock_run.call_args.args[1]
+
+    def test_ensure_skill_archive_skips_directory_placeholders(self, provider_and_handle):
+        provider, handle = provider_and_handle
+        mock_sandbox = handle.metadata["_sandbox"]
+        skill = SimpleNamespace(
+            skill_id=12,
+            name="demo",
+            bootstrap_script_path=None,
+            files=[
+                SimpleNamespace(path="scripts/", content_text="", content_bytes=None),
+                SimpleNamespace(
+                    path="scripts/helper.py",
+                    content_text="x = 1",
+                    content_bytes=None,
+                ),
+            ],
+        )
+
+        with patch.object(provider, "run_code", return_value=""):
+            result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"]["files"] == "ok"
+        _, archive_bytes = mock_sandbox.files.write_file.call_args.args
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+            assert archive.getnames() == ["scripts/helper.py"]
+
+    def test_ensure_skill_archive_rejects_paths_outside_skill_dir(self, provider_and_handle):
+        provider, handle = provider_and_handle
+        mock_sandbox = handle.metadata["_sandbox"]
+        skill = SimpleNamespace(
+            skill_id=13,
+            name="demo",
+            bootstrap_script_path=None,
+            files=[
+                SimpleNamespace(path="../escape.py", content_text="x = 1", content_bytes=None),
+            ],
+        )
+
+        result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"]["files"].startswith("failed:")
+        mock_sandbox.files.write_file.assert_not_called()
 
 
 class TestOpenSandboxProviderDestroy:

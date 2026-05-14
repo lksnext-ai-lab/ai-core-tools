@@ -46,6 +46,7 @@ from typing import Any
 import config as settings
 from utils.logger import get_logger
 from .provider import SandboxExpiredError, SandboxHandle, SandboxProvider
+from .skill_archive import build_skill_archive, skill_archive_name
 
 logger = get_logger(__name__)
 
@@ -680,6 +681,62 @@ class DaytonaProvider(SandboxProvider):
             handle.sandbox_id,
         )
 
+    def _upload_skill_archive(self, handle: SandboxHandle, skill: Any, files_dir: str) -> None:
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"DaytonaProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+
+        archive_bytes, file_count = build_skill_archive(skill)
+        archive_path = (
+            f"{_workspace_root()}/.skills/.archives/{skill_archive_name(skill)}"
+        )
+        archive_parent = posixpath.dirname(archive_path)
+        proc = _process(sandbox)
+        if proc is None or not hasattr(proc, "exec"):
+            raise RuntimeError("Daytona sandbox has no process.exec service")
+        fs = _fs(sandbox)
+        if fs is None or not hasattr(fs, "upload_file"):
+            raise RuntimeError("Daytona sandbox has no fs.upload_file service")
+
+        self._reset_idle_timeout(sandbox)
+        try:
+            mkdir_response = proc.exec(
+                "mkdir -p "
+                f"{shlex.quote(files_dir)} {shlex.quote(archive_parent)}"
+            )
+            self._raise_on_process_failure(mkdir_response, "create skill directories")
+            if file_count == 0:
+                return
+
+            fs.upload_file(archive_bytes, archive_path)
+            extract_response = proc.exec(
+                "tar -xzf "
+                f"{shlex.quote(archive_path)} "
+                f"-C {shlex.quote(files_dir)} "
+                f"&& rm -f {shlex.quote(archive_path)}"
+            )
+            self._raise_on_process_failure(extract_response, "extract skill archive")
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
+
+        logger.debug(
+            "DaytonaProvider.ensure_skill: uploaded %d skill files via archive to %s "
+            "(sandbox=%s)",
+            file_count,
+            files_dir,
+            handle.sandbox_id,
+        )
+
+    @staticmethod
+    def _raise_on_process_failure(response: Any, action: str) -> None:
+        exit_code = _get_attr(response, "exit_code", "exitCode", default=0)
+        if isinstance(exit_code, int) and exit_code != 0:
+            output = _response_output(response).strip()
+            detail = f": {output}" if output else ""
+            raise RuntimeError(f"Failed to {action}{detail}")
+
     def read_file(self, handle: SandboxHandle, filename: str) -> bytes:
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:
@@ -769,15 +826,7 @@ class DaytonaProvider(SandboxProvider):
         handle.active_skills[skill.name] = state
 
         try:
-            for skill_file in skill.files:
-                if str(skill_file.path).endswith("/"):
-                    continue
-                content = skill_file.content_bytes or (
-                    skill_file.content_text.encode("utf-8")
-                    if skill_file.content_text
-                    else b""
-                )
-                self.write_file(handle, f"{files_dir}/{skill_file.path}", content)
+            self._upload_skill_archive(handle, skill, files_dir)
             state["phases"]["files"] = "ok"
         except Exception as exc:
             state["phases"]["files"] = f"failed: {exc}"

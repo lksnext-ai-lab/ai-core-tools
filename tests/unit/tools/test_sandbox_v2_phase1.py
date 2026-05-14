@@ -235,6 +235,35 @@ def test_repl_tool_streams_stdout_from_provider_thread():
     ]
 
 
+def test_repl_tool_marks_sandbox_session_active_while_running():
+    from backend.tools.sandbox.provider import SandboxHandle
+    from backend.tools.sandbox.tool_factory import create_sandbox_repl_tool
+
+    handle = SandboxHandle(
+        sandbox_id="sandbox-1",
+        working_dir="/tmp",
+        provider_name="test",
+    )
+    provider = MagicMock()
+    provider.run_code.return_value = "done"
+    session_service = MagicMock()
+    session_service.begin_use.return_value = True
+
+    repl_tool = create_sandbox_repl_tool(
+        handle,
+        provider,
+        "python",
+        session_key="conv_1_1",
+        session_service=session_service,
+    )
+    result = repl_tool.invoke({"code": "print('hello')"})
+
+    assert result == "done"
+    session_service.begin_use.assert_called_once_with("conv_1_1")
+    session_service.end_use.assert_called_once_with("conv_1_1")
+    provider.run_code.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # 7. list_files returns workspace-relative paths, excludes .skills/
 # ---------------------------------------------------------------------------

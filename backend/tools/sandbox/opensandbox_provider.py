@@ -63,6 +63,7 @@ from __future__ import annotations
 import os
 import posixpath
 import queue
+import shlex
 import threading
 import time
 from contextvars import copy_context
@@ -75,6 +76,7 @@ from typing import TYPE_CHECKING, Any
 import config as settings
 from utils.logger import get_logger
 from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
+from .skill_archive import build_skill_archive, skill_archive_name
 
 if TYPE_CHECKING:
     pass
@@ -310,6 +312,23 @@ def _write_skill_files(
             skill_file.content_text.encode("utf-8") if skill_file.content_text else b""
         )
         provider.write_file(handle, dest_path, content)
+
+
+def _python_extract_archive_script(archive_path: str, files_dir: str) -> str:
+    return (
+        "import os, tarfile\n"
+        f"archive_path = {archive_path!r}\n"
+        f"files_dir = {files_dir!r}\n"
+        "os.makedirs(files_dir, exist_ok=True)\n"
+        "root = os.path.realpath(files_dir)\n"
+        "with tarfile.open(archive_path, 'r:gz') as archive:\n"
+        "    for member in archive.getmembers():\n"
+        "        target = os.path.realpath(os.path.join(files_dir, member.name))\n"
+        "        if target != root and not target.startswith(root + os.sep):\n"
+        "            raise RuntimeError(f'Unsafe archive member: {member.name}')\n"
+        "    archive.extractall(files_dir)\n"
+        "os.remove(archive_path)\n"
+    )
 
 
 def _read_skill_file_text(skill: Any, relative_path: str) -> str:
@@ -1094,6 +1113,70 @@ class OpenSandboxProvider(SandboxProvider):
             handle.sandbox_id,
         )
 
+    def _skill_archive_extract_language(self, handle: SandboxHandle) -> str | None:
+        context_pools = self._ensure_context_pools(handle)
+        if "bash" in context_pools:
+            return "bash"
+        if "python" in context_pools:
+            return "python"
+        return None
+
+    def _upload_skill_archive(
+        self,
+        handle: SandboxHandle,
+        skill: Any,
+        files_dir: str,
+        extract_language: str,
+    ) -> None:
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"OpenSandboxProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+
+        archive_bytes, file_count = build_skill_archive(skill)
+        if file_count == 0:
+            return
+
+        archive_path = f"/workspace/.skill_archive_{skill_archive_name(skill)}"
+        try:
+            self._reset_idle_timeout(sandbox)
+            sandbox.files.write_file(_workspace_path(archive_path), archive_bytes)
+        except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during skill archive upload: {exc}"
+                ) from exc
+            raise
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
+
+        if extract_language == "bash":
+            script = (
+                f"mkdir -p {shlex.quote(files_dir)} && "
+                f"tar -xzf {shlex.quote(archive_path)} -C {shlex.quote(files_dir)} && "
+                f"rm -f {shlex.quote(archive_path)}"
+            )
+        else:
+            script = _python_extract_archive_script(archive_path, files_dir)
+
+        output = self.run_code(
+            handle,
+            script,
+            language=extract_language,
+            timeout=settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S,
+        )
+        if _bootstrap_failed(output):
+            raise RuntimeError(output.strip() or "skill archive extraction failed")
+
+        logger.debug(
+            "OpenSandboxProvider.ensure_skill: uploaded %d skill files via archive to %s "
+            "(sandbox=%s)",
+            file_count,
+            files_dir,
+            handle.sandbox_id,
+        )
+
     def read_file(self, handle: SandboxHandle, filename: str) -> bytes:
         """Return raw bytes of ``/workspace/{filename}`` from the sandbox."""
         sandbox = handle.metadata.get(_META_SANDBOX)
@@ -1199,8 +1282,10 @@ class OpenSandboxProvider(SandboxProvider):
     ) -> dict[str, Any]:
         """Activate *skill* inside the sandbox using a two-phase approach.
 
-        Phase 1 — files: write all ``SkillFile`` records to
-        ``/workspace/.skills/{skill.name}/`` using package-root-relative paths.
+        Phase 1 — files: upload one compressed archive of all ``SkillFile``
+        records, then extract it to ``/workspace/.skills/{skill.name}/`` using
+        package-root-relative paths. If the sandbox has no bash or Python
+        execution context available for extraction, fall back to per-file writes.
 
         Phase 2 — bootstrap: when ``skill.bootstrap_script_path`` is set, read
         the matching ``SkillFile`` and execute it via :meth:`run_code`.
@@ -1239,7 +1324,11 @@ class OpenSandboxProvider(SandboxProvider):
 
         # Phase 1: write package files into the sandbox
         try:
-            _write_skill_files(self, handle, skill, files_dir)
+            extract_language = self._skill_archive_extract_language(handle)
+            if extract_language is None:
+                _write_skill_files(self, handle, skill, files_dir)
+            else:
+                self._upload_skill_archive(handle, skill, files_dir, extract_language)
             state["phases"]["files"] = "ok"
         except Exception as exc:
             state["phases"]["files"] = f"failed: {exc}"

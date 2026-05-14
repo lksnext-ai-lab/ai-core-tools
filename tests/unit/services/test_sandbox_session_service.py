@@ -49,6 +49,41 @@ def test_reap_stale_keeps_recent_sessions(monkeypatch):
     provider.destroy_sandbox.assert_not_called()
 
 
+def test_reap_stale_skips_active_session(monkeypatch):
+    monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+    service = SandboxSessionService()
+    provider = MagicMock()
+    handle = _handle()
+    entry = _Entry(handle=handle, provider=provider)
+    entry.last_used = time.monotonic() - 121
+    entry.active_uses = 1
+    service._sessions["conv_1_1"] = entry
+
+    service._reap_stale()
+
+    assert "conv_1_1" in service._sessions
+    provider.destroy_sandbox.assert_not_called()
+
+
+def test_begin_end_use_refreshes_idle_timestamp():
+    service = SandboxSessionService()
+    provider = MagicMock()
+    handle = _handle()
+    entry = _Entry(handle=handle, provider=provider)
+    entry.last_used = time.monotonic() - 121
+    service._sessions["conv_1_1"] = entry
+
+    assert service.begin_use("conv_1_1") is True
+    assert entry.active_uses == 1
+    used_at = entry.last_used
+    assert service.begin_use("missing") is False
+
+    service.end_use("conv_1_1")
+
+    assert entry.active_uses == 0
+    assert entry.last_used >= used_at
+
+
 def test_get_or_create_does_not_resume_idle_expired_persisted_state(monkeypatch):
     monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
     service = SandboxSessionService()

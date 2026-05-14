@@ -180,21 +180,27 @@ def test_renew_sandbox_no_sdk_object_raises_expired(provider):
 
 
 def test_ensure_skill_file_write_success(provider, mock_skill_with_files):
-    """ensure_skill writes all SkillFile records → phases['files'] == 'ok'."""
+    """ensure_skill uploads the Skill package archive → phases['files'] == 'ok'."""
     prov, _ = provider
     handle = MagicMock()
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file") as mock_write:
-        result = prov.ensure_skill(handle, mock_skill_with_files)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive") as mock_upload:
+            result = prov.ensure_skill(handle, mock_skill_with_files)
 
     assert result["phases"]["files"] == "ok"
-    assert mock_write.call_count == len(mock_skill_with_files.files)
+    mock_upload.assert_called_once_with(
+        handle,
+        mock_skill_with_files,
+        "/workspace/.skills/test_skill_files",
+        "python",
+    )
 
 
 def test_ensure_skill_skips_directory_placeholders(provider):
-    """Directory entries from ZIP packages must not be uploaded as files."""
+    """Directory entries from ZIP packages must not create separate uploads."""
     prov, _ = provider
     handle = MagicMock()
     handle.sandbox_id = "sbx_1"
@@ -209,12 +215,12 @@ def test_ensure_skill_skips_directory_placeholders(provider):
         ],
     )
 
-    with patch.object(prov, "write_file") as mock_write:
-        result = prov.ensure_skill(handle, skill)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive") as mock_upload:
+            result = prov.ensure_skill(handle, skill)
 
     assert result["phases"]["files"] == "ok"
-    mock_write.assert_called_once()
-    assert mock_write.call_args.args[1] == "/workspace/.skills/pptx/scripts/__init__.py"
+    mock_upload.assert_called_once()
 
 
 def test_ensure_skill_no_bootstrap_skips_phase(provider, mock_skill_with_files):
@@ -224,8 +230,9 @@ def test_ensure_skill_no_bootstrap_skips_phase(provider, mock_skill_with_files):
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file"):
-        result = prov.ensure_skill(handle, mock_skill_with_files)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive"):
+            result = prov.ensure_skill(handle, mock_skill_with_files)
 
     assert result["phases"]["bootstrap"] == "skipped"
 
@@ -237,9 +244,10 @@ def test_ensure_skill_bootstrap_success(provider, mock_skill_with_bootstrap):
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file"):
-        with patch.object(prov, "run_code", return_value="") as mock_run:
-            result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive"):
+            with patch.object(prov, "run_code", return_value="") as mock_run:
+                result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
 
     assert result["phases"]["bootstrap"] == "ok"
     mock_run.assert_called_once()
@@ -264,9 +272,10 @@ def test_ensure_skill_bootstrap_uses_bash_for_shell_script(provider):
         ],
     )
 
-    with patch.object(prov, "write_file"):
-        with patch.object(prov, "run_code", return_value="") as mock_run:
-            result = prov.ensure_skill(handle, skill)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive"):
+            with patch.object(prov, "run_code", return_value="") as mock_run:
+                result = prov.ensure_skill(handle, skill)
 
     assert result["phases"]["bootstrap"] == "ok"
     assert mock_run.call_args.kwargs["language"] == "bash"
@@ -286,9 +295,10 @@ def test_ensure_skill_bootstrap_failure(provider, mock_skill_with_bootstrap):
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file"):
-        with patch.object(prov, "run_code", side_effect=RuntimeError("script error")):
-            result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive"):
+            with patch.object(prov, "run_code", side_effect=RuntimeError("script error")):
+                result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
 
     assert result["phases"]["bootstrap"].startswith("failed:")
 
@@ -310,9 +320,10 @@ def test_ensure_skill_bootstrap_failure_from_run_code_output(
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file"):
-        with patch.object(prov, "run_code", return_value=output):
-            result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive"):
+            with patch.object(prov, "run_code", return_value=output):
+                result = prov.ensure_skill(handle, mock_skill_with_bootstrap)
 
     assert result["phases"]["bootstrap"].startswith("failed:")
     assert output in result["phases"]["bootstrap"]
@@ -325,22 +336,24 @@ def test_ensure_skill_idempotent(provider, mock_skill_with_files):
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file"):
-        first = prov.ensure_skill(handle, mock_skill_with_files)
-        second = prov.ensure_skill(handle, mock_skill_with_files)
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive"):
+            first = prov.ensure_skill(handle, mock_skill_with_files)
+            second = prov.ensure_skill(handle, mock_skill_with_files)
 
     assert first is second
 
 
 def test_ensure_skill_retry_recomputes(provider, mock_skill_with_files):
-    """ensure_skill with retry=True re-runs write_file even if cached result is healthy."""
+    """ensure_skill with retry=True re-runs archive upload when cached state is healthy."""
     prov, _ = provider
     handle = MagicMock()
     handle.sandbox_id = "sbx_1"
     handle.active_skills = {}
 
-    with patch.object(prov, "write_file") as mock_write:
-        prov.ensure_skill(handle, mock_skill_with_files)
-        write_count_first = mock_write.call_count
-        prov.ensure_skill(handle, mock_skill_with_files, retry=True)
-        assert mock_write.call_count == write_count_first * 2
+    with patch.object(prov, "_skill_archive_extract_language", return_value="python"):
+        with patch.object(prov, "_upload_skill_archive") as mock_upload:
+            prov.ensure_skill(handle, mock_skill_with_files)
+            upload_count_first = mock_upload.call_count
+            prov.ensure_skill(handle, mock_skill_with_files, retry=True)
+            assert mock_upload.call_count == upload_count_first * 2

@@ -159,6 +159,7 @@ class _Entry:
     provider: SandboxProvider
     active_skills: list = field(default_factory=list)
     last_used: float = field(default_factory=time.monotonic)
+    active_uses: int = 0
 
 
 class SandboxSessionService:
@@ -376,6 +377,30 @@ class SandboxSessionService:
                 entry.handle.sandbox_id,
             )
 
+    def begin_use(self, session_key: str) -> bool:
+        """Mark a sandbox session as actively executing work.
+
+        The idle reaper skips entries with active uses so long-running code
+        execution cannot be mistaken for an idle sandbox. Returns ``True`` when
+        the session exists and was marked.
+        """
+        with self._lock:
+            entry = self._sessions.get(session_key)
+            if entry is None:
+                return False
+            entry.active_uses += 1
+            entry.last_used = time.monotonic()
+            return True
+
+    def end_use(self, session_key: str) -> None:
+        """Clear one active-use marker and refresh the idle timestamp."""
+        with self._lock:
+            entry = self._sessions.get(session_key)
+            if entry is None:
+                return
+            entry.active_uses = max(0, entry.active_uses - 1)
+            entry.last_used = time.monotonic()
+
     def destroy(self, session_key: str) -> None:
         """Destroy the sandbox associated with *session_key* and remove it.
 
@@ -504,7 +529,7 @@ class SandboxSessionService:
         with self._lock:
             stale_keys = [
                 k for k, e in self._sessions.items()
-                if (now - e.last_used) > ttl_s
+                if e.active_uses <= 0 and (now - e.last_used) > ttl_s
             ]
             stale_entries = {k: self._sessions.pop(k) for k in stale_keys}
 

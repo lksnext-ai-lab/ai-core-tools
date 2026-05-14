@@ -36,6 +36,7 @@ from typing import Any
 import config as settings
 from utils.logger import get_logger
 from .provider import SandboxExpiredError, SandboxHandle, SandboxProvider
+from .skill_archive import build_skill_archive, skill_archive_name
 
 logger = get_logger(__name__)
 
@@ -584,6 +585,64 @@ class E2BProvider(SandboxProvider):
         finally:
             self._reset_idle_timeout(sandbox, suppress_errors=True)
 
+    def _upload_skill_archive(self, handle: SandboxHandle, skill: Any, files_dir: str) -> None:
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"E2BProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+
+        archive_bytes, file_count = build_skill_archive(skill)
+        archive_path = (
+            f"{_workspace_root()}/.skills/.archives/{skill_archive_name(skill)}"
+        )
+        archive_parent = posixpath.dirname(archive_path)
+
+        self._reset_idle_timeout(sandbox)
+        try:
+            mkdir_result = sandbox.commands.run(
+                "mkdir -p "
+                f"{shlex.quote(files_dir)} {shlex.quote(archive_parent)}",
+                timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+                request_timeout=settings.SANDBOX_CREATE_TIMEOUT_S,
+            )
+            self._raise_on_command_failure(mkdir_result, "create skill directories")
+            if file_count == 0:
+                return
+
+            sandbox.files.write(
+                archive_path,
+                archive_bytes,
+                request_timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+            )
+            extract_result = sandbox.commands.run(
+                "tar -xzf "
+                f"{shlex.quote(archive_path)} "
+                f"-C {shlex.quote(files_dir)} "
+                f"&& rm -f {shlex.quote(archive_path)}",
+                timeout=settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S,
+                request_timeout=settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S,
+            )
+            self._raise_on_command_failure(extract_result, "extract skill archive")
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
+
+        logger.debug(
+            "E2BProvider.ensure_skill: uploaded %d skill files via archive to %s "
+            "(sandbox=%s)",
+            file_count,
+            files_dir,
+            handle.sandbox_id,
+        )
+
+    @staticmethod
+    def _raise_on_command_failure(result: Any, action: str) -> None:
+        exit_code = _get_attr(result, "exit_code", "exitCode", default=0)
+        if isinstance(exit_code, int) and exit_code != 0:
+            output = _command_output(result).strip()
+            detail = f": {output}" if output else ""
+            raise RuntimeError(f"Failed to {action}{detail}")
+
     def read_file(self, handle: SandboxHandle, filename: str) -> bytes:
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:
@@ -663,15 +722,7 @@ class E2BProvider(SandboxProvider):
         handle.active_skills[skill.name] = state
 
         try:
-            for skill_file in skill.files:
-                if str(skill_file.path).endswith("/"):
-                    continue
-                content = skill_file.content_bytes or (
-                    skill_file.content_text.encode("utf-8")
-                    if skill_file.content_text
-                    else b""
-                )
-                self.write_file(handle, f"{files_dir}/{skill_file.path}", content)
+            self._upload_skill_archive(handle, skill, files_dir)
             state["phases"]["files"] = "ok"
         except Exception as exc:
             state["phases"]["files"] = f"failed: {exc}"

@@ -210,6 +210,12 @@ def create_sandbox_repl_tool(
                 f"[Execution budget exceeded: {max_executions} executions per turn]"
             )
         stream_writer = _get_stream_writer_or_none()
+        lease_acquired = False
+        if session_service is not None and session_key is not None:
+            try:
+                lease_acquired = bool(session_service.begin_use(session_key))
+            except Exception:
+                lease_acquired = False
         try:
             return provider.run_code(
                 handle,
@@ -228,6 +234,12 @@ def create_sandbox_repl_tool(
                 except Exception:
                     pass  # evict is best-effort
             raise
+        finally:
+            if lease_acquired and session_service is not None and session_key is not None:
+                try:
+                    session_service.end_use(session_key)
+                except Exception:
+                    pass
 
     _repl_fn.__name__ = tool_name
     _repl_fn.__doc__ = base_doc

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import tarfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -248,7 +250,7 @@ class TestDaytonaFileIO:
 
 class TestDaytonaSkills:
     def test_ensure_skill_writes_files_and_skips_bootstrap(self, provider_and_sandbox, tmp_path):
-        provider, _, _ = provider_and_sandbox
+        provider, _, sandbox = provider_and_sandbox
         handle = provider.create_sandbox(str(tmp_path))
         skill = SimpleNamespace(
             skill_id=10,
@@ -261,7 +263,65 @@ class TestDaytonaSkills:
             result = provider.ensure_skill(handle, skill)
 
         assert result["phases"] == {"files": "ok", "bootstrap": "skipped"}
-        mock_write.assert_called_once_with(handle, "workspace/.skills/demo/helper.py", b"x = 1")
+        mock_write.assert_not_called()
+        sandbox.fs.upload_file.assert_called_once()
+        archive_bytes, archive_path = sandbox.fs.upload_file.call_args.args
+        assert archive_path == "workspace/.skills/.archives/10_demo.tar.gz"
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+            assert archive.getnames() == ["helper.py"]
+            assert archive.extractfile("helper.py").read() == b"x = 1"
+        sandbox.process.exec.assert_any_call(
+            "mkdir -p workspace/.skills/demo workspace/.skills/.archives"
+        )
+        sandbox.process.exec.assert_any_call(
+            "tar -xzf workspace/.skills/.archives/10_demo.tar.gz "
+            "-C workspace/.skills/demo && rm -f workspace/.skills/.archives/10_demo.tar.gz"
+        )
+
+    def test_ensure_skill_archive_skips_directory_placeholders(
+        self, provider_and_sandbox, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        skill = SimpleNamespace(
+            skill_id=12,
+            name="demo",
+            bootstrap_script_path=None,
+            files=[
+                SimpleNamespace(path="scripts/", content_text="", content_bytes=None),
+                SimpleNamespace(
+                    path="scripts/helper.py",
+                    content_text="x = 1",
+                    content_bytes=None,
+                ),
+            ],
+        )
+
+        result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"]["files"] == "ok"
+        archive_bytes, _ = sandbox.fs.upload_file.call_args.args
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+            assert archive.getnames() == ["scripts/helper.py"]
+
+    def test_ensure_skill_archive_rejects_paths_outside_skill_dir(
+        self, provider_and_sandbox, tmp_path
+    ):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        skill = SimpleNamespace(
+            skill_id=13,
+            name="demo",
+            bootstrap_script_path=None,
+            files=[
+                SimpleNamespace(path="../escape.py", content_text="x = 1", content_bytes=None),
+            ],
+        )
+
+        result = provider.ensure_skill(handle, skill)
+
+        assert result["phases"]["files"].startswith("failed:")
+        sandbox.fs.upload_file.assert_not_called()
 
     def test_ensure_skill_runs_bash_bootstrap(self, provider_and_sandbox, tmp_path):
         provider, _, _ = provider_and_sandbox
@@ -273,7 +333,7 @@ class TestDaytonaSkills:
             files=[SimpleNamespace(path="bootstrap.sh", content_text="echo ok", content_bytes=None)],
         )
 
-        with patch.object(provider, "write_file"), patch.object(
+        with patch.object(
             provider, "run_code", return_value="__AICT_BOOTSTRAP_EXIT_CODE__=0"
         ) as mock_run:
             result = provider.ensure_skill(handle, skill)
