@@ -375,6 +375,20 @@ class E2BProvider(SandboxProvider):
                 f"E2B sandbox {handle.sandbox_id} renew failed: {exc}"
             ) from exc
 
+    def touch_sandbox(self, handle: SandboxHandle, idle_timeout_s: int) -> None:
+        """Refresh E2B timeout to the service-managed idle window."""
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"E2BProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+        try:
+            self._set_sandbox_timeout(sandbox, max(1, int(idle_timeout_s)))
+        except Exception as exc:
+            raise SandboxExpiredError(
+                f"E2B sandbox {handle.sandbox_id} touch failed: {exc}"
+            ) from exc
+
     def _set_sandbox_timeout(
         self,
         sandbox: Any,
@@ -413,6 +427,38 @@ class E2BProvider(SandboxProvider):
                 handle.sandbox_id,
                 exc,
             )
+
+    def destroy_sandbox_id(self, sandbox_id: str) -> None:
+        sdk = self._ensure_sdk()
+        try:
+            if hasattr(sdk, "kill"):
+                sdk.kill(sandbox_id)
+                logger.info("E2BProvider: sandbox %s killed by id", sandbox_id)
+                return
+        except Exception as exc:
+            logger.debug("E2BProvider: static kill failed for %s: %s", sandbox_id, exc)
+        try:
+            sandbox = _call_with_fallbacks(
+                sdk.connect,
+                sandbox_id,
+                timeout=_idle_timeout_s(),
+                request_timeout=settings.SANDBOX_CREATE_TIMEOUT_S,
+            )
+        except Exception as exc:
+            logger.debug(
+                "E2BProvider: sandbox %s unavailable during destroy-by-id: %s",
+                sandbox_id,
+                exc,
+            )
+            return
+        self.destroy_sandbox(
+            SandboxHandle(
+                sandbox_id=sandbox_id,
+                working_dir="",
+                provider_name=self.PROVIDER_NAME,
+                metadata={_META_SANDBOX: sandbox},
+            )
+        )
 
     def _run_bash(
         self,

@@ -8,6 +8,11 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def is_missing_tool_output_error(exc: BaseException) -> bool:
+    """Return True when a provider rejects a stale incomplete tool-call checkpoint."""
+    return "No tool output found for function call" in str(exc)
+
+
 def _content_blocks_to_str(blocks: list) -> str:
     """Convert a LangChain multimodal content block list to a display string.
 

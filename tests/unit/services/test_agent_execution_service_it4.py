@@ -8,9 +8,9 @@ Verification criteria from the RFC:
   2. For non-subprocess providers, ``_prepare_turn`` pushes each processed_file
      into the sandbox via ``provider.write_file``.
   3. For SubprocessProvider (provider_name == 'subprocess'), no push/pull occurs.
-  4. ``_finalize_turn`` pulls new remote files (not in pre_existing_remote_files)
-     into ``working_dir`` before ``sync_output_files``.
-  5. Files under ``/workspace/.skills/`` are never pulled.
+  4. ``_finalize_turn`` pulls new remote output/ files (not in
+     pre_existing_remote_files) into local output/ before ``sync_output_files``.
+  5. Files outside ``output/`` (including ``.skills/``) are never pulled.
   6. Unsafe basenames (path traversal) are skipped during pull.
   7. Push/pull errors are logged but do not crash the turn.
 """
@@ -230,7 +230,7 @@ class TestPrepareTurnFilePush:
             )
 
         mock_provider.write_file.assert_called_once_with(
-            mock_handle, "data.xlsx", b"XLSX_CONTENT"
+            mock_handle, "input/data.xlsx", b"XLSX_CONTENT"
         )
 
     def test_no_push_for_subprocess_provider(self, tmp_path):
@@ -274,6 +274,7 @@ class TestPrepareTurnFilePush:
 
         # SubprocessProvider: no write_file called (files are in working_dir already)
         mock_provider.write_file.assert_not_called()
+        assert os.path.exists(os.path.join(ctx.working_dir, "input", "report.csv"))
 
     def test_push_error_does_not_crash_turn(self, tmp_path):
         agent = _make_agent(enable_code_interpreter=True)
@@ -348,46 +349,47 @@ class TestFinalizeTurnFilePull:
 
     def test_pulls_new_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
-        ctx.sandbox_provider.list_files.return_value = ["/workspace/report.docx"]
+        ctx.sandbox_provider.list_files.return_value = ["/workspace/output/report.docx"]
         ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
         self._run_finalize(ctx, tmp_path)
 
-        dest = tmp_path / "report.docx"
+        dest = tmp_path / "output" / "report.docx"
         assert dest.exists()
         assert dest.read_bytes() == b"DOCX_BYTES"
 
     def test_pulls_new_remote_file_from_bare_filename(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
-        ctx.sandbox_provider.list_files.return_value = ["report.docx"]
+        ctx.sandbox_provider.list_files.return_value = ["output/report.docx"]
         ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
         self._run_finalize(ctx, tmp_path)
 
-        dest = tmp_path / "report.docx"
+        dest = tmp_path / "output" / "report.docx"
         assert dest.exists()
         assert dest.read_bytes() == b"DOCX_BYTES"
         ctx.sandbox_provider.read_file.assert_called_once_with(
-            ctx.sandbox_handle, "report.docx"
+            ctx.sandbox_handle, "output/report.docx"
         )
 
     def test_skips_pre_existing_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
-        ctx.sandbox_provider.list_files.return_value = ["/workspace/old.txt"]
+        ctx.sandbox_provider.list_files.return_value = ["/workspace/output/old.txt"]
         ctx.sandbox_provider.read_file.return_value = b"OLD"
-        ctx.pre_existing_remote_files = {"/workspace/old.txt"}
+        ctx.pre_existing_remote_files = {"output/old.txt"}
 
         self._run_finalize(ctx, tmp_path)
 
-        assert not (tmp_path / "old.txt").exists()
+        assert not (tmp_path / "output" / "old.txt").exists()
 
     def test_skips_skill_resources(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
         ctx.sandbox_provider.list_files.return_value = [
             "/workspace/.skills/word-generation/setup.py",
-            "/workspace/output.xlsx",
+            "/workspace/work/package.json",
+            "/workspace/output/output.xlsx",
         ]
         ctx.sandbox_provider.read_file.return_value = b"DATA"
         ctx.pre_existing_remote_files = set()
@@ -395,9 +397,10 @@ class TestFinalizeTurnFilePull:
         self._run_finalize(ctx, tmp_path)
 
         # Skill resource skipped
-        assert not (tmp_path / "setup.py").exists()
-        # Regular file pulled
-        assert (tmp_path / "output.xlsx").exists()
+        assert not (tmp_path / "output" / "setup.py").exists()
+        assert not (tmp_path / "output" / "package.json").exists()
+        # Published output file pulled
+        assert (tmp_path / "output" / "output.xlsx").exists()
 
     def test_skips_path_traversal_filenames(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
@@ -405,7 +408,7 @@ class TestFinalizeTurnFilePull:
             # Normalizes to /etc/passwd — outside /workspace/
             "/workspace/../../../etc/passwd",
             # Hidden file inside /workspace/ — basename starts with .
-            "/workspace/.hidden",
+            "/workspace/output/.hidden",
         ]
         ctx.sandbox_provider.read_file.return_value = b"EVIL"
         ctx.pre_existing_remote_files = set()
@@ -415,8 +418,8 @@ class TestFinalizeTurnFilePull:
         # read_file should never have been called for these unsafe paths
         ctx.sandbox_provider.read_file.assert_not_called()
         # No files written
-        assert not (tmp_path / "passwd").exists()
-        assert not (tmp_path / ".hidden").exists()
+        assert not (tmp_path / "output" / "passwd").exists()
+        assert not (tmp_path / "output" / ".hidden").exists()
 
     def test_no_pull_for_subprocess_provider(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="subprocess")
@@ -445,7 +448,10 @@ class TestFinalizeTurnFilePull:
 
     def test_read_file_error_skips_file_gracefully(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
-        ctx.sandbox_provider.list_files.return_value = ["/workspace/good.txt", "/workspace/bad.bin"]
+        ctx.sandbox_provider.list_files.return_value = [
+            "/workspace/output/good.txt",
+            "/workspace/output/bad.bin",
+        ]
         ctx.sandbox_provider.read_file.side_effect = lambda handle, path: (
             b"GOOD" if "good" in path else (_ for _ in ()).throw(IOError("disk full"))
         )
@@ -453,8 +459,8 @@ class TestFinalizeTurnFilePull:
 
         self._run_finalize(ctx, tmp_path)
 
-        assert (tmp_path / "good.txt").exists()
-        assert not (tmp_path / "bad.bin").exists()
+        assert (tmp_path / "output" / "good.txt").exists()
+        assert not (tmp_path / "output" / "bad.bin").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -473,12 +479,17 @@ class TestSubprocessRoundTripUnchanged:
         svc.session_service.touch_session = AsyncMock()
         svc.agent_execution_repo = MagicMock()
 
-        # Pre-existing file
-        (tmp_path / "old.txt").write_text("old")
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        # Pre-existing published file
+        (output_dir / "old.txt").write_text("old")
         pre_existing = {"old.txt"}
 
-        # New file written during turn
-        (tmp_path / "report.docx").write_bytes(b"DOCX")
+        # New published file written during turn
+        (output_dir / "report.docx").write_bytes(b"DOCX")
+        # Scratch file should be outside sync_output_files' scan target.
+        (tmp_path / "work").mkdir()
+        (tmp_path / "work" / "helper.js").write_text("support")
 
         ctx = _base_ctx(str(tmp_path), provider_name="subprocess")
         ctx.pre_existing_files = pre_existing

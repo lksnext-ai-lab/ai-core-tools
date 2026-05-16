@@ -2,6 +2,8 @@ import os
 import asyncio
 import ast
 import json
+import posixpath
+import shutil
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
@@ -32,6 +34,85 @@ logger = get_logger(__name__)
 
 _IMAGE_FILE_TYPES = {"image"}
 _AGENT_NOT_FOUND = "Agent not found"
+_WORKSPACE_INPUT_DIR = "input"
+_WORKSPACE_WORK_DIR = "work"
+_WORKSPACE_OUTPUT_DIR = "output"
+_REMOTE_WORKSPACE_PREFIXES = (
+    "/workspace/",
+    "workspace/",
+    "/home/user/workspace/",
+    "home/user/workspace/",
+)
+
+
+def _safe_workspace_filename(filename: str) -> str:
+    """Return a filename safe for one workspace directory level."""
+    return os.path.basename((filename or "").replace("\\", "/")).replace("/", "_")
+
+
+def _workspace_layout_paths(working_dir: str) -> dict[str, str]:
+    return {
+        "input": os.path.join(working_dir, _WORKSPACE_INPUT_DIR),
+        "work": os.path.join(working_dir, _WORKSPACE_WORK_DIR),
+        "output": os.path.join(working_dir, _WORKSPACE_OUTPUT_DIR),
+    }
+
+
+def _ensure_local_workspace_layout(working_dir: str) -> dict[str, str]:
+    paths = _workspace_layout_paths(working_dir)
+    os.makedirs(working_dir, exist_ok=True)
+    for path in paths.values():
+        os.makedirs(path, exist_ok=True)
+    return paths
+
+
+def _remote_workspace_relative(path: str) -> str:
+    """Normalize provider list_files output to a workspace-relative path."""
+    normalized = posixpath.normpath(str(path or "").replace("\\", "/"))
+    for prefix in _REMOTE_WORKSPACE_PREFIXES:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+            break
+    return normalized.lstrip("/")
+
+
+def _is_remote_output_file(path: str) -> bool:
+    rel = _remote_workspace_relative(path)
+    if rel in ("", ".", _WORKSPACE_OUTPUT_DIR):
+        return False
+    if not rel.startswith(f"{_WORKSPACE_OUTPUT_DIR}/"):
+        return False
+    parts = rel.split("/")
+    return all(part and not part.startswith(".") and part not in ("..",) for part in parts)
+
+
+def _ensure_remote_workspace_layout(provider: Any, handle: Any) -> None:
+    """Best-effort creation of input/work/output inside the sandbox workspace."""
+    try:
+        languages = set(provider.get_supported_languages())
+    except Exception:
+        languages = set()
+    try:
+        if "bash" in languages:
+            provider.run_code(
+                handle,
+                f"mkdir -p {_WORKSPACE_INPUT_DIR} {_WORKSPACE_WORK_DIR} {_WORKSPACE_OUTPUT_DIR}",
+                language="bash",
+                timeout=10,
+            )
+        elif "python" in languages:
+            provider.run_code(
+                handle,
+                (
+                    "import os\n"
+                    f"for p in {[_WORKSPACE_INPUT_DIR, _WORKSPACE_WORK_DIR, _WORKSPACE_OUTPUT_DIR]!r}:\n"
+                    "    os.makedirs(p, exist_ok=True)\n"
+                ),
+                language="python",
+                timeout=10,
+            )
+    except Exception as exc:
+        logger.debug("Could not create remote workspace layout: %s", exc, exc_info=True)
 
 
 def _inject_file_markers(text: str, files: list) -> str:
@@ -115,6 +196,7 @@ class AgentExecutionService:
                 working_dir=ctx.working_dir,
                 sandbox_handle=ctx.sandbox_handle,
                 sandbox_provider=ctx.sandbox_provider,
+                sandbox_session_key=ctx.sandbox_session_key,
                 router_message=message,
             )
 
@@ -243,11 +325,34 @@ class AgentExecutionService:
             app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
             session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
             working_dir = os.path.join(tmp_base, "persistent", session_key)
+        workspace_paths = _ensure_local_workspace_layout(working_dir)
+        output_dir = workspace_paths["output"]
 
-        # 10. Snapshot working dir so finalize can exclude pre-existing files
+        # 10. Snapshot published-output dir so finalize can exclude pre-existing files
         pre_existing_files: set = set()
-        if working_dir and os.path.isdir(working_dir):
-            pre_existing_files = set(os.listdir(working_dir))
+        if os.path.isdir(output_dir):
+            pre_existing_files = set(os.listdir(output_dir))
+
+        # Copy attached files into the explicit input area for local subprocess
+        # runs. Remote providers receive the same input/<filename> paths below.
+        for pf in processed_files:
+            _filename = _safe_workspace_filename(pf.get("filename", ""))
+            _file_path = pf.get("file_path")
+            if not _filename or not _file_path:
+                continue
+            _abs_file_path = _file_path
+            if not os.path.isabs(_abs_file_path):
+                _abs_file_path = os.path.join(tmp_base, _file_path)
+            if not os.path.isfile(_abs_file_path):
+                continue
+            try:
+                shutil.copy2(_abs_file_path, os.path.join(workspace_paths["input"], _filename))
+            except Exception as _copy_exc:
+                logger.warning(
+                    "Could not copy attached file '%s' into workspace input: %s",
+                    _filename,
+                    _copy_exc,
+                )
 
         # 11. Sandbox session + file push (IT-4)
         # Derives a stable session key then obtains (or reuses) a sandbox handle
@@ -289,38 +394,54 @@ class AgentExecutionService:
             # Only remote (non-subprocess) providers need explicit push/pull.
             # SubprocessProvider uses working_dir directly so nothing to do here.
             if sandbox_handle.provider_name != "subprocess":
-                # Snapshot remote files BEFORE this turn so finalize can diff
-                try:
-                    pre_existing_remote_files = set(sandbox_provider.list_files(sandbox_handle))
-                except Exception as _snap_exc:
-                    logger.warning(
-                        "IT4: could not snapshot remote files before turn (%s): %s",
-                        sandbox_session_key,
-                        _snap_exc,
-                    )
+                with _sss.use(
+                    sandbox_session_key,
+                    conversation=conversation,
+                    db=db,
+                    expected_seconds=30,
+                ):
+                    _ensure_remote_workspace_layout(sandbox_provider, sandbox_handle)
 
-                # Push user-uploaded files into the sandbox workspace
-                for pf in processed_files:
-                    _filename = pf.get("filename", "")
-                    _file_path = pf.get("file_path")
-                    if not _filename:
-                        continue
+                    # Snapshot remote files BEFORE this turn so finalize can diff
                     try:
-                        if _file_path and os.path.isfile(_file_path):
-                            with open(_file_path, "rb") as _fh:
-                                _raw = _fh.read()
-                        else:
-                            _content = pf.get("content", "")
-                            _raw = _content.encode("utf-8") if isinstance(_content, str) else bytes(_content)
-                        sandbox_provider.write_file(sandbox_handle, _filename, _raw)
-                        logger.debug("IT4: pushed '%s' into sandbox %s", _filename, sandbox_session_key)
-                    except Exception as _push_exc:
+                        pre_existing_remote_files = {
+                            _remote_workspace_relative(path)
+                            for path in sandbox_provider.list_files(sandbox_handle)
+                            if _is_remote_output_file(path)
+                        }
+                    except Exception as _snap_exc:
                         logger.warning(
-                            "IT4: failed to push file '%s' into sandbox %s: %s",
-                            _filename,
+                            "IT4: could not snapshot remote files before turn (%s): %s",
                             sandbox_session_key,
-                            _push_exc,
+                            _snap_exc,
                         )
+
+                    # Push user-uploaded files into the sandbox workspace
+                    for pf in processed_files:
+                        _filename = _safe_workspace_filename(pf.get("filename", ""))
+                        _file_path = pf.get("file_path")
+                        if not _filename:
+                            continue
+                        try:
+                            _abs_file_path = _file_path or ""
+                            if _abs_file_path and not os.path.isabs(_abs_file_path):
+                                _abs_file_path = os.path.join(tmp_base, _abs_file_path)
+                            if _abs_file_path and os.path.isfile(_abs_file_path):
+                                with open(_abs_file_path, "rb") as _fh:
+                                    _raw = _fh.read()
+                            else:
+                                _content = pf.get("content", "")
+                                _raw = _content.encode("utf-8") if isinstance(_content, str) else bytes(_content)
+                            _remote_input_path = f"{_WORKSPACE_INPUT_DIR}/{_filename}"
+                            sandbox_provider.write_file(sandbox_handle, _remote_input_path, _raw)
+                            logger.debug("IT4: pushed '%s' into sandbox %s", _filename, sandbox_session_key)
+                        except Exception as _push_exc:
+                            logger.warning(
+                                "IT4: failed to push file '%s' into sandbox %s: %s",
+                                _filename,
+                                sandbox_session_key,
+                                _push_exc,
+                            )
 
         return AgentExecutionContext(
             agent_id=agent_id,
@@ -377,54 +498,58 @@ class AgentExecutionService:
 
         # 0 (IT-4). Pull new files from remote sandbox into working_dir BEFORE sync.
         # SubprocessProvider writes directly to working_dir so no pull is needed there.
+        output_dir = (
+            _ensure_local_workspace_layout(ctx.working_dir)["output"]
+            if ctx.working_dir
+            else None
+        )
         if (
             ctx.sandbox_handle is not None
             and ctx.sandbox_provider is not None
             and ctx.working_dir
+            and output_dir
             and ctx.sandbox_handle.provider_name != "subprocess"
         ):
             try:
-                remote_files = ctx.sandbox_provider.list_files(ctx.sandbox_handle)
-                for remote_path in remote_files:
-                    # Skip skill resources written by the activation machinery
-                    if "/workspace/.skills/" in remote_path or remote_path.startswith(".skills/"):
-                        continue
-                    if remote_path in ctx.pre_existing_remote_files:
-                        continue
-                    # Security: normalize the remote path and require it to be inside /workspace/.
-                    # Providers may return either bare filenames ("report.docx") or absolute
-                    # workspace paths ("/workspace/report.docx").
-                    import posixpath as _posixpath
-                    norm_remote = _posixpath.normpath(remote_path)
-                    if not norm_remote.startswith("/workspace/"):
-                        norm_remote = _posixpath.normpath(f"/workspace/{norm_remote}")
-                    if not norm_remote.startswith("/workspace/"):
-                        logger.warning("IT4: skipping non-workspace remote path '%s'", remote_path)
-                        continue
-                    # Derive a safe local filename (last component, no hidden/traversal names)
-                    basename = _posixpath.basename(norm_remote)
-                    if not basename or basename.startswith("."):
-                        logger.warning("IT4: skipping unsafe remote path '%s'", remote_path)
-                        continue
-                    try:
-                        file_bytes = ctx.sandbox_provider.read_file(ctx.sandbox_handle, remote_path)
-                        dest = os.path.join(ctx.working_dir, basename)
-                        os.makedirs(ctx.working_dir, exist_ok=True)
-                        with open(dest, "wb") as _fh:
-                            _fh.write(file_bytes)
-                        logger.debug("IT4: pulled '%s' → %s", remote_path, dest)
-                    except Exception as _pull_exc:
-                        logger.warning(
-                            "IT4: failed to pull remote file '%s': %s", remote_path, _pull_exc
-                        )
+                from services.sandbox_session_service import sandbox_session_service as _sss
+
+                with _sss.use(
+                    ctx.sandbox_session_key,
+                    conversation=ctx.conversation,
+                    db=db,
+                    expected_seconds=30,
+                ):
+                    remote_files = ctx.sandbox_provider.list_files(ctx.sandbox_handle)
+                    for remote_path in remote_files:
+                        if not _is_remote_output_file(remote_path):
+                            continue
+                        remote_rel = _remote_workspace_relative(remote_path)
+                        if remote_rel in ctx.pre_existing_remote_files:
+                            continue
+                        # Derive a safe local filename (last component, no hidden/traversal names)
+                        basename = posixpath.basename(remote_rel)
+                        if not basename or basename.startswith("."):
+                            logger.warning("IT4: skipping unsafe remote path '%s'", remote_path)
+                            continue
+                        try:
+                            file_bytes = ctx.sandbox_provider.read_file(ctx.sandbox_handle, remote_rel)
+                            dest = os.path.join(output_dir, basename)
+                            os.makedirs(output_dir, exist_ok=True)
+                            with open(dest, "wb") as _fh:
+                                _fh.write(file_bytes)
+                            logger.debug("IT4: pulled '%s' → %s", remote_path, dest)
+                        except Exception as _pull_exc:
+                            logger.warning(
+                                "IT4: failed to pull remote file '%s': %s", remote_path, _pull_exc
+                            )
             except Exception as _list_exc:
                 logger.warning("IT4: could not list remote files for pull: %s", _list_exc)
 
         # 1 + 2. Sync output files and inject markers
-        if ctx.working_dir:
+        if output_dir:
             file_service = FileManagementService()
             new_files = await file_service.sync_output_files(
-                working_dir=ctx.working_dir,
+                working_dir=output_dir,
                 agent_id=ctx.agent_id,
                 user_context=ctx.user_context,
                 conversation_id=(
@@ -1047,7 +1172,13 @@ class AgentExecutionService:
                 if file_data.get('type') == 'image':
                     image_files.append(file_data)
                 else:
-                    text_files_msg += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+                    safe_name = _safe_workspace_filename(file_data["filename"])
+                    text_files_msg += (
+                        f"\n\n--- File: {file_data['filename']} "
+                        f"(Sandbox path: input/{safe_name}) ---\n"
+                        f"{file_data['content']}\n"
+                        f"--- End of {file_data['filename']} ---"
+                    )
 
             if text_files_msg:
                 enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
@@ -1060,10 +1191,10 @@ class AgentExecutionService:
         import base64
         import time
         try:
-            os.makedirs(working_dir, exist_ok=True)
+            output_dir = _ensure_local_workspace_layout(working_dir)["output"]
             safe_id = block_id[:48] if block_id else str(int(time.time()))
             filename = f"generated_image_{safe_id}.png"
-            dest = os.path.join(working_dir, filename)
+            dest = os.path.join(output_dir, filename)
             with open(dest, "wb") as f:
                 f.write(base64.b64decode(b64_data))
             logger.info("Saved generated image to %s", dest)
@@ -1126,6 +1257,7 @@ class AgentExecutionService:
         working_dir: Optional[str] = None,
         sandbox_handle: Any = None,
         sandbox_provider: Any = None,
+        sandbox_session_key: Optional[str] = None,
         router_message: Optional[str] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
@@ -1155,6 +1287,7 @@ class AgentExecutionService:
                 working_dir,
                 sandbox_handle=sandbox_handle,
                 sandbox_provider=sandbox_provider,
+                sandbox_session_key=sandbox_session_key,
                 recent_messages=_router_messages,
             )
 
@@ -1191,7 +1324,38 @@ class AgentExecutionService:
                     ls_settings.source,
                 )
 
-            result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+                try:
+                result = await agent_chain.ainvoke(
+                        {"messages": [message_payload]},
+                        config=config,
+                    )
+                except Exception as invoke_exc:
+                    from services.agent_cache_service import (
+                        CheckpointerCacheService,
+                        is_missing_tool_output_error,
+                    )
+
+                    if (
+                        fresh_agent.has_memory
+                        and session_id_for_cache
+                        and is_missing_tool_output_error(invoke_exc)
+                    ):
+                        logger.warning(
+                            "Detected incomplete tool-call checkpoint for agent %s "
+                            "session %s; deleting checkpoint and retrying turn once",
+                            fresh_agent.agent_id,
+                            session_id_for_cache,
+                        )
+                        await CheckpointerCacheService.invalidate_checkpointer_async(
+                            fresh_agent.agent_id,
+                            session_id_for_cache,
+                        )
+                        result = await agent_chain.ainvoke(
+                            {"messages": [message_payload]},
+                            config=config,
+                        )
+                    else:
+                        raise
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

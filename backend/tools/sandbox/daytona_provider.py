@@ -440,6 +440,20 @@ class DaytonaProvider(SandboxProvider):
                 f"Daytona sandbox {handle.sandbox_id} renew failed: {exc}"
             ) from exc
 
+    def touch_sandbox(self, handle: SandboxHandle, idle_timeout_s: int) -> None:
+        """Refresh Daytona auto-stop and issue lightweight activity."""
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"DaytonaProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+        try:
+            self._reset_idle_timeout(sandbox)
+        except Exception as exc:
+            raise SandboxExpiredError(
+                f"Daytona sandbox {handle.sandbox_id} touch failed: {exc}"
+            ) from exc
+
     def _set_autostop_interval(
         self,
         sandbox: Any,
@@ -534,6 +548,25 @@ class DaytonaProvider(SandboxProvider):
                 handle.sandbox_id,
                 exc,
             )
+
+    def destroy_sandbox_id(self, sandbox_id: str) -> None:
+        client = self._get_client()
+        try:
+            sandbox = client.get(sandbox_id)
+        except Exception as exc:
+            logger.debug(
+                "DaytonaProvider: sandbox %s unavailable during destroy-by-id: %s",
+                sandbox_id,
+                exc,
+            )
+            return
+        handle = SandboxHandle(
+            sandbox_id=sandbox_id,
+            working_dir="",
+            provider_name=self.PROVIDER_NAME,
+            metadata={_META_CLIENT: client, _META_SANDBOX: sandbox},
+        )
+        self.destroy_sandbox(handle)
 
     def _run_python(
         self,

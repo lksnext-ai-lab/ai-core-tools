@@ -24,6 +24,10 @@ from tools.streaming_utils import (
     SSE_TOKEN,
 )
 from services.agent_execution_service import AgentExecutionService
+from services.agent_cache_service import (
+    CheckpointerCacheService,
+    is_missing_tool_output_error,
+)
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -116,45 +120,52 @@ class AgentStreamingService:
                 },
             )
 
-            # ----------------------------------------------------------------
-            # 3. Build agent chain
-            # ----------------------------------------------------------------
-            _router_messages = [{"role": "user", "content": message}]
+            result = None
+            for attempt in range(2):
+                mcp_client = None
+                # ------------------------------------------------------------
+                # 3. Build agent chain
+                # ------------------------------------------------------------
+                _router_messages = [{"role": "user", "content": message}]
 
-            agent_chain, mcp_client = await create_agent(
-                ctx.fresh_agent,
-                ctx.search_params,
-                ctx.session_id_for_cache,
-                ctx.user_context,
-                ctx.working_dir,
-                sandbox_handle=ctx.sandbox_handle,
-                sandbox_provider=ctx.sandbox_provider,
-                recent_messages=_router_messages,
-            )
-
-            config = prepare_agent_config(ctx.fresh_agent)
-
-            if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
-                config["configurable"]["thread_id"] = (
-                    f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
-                )
-                logger.info(
-                    "Using session-aware thread_id: %s",
-                    config["configurable"]["thread_id"],
-                )
-            else:
-                config["configurable"]["thread_id"] = (
-                    f"thread_{ctx.fresh_agent.agent_id}"
+                agent_chain, mcp_client = await create_agent(
+                    ctx.fresh_agent,
+                    ctx.search_params,
+                    ctx.session_id_for_cache,
+                    ctx.user_context,
+                    ctx.working_dir,
+                    sandbox_handle=ctx.sandbox_handle,
+                    sandbox_provider=ctx.sandbox_provider,
+                    sandbox_session_key=ctx.sandbox_session_key,
+                    recent_messages=_router_messages,
                 )
 
-            config["configurable"]["question"] = ctx.enhanced_message
+                config = prepare_agent_config(ctx.fresh_agent)
 
-            # ----------------------------------------------------------------
-            # 4. Build the HumanMessage payload (handles multimodal images)
-            # ----------------------------------------------------------------
-            message_payload = build_human_message(
-                ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
-            )
+                if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
+                    config["configurable"]["thread_id"] = (
+                        f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
+                    )
+                    logger.info(
+                        "Using session-aware thread_id: %s",
+                        config["configurable"]["thread_id"],
+                    )
+                else:
+                    config["configurable"]["thread_id"] = (
+                        f"thread_{ctx.fresh_agent.agent_id}"
+                    )
+
+                config["configurable"]["question"] = ctx.enhanced_message
+
+                # ------------------------------------------------------------
+                # 4. Build the HumanMessage payload (handles multimodal images)
+                # ------------------------------------------------------------
+                message_payload = build_human_message(
+                    ctx.fresh_agent,
+                    ctx.enhanced_message,
+                    ctx.image_files,
+                    ctx.user_context,
+                )
 
             # ----------------------------------------------------------------
             # 5. Attach LangSmith tracer + metadata when configured
@@ -175,9 +186,9 @@ class AgentStreamingService:
                     ls_settings.source,
                 )
 
-            # ----------------------------------------------------------------
-            # 6. Streaming loop — the only part that stays in this service
-            # ----------------------------------------------------------------
+                # ------------------------------------------------------------
+                # 6. Streaming loop — the only part that stays in this service
+                # ------------------------------------------------------------
             # Return the sync connection to the pool for the duration of the
             # stream: astream uses the async checkpointer, not this session, so
             # holding it across LLM I/O would exhaust the pool. ctx objects expire
@@ -185,19 +196,52 @@ class AgentStreamingService:
             if effective_db is not None:
                 effective_db.commit()
 
-            accumulated_content = ""
+                accumulated_content = ""
 
-            async for mode, chunk in agent_chain.astream(
-                {"messages": [message_payload]},
-                config=config,
-                stream_mode=["messages", "updates", "custom"],
-            ):
-                events = map_stream_event(mode, chunk)
-                if events:
-                    for event in events:
-                        if event["type"] == SSE_TOKEN:
-                            accumulated_content += event["data"].get("content", "")
-                        yield format_sse_event(event["type"], event["data"])
+                if langsmith_config:
+                    stream_ctx = ls.tracing_context(
+                        client=langsmith_config["client"],
+                        project_name=langsmith_config["project_name"],
+                        enabled=True,
+                    )
+                else:
+                    from contextlib import nullcontext
+
+                    stream_ctx = nullcontext()
+
+                try:
+                    with stream_ctx:
+                        async for mode, chunk in agent_chain.astream(
+                            {"messages": [message_payload]},
+                            config=config,
+                            stream_mode=["messages", "updates", "custom"],
+                        ):
+                            events = map_stream_event(mode, chunk)
+                            if events:
+                                for event in events:
+                                    if event["type"] == SSE_TOKEN:
+                                        accumulated_content += event["data"].get("content", "")
+                                    yield format_sse_event(event["type"], event["data"])
+                    break
+                except Exception as stream_exc:
+                    if (
+                        attempt == 0
+                        and ctx.fresh_agent.has_memory
+                        and ctx.session_id_for_cache
+                        and is_missing_tool_output_error(stream_exc)
+                    ):
+                        logger.warning(
+                            "Detected incomplete tool-call checkpoint for agent %s "
+                            "session %s; deleting checkpoint and retrying turn once",
+                            ctx.fresh_agent.agent_id,
+                            ctx.session_id_for_cache,
+                        )
+                        await CheckpointerCacheService.invalidate_checkpointer_async(
+                            ctx.fresh_agent.agent_id,
+                            ctx.session_id_for_cache,
+                        )
+                        continue
+                    raise
 
             # ----------------------------------------------------------------
             # 7. Post-processing phase — delegates to AgentExecutionService

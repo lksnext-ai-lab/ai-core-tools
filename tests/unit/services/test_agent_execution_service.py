@@ -41,6 +41,8 @@ def make_agent(
     agent.request_count = 0
     agent.is_frozen = is_frozen  # SaaS mode: must be explicitly False to avoid MagicMock truthiness
     agent.ai_service = None
+    agent.enable_code_interpreter = False
+    agent.skill_associations = []
     agent.prompt_template = MagicMock()
     agent.prompt_template.format.return_value = "formatted message"
     return agent
@@ -328,10 +330,11 @@ class TestFileSnapshotting:
         agent = make_agent(agent_id=1, has_memory=False)
         svc, _ = make_service(agent=agent)
 
-        # Create a working dir with a pre-existing file
+        # Create a published output dir with a pre-existing file
         working_dir = tmp_path / "conversations" / "42"
-        working_dir.mkdir(parents=True)
-        (working_dir / "old_report.pdf").write_text("stale")
+        output_dir = working_dir / "output"
+        output_dir.mkdir(parents=True)
+        (output_dir / "old_report.pdf").write_text("stale")
 
         mock_sync = AsyncMock(return_value=[])
 
@@ -343,8 +346,6 @@ class TestFileSnapshotting:
             patch("tools.agentTools.parse_agent_response", return_value="ok"),
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.FileManagementService") as mock_fms_cls,
-            patch("os.path.isdir", side_effect=lambda p: p == str(working_dir) or os.path.isdir(p)),
-            patch("os.listdir", side_effect=lambda p: ["old_report.pdf"] if p == str(working_dir) else os.listdir(p)),
         ):
             mock_fms_cls.return_value.sync_output_files = mock_sync
 
@@ -388,7 +389,6 @@ class TestFileSnapshotting:
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.FileManagementService") as mock_fms_cls,
             patch("services.agent_execution_service._inject_file_markers", return_value="ok with files") as mock_inject,
-            patch("os.path.isdir", return_value=False),
         ):
             mock_fms_cls.return_value.sync_output_files = mock_sync
 

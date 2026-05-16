@@ -324,6 +324,8 @@ async def create_agent(
     working_dir: Optional[str] = None,
     sandbox_handle: Optional[Any] = None,
     sandbox_provider: Optional[Any] = None,
+    sandbox_session_key: Optional[str] = None,
+    sandbox_session_service: Optional[Any] = None,
     recent_messages: Optional[List[Dict]] = None,
 ):
     """Create a new agent instance with cached checkpointer if memory is enabled.
@@ -336,6 +338,8 @@ async def create_agent(
         working_dir: Optional per-conversation working directory
         sandbox_handle: Optional sandbox handle created during turn preparation
         sandbox_provider: Optional provider matching sandbox_handle
+        sandbox_session_key: Optional key for sandbox active-use leasing
+        sandbox_session_service: Optional service used for sandbox active-use leasing
     """
     llm = get_llm(agent)
     if llm is None:
@@ -471,9 +475,13 @@ async def create_agent(
             system_prompt_content
             + "\n\n<workspace>\n"
             + f"Working directory: {working_dir}\n"
-            + "User-uploaded files are in this directory — reference them by filename only.\n"
+            + "Workspace layout:\n"
+            + "- input/: user-provided files. Treat these as source material.\n"
+            + "- work/: scratch files, scripts, dependencies, extracted content, and intermediate data.\n"
+            + "- output/: final files intended for the user to download.\n"
+            + "User-uploaded files are available under input/; reference them as input/<filename>.\n"
             + "Use `download_url_to_workspace` to save any URL (generated image, PDF, report…) "
-            + "to this directory so the user can download it from the files panel.\n"
+            + "to output/ so the user can download it from the files panel.\n"
             + "</workspace>"
         )
 
@@ -486,8 +494,9 @@ async def create_agent(
             + "\n\n<code_interpreter>\n"
             + f"You have access to the following code execution tools: {_tool_names}.\n"
             + "Each tool accepts source code in the corresponding language and returns stdout + stderr.\n"
-            + "Reference uploaded files by filename only (e.g. 'report.xlsx').\n"
-            + "Save output files to the working directory and print the filename so the user can download it.\n"
+            + "Read uploaded files from input/<filename>.\n"
+            + "Use work/ for temporary files, package installs, scripts, and dependencies.\n"
+            + "Save only final user-facing deliverables in output/ and print the output/<filename> path.\n"
             + "</code_interpreter>"
         )
 
@@ -569,7 +578,18 @@ async def create_agent(
                 agent.agent_id,
             )
             sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
-        repl_tools = create_sandbox_repl_tools(sandbox_handle, sandbox_provider)
+        if sandbox_session_service is None and sandbox_session_key is not None:
+            try:
+                from services.sandbox_session_service import sandbox_session_service as _sss
+                sandbox_session_service = _sss
+            except Exception:
+                sandbox_session_service = None
+        repl_tools = create_sandbox_repl_tools(
+            sandbox_handle,
+            sandbox_provider,
+            session_key=sandbox_session_key,
+            session_service=sandbox_session_service,
+        )
         tools.extend(repl_tools)
         logger.info(
             "REPL tools added for agent %s (languages=%s, working_dir=%s, sandbox_id=%s, provider=%s)",

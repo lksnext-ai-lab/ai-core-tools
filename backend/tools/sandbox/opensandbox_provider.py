@@ -725,16 +725,13 @@ class OpenSandboxProvider(SandboxProvider):
                     "OpenSandboxProvider: resumed sandbox %s", existing_sandbox_id
                 )
             except Exception as exc:
-                if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
-                    logger.info(
-                        "OpenSandboxProvider: sandbox %s expired or unreachable; creating fresh.",
-                        existing_sandbox_id,
-                    )
-                    sandbox = None
-                else:
-                    raise SandboxExpiredError(
-                        f"Unexpected error resuming sandbox {existing_sandbox_id}: {exc}"
-                    ) from exc
+                logger.info(
+                    "OpenSandboxProvider: sandbox %s unavailable during resume; "
+                    "creating fresh: %s",
+                    existing_sandbox_id,
+                    exc,
+                )
+                sandbox = None
 
         if sandbox is None:
             logger.info(
@@ -789,6 +786,10 @@ class OpenSandboxProvider(SandboxProvider):
             raise SandboxExpiredError(
                 f"Sandbox {handle.sandbox_id} renew failed: {exc}"
             ) from exc
+
+    def touch_sandbox(self, handle: SandboxHandle, idle_timeout_s: int) -> None:
+        """Refresh OpenSandbox expiry to the service-managed idle window."""
+        self.renew_sandbox(handle, timedelta(seconds=idle_timeout_s))
 
     def _renew_sandbox_timeout(
         self,
@@ -845,6 +846,51 @@ class OpenSandboxProvider(SandboxProvider):
                     handle.sandbox_id,
                     exc,
                 )
+
+    def destroy_sandbox_id(self, sandbox_id: str) -> None:
+        """Kill an OpenSandbox container using only its provider id."""
+        if SandboxSync is None:
+            return
+
+        if hasattr(SandboxSync, "kill"):
+            try:
+                SandboxSync.kill(sandbox_id, connection_config=self._get_config())
+                logger.info("OpenSandboxProvider: sandbox %s killed by id", sandbox_id)
+                return
+            except Exception as exc:
+                logger.debug(
+                    "OpenSandboxProvider: static kill by id failed for %s: %s",
+                    sandbox_id,
+                    exc,
+                    exc_info=True,
+                )
+
+        sandbox = None
+        try:
+            if self._can_resume:
+                sandbox = SandboxSync.resume(
+                    sandbox_id,
+                    connection_config=self._get_config(),
+                )
+        except Exception as exc:
+            logger.debug(
+                "OpenSandboxProvider: resume before destroy-by-id failed for %s: %s",
+                sandbox_id,
+                exc,
+                exc_info=True,
+            )
+            return
+
+        if sandbox is None:
+            return
+        try:
+            sandbox.kill()
+            logger.info("OpenSandboxProvider: sandbox %s killed by id", sandbox_id)
+        finally:
+            try:
+                sandbox.close()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Execution

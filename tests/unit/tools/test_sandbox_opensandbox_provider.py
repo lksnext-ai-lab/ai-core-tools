@@ -383,6 +383,72 @@ class TestOpenSandboxProviderRunCode:
         mock_interpreter.codes.create_context.assert_called_once_with("python")
 
 
+class TestOpenSandboxProviderCreate:
+    def test_create_sandbox_falls_back_to_fresh_when_resume_fails(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        import tools.sandbox.opensandbox_provider as provider_mod
+        from tools.sandbox.opensandbox_provider import OpenSandboxProvider
+
+        resume_calls: list[str] = []
+        create_calls: list[tuple] = []
+        fresh_sandbox = SimpleNamespace(id="sandbox-fresh")
+
+        class FakeSandboxSync:
+            @classmethod
+            def resume(cls, sandbox_id, **kwargs):
+                resume_calls.append(sandbox_id)
+                raise RuntimeError("404 sandbox not found")
+
+            @classmethod
+            def create(cls, *args, **kwargs):
+                create_calls.append((args, kwargs))
+                return fresh_sandbox
+
+        mock_context = MagicMock()
+        mock_context.id = "ctx-fresh"
+        mock_interpreter = MagicMock()
+        mock_interpreter.codes.create_context.return_value = mock_context
+
+        class FakeCodeInterpreterSync:
+            @classmethod
+            def create(cls, *, sandbox):
+                assert sandbox is fresh_sandbox
+                return mock_interpreter
+
+        fake_code_interpreter_module = ModuleType("code_interpreter.sync.code_interpreter")
+        fake_code_interpreter_module.CodeInterpreterSync = FakeCodeInterpreterSync
+        fake_code_module = ModuleType("code_interpreter.models.code")
+        fake_code_module.SupportedLanguage = SimpleNamespace(PYTHON="python")
+
+        monkeypatch.setattr(provider_mod, "SandboxSync", FakeSandboxSync)
+        monkeypatch.setattr(provider_mod, "_supported_languages", lambda: ["python"])
+
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "code_interpreter.sync.code_interpreter": fake_code_interpreter_module,
+                    "code_interpreter.models.code": fake_code_module,
+                },
+            ),
+            patch.object(provider_mod, "_get_connection_config", return_value=MagicMock()),
+        ):
+            provider = OpenSandboxProvider()
+            handle = provider.create_sandbox(
+                str(tmp_path),
+                session_key="conv_1_1",
+                existing_sandbox_id="sandbox-gone",
+            )
+
+        assert resume_calls == ["sandbox-gone"]
+        assert create_calls
+        assert handle.sandbox_id == "sandbox-fresh"
+        assert handle.session_key == "conv_1_1"
+
+
 class TestOpenSandboxProviderFileIO:
     def test_write_file_prefixes_workspace(self, provider_and_handle):
         provider, handle = provider_and_handle
@@ -545,6 +611,42 @@ class TestOpenSandboxProviderDestroy:
 
         # Should NOT raise
         provider.destroy_sandbox(handle)
+
+    def test_destroy_by_id_prefers_static_kill(self, provider_and_handle):
+        provider, _handle = provider_and_handle
+        sandbox_sync = provider_and_handle[0].__class__.__module__
+
+        with patch(f"{sandbox_sync}.SandboxSync", create=True) as MockSandboxSync:
+            MockSandboxSync.kill = MagicMock()
+            MockSandboxSync.resume = MagicMock()
+
+            with patch.object(provider, "_get_config", return_value=MagicMock()):
+                provider.destroy_sandbox_id("sandbox-abc")
+
+            MockSandboxSync.kill.assert_called_once()
+            MockSandboxSync.resume.assert_not_called()
+
+    def test_destroy_by_id_falls_back_to_resume_when_static_kill_missing(
+        self,
+        provider_and_handle,
+    ):
+        provider, _handle = provider_and_handle
+        sandbox_sync = provider_and_handle[0].__class__.__module__
+        resumed = MagicMock()
+
+        class LegacySandboxSync:
+            @classmethod
+            def resume(cls, *args, **kwargs):
+                return resumed
+
+        with (
+            patch(f"{sandbox_sync}.SandboxSync", LegacySandboxSync),
+            patch.object(provider, "_get_config", return_value=MagicMock()),
+        ):
+            provider.destroy_sandbox_id("sandbox-abc")
+
+        resumed.kill.assert_called_once()
+        resumed.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

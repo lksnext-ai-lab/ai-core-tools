@@ -119,9 +119,33 @@ class SandboxProvider(ABC):
         raise :exc:`SandboxExpiredError` if the remote sandbox is gone.
         """
 
+    def touch_sandbox(self, handle: SandboxHandle, idle_timeout_s: int) -> None:
+        """Record provider-side activity and refresh the idle timeout.
+
+        The session service owns idle detection. Providers use this hook to keep
+        their own timeout/auto-stop setting aligned with that service-level
+        activity. The default bridges to the older ``renew_sandbox`` hook.
+        """
+        self.renew_sandbox(handle, timedelta(seconds=idle_timeout_s))
+
     @abstractmethod
     def destroy_sandbox(self, handle: SandboxHandle) -> None:
         """Release all resources held by the sandbox."""
+
+    def destroy_sandbox_id(self, sandbox_id: str) -> None:
+        """Best-effort destroy by provider sandbox id.
+
+        Used by persisted-state cleanup after backend restarts, when the live
+        SDK object stored in ``SandboxHandle.metadata`` is no longer available.
+        Providers with remote resume/connect APIs should override this method.
+        """
+        self.destroy_sandbox(
+            SandboxHandle(
+                sandbox_id=sandbox_id,
+                working_dir="",
+                provider_name=getattr(self, "PROVIDER_NAME", self.__class__.__name__),
+            )
+        )
 
     # ------------------------------------------------------------------
     # Execution

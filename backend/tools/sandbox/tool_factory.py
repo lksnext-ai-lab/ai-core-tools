@@ -168,10 +168,13 @@ def create_sandbox_repl_tool(
     if extra:
         base_doc += f"\n{extra}\n"
     base_doc += (
-        "\nFiles uploaded by the user are in the current working directory — reference\n"
-        "them by filename only (e.g. 'report.xlsx', not a full path).\n\n"
-        "Save output files to the current working directory and print the filename\n"
-        "so the user knows what to download."
+        "\nWorkspace layout:\n"
+        "- input/: user-provided files.\n"
+        "- work/: scratch files, scripts, dependencies, and intermediates.\n"
+        "- output/: final user-facing deliverables.\n\n"
+        "Read uploads as input/<filename>. Put temporary support files under work/.\n"
+        "Save only files the user should receive under output/ and print the\n"
+        "output/<filename> path."
     )
 
     def _get_stream_writer_or_none():
@@ -202,7 +205,34 @@ def create_sandbox_repl_tool(
     # Build the tool function dynamically so that its __name__ matches
     # tool_name (LangChain uses __name__ as the tool name when @tool is applied
     # to a plain function without an explicit name argument).
+    def _recreate_stale_handle() -> bool:
+        nonlocal handle
+        if session_service is None or session_key is None:
+            return False
+        try:
+            session_service.evict(session_key)
+            handle = session_service.get_or_create(
+                session_key,
+                provider,
+                handle.working_dir,
+            )
+            logger.info(
+                "Recovered sandbox session %s with new sandbox_id=%s",
+                session_key,
+                handle.sandbox_id,
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Failed to recreate sandbox session %s after expiry: %s",
+                session_key,
+                exc,
+                exc_info=True,
+            )
+            return False
+
     def _repl_fn(code: str) -> str:
+        nonlocal handle
         _budget["count"] += 1
         max_executions: int = settings.SANDBOX_MAX_EXECUTIONS_PER_TURN
         if _budget["count"] > max_executions:
@@ -210,36 +240,45 @@ def create_sandbox_repl_tool(
                 f"[Execution budget exceeded: {max_executions} executions per turn]"
             )
         stream_writer = _get_stream_writer_or_none()
-        lease_acquired = False
-        if session_service is not None and session_key is not None:
-            try:
-                lease_acquired = bool(session_service.begin_use(session_key))
-            except Exception:
-                lease_acquired = False
-        try:
-            return provider.run_code(
-                handle,
-                code,
-                language=language,
-                on_stdout=lambda line: _emit_code_output(stream_writer, "stdout", line),
-                on_stderr=lambda line: _emit_code_output(stream_writer, "stderr", line),
-            )
-        except SandboxExpiredError:
-            # Evict the stale cache entry so the next agent turn creates a fresh
-            # sandbox.  We re-raise so the LLM receives an error explaining that
-            # the sandbox was reset and it should retry.
+        for attempt in range(2):
+            lease_acquired = False
             if session_service is not None and session_key is not None:
                 try:
-                    session_service.evict(session_key)
+                    lease_acquired = bool(session_service.begin_use(session_key))
+                except SandboxExpiredError:
+                    if attempt == 0 and _recreate_stale_handle():
+                        continue
+                    return (
+                        "[Error] Sandbox session expired and could not be "
+                        "recreated. Please retry the request."
+                    )
                 except Exception:
-                    pass  # evict is best-effort
-            raise
-        finally:
-            if lease_acquired and session_service is not None and session_key is not None:
-                try:
-                    session_service.end_use(session_key)
-                except Exception:
-                    pass
+                    lease_acquired = False
+            try:
+                return provider.run_code(
+                    handle,
+                    code,
+                    language=language,
+                    on_stdout=lambda line: _emit_code_output(stream_writer, "stdout", line),
+                    on_stderr=lambda line: _emit_code_output(stream_writer, "stderr", line),
+                )
+            except SandboxExpiredError:
+                if attempt == 0 and _recreate_stale_handle():
+                    continue
+                return (
+                    "[Error] Sandbox session expired and was reset. "
+                    "Please retry the code execution."
+                )
+            finally:
+                if lease_acquired and session_service is not None and session_key is not None:
+                    try:
+                        session_service.end_use(session_key)
+                    except Exception:
+                        pass
+        return (
+            "[Error] Sandbox session expired and was reset. "
+            "Please retry the code execution."
+        )
 
     _repl_fn.__name__ = tool_name
     _repl_fn.__doc__ = base_doc
@@ -250,6 +289,9 @@ def create_sandbox_repl_tool(
 def create_sandbox_repl_tools(
     handle: SandboxHandle,
     provider: SandboxProvider,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
 ) -> list:
     """Return one REPL tool per language supported by *provider*.
 
@@ -258,15 +300,23 @@ def create_sandbox_repl_tools(
     for without requiring the caller to enumerate them manually.
 
     Args:
-        handle:   Active sandbox handle.
-        provider: Resolved ``SandboxProvider`` instance.
+        handle:          Active sandbox handle.
+        provider:        Resolved ``SandboxProvider`` instance.
+        session_key:     Optional session key used for active-use leasing.
+        session_service: Optional session service used for active-use leasing.
 
     Returns:
         A list of LangChain tools, one per language returned by
         ``provider.get_supported_languages()``.
     """
     return [
-        create_sandbox_repl_tool(handle, provider, lang)
+        create_sandbox_repl_tool(
+            handle,
+            provider,
+            lang,
+            session_key=session_key,
+            session_service=session_service,
+        )
         for lang in provider.get_supported_languages()
     ]
 

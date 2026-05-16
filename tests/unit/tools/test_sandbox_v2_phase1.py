@@ -398,6 +398,7 @@ def test_opensandbox_list_active_skills():
 
 
 def test_config_new_sandbox_settings():
+    import os
     import config as settings
 
     assert hasattr(settings, "SANDBOX_MAX_OUTPUT_CHARS")
@@ -411,9 +412,13 @@ def test_config_new_sandbox_settings():
     assert isinstance(settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S, int)
 
     assert settings.SANDBOX_MAX_OUTPUT_CHARS == 20000
-    assert settings.SANDBOX_MAX_EXECUTIONS_PER_TURN == 5
+    assert settings.SANDBOX_MAX_EXECUTIONS_PER_TURN == int(
+        os.getenv("SANDBOX_MAX_EXECUTIONS_PER_TURN", "5")
+    )
     assert settings.SANDBOX_RENEW_MINUTES == 30
-    assert settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S == 60
+    assert settings.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S == int(
+        os.getenv("SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S", "60")
+    )
 
 
 def test_config_no_install_timeout():

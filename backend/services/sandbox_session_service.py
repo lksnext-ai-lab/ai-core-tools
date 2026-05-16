@@ -21,9 +21,10 @@ import json
 import threading
 import time
 import os
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Session
@@ -46,14 +47,6 @@ def _create_timeout_s() -> int:
         return int(os.getenv("SANDBOX_CREATE_TIMEOUT_S", str(_DEFAULT_CREATE_TIMEOUT_S)))
     except (TypeError, ValueError):
         return _DEFAULT_CREATE_TIMEOUT_S
-
-
-def _renew_duration() -> timedelta:
-    try:
-        import config as settings  # type: ignore[import]
-        return timedelta(minutes=settings.SANDBOX_RENEW_MINUTES)
-    except Exception:
-        return timedelta(minutes=30)
 
 
 def _idle_timeout_s() -> int:
@@ -88,6 +81,33 @@ class SavedSandboxState:
     sandbox_id: str
     active_skills: dict[str, dict[str, Any]]
     updated_at: str
+    created_at: str | None = None
+    last_activity_at: str | None = None
+    lease_expires_at: str | None = None
+    idle_timeout_s: int | None = None
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _utc_now_iso() -> str:
+    return _utc_now().isoformat() + "Z"
+
+
+def _parse_utc(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.rstrip("Z"))
+    except (ValueError, AttributeError):
+        return None
+
+
+def _state_activity_at(state: SavedSandboxState | None) -> datetime | None:
+    if state is None:
+        return None
+    return _parse_utc(state.last_activity_at) or _parse_utc(state.updated_at)
 
 
 def _load_sandbox_state(conversation: "Conversation | None") -> SavedSandboxState | None:
@@ -105,6 +125,10 @@ def _load_sandbox_state(conversation: "Conversation | None") -> SavedSandboxStat
             sandbox_id=data.get("sandbox_id", ""),
             active_skills=data.get("active_skills", {}),
             updated_at=data.get("updated_at", ""),
+            created_at=data.get("created_at"),
+            last_activity_at=data.get("last_activity_at"),
+            lease_expires_at=data.get("lease_expires_at"),
+            idle_timeout_s=data.get("idle_timeout_s"),
         )
     except (json.JSONDecodeError, KeyError, TypeError):
         return None
@@ -114,11 +138,13 @@ def _state_is_idle_expired(state: SavedSandboxState | None) -> bool:
     """Return True if persisted sandbox state is older than the idle timeout."""
     if state is None:
         return False
-    try:
-        updated_at = datetime.fromisoformat(state.updated_at.rstrip("Z"))
-    except (ValueError, AttributeError):
+    activity_at = _state_activity_at(state)
+    if activity_at is None:
         return True
-    return updated_at < (datetime.utcnow() - timedelta(seconds=_idle_timeout_s()))
+    lease_expires_at = _parse_utc(state.lease_expires_at)
+    if lease_expires_at is not None and lease_expires_at >= _utc_now():
+        return False
+    return activity_at < (_utc_now() - timedelta(seconds=_idle_timeout_s()))
 
 
 def _persist_sandbox_state(
@@ -126,21 +152,119 @@ def _persist_sandbox_state(
     handle: SandboxHandle,
     *,
     db: Session | None,
+    last_activity_at: str | None = None,
+    lease_expires_at: str | None = None,
 ) -> None:
     """Serialize SandboxHandle state into ``Conversation.sandbox_state`` and commit."""
     if conversation is None or db is None:
         return
+    existing = {}
+    try:
+        existing = json.loads(getattr(conversation, "sandbox_state", None) or "{}")
+    except (json.JSONDecodeError, TypeError):
+        existing = {}
+    now = _utc_now_iso()
     state = {
         "provider": handle.provider_name,
         "session_key": handle.session_key,
         "sandbox_id": handle.sandbox_id,
         "active_skills": handle.active_skills,
-        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": existing.get("created_at") or now,
+        "last_activity_at": last_activity_at or now,
+        "lease_expires_at": lease_expires_at,
+        "idle_timeout_s": _idle_timeout_s(),
+        "updated_at": now,
     }
     conversation.sandbox_state = json.dumps(state)
     conversation.sandbox_session_id = handle.sandbox_id
     db.add(conversation)
     db.commit()
+
+
+def _conversation_id_from_session_key(session_key: str) -> int | None:
+    """Extract the conversation id from a conv_<agent_id>_<conversation_id> key."""
+    parts = session_key.split("_", 2)
+    if len(parts) != 3 or parts[0] != "conv":
+        return None
+    try:
+        return int(parts[2])
+    except (TypeError, ValueError):
+        return None
+
+
+def _persist_sandbox_state_for_session_key(
+    session_key: str,
+    handle: SandboxHandle,
+    *,
+    db: Session | None = None,
+    last_activity_at: str | None = None,
+    lease_expires_at: str | None = None,
+) -> None:
+    """Best-effort persistence when only the stable sandbox session key is available.
+
+    REPL tools execute below the request-preparation layer and may not have the
+    ORM Conversation object. Persisting their active lease keeps reaper threads
+    in sibling uvicorn workers from treating the sandbox as idle.
+    """
+    conversation_id = _conversation_id_from_session_key(session_key)
+    if conversation_id is None:
+        return
+
+    owns_db = False
+    if db is None:
+        try:
+            from db.database import SessionLocal  # type: ignore[import]
+            db = SessionLocal()
+            owns_db = True
+        except Exception as exc:
+            logger.debug(
+                "SandboxSessionService: cannot open DB session to persist sandbox lease "
+                "(key=%s): %s",
+                session_key,
+                exc,
+                exc_info=True,
+            )
+            return
+
+    try:
+        from models.conversation import Conversation  # type: ignore[import]
+        conversation = (
+            db.query(Conversation)
+            .filter(Conversation.conversation_id == conversation_id)
+            .first()
+        )
+        if conversation is None:
+            return
+        state = _load_sandbox_state(conversation)
+        if state is not None and state.session_key and state.session_key != session_key:
+            return
+        if (
+            getattr(conversation, "sandbox_session_id", None)
+            and getattr(conversation, "sandbox_session_id", None) != handle.sandbox_id
+            and state is not None
+            and state.session_key != session_key
+        ):
+            return
+        _persist_sandbox_state(
+            conversation,
+            handle,
+            db=db,
+            last_activity_at=last_activity_at,
+            lease_expires_at=lease_expires_at,
+        )
+    except Exception as exc:
+        logger.debug(
+            "SandboxSessionService: cannot persist sandbox lease (key=%s): %s",
+            session_key,
+            exc,
+            exc_info=True,
+        )
+    finally:
+        if owns_db and db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 def _get_provider_by_name(name: str) -> SandboxProvider | None:
@@ -153,6 +277,32 @@ def _get_provider_by_name(name: str) -> SandboxProvider | None:
         return None
 
 
+def _destroy_persisted_sandbox(state: SavedSandboxState | None) -> None:
+    """Best-effort remote destroy for a persisted sandbox state snapshot."""
+    if state is None or not state.provider or not state.sandbox_id:
+        return
+    provider = _get_provider_by_name(state.provider)
+    if provider is None:
+        logger.warning(
+            "SandboxSessionService: cannot destroy persisted sandbox %s; "
+            "unknown provider %s",
+            state.sandbox_id,
+            state.provider,
+        )
+        return
+    try:
+        provider.destroy_sandbox_id(state.sandbox_id)
+    except Exception as exc:
+        logger.warning(
+            "SandboxSessionService: error destroying persisted sandbox "
+            "(provider=%s, sandbox_id=%s): %s",
+            state.provider,
+            state.sandbox_id,
+            exc,
+            exc_info=True,
+        )
+
+
 @dataclass
 class _Entry:
     handle: SandboxHandle
@@ -160,6 +310,8 @@ class _Entry:
     active_skills: list = field(default_factory=list)
     last_used: float = field(default_factory=time.monotonic)
     active_uses: int = 0
+    created_at: float = field(default_factory=time.monotonic)
+    lease_expires_at: float | None = None
 
 
 class SandboxSessionService:
@@ -242,8 +394,9 @@ class SandboxSessionService:
             entry = self._sessions.get(session_key)
             if entry is not None:
                 try:
-                    provider.renew_sandbox(entry.handle, _renew_duration())
+                    provider.touch_sandbox(entry.handle, _idle_timeout_s())
                     entry.last_used = time.monotonic()
+                    entry.lease_expires_at = None
                     _persist_sandbox_state(conversation, entry.handle, db=db)
                     logger.debug(
                         "SandboxSessionService: reusing handle for %s (sandbox_id=%s)",
@@ -262,9 +415,10 @@ class SandboxSessionService:
         if _state_is_idle_expired(saved_state):
             logger.info(
                 "SandboxSessionService: persisted sandbox for %s expired by idle timeout; "
-                "creating fresh",
+                "destroying and creating fresh",
                 session_key,
             )
+            _destroy_persisted_sandbox(saved_state)
             saved_state = None
             if conversation is not None:
                 conversation.sandbox_session_id = None
@@ -278,12 +432,34 @@ class SandboxSessionService:
             provider.PROVIDER_NAME,
             _create_timeout_s(),
         )
-        handle = self._create_sandbox_with_timeout(
-            provider,
-            working_dir,
-            session_key=session_key,
-            existing_sandbox_id=saved_state.sandbox_id if saved_state else None,
-        )
+        try:
+            handle = self._create_sandbox_with_timeout(
+                provider,
+                working_dir,
+                session_key=session_key,
+                existing_sandbox_id=saved_state.sandbox_id if saved_state else None,
+            )
+        except SandboxExpiredError:
+            if saved_state is None:
+                raise
+            logger.info(
+                "SandboxSessionService: persisted sandbox for %s was unavailable "
+                "during resume; creating fresh",
+                session_key,
+            )
+            saved_state = None
+            if conversation is not None:
+                conversation.sandbox_session_id = None
+                conversation.sandbox_state = None
+                if db is not None:
+                    db.add(conversation)
+                    db.commit()
+            handle = self._create_sandbox_with_timeout(
+                provider,
+                working_dir,
+                session_key=session_key,
+                existing_sandbox_id=None,
+            )
 
         is_fresh_sandbox = saved_state and saved_state.sandbox_id != handle.sandbox_id
         if is_fresh_sandbox:
@@ -312,6 +488,8 @@ class SandboxSessionService:
             handle.active_skills = dict(saved_state.active_skills)
 
         _persist_sandbox_state(conversation, handle, db=db)
+        if conversation is None and db is None:
+            _persist_sandbox_state_for_session_key(session_key, handle)
 
         with self._lock:
             self._sessions[session_key] = _Entry(handle=handle, provider=provider)
@@ -377,29 +555,135 @@ class SandboxSessionService:
                 entry.handle.sandbox_id,
             )
 
-    def begin_use(self, session_key: str) -> bool:
+    def begin_use(
+        self,
+        session_key: str,
+        *,
+        conversation: "Conversation | None" = None,
+        db: Session | None = None,
+        expected_seconds: int | None = None,
+    ) -> bool:
         """Mark a sandbox session as actively executing work.
 
         The idle reaper skips entries with active uses so long-running code
         execution cannot be mistaken for an idle sandbox. Returns ``True`` when
         the session exists and was marked.
         """
+        ttl_s = _idle_timeout_s()
+        now_mono = time.monotonic()
+        lease_seconds = max(ttl_s, int(expected_seconds or 0) + ttl_s)
+        lease_expires_mono = now_mono + lease_seconds
+        lease_expires_at = (_utc_now() + timedelta(seconds=lease_seconds)).isoformat() + "Z"
         with self._lock:
             entry = self._sessions.get(session_key)
             if entry is None:
                 return False
             entry.active_uses += 1
-            entry.last_used = time.monotonic()
-            return True
+            entry.last_used = now_mono
+            entry.lease_expires_at = lease_expires_mono
+            handle = entry.handle
+            provider = entry.provider
+        try:
+            provider.touch_sandbox(handle, lease_seconds)
+        except SandboxExpiredError:
+            self.evict(session_key)
+            raise
+        except Exception as exc:
+            logger.debug(
+                "SandboxSessionService.begin_use: provider touch failed (key=%s): %s",
+                session_key,
+                exc,
+                exc_info=True,
+            )
+        _persist_sandbox_state(
+            conversation,
+            handle,
+            db=db,
+            lease_expires_at=lease_expires_at,
+        )
+        if conversation is None and db is None:
+            _persist_sandbox_state_for_session_key(
+                session_key,
+                handle,
+                lease_expires_at=lease_expires_at,
+            )
+        return True
 
-    def end_use(self, session_key: str) -> None:
+    def end_use(
+        self,
+        session_key: str,
+        *,
+        conversation: "Conversation | None" = None,
+        db: Session | None = None,
+    ) -> None:
         """Clear one active-use marker and refresh the idle timestamp."""
+        handle = None
+        provider = None
         with self._lock:
             entry = self._sessions.get(session_key)
             if entry is None:
                 return
             entry.active_uses = max(0, entry.active_uses - 1)
             entry.last_used = time.monotonic()
+            if entry.active_uses == 0:
+                entry.lease_expires_at = None
+            handle = entry.handle
+            provider = entry.provider
+        try:
+            provider.touch_sandbox(handle, _idle_timeout_s())
+        except SandboxExpiredError:
+            self.evict(session_key)
+            raise
+        except Exception as exc:
+            logger.debug(
+                "SandboxSessionService.end_use: provider touch failed (key=%s): %s",
+                session_key,
+                exc,
+                exc_info=True,
+            )
+        _persist_sandbox_state(conversation, handle, db=db)
+        if conversation is None and db is None:
+            _persist_sandbox_state_for_session_key(session_key, handle)
+
+    @contextmanager
+    def use(
+        self,
+        session_key: str,
+        *,
+        conversation: "Conversation | None" = None,
+        db: Session | None = None,
+        expected_seconds: int | None = None,
+    ):
+        """Context manager that protects a sandbox from idle reaping while used."""
+        acquired = self.begin_use(
+            session_key,
+            conversation=conversation,
+            db=db,
+            expected_seconds=expected_seconds,
+        )
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                self.end_use(session_key, conversation=conversation, db=db)
+
+    def record_activity(
+        self,
+        session_key: str,
+        *,
+        conversation: "Conversation | None" = None,
+        db: Session | None = None,
+    ) -> None:
+        """Persist a completed non-REPL sandbox activity as last-use."""
+        with self._lock:
+            entry = self._sessions.get(session_key)
+            if entry is None:
+                return
+            entry.last_used = time.monotonic()
+            handle = entry.handle
+        _persist_sandbox_state(conversation, handle, db=db)
+        if conversation is None and db is None:
+            _persist_sandbox_state_for_session_key(session_key, handle)
 
     def destroy(self, session_key: str) -> None:
         """Destroy the sandbox associated with *session_key* and remove it.
@@ -511,10 +795,22 @@ class SandboxSessionService:
         """Daemon loop: periodically reap sandboxes idle longer than the TTL."""
         while True:
             time.sleep(_reap_interval_s())
+            db = None
             try:
-                self._reap_stale()
+                try:
+                    from db.database import SessionLocal  # type: ignore[import]
+                    db = SessionLocal()
+                except Exception:
+                    db = None
+                self._reap_stale(db=db)
             except Exception as exc:
                 logger.warning("SandboxSessionService: reaper error: %s", exc, exc_info=True)
+            finally:
+                if db is not None:
+                    try:
+                        db.close()
+                    except Exception:
+                        pass
 
     def _reap_stale(self, *, db: Session | None = None) -> None:
         """Destroy sandbox sessions idle for longer than SANDBOX_IDLE_TIMEOUT_S.
@@ -529,7 +825,11 @@ class SandboxSessionService:
         with self._lock:
             stale_keys = [
                 k for k, e in self._sessions.items()
-                if e.active_uses <= 0 and (now - e.last_used) > ttl_s
+                if (
+                    e.active_uses <= 0
+                    and (e.lease_expires_at is None or e.lease_expires_at < now)
+                    and (now - e.last_used) > ttl_s
+                )
             ]
             stale_entries = {k: self._sessions.pop(k) for k in stale_keys}
 
@@ -556,7 +856,7 @@ class SandboxSessionService:
         except Exception:
             return
 
-        cutoff = datetime.utcnow() - timedelta(seconds=ttl_s)
+        cutoff = _utc_now() - timedelta(seconds=ttl_s)
         try:
             stale_conversations = (
                 db.query(Conversation)
@@ -575,24 +875,18 @@ class SandboxSessionService:
                 conv.sandbox_state = None
                 db.add(conv)
                 continue
-            try:
-                updated_at = datetime.fromisoformat(state.updated_at.rstrip("Z"))
-            except (ValueError, AttributeError):
-                updated_at = datetime.min
-            if updated_at < cutoff:
+            with self._lock:
+                if state.session_key in self._sessions:
+                    # The in-memory registry owns active process-local sessions.
+                    # Its monotonic clock/active-use lease is fresher than DB state.
+                    continue
+            activity_at = _state_activity_at(state) or datetime.min
+            lease_expires_at = _parse_utc(state.lease_expires_at)
+            if lease_expires_at is not None and lease_expires_at >= _utc_now():
+                continue
+            if activity_at < cutoff:
                 # Best-effort remote destroy
-                try:
-                    provider = _get_provider_by_name(state.provider)
-                    if provider:
-                        handle = SandboxHandle(
-                            sandbox_id=state.sandbox_id,
-                            working_dir="",
-                            provider_name=state.provider,
-                            session_key=state.session_key,
-                        )
-                        provider.destroy_sandbox(handle)
-                except Exception:
-                    pass  # Best effort; clear DB state regardless
+                _destroy_persisted_sandbox(state)
                 conv.sandbox_session_id = None
                 conv.sandbox_state = None
                 db.add(conv)
