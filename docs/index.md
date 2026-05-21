@@ -1,6 +1,6 @@
 # Mattin AI — Documentation
 
-> Last updated: 2026-04-30 (based on commit `d40b51d` + GitFlow release workflow: git-workflow guide, release/hotfix process, versioning convention)
+> Last updated: 2026-05-21 (based on commit `fdb3943` — 0.4.2 release: LangSmith env var update, memory constants correction, MCP agent-as-tool fix)
 
 ## Table of Contents
 

@@ -18,7 +18,7 @@ The **Agent System** is the core execution engine of Mattin AI, powered by **Lan
 - **Memory management**: Conversation history persisted via checkpointer with configurable limits
 - **File attachments**: Process uploaded files during agent execution
 - **Skills system**: Reusable skills (legacy, being phased out)
-- **MCP integration**: Connect to Model Context Protocol servers
+- **MCP integration**: Connect to Model Context Protocol servers — tools are loaded for both top-level agents and agents used as sub-tools by other agents
 
 ## Agent Configuration
 
@@ -168,12 +168,17 @@ if agent.silo_id and search_params:
 Manages conversation memory with configurable limits:
 
 ```python
+# backend/models/agent.py
+DEFAULT_MEMORY_SUMMARIZE_THRESHOLD = 20  # centralised constant
+
 class MemoryManagementService:
-    # Default limits
-    MAX_MESSAGES = 50
-    MAX_TOKENS = 16000
-    SUMMARIZATION_THRESHOLD = 40
+    # Default limits (configurable per-agent via Agent fields)
+    MAX_MESSAGES = 20          # Agent.memory_max_messages
+    MAX_TOKENS = 4000          # Agent.memory_max_tokens
+    SUMMARIZATION_THRESHOLD = 20  # Agent.memory_summarize_threshold
 ```
+
+> The summarization threshold constant (`DEFAULT_MEMORY_SUMMARIZE_THRESHOLD = 20`) is defined once in `backend/models/agent.py` and used everywhere memory configuration is set or defaulted. Override per-agent via the `memory_summarize_threshold` field.
 
 **Methods**:
 

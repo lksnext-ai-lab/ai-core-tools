@@ -5,29 +5,30 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "d40b51d52e32c9e6fd46c53ea85e1a5dd56a6567"
-last_synced_date: "2026-04-30T00:00:00+00:00"
+last_synced_commit: "fdb3943fab6dda87a21c93c70c3e0c6a7e08f9b2"
+last_synced_date: "2026-05-21T00:00:00+00:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
-    - "docs/index.md"
-    - "docs/guides/copilot-agents.md"
+    - "docs/reference/environment-variables.md"
+    - "docs/ai/agent-system.md"
     - "docs/.doc-metadata.yaml"
-  files_created:
-    - "docs/guides/git-workflow.md"
+  files_created: []
   files_deleted: []
-  commits_covered: null
-  commit_range: "d40b51d..HEAD (release/0.4.1 branch)"
+  commits_covered: 14
+  commit_range: "d40b51d..fdb3943"
   notes: >
-    GitFlow Release Workflow documentation (release/0.4.1 branch changes):
-    (1) Added .github/agents/git-github.agent.md workflow: "When Creating a GitFlow Release Branch"
-    (11 steps: sync develop → cut release/<version> → bump version in pyproject.toml → signed commit →
-    push → PR to main → tag main → back-merge to develop → bump next dev version → delete release branch)
-    and "When Creating a GitFlow Hotfix Branch" (4 steps).
-    (2) Added .github/instructions/.git-github.instructions.md section "GitFlow Release Workflow"
-    (8 steps) and branch naming entries: release/<version>, hotfix/<description>.
+    0.4.2 release documentation sync. Changes:
+    (1) environment-variables.md: Updated LangSmith section from legacy LANGCHAIN_*
+    variable names to the new LANGSMITH_* prefix (LANGSMITH_TRACING, LANGSMITH_API_KEY,
+    LANGSMITH_PROJECT, LANGSMITH_ENDPOINT) reflecting the centralised langsmith_config.py
+    module introduced for LangChain 1.x compatibility. Added per-app tracing note.
+    (2) agent-system.md: Corrected MemoryManagementService default constants
+    (MAX_MESSAGES=20, MAX_TOKENS=4000, SUMMARIZATION_THRESHOLD=20 — centralised in
+    DEFAULT_MEMORY_SUMMARIZE_THRESHOLD constant in models/agent.py). Added note that
+    MCP tools are loaded for both top-level agents and agents used as sub-tools.
     (3) pyproject.toml version bumped from 0.4.1.dev0 → 0.4.1 on release/0.4.1 branch.
     Documentation created: docs/guides/git-workflow.md (full GitFlow guide: branch naming, versioning
     convention x.y.z.devN, release workflow, hotfix workflow, commit signing, remote config, GitHub CLI rules).
