@@ -13,6 +13,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.4.2] - 2026-05-21
+
+### Added
+
+- **SharePoint Sync (EE Plugin)**: New Enterprise Edition plugin module (`mattin-ai-plugins/mattin_sharepoint`) that synchronises SharePoint document libraries into Mattin AI repositories. Provides a Graph API client, background worker, and dedicated router/service/repository layers for scheduled content ingestion.
+- **Streaming Middleware Source Filtering**: Middleware-level source filtering for SSE streaming responses, with unit test coverage for `streaming_utils`.
+- **API Key Recovery on Masked Test-Connection**: When testing a connection for an AI or Embedding service whose key is masked, the stored API key is now recovered and used for the test request instead of sending the masked placeholder.
+
+### Changed
+
+- **LangSmith Tracing Restored (LangChain 1.x)**: Tracing is re-enabled via a centralised `backend/tools/langsmith_config.py` module that works with LangChain 1.x. A per-app `POST /internal/apps/{id}/langsmith/test` endpoint validates connectivity without requiring a server restart.
+- **`DEFAULT_MEMORY_SUMMARIZE_THRESHOLD` Centralised**: The constant is now defined once in a shared location and defaulted to `20`. All references updated.
+
+### Fixed
+
+- **PDF Image Artifacts in Silo Indexing**: An artifact-cleaning pass is added to the silo indexing pipeline to strip image-only or decorative chunks produced by `PyMuPDFLoader`, preventing noisy vector store entries.
+- **MCP Tools Not Loaded for Agent-as-Tool**: MCP tool configurations were not being loaded when an agent is invoked as a sub-tool by another agent. All configured MCP tools are now wired in regardless of call depth.
+- **Embedding Service Model ID Using Description**: The embedding service was incorrectly using the `description` field as the model ID when constructing the embedding client. The correct `model_id` field is now used.
+- **Provider-Side Tools Not Deselected**: Selecting a different tool provider in the agent form was not clearing previously selected provider-side tools, leading to stale tool selections being saved.
+- **Default Prompt Template for New Agents**: New agents now default to `{question}` as the prompt template instead of an empty string, avoiding empty-prompt errors on first use.
+- **Conversation Delete Requires Double-Click**: Deleting a conversation required a double-click. Replaced with a single-click action that opens a confirmation modal, consistent with the rest of the UI.
+
 ## [0.4.1] - 2026-04-30
 
 ### Added
