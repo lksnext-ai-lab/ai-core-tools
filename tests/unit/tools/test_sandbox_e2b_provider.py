@@ -46,6 +46,8 @@ def provider_and_sandbox(monkeypatch):
     monkeypatch.setattr("tools.sandbox.e2b_provider.E2BSandbox", mock_sdk)
     monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
     monkeypatch.setattr("config.SANDBOX_CREATE_TIMEOUT_S", 60, raising=False)
+    monkeypatch.setattr("config.SANDBOX_DEFAULT_TIMEOUT_S", 120, raising=False)
+    monkeypatch.setattr("config.SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S", 120, raising=False)
 
     provider = E2BProvider()
     return provider, mock_sdk, sandbox
