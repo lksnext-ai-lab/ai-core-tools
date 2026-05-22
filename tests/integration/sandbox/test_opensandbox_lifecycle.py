@@ -88,14 +88,21 @@ def test_resume_fails_with_expiry_falls_back_to_create(provider):
     assert handle.sandbox_id == "sbx_new"
 
 
-def test_resume_unexpected_error_raises_sandbox_expired_error(provider):
-    """Non-expiry exception during resume → SandboxExpiredError is raised."""
+def test_resume_unexpected_error_falls_back_to_create(provider):
+    """Non-expiry exception during resume falls back to a fresh sandbox."""
     prov, mock_sdk = provider
     prov._sdk_expiry_exceptions = ()  # nothing maps to expiry
     mock_sdk.resume.side_effect = ValueError("unexpected")
 
-    with pytest.raises(SandboxExpiredError):
-        prov.create_sandbox("/workspace", existing_sandbox_id="sbx_old")
+    fresh_sandbox = _make_sandbox_mock("sbx_new")
+    mock_sdk.create.return_value = fresh_sandbox
+
+    with patch.object(prov, "_setup_sandbox_handle") as mock_setup:
+        mock_setup.return_value = MagicMock(sandbox_id="sbx_new")
+        handle = prov.create_sandbox("/workspace", existing_sandbox_id="sbx_old")
+
+    mock_sdk.create.assert_called_once()
+    assert handle.sandbox_id == "sbx_new"
 
 
 def test_no_resume_when_sdk_lacks_resume(provider):

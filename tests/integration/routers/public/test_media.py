@@ -382,7 +382,7 @@ class TestYouTubeMedia:
     ):
         resp = client.post(
             media_url(fake_app.app_id, fake_repository.repository_id, "/youtube"),
-            json={"url": "https://www.youtube.com/watch?v=abc123"},
+            json={},
             headers=api_headers(fake_api_key.key),
         )
         assert resp.status_code == 422

@@ -1324,38 +1324,38 @@ class AgentExecutionService:
                     ls_settings.source,
                 )
 
-                try:
+            try:
                 result = await agent_chain.ainvoke(
+                    {"messages": [message_payload]},
+                    config=config,
+                )
+            except Exception as invoke_exc:
+                from services.agent_cache_service import (
+                    CheckpointerCacheService,
+                    is_missing_tool_output_error,
+                )
+
+                if (
+                    fresh_agent.has_memory
+                    and session_id_for_cache
+                    and is_missing_tool_output_error(invoke_exc)
+                ):
+                    logger.warning(
+                        "Detected incomplete tool-call checkpoint for agent %s "
+                        "session %s; deleting checkpoint and retrying turn once",
+                        fresh_agent.agent_id,
+                        session_id_for_cache,
+                    )
+                    await CheckpointerCacheService.invalidate_checkpointer_async(
+                        fresh_agent.agent_id,
+                        session_id_for_cache,
+                    )
+                    result = await agent_chain.ainvoke(
                         {"messages": [message_payload]},
                         config=config,
                     )
-                except Exception as invoke_exc:
-                    from services.agent_cache_service import (
-                        CheckpointerCacheService,
-                        is_missing_tool_output_error,
-                    )
-
-                    if (
-                        fresh_agent.has_memory
-                        and session_id_for_cache
-                        and is_missing_tool_output_error(invoke_exc)
-                    ):
-                        logger.warning(
-                            "Detected incomplete tool-call checkpoint for agent %s "
-                            "session %s; deleting checkpoint and retrying turn once",
-                            fresh_agent.agent_id,
-                            session_id_for_cache,
-                        )
-                        await CheckpointerCacheService.invalidate_checkpointer_async(
-                            fresh_agent.agent_id,
-                            session_id_for_cache,
-                        )
-                        result = await agent_chain.ainvoke(
-                            {"messages": [message_payload]},
-                            config=config,
-                        )
-                    else:
-                        raise
+                else:
+                    raise
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

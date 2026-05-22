@@ -7,6 +7,7 @@ _finalize_turn(); this service only owns the astream loop that yields tokens
 and tool events to the client.
 """
 
+from contextlib import nullcontext
 from typing import AsyncGenerator, Dict, List, Any
 
 import psycopg.errors
@@ -128,7 +129,7 @@ class AgentStreamingService:
                 # ------------------------------------------------------------
                 _router_messages = [{"role": "user", "content": message}]
 
-                agent_chain, mcp_client = await create_agent(
+                create_agent_result = await create_agent(
                     ctx.fresh_agent,
                     ctx.search_params,
                     ctx.session_id_for_cache,
@@ -139,6 +140,7 @@ class AgentStreamingService:
                     sandbox_session_key=ctx.sandbox_session_key,
                     recent_messages=_router_messages,
                 )
+                agent_chain, mcp_client = create_agent_result[:2]
 
                 config = prepare_agent_config(ctx.fresh_agent)
 
@@ -167,24 +169,26 @@ class AgentStreamingService:
                     ctx.user_context,
                 )
 
-            # ----------------------------------------------------------------
-            # 5. Attach LangSmith tracer + metadata when configured
-            # ----------------------------------------------------------------
-            ls_settings = resolve_langsmith_settings(ctx.fresh_agent.app)
-            if ls_settings:
-                tracer, overrides = build_tracing_config(
-                    ls_settings,
-                    agent=ctx.fresh_agent,
-                    user_context=ctx.user_context,
-                    conversation_id=ctx.effective_conv_id,
-                    session_id=ctx.session_id_for_cache,
+                # ----------------------------------------------------------------
+                # 5. Attach LangSmith tracer + metadata when configured
+                # ----------------------------------------------------------------
+                ls_settings = resolve_langsmith_settings(
+                    getattr(ctx.fresh_agent, "app", None)
                 )
-                apply_tracing_to_config(config, tracer, overrides)
-                logger.info(
-                    "LangSmith tracing ENABLED — project='%s' source='%s'",
-                    ls_settings.project_name,
-                    ls_settings.source,
-                )
+                if ls_settings:
+                    tracer, overrides = build_tracing_config(
+                        ls_settings,
+                        agent=ctx.fresh_agent,
+                        user_context=ctx.user_context,
+                        conversation_id=ctx.effective_conv_id,
+                        session_id=ctx.session_id_for_cache,
+                    )
+                    apply_tracing_to_config(config, tracer, overrides)
+                    logger.info(
+                        "LangSmith tracing ENABLED — project='%s' source='%s'",
+                        ls_settings.project_name,
+                        ls_settings.source,
+                    )
 
                 # ------------------------------------------------------------
                 # 6. Streaming loop — the only part that stays in this service
@@ -198,19 +202,8 @@ class AgentStreamingService:
 
                 accumulated_content = ""
 
-                if langsmith_config:
-                    stream_ctx = ls.tracing_context(
-                        client=langsmith_config["client"],
-                        project_name=langsmith_config["project_name"],
-                        enabled=True,
-                    )
-                else:
-                    from contextlib import nullcontext
-
-                    stream_ctx = nullcontext()
-
                 try:
-                    with stream_ctx:
+                    with nullcontext():
                         async for mode, chunk in agent_chain.astream(
                             {"messages": [message_payload]},
                             config=config,
