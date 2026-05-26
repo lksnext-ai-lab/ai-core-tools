@@ -260,6 +260,14 @@ class TestE2BRunCode:
         with pytest.raises(SandboxExpiredError):
             provider.run_code(handle, "pass")
 
+    def test_sandbox_not_found_raises_expired(self, provider_and_sandbox, tmp_path):
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.set_timeout.side_effect = RuntimeError("Sandbox e2b-sbx not found")
+
+        with pytest.raises(SandboxExpiredError):
+            provider.run_code(handle, "pass")
+
 
 class TestE2BFileIO:
     def test_write_file_writes_to_workspace(self, provider_and_sandbox, tmp_path):

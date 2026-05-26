@@ -54,6 +54,7 @@ async def test_streaming_agent_passes_sandbox_session_key_to_tool_builder():
 
     service = AgentStreamingService()
     service.execution_service = execution_service
+    db = MagicMock()
 
     with (
         patch("services.agent_streaming_service.create_agent", create_agent),
@@ -68,12 +69,20 @@ async def test_streaming_agent_passes_sandbox_session_key_to_tool_builder():
                 file_references=[],
                 user_context={"user_id": "u1"},
                 conversation_id=297,
-                db=MagicMock(),
+                db=db,
             )
         ]
 
     assert events
     assert create_agent.call_args.kwargs["sandbox_session_key"] == "conv_1_297"
+    execution_service._begin_sandbox_turn.assert_called_once_with(
+        ctx,
+        db=db,
+    )
+    execution_service._end_sandbox_turn.assert_called_once_with(
+        ctx,
+        db=db,
+    )
 
 
 @pytest.mark.asyncio

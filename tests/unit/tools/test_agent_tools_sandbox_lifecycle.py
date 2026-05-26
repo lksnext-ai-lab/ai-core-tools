@@ -57,3 +57,50 @@ async def test_create_agent_reuses_prepared_sandbox_handle(tmp_path):
 
     resolve_provider.assert_not_called()
     provider.create_sandbox.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_agent_passes_parent_sandbox_to_agent_tools(tmp_path):
+    from tools.agentTools import create_agent
+    from tools.sandbox.provider import SandboxHandle
+
+    agent = _make_agent()
+    sub_agent = _make_agent()
+    sub_agent.agent_id = 8
+    agent.tool_associations = [SimpleNamespace(tool=sub_agent)]
+    handle = SandboxHandle(
+        sandbox_id="prepared-001",
+        working_dir=str(tmp_path),
+        provider_name="opensandbox",
+        metadata={},
+    )
+    provider = MagicMock()
+    provider.get_supported_languages.return_value = ["python"]
+    session_service = MagicMock()
+    agent_tool = MagicMock()
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=MagicMock()),
+        patch("tools.agentTools.get_output_parser", return_value=None),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
+        patch("tools.agentTools.MCPClientManager.get_client", new=AsyncMock(return_value=None)),
+        patch("tools.agentTools.IACTTool.create", new=AsyncMock(return_value=agent_tool)) as create_tool,
+    ):
+        await create_agent(
+            agent,
+            working_dir=str(tmp_path),
+            sandbox_handle=handle,
+            sandbox_provider=provider,
+            sandbox_session_key="conv_7_42",
+            sandbox_session_service=session_service,
+        )
+
+    create_tool.assert_awaited_once_with(
+        sub_agent,
+        user_context=None,
+        working_dir=str(tmp_path),
+        sandbox_handle=handle,
+        sandbox_provider=provider,
+        sandbox_session_key="conv_7_42",
+        sandbox_session_service=session_service,
+    )

@@ -550,7 +550,15 @@ async def create_agent(
 
     for tool in agent.tool_associations:
         sub_agent = tool.tool
-        tools.append(await IACTTool.create(sub_agent, user_context=user_context))
+        tools.append(await IACTTool.create(
+            sub_agent,
+            user_context=user_context,
+            working_dir=working_dir,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            sandbox_session_service=sandbox_session_service,
+        ))
 
     # Base tools — always available for every agent
     if working_dir:
@@ -881,12 +889,39 @@ class IACTTool(BaseTool):
     react_agent: Any = None
     mcp_client: Any = None
     llm: Any = None
+    working_dir: Optional[str] = None
+    sandbox_handle: Any = None
+    sandbox_provider: Any = None
+    sandbox_session_key: Optional[str] = None
+    sandbox_session_service: Any = None
 
-    def __init__(self, agent: Agent, user_context: Optional[Dict] = None) -> None:
-        super().__init__(agent=agent, user_context=user_context)
+    def __init__(
+        self,
+        agent: Agent,
+        user_context: Optional[Dict] = None,
+        working_dir: Optional[str] = None,
+        sandbox_handle: Optional[Any] = None,
+        sandbox_provider: Optional[Any] = None,
+        sandbox_session_key: Optional[str] = None,
+        sandbox_session_service: Optional[Any] = None,
+    ) -> None:
+        super().__init__(
+            agent=agent,
+            user_context=user_context,
+            working_dir=working_dir,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            sandbox_session_service=sandbox_session_service,
+        )
 
         self.agent = agent
         self.user_context = user_context
+        self.working_dir = working_dir
+        self.sandbox_handle = sandbox_handle
+        self.sandbox_provider = sandbox_provider
+        self.sandbox_session_key = sandbox_session_key
+        self.sandbox_session_service = sandbox_session_service
         self.name = agent.name.replace(" ", "_")
         self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
@@ -896,20 +931,45 @@ class IACTTool(BaseTool):
         self.mcp_client = None
 
     @classmethod
-    async def create(cls, agent: Agent, user_context: Optional[Dict] = None) -> "IACTTool":
+    async def create(
+        cls,
+        agent: Agent,
+        user_context: Optional[Dict] = None,
+        working_dir: Optional[str] = None,
+        sandbox_handle: Optional[Any] = None,
+        sandbox_provider: Optional[Any] = None,
+        sandbox_session_key: Optional[str] = None,
+        sandbox_session_service: Optional[Any] = None,
+    ) -> "IACTTool":
         """Build an agent-as-tool, including the sub-agent's MCP tools.
 
         MCP tools are loaded with an awaited MultiServerMCPClient, which is not
         possible inside a synchronous ``__init__``; hence this async factory. It
         is the only supported way to obtain a ready-to-use ``IACTTool``.
         """
-        instance = cls(agent, user_context=user_context)
+        instance = cls(
+            agent,
+            user_context=user_context,
+            working_dir=working_dir,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            sandbox_session_service=sandbox_session_service,
+        )
 
         tools = []
         # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
-            tools.append(await IACTTool.create(sub_agent, user_context=user_context))
+            tools.append(await IACTTool.create(
+                sub_agent,
+                user_context=user_context,
+                working_dir=working_dir,
+                sandbox_handle=sandbox_handle,
+                sandbox_provider=sandbox_provider,
+                sandbox_session_key=sandbox_session_key,
+                sandbox_session_service=sandbox_session_service,
+            ))
 
         # Add base useful tools
         tools.append(fetch_file_in_base64)
@@ -928,11 +988,44 @@ class IACTTool(BaseTool):
             if retriever_tool is not None:
                 tools.append(retriever_tool)
 
-        # Add skill tools for sub-agents too. No sandbox handle is available in
-        # this path, but the model can still load prompt instructions and read
-        # packaged reference files.
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None:
+            if sandbox_provider is None:
+                sandbox_provider = resolve_provider(agent)
+                instance.sandbox_provider = sandbox_provider
+            repl_tools = create_sandbox_repl_tools(
+                sandbox_handle,
+                sandbox_provider,
+                session_key=sandbox_session_key,
+                session_service=sandbox_session_service,
+            )
+            tools.extend(repl_tools)
+            logger.info(
+                "Shared sandbox REPL tools added for sub-agent %s "
+                "(languages=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
+                agent.agent_id,
+                [t.name for t in repl_tools],
+                working_dir,
+                sandbox_handle.sandbox_id,
+                sandbox_handle.provider_name,
+            )
+
+            skill_associations = getattr(agent, 'skill_associations', None) or []
+            sandbox_skill_tools = create_sandbox_skill_tools(
+                sandbox_handle,
+                sandbox_provider,
+                skill_associations,
+            )
+            if sandbox_skill_tools:
+                tools.extend(sandbox_skill_tools)
+
+        # Add skill tools for sub-agents too. When a parent sandbox was prepared,
+        # bind load_skill to the same handle so runtime Skills activate there.
         if hasattr(agent, 'skill_associations') and agent.skill_associations:
-            skill_tool = create_skill_loader_tool(agent.skill_associations)
+            skill_tool = create_skill_loader_tool(
+                agent.skill_associations,
+                sandbox_handle=sandbox_handle,
+                sandbox_provider=sandbox_provider,
+            )
             if skill_tool:
                 tools.append(skill_tool)
             skill_file_tool = create_skill_file_reader_tool(agent.skill_associations)
@@ -965,9 +1058,40 @@ class IACTTool(BaseTool):
         current_date = datetime.now().strftime("%Y-%m-%d")
         tool_system_prompt += f"\n\nToday's date is {current_date}."
         if agent.system_prompt and hasattr(agent, 'skill_associations') and agent.skill_associations:
-            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+            skills_section = generate_skills_system_prompt_section(
+                agent.skill_associations,
+                handle=sandbox_handle,
+            )
             if skills_section:
                 tool_system_prompt = tool_system_prompt + "\n" + skills_section
+
+        if working_dir:
+            tool_system_prompt = (
+                tool_system_prompt
+                + "\n\n<workspace>\n"
+                + f"Working directory: {working_dir}\n"
+                + "Workspace layout:\n"
+                + "- input/: user-provided files. Treat these as source material.\n"
+                + "- work/: scratch files, scripts, dependencies, extracted content, and intermediate data.\n"
+                + "- output/: final files intended for the user to download.\n"
+                + "User-uploaded files are available under input/; reference them as input/<filename>.\n"
+                + "</workspace>"
+            )
+
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None:
+            _ci_provider = sandbox_provider or resolve_provider(agent)
+            _ci_languages = _ci_provider.get_supported_languages()
+            _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
+            tool_system_prompt = (
+                tool_system_prompt
+                + "\n\n<code_interpreter>\n"
+                + f"You have access to the following code execution tools: {_tool_names}.\n"
+                + "They run in the same sandbox used by the parent agent and sibling tools.\n"
+                + "Read uploaded files from input/<filename>.\n"
+                + "Use work/ for temporary files, package installs, scripts, and dependencies.\n"
+                + "Save only final user-facing deliverables in output/ and print the output/<filename> path.\n"
+                + "</code_interpreter>"
+            )
 
         # Create sub-agent
         instance.react_agent = create_langchain_agent(
@@ -1020,6 +1144,82 @@ class IACTTool(BaseTool):
         except Exception as e:
             logger.error(f"Error executing agent tool {self.name}: {str(e)}")
             return f"Error executing agent tool: {str(e)}"
+
+    def _format_tool_query(self, query: str) -> str:
+        """Apply the sub-agent prompt template to a tool query."""
+        if self.agent.prompt_template:
+            try:
+                return self.agent.prompt_template.format(question=query)
+            except KeyError:
+                try:
+                    return self.agent.prompt_template.format(query=query)
+                except KeyError:
+                    logger.warning(
+                        f"Could not format prompt_template for agent {self.agent.name}, using query directly"
+                    )
+        return query
+
+    @staticmethod
+    def _extract_last_message_content(result: Any) -> str:
+        """Return the last non-empty message content from a LangGraph result/state."""
+        if isinstance(result, dict) and "messages" in result:
+            messages_list = result["messages"]
+            for msg in reversed(messages_list):
+                if hasattr(msg, 'content') and msg.content:
+                    return str(msg.content)
+            if messages_list:
+                last_msg = messages_list[-1]
+                return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+        return str(result)
+
+    def _get_stream_writer_or_none(self):
+        try:
+            from langgraph.config import get_stream_writer
+
+            return get_stream_writer()
+        except Exception:
+            return None
+
+    def _emit_subagent_stream_event(self, writer: Any, event: dict) -> None:
+        """Forward a nested sub-agent event to the parent graph custom stream."""
+        if writer is None or not isinstance(event, dict):
+            return
+
+        event_type = event.get("type")
+        data = event.get("data")
+        if not isinstance(data, dict):
+            data = {}
+
+        if event_type in {"tool_start", "tool_end", "thinking"}:
+            raw_tool_call_id = data.get("tool_call_id")
+            data = {
+                **data,
+                "parent_tool_name": self.name,
+                "subagent_name": self.agent.name,
+                "subagent_id": self.agent.agent_id,
+            }
+            if raw_tool_call_id:
+                data["raw_tool_call_id"] = raw_tool_call_id
+                data["tool_call_id"] = f"{self.name}:{self.agent.agent_id}:{raw_tool_call_id}"
+            try:
+                writer({"type": event_type, "data": data})
+            except Exception:
+                pass
+            return
+
+        if event_type == "code_output":
+            try:
+                writer({
+                    "type": "code_output",
+                    "tool_name": data.get("tool_name"),
+                    "stream": data.get("stream", "stdout"),
+                    "line": data.get("line", ""),
+                    "parent_tool_name": self.name,
+                    "subagent_name": self.agent.name,
+                    "subagent_id": self.agent.agent_id,
+                })
+            except Exception:
+                pass
     
     async def _arun(self, query: str, *args, **kwargs) -> str:
         """Asynchronous execution of the agent tool"""
@@ -1028,38 +1228,40 @@ class IACTTool(BaseTool):
                 "IACTTool must be built via 'await IACTTool.create(...)' before use."
             )
         try:
-            # Format the message using prompt_template if available, otherwise use query directly
-            if self.agent.prompt_template:
-                try:
-                    formatted_prompt = self.agent.prompt_template.format(question=query)
-                except KeyError:
-                    # If 'question' is not in template, try other common placeholders
-                    try:
-                        formatted_prompt = self.agent.prompt_template.format(query=query)
-                    except KeyError:
-                        # If no placeholder works, just use the query
-                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
-                        formatted_prompt = query
-            else:
-                formatted_prompt = query
-            
+            formatted_prompt = self._format_tool_query(query)
             messages = [HumanMessage(content=formatted_prompt)]
-            result = await self.react_agent.ainvoke({"messages": messages})
-            
-            # Extract the content from the last AI message
-            if isinstance(result, dict) and "messages" in result:
-                messages_list = result["messages"]
-                # Find the last AI message with content
-                for msg in reversed(messages_list):
-                    if hasattr(msg, 'content') and msg.content:
-                        return str(msg.content)
-                # Fallback: return the last message content
-                if messages_list:
-                    last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
-            
-            # If result is a string, return it directly
-            return str(result)
+            stream_writer = self._get_stream_writer_or_none()
+
+            if stream_writer is None:
+                result = await self.react_agent.ainvoke({"messages": messages})
+                return self._extract_last_message_content(result)
+
+            if not hasattr(self.react_agent, "astream"):
+                result = await self.react_agent.ainvoke({"messages": messages})
+                return self._extract_last_message_content(result)
+
+            from tools.streaming_utils import map_stream_event
+
+            latest_state: Any = None
+            async for mode, chunk in self.react_agent.astream(
+                {"messages": messages},
+                stream_mode=["updates", "custom"],
+            ):
+                if mode == "updates" and isinstance(chunk, dict):
+                    for state_delta in chunk.values():
+                        if isinstance(state_delta, dict) and "messages" in state_delta:
+                            latest_state = state_delta
+
+                events = map_stream_event(mode, chunk)
+                if not events:
+                    continue
+                for event in events:
+                    self._emit_subagent_stream_event(stream_writer, event)
+
+            if latest_state is not None:
+                return self._extract_last_message_content(latest_state)
+
+            return ""
             
         except Exception as e:
             logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")

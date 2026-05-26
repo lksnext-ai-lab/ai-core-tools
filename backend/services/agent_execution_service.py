@@ -169,6 +169,8 @@ class AgentExecutionService:
         Returns:
             Dict containing agent response and metadata.
         """
+        ctx = None
+        sandbox_turn_active = False
         try:
             ctx = await self._prepare_turn(
                 agent_id=agent_id,
@@ -179,6 +181,7 @@ class AgentExecutionService:
                 conversation_id=conversation_id,
                 db=db,
             )
+            sandbox_turn_active = self._begin_sandbox_turn(ctx, db=db)
 
             # Release the sync connection to the pool during the LLM call; the
             # agent chain uses the async checkpointer, not this session. ctx
@@ -207,6 +210,9 @@ class AgentExecutionService:
         except Exception as e:
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+        finally:
+            if ctx is not None and sandbox_turn_active:
+                self._end_sandbox_turn(ctx, db=db)
 
     async def _prepare_turn(
         self,
@@ -463,6 +469,73 @@ class AgentExecutionService:
             search_params=search_params,
             user_context=user_context,
         )
+
+    def _sandbox_turn_expected_seconds(self) -> int:
+        """Return the expected active-turn lease window for sandbox DB state."""
+        try:
+            import config as settings
+
+            return max(1, int(getattr(settings, "SANDBOX_DEFAULT_TIMEOUT_S", 30)))
+        except Exception:
+            return 30
+
+    def _begin_sandbox_turn(
+        self,
+        ctx: AgentExecutionContext,
+        *,
+        db: Session | None = None,
+    ) -> bool:
+        """Mark the sandbox as active for the whole model turn.
+
+        Individual REPL calls still acquire nested leases, but this outer lease
+        protects the sandbox while the model is thinking between tool calls.
+        """
+        if ctx.sandbox_handle is None or not ctx.sandbox_session_key:
+            return False
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            return bool(
+                _sss.begin_use(
+                    ctx.sandbox_session_key,
+                    conversation=ctx.conversation,
+                    db=db,
+                    expected_seconds=self._sandbox_turn_expected_seconds(),
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not mark sandbox turn active (key=%s): %s",
+                ctx.sandbox_session_key,
+                exc,
+                exc_info=True,
+            )
+            return False
+
+    def _end_sandbox_turn(
+        self,
+        ctx: AgentExecutionContext,
+        *,
+        db: Session | None = None,
+    ) -> None:
+        """Clear the active-turn sandbox lease and refresh idle activity."""
+        if ctx.sandbox_handle is None or not ctx.sandbox_session_key:
+            return
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            _sss.end_use(
+                ctx.sandbox_session_key,
+                conversation=ctx.conversation,
+                db=db,
+            )
+        except Exception as exc:
+            logger.debug(
+                "Could not clear sandbox turn activity (key=%s): %s",
+                ctx.sandbox_session_key,
+                exc,
+                exc_info=True,
+            )
 
     async def _finalize_turn(
         self,

@@ -21,12 +21,18 @@ export interface ToolStartEventData {
   tool_name: string;
   tool_call_id?: string;
   tool_input?: string;
+  parent_tool_name?: string;
+  subagent_name?: string;
+  subagent_id?: number;
 }
 
 export interface ToolEndEventData {
   tool_name: string;
   tool_call_id?: string;
   tool_output?: string;
+  parent_tool_name?: string;
+  subagent_name?: string;
+  subagent_id?: number;
 }
 
 export interface ThinkingEventData {

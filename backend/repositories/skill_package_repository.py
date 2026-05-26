@@ -10,6 +10,12 @@ The canonical ZIP layout (v2):
 Legacy layout (input only — do NOT produce):
     SKILL.md
     files/scripts/bootstrap.py  — legacy files/ prefix is stripped on import
+
+Multi-skill uploads (input only):
+    analytics/SKILL.md
+    analytics/scripts/bootstrap.py
+    writing/skill.md
+    writing/references/style.md
 """
 from __future__ import annotations
 
@@ -102,6 +108,14 @@ class SkillFileContent(dict):
     """TypedDict-like dict with keys: path, content (bytes), mime_type."""
 
 
+@dataclass(frozen=True)
+class _SkillPackageEntry:
+    """One skill package discovered inside an uploaded ZIP."""
+
+    root: str
+    skill_md_path: str
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -152,6 +166,76 @@ def _parse_skill_md(text: str) -> tuple[dict, str]:
                     fm[k.strip()] = v.strip()
 
     return fm, body
+
+
+def _normalized_archive_path(path: str) -> str:
+    """Return a normalized POSIX archive path."""
+    return posixpath.normpath(path.replace("\\", "/"))
+
+
+def _is_skill_md_path(path: str) -> bool:
+    return posixpath.basename(path).lower() == "skill.md"
+
+
+def _discover_skill_entries(zf: zipfile.ZipFile) -> list[_SkillPackageEntry]:
+    """Find every archive folder that contains a SKILL.md/skill.md file."""
+    entries: list[_SkillPackageEntry] = []
+    seen_roots: set[str] = set()
+
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        normalized = _normalized_archive_path(info.filename)
+        if not _is_skill_md_path(normalized):
+            continue
+        root = posixpath.dirname(normalized)
+        if root in seen_roots:
+            continue
+        seen_roots.add(root)
+        entries.append(_SkillPackageEntry(root=root, skill_md_path=info.filename))
+
+    return sorted(entries, key=lambda entry: (entry.root.count("/"), entry.root))
+
+
+def _is_descendant(path: str, root: str) -> bool:
+    if not root:
+        return True
+    return path == root or path.startswith(f"{root}/")
+
+
+def _resource_entries_for_skill(
+    zf: zipfile.ZipFile,
+    entry: _SkillPackageEntry,
+    all_entries: list[_SkillPackageEntry],
+) -> list[tuple[str, str]]:
+    """Return ``(archive_path, package_relative_path)`` resources for one skill."""
+    nested_roots = [
+        other.root
+        for other in all_entries
+        if other.root
+        and other.root != entry.root
+        and _is_descendant(other.root, entry.root)
+    ]
+    resources: list[tuple[str, str]] = []
+
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        normalized = _normalized_archive_path(info.filename)
+        if normalized == _normalized_archive_path(entry.skill_md_path):
+            continue
+        if not _is_descendant(normalized, entry.root):
+            continue
+        if any(_is_descendant(normalized, nested_root) for nested_root in nested_roots):
+            continue
+
+        rel = normalized[len(entry.root):].lstrip("/") if entry.root else normalized
+        # Compatibility: old packages stored resources under files/<path>.
+        rel = rel[len("files/"):] if rel.startswith("files/") else rel
+        if rel:
+            resources.append((info.filename, rel))
+
+    return resources
 
 
 def _build_skill_md(skill) -> str:
@@ -243,79 +327,111 @@ class SkillPackageRepository:
                     "Archive decompression ratio exceeds limit (possible zip bomb)."
                 )
 
-            names = [info.filename for info in infos]
-
-            # SKILL.md at root
-            if "SKILL.md" not in names:
-                result.errors.append("SKILL.md not found at archive root.")
-                return result  # cannot proceed further
-
-            # Parse SKILL.md
-            try:
-                raw_skill_md = zf.read("SKILL.md").decode("utf-8")
-            except Exception as exc:
-                result.errors.append(f"Cannot read SKILL.md: {exc}")
-                return result
-
-            fm, _body = _parse_skill_md(raw_skill_md)
-
-            name = str(fm.get("name", "")).strip()
-            description = str(fm.get("description", "")).strip()
-            if not name:
-                result.errors.append("Frontmatter field 'name' is missing or empty.")
-            if not description:
-                result.errors.append("Frontmatter field 'description' is missing or empty.")
-
-            # Path safety checks
-            seen_normalized: set[str] = set()
+            # Archive-wide path safety checks.
+            seen_archive_normalized: set[str] = set()
             for info in infos:
                 if info.is_dir():
                     continue
                 arc_name = info.filename
-                if arc_name == "SKILL.md":
-                    continue
-                # Normalize legacy files/ prefix for path checks
-                rel = arc_name[len("files/"):] if arc_name.startswith("files/") else arc_name
-                if not rel:
-                    continue
                 # Absolute
-                if posixpath.isabs(rel):
+                if posixpath.isabs(arc_name):
                     result.errors.append(
                         f"File path is absolute: {arc_name!r}."
                     )
                     continue
-                normalized = posixpath.normpath(rel)
+                normalized = _normalized_archive_path(arc_name)
                 # Traversal
                 if normalized.startswith(".."):
                     result.errors.append(
                         f"Path traversal detected: {arc_name!r} normalizes to {normalized!r}."
                     )
                     continue
-                lower = normalized.lower()
-                if lower in seen_normalized:
+                archive_lower = normalized.lower()
+                if archive_lower in seen_archive_normalized:
                     result.errors.append(
                         f"Duplicate path after normalization: {arc_name!r}."
                     )
-                seen_normalized.add(lower)
+                seen_archive_normalized.add(archive_lower)
 
-            # Warnings
-            if fm.get("dependencies"):
-                result.warnings.append(
-                    "Frontmatter field 'dependencies' is deprecated and will be ignored."
-                )
-            if fm.get("runtime"):
-                result.warnings.append(
-                    "Frontmatter field 'runtime' is deprecated and will be ignored."
-                )
-            unknown_keys = set(fm.keys()) - _KNOWN_FM_KEYS
-            for k in sorted(unknown_keys):
-                result.warnings.append(f"Unknown frontmatter field: {k!r}.")
-            if fm.get("allowed-tools") or fm.get("allowed_tools"):
-                result.warnings.append(
-                    "Frontmatter field 'allowed-tools' is present but not enforced."
-                )
-            if _body and len(_body.encode("utf-8")) > 50 * 1024:
-                result.warnings.append("SKILL.md body exceeds 50 KB.")
+            entries = _discover_skill_entries(zf)
+            if not entries:
+                result.errors.append("No SKILL.md found in archive.")
+                return result  # cannot proceed further
+
+            skill_names: set[str] = set()
+            for entry in entries:
+                skill_label = entry.root or "."
+                try:
+                    raw_skill_md = zf.read(entry.skill_md_path).decode("utf-8")
+                except Exception as exc:
+                    result.errors.append(f"Cannot read {entry.skill_md_path}: {exc}")
+                    continue
+
+                fm, _body = _parse_skill_md(raw_skill_md)
+
+                name = str(fm.get("name", "")).strip()
+                description = str(fm.get("description", "")).strip()
+                if not name:
+                    result.errors.append(
+                        f"{skill_label}: Frontmatter field 'name' is missing or empty."
+                    )
+                else:
+                    name_key = name.lower()
+                    if name_key in skill_names:
+                        result.errors.append(
+                            f"{skill_label}: Duplicate skill name in archive: {name!r}."
+                        )
+                    skill_names.add(name_key)
+                if not description:
+                    result.errors.append(
+                        f"{skill_label}: Frontmatter field 'description' is missing or empty."
+                    )
+
+                # Resource path safety checks within this skill package root.
+                seen_resource_normalized: set[str] = set()
+                for arc_name, rel in _resource_entries_for_skill(zf, entry, entries):
+                    if posixpath.isabs(rel):
+                        result.errors.append(
+                            f"{skill_label}: File path is absolute: {arc_name!r}."
+                        )
+                        continue
+                    normalized = posixpath.normpath(rel)
+                    if normalized.startswith(".."):
+                        result.errors.append(
+                            f"{skill_label}: Path traversal detected: {arc_name!r} "
+                            f"normalizes to {normalized!r}."
+                        )
+                        continue
+                    lower = normalized.lower()
+                    if lower in seen_resource_normalized:
+                        result.errors.append(
+                            f"{skill_label}: Duplicate path after normalization: {arc_name!r}."
+                        )
+                    seen_resource_normalized.add(lower)
+
+                # Warnings
+                if fm.get("dependencies"):
+                    result.warnings.append(
+                        f"{skill_label}: Frontmatter field 'dependencies' is deprecated "
+                        "and will be ignored."
+                    )
+                if fm.get("runtime"):
+                    result.warnings.append(
+                        f"{skill_label}: Frontmatter field 'runtime' is deprecated "
+                        "and will be ignored."
+                    )
+                unknown_keys = set(fm.keys()) - _KNOWN_FM_KEYS
+                for k in sorted(unknown_keys):
+                    result.warnings.append(
+                        f"{skill_label}: Unknown frontmatter field: {k!r}."
+                    )
+                if fm.get("allowed-tools") or fm.get("allowed_tools"):
+                    result.warnings.append(
+                        f"{skill_label}: Frontmatter field 'allowed-tools' is present "
+                        "but not enforced."
+                    )
+                if _body and len(_body.encode("utf-8")) > 50 * 1024:
+                    result.warnings.append(f"{skill_label}: SKILL.md body exceeds 50 KB.")
 
         return result
 
@@ -331,10 +447,12 @@ class SkillPackageRepository:
         *,
         source: str = "upload",
     ):
-        """Parse and store a canonical Agent Skills ZIP package.
+        """Parse and store an Agent Skills ZIP package, returning the first skill.
 
         Silently drops deprecated 'dependencies' and 'runtime' frontmatter fields.
         Accepts the legacy ``files/<path>`` layout and normalizes to package-root paths.
+        If the archive contains multiple skill folders, all are imported and the
+        first discovered skill is returned for backward compatibility.
 
         Returns:
             The created or updated :class:`~models.skill.Skill` instance.
@@ -342,105 +460,125 @@ class SkillPackageRepository:
         Raises:
             ValueError: If validation fails.
         """
-        from models.skill import Skill, SkillFile
+        imported = SkillPackageRepository.import_packages(
+            db,
+            app_id,
+            zip_bytes,
+            source=source,
+        )
+        return imported[0]
+
+    @staticmethod
+    def import_packages(
+        db: "Session",
+        app_id: int,
+        zip_bytes: bytes,
+        *,
+        source: str = "upload",
+    ) -> list:
+        """Parse and store every Agent Skill package discovered in a ZIP.
+
+        Each folder containing ``SKILL.md`` or ``skill.md`` is treated as an
+        independent skill package. Resources are imported from that folder
+        relative to the manifest location. Nested skill packages are excluded
+        from the parent skill's resources.
+        """
+        from models.skill import Skill
         from repositories.skill_repository import SkillRepository
 
         validation = SkillPackageRepository.validate_package(zip_bytes)
         if not validation.is_valid:
             raise ValueError(f"Invalid skill package: {validation.errors}")
 
+        imported_skills = []
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            names = zf.namelist()
-            raw_skill_md = zf.read("SKILL.md").decode("utf-8")
-            fm, body = _parse_skill_md(raw_skill_md)
+            entries = _discover_skill_entries(zf)
+            for entry in entries:
+                raw_skill_md = zf.read(entry.skill_md_path).decode("utf-8")
+                fm, body = _parse_skill_md(raw_skill_md)
 
-            # Silently drop deprecated fields
-            fm.pop("dependencies", None)
-            fm.pop("runtime", None)
+                # Silently drop deprecated fields
+                fm.pop("dependencies", None)
+                fm.pop("runtime", None)
 
-            name = str(fm.get("name", "")).strip()
-            description = str(fm.get("description", "")).strip()
+                name = str(fm.get("name", "")).strip()
+                description = str(fm.get("description", "")).strip()
 
-            # Resolve existing owned skill by name
-            existing = db.query(Skill).filter(
-                Skill.app_id == app_id,
-                Skill.name == name,
-            ).first()
+                # Resolve existing owned skill by name
+                existing = db.query(Skill).filter(
+                    Skill.app_id == app_id,
+                    Skill.name == name,
+                ).first()
 
-            if existing:
-                skill = existing
-            else:
-                from services.tier_enforcement_service import TierEnforcementService
-                TierEnforcementService.check_resource_limit(db, app_id, "skills")
-                from datetime import datetime
-                skill = Skill()
-                skill.app_id = app_id
-                skill.create_date = datetime.now()
+                if existing:
+                    skill = existing
+                else:
+                    from services.tier_enforcement_service import TierEnforcementService
+                    TierEnforcementService.check_resource_limit(db, app_id, "skills")
+                    from datetime import datetime
+                    skill = Skill()
+                    skill.app_id = app_id
+                    skill.create_date = datetime.now()
 
-            skill.name = name
-            skill.display_name = fm.get("display_name")
-            skill.description = description
-            skill.content = body
-            import json
-            _tools = fm.get("allowed-tools") or fm.get("allowed_tools")
-            skill.allowed_tools = json.dumps(_tools) if _tools else None
-            skill.bootstrap_script_path = fm.get("bootstrap_script_path")
-            _ro = fm.get("runtime_options")
-            skill.runtime_options = json.dumps(_ro) if _ro else None
+                skill.name = name
+                skill.display_name = fm.get("display_name")
+                skill.description = description
+                skill.content = body
+                import json
+                _tools = fm.get("allowed-tools") or fm.get("allowed_tools")
+                skill.allowed_tools = json.dumps(_tools) if _tools else None
+                skill.bootstrap_script_path = fm.get("bootstrap_script_path")
+                _ro = fm.get("runtime_options")
+                skill.runtime_options = json.dumps(_ro) if _ro else None
 
-            # Steps 5.2 + 5.3: store when_to_use and disable_model_invocation as JSON
-            # in the frontmatter column so the router can read them without a migration.
-            _skill_fm: dict = {}
-            _when_to_use = fm.get("when-to-use") or fm.get("when_to_use") or None
-            if _when_to_use:
-                _skill_fm["when_to_use"] = str(_when_to_use)
-            _disable_mi = bool(
-                fm.get("disable-model-invocation") or fm.get("disable_model_invocation") or False
-            )
-            _skill_fm["disable_model_invocation"] = _disable_mi
-            skill.frontmatter = json.dumps(_skill_fm) if _skill_fm else None
-
-            if existing:
-                skill = SkillRepository.update(db, skill)
-            else:
-                skill = SkillRepository.create(db, skill)
-
-            # Replace SkillFiles
-            SkillRepository.delete_skill_files(db, skill.skill_id)
-            for info in zf.infolist():
-                if info.is_dir():
-                    continue
-                arc_name = info.filename
-                if arc_name == "SKILL.md":
-                    continue
-                # Normalize legacy files/ prefix
-                rel = arc_name[len("files/"):] if arc_name.startswith("files/") else arc_name
-                if not rel:
-                    continue
-                try:
-                    _validate_skill_file_path(rel)
-                except ValueError:
-                    continue  # validation already caught this; skip silently
-                raw = zf.read(arc_name)
-                media_type = _guess_media_type(rel)
-                try:
-                    content_text = raw.decode("utf-8")
-                    content_bytes = None
-                except UnicodeDecodeError:
-                    content_text = None
-                    content_bytes = raw
-                SkillRepository.upsert_skill_file(
-                    db,
-                    skill_id=skill.skill_id,
-                    path=rel,
-                    media_type=media_type,
-                    content_text=content_text,
-                    content_bytes=content_bytes,
-                    checksum_sha256=_sha256_hex(raw),
+                # Steps 5.2 + 5.3: store when_to_use and disable_model_invocation as JSON
+                # in the frontmatter column so the router can read them without a migration.
+                _skill_fm: dict = {}
+                _when_to_use = fm.get("when-to-use") or fm.get("when_to_use") or None
+                if _when_to_use:
+                    _skill_fm["when_to_use"] = str(_when_to_use)
+                _disable_mi = bool(
+                    fm.get("disable-model-invocation")
+                    or fm.get("disable_model_invocation")
+                    or False
                 )
+                _skill_fm["disable_model_invocation"] = _disable_mi
+                skill.frontmatter = json.dumps(_skill_fm) if _skill_fm else None
 
-            db.refresh(skill)
-            return skill
+                if existing:
+                    skill = SkillRepository.update(db, skill)
+                else:
+                    skill = SkillRepository.create(db, skill)
+
+                # Replace SkillFiles
+                SkillRepository.delete_skill_files(db, skill.skill_id)
+                for arc_name, rel in _resource_entries_for_skill(zf, entry, entries):
+                    try:
+                        _validate_skill_file_path(rel)
+                    except ValueError:
+                        continue  # validation already caught this; skip silently
+                    raw = zf.read(arc_name)
+                    media_type = _guess_media_type(rel)
+                    try:
+                        content_text = raw.decode("utf-8")
+                        content_bytes = None
+                    except UnicodeDecodeError:
+                        content_text = None
+                        content_bytes = raw
+                    SkillRepository.upsert_skill_file(
+                        db,
+                        skill_id=skill.skill_id,
+                        path=rel,
+                        media_type=media_type,
+                        content_text=content_text,
+                        content_bytes=content_bytes,
+                        checksum_sha256=_sha256_hex(raw),
+                    )
+
+                db.refresh(skill)
+                imported_skills.append(skill)
+
+        return imported_skills
 
     # ------------------------------------------------------------------
     # export_package

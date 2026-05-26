@@ -204,6 +204,19 @@ def _command_output(result: Any) -> str:
     return "\n".join(parts)
 
 
+def _is_expiry_error(exc: Exception) -> bool:
+    """Return True for E2B errors that mean the remote sandbox is gone."""
+    if isinstance(exc, SandboxExpiredError):
+        return True
+    exc_name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    return (
+        ("sandbox" in message and "not found" in message)
+        or "sandboxnotfound" in exc_name
+        or "sandbox_not_found" in exc_name
+    )
+
+
 def _healthy_for_sandbox(state: dict | None, sandbox_id: str) -> bool:
     if not state or state.get("sandbox_id") != sandbox_id:
         return False
@@ -605,6 +618,10 @@ class E2BProvider(SandboxProvider):
             finally:
                 self._reset_idle_timeout(sandbox, suppress_errors=True)
         except Exception as exc:
+            if _is_expiry_error(exc):
+                raise SandboxExpiredError(
+                    f"E2B sandbox {handle.sandbox_id} expired during run_code: {exc}"
+                ) from exc
             logger.error(
                 "E2BProvider.run_code error (sandbox_id=%s): %s",
                 handle.sandbox_id,

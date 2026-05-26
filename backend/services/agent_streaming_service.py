@@ -93,6 +93,8 @@ class AgentStreamingService:
         """
         effective_db = db or self.db
         mcp_client = None
+        ctx = None
+        sandbox_turn_active = False
 
         try:
             # ----------------------------------------------------------------
@@ -105,6 +107,10 @@ class AgentStreamingService:
                 search_params=search_params,
                 user_context=user_context,
                 conversation_id=conversation_id,
+                db=effective_db,
+            )
+            sandbox_turn_active = self.execution_service._begin_sandbox_turn(
+                ctx,
                 db=effective_db,
             )
 
@@ -274,6 +280,8 @@ class AgentStreamingService:
             yield format_sse_event("error", {"message": str(exc)})
 
         finally:
+            if ctx is not None and sandbox_turn_active:
+                self.execution_service._end_sandbox_turn(ctx, db=effective_db)
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
 

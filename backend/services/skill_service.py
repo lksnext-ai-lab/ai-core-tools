@@ -190,8 +190,8 @@ class SkillService:
             return None
 
     @staticmethod
-    def import_skill_zip(db: Session, app_id: int, zip_bytes: bytes) -> Skill:
-        """Import a canonical Agent Skills ZIP package, accepting legacy files/ input."""
+    def import_skill_zip(db: Session, app_id: int, zip_bytes: bytes) -> List[Skill]:
+        """Import one or more Agent Skills from a ZIP package."""
         from repositories.skill_package_repository import SkillPackageRepository
 
-        return SkillPackageRepository.import_package(db, app_id, zip_bytes)
+        return SkillPackageRepository.import_packages(db, app_id, zip_bytes)

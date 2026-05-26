@@ -7,7 +7,7 @@ Create Date: 2025-05-10 00:30:00.000000
 """
 from typing import Any, Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -31,6 +31,9 @@ def _has_column(inspector: Any, table_name: str, column_name: str) -> bool:
 
 
 def upgrade() -> None:
+    if context.is_offline_mode():
+        return
+
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
@@ -42,6 +45,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if context.is_offline_mode():
+        return
+
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 

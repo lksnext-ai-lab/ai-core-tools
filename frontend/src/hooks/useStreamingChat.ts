@@ -16,6 +16,9 @@ export interface ToolExecutionRecord {
   readonly toolCallId?: string;
   readonly toolName: string;
   readonly displayName: string;
+  readonly parentToolName?: string;
+  readonly subagentName?: string;
+  readonly subagentId?: number;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly status: 'running' | 'complete';
@@ -26,6 +29,11 @@ export interface ToolExecutionRecord {
 
 function buildToolRecordId(toolName: string, toolCallId?: string): string {
   return toolCallId || `${toolName}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function buildToolDisplayName(toolName: string, subagentName?: string): string {
+  const formattedToolName = toolName.replaceAll('_', ' ');
+  return subagentName ? `${subagentName} / ${formattedToolName}` : formattedToolName;
 }
 
 interface StreamResult {
@@ -216,6 +224,9 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
               case 'tool_start': {
                 const toolName = (event.data as { tool_name?: string }).tool_name || 'unknown';
                 const toolCallId = (event.data as { tool_call_id?: string }).tool_call_id || undefined;
+                const parentToolName = (event.data as { parent_tool_name?: string }).parent_tool_name || undefined;
+                const subagentName = (event.data as { subagent_name?: string }).subagent_name || undefined;
+                const subagentId = (event.data as { subagent_id?: number }).subagent_id || undefined;
                 const thinkingMsg =
                   (event.data as { message?: string }).message ||
                   getStreamingMessage('using_tool', { name: toolName });
@@ -235,7 +246,10 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   id: buildToolRecordId(toolName, toolCallId),
                   toolCallId,
                   toolName,
-                  displayName: toolName.replaceAll('_', ' '),
+                  displayName: buildToolDisplayName(toolName, subagentName),
+                  parentToolName,
+                  subagentName,
+                  subagentId,
                   startedAt: Date.now(),
                   status: 'running',
                   outputLines: [],
@@ -253,7 +267,10 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   updated[existingIdx] = {
                     ...updated[existingIdx],
                     toolName,
-                    displayName: toolName.replaceAll('_', ' '),
+                    displayName: buildToolDisplayName(toolName, subagentName),
+                    parentToolName: updated[existingIdx].parentToolName ?? parentToolName,
+                    subagentName: updated[existingIdx].subagentName ?? subagentName,
+                    subagentId: updated[existingIdx].subagentId ?? subagentId,
                     toolInput: updated[existingIdx].toolInput ?? toolInput,
                   };
                   return updated;
@@ -284,6 +301,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
               case 'code_output': {
                 const line = (event.data as { line?: string }).line ?? '';
                 const toolName = (event.data as { tool_name?: string }).tool_name || undefined;
+                const subagentName = (event.data as { subagent_name?: string }).subagent_name || undefined;
                 const stream = (event.data as { stream?: 'stdout' | 'stderr' }).stream === 'stderr'
                   ? 'stderr'
                   : 'stdout';
@@ -300,6 +318,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                     const updated = [...prev];
                     updated[lastRunningIdx] = {
                       ...updated[lastRunningIdx],
+                      displayName: buildToolDisplayName(updated[lastRunningIdx].toolName, subagentName ?? updated[lastRunningIdx].subagentName),
+                      subagentName: updated[lastRunningIdx].subagentName ?? subagentName,
                       outputLines: [...updated[lastRunningIdx].outputLines, { stream, line }],
                     };
                     return updated;

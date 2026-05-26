@@ -366,6 +366,16 @@ def _map_custom_chunk(chunk: Any) -> list[dict] | None:
     Returns:
         A list containing one event dict.
     """
+    if isinstance(chunk, dict) and chunk.get("type") in {
+        SSE_TOOL_START,
+        SSE_TOOL_END,
+        SSE_THINKING,
+    }:
+        data = chunk.get("data", {})
+        if not isinstance(data, dict):
+            data = {"message": str(data)}
+        return [{"type": chunk["type"], "data": data}]
+
     if isinstance(chunk, dict) and chunk.get("type") == "code_output":
         stream = chunk.get("stream", "stdout")
         if stream not in ("stdout", "stderr"):
@@ -374,8 +384,14 @@ def _map_custom_chunk(chunk: Any) -> list[dict] | None:
             "line": chunk.get("line", ""),
             "stream": stream,
         }
-        if chunk.get("tool_name"):
-            data["tool_name"] = chunk.get("tool_name")
+        for optional_key in (
+            "tool_name",
+            "parent_tool_name",
+            "subagent_name",
+            "subagent_id",
+        ):
+            if chunk.get(optional_key):
+                data[optional_key] = chunk.get(optional_key)
         return [
             {
                 "type": SSE_CODE_OUTPUT,

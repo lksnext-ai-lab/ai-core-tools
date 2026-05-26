@@ -232,6 +232,55 @@ class TestSuccessfulExecution:
 
         assert result["metadata"]["files_processed"] == 0
 
+    @pytest.mark.asyncio
+    async def test_sandbox_marked_active_for_whole_turn(self, monkeypatch):
+        agent = make_agent(agent_id=1, has_memory=True)
+        svc, _ = make_service(agent=agent)
+        db = MagicMock()
+        conversation = MagicMock()
+        sandbox_handle = MagicMock()
+        ctx = make_context(
+            agent=agent,
+            conversation=conversation,
+            sandbox_handle=sandbox_handle,
+            sandbox_session_key="conv_1_123",
+        )
+        mock_sss = MagicMock()
+        mock_sss.begin_use.return_value = True
+        monkeypatch.setattr("config.SANDBOX_DEFAULT_TIMEOUT_S", 42, raising=False)
+
+        with (
+            patch.object(svc, "_prepare_turn", new=AsyncMock(return_value=ctx)),
+            patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
+            patch.object(svc, "_finalize_turn", new=AsyncMock(return_value={
+                "response": "ok",
+                "agent_id": 1,
+                "conversation_id": 123,
+                "metadata": {},
+                "parsed_response": "ok",
+                "effective_conv_id": 123,
+                "files_data": [],
+            })),
+            patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
+        ):
+            await svc.execute_agent_chat_with_file_refs(
+                agent_id=1,
+                message="hello",
+                db=db,
+            )
+
+        mock_sss.begin_use.assert_called_once_with(
+            "conv_1_123",
+            conversation=conversation,
+            db=db,
+            expected_seconds=42,
+        )
+        mock_sss.end_use.assert_called_once_with(
+            "conv_1_123",
+            conversation=conversation,
+            db=db,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Memory-enabled agents — tested via _prepare_turn

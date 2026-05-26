@@ -14,7 +14,8 @@ import pytest
 
 from repositories.skill_package_repository import (
     SkillPackageRepository,
-    SkillPackageValidation,
+    _discover_skill_entries,
+    _resource_entries_for_skill,
     _validate_skill_file_path,
 )
 
@@ -166,6 +167,116 @@ class TestValidatePackageValid:
         })
         result = SkillPackageRepository.validate_package(z)
         assert result.is_valid
+
+    def test_multi_skill_package_with_nested_roots_is_valid(self):
+        z = _make_zip({
+            "skills/alpha/SKILL.md": (
+                "---\nname: alpha\ndescription: Alpha skill\n---\nAlpha body"
+            ),
+            "skills/alpha/scripts/run.py": "print('alpha')",
+            "skills/beta/skill.md": (
+                "---\nname: beta\ndescription: Beta skill\n---\nBeta body"
+            ),
+            "skills/beta/references/ref.md": "# Beta ref",
+        })
+        result = SkillPackageRepository.validate_package(z)
+        assert result.is_valid
+
+    def test_multi_skill_package_rejects_duplicate_skill_names(self):
+        z = _make_zip({
+            "alpha/SKILL.md": "---\nname: same\ndescription: Alpha\n---\nA",
+            "beta/SKILL.md": "---\nname: same\ndescription: Beta\n---\nB",
+        })
+        result = SkillPackageRepository.validate_package(z)
+        assert not result.is_valid
+        assert any("duplicate skill name" in e.lower() for e in result.errors)
+
+
+class TestSkillPackageDiscovery:
+    def test_discovers_root_and_nested_skill_manifests_case_insensitively(self):
+        z = _make_zip({
+            "SKILL.md": VALID_SKILL_MD,
+            "skills/alpha/skill.md": (
+                "---\nname: alpha\ndescription: Alpha skill\n---\nAlpha body"
+            ),
+            "skills/beta/SKILL.md": (
+                "---\nname: beta\ndescription: Beta skill\n---\nBeta body"
+            ),
+        })
+        with zipfile.ZipFile(io.BytesIO(z)) as zf:
+            entries = _discover_skill_entries(zf)
+        assert [entry.root for entry in entries] == ["", "skills/alpha", "skills/beta"]
+
+    def test_resources_are_relative_to_skill_root_and_exclude_nested_skills(self):
+        z = _make_zip({
+            "bundle/SKILL.md": "---\nname: parent\ndescription: Parent\n---\nParent",
+            "bundle/scripts/parent.py": "print('parent')",
+            "bundle/child/SKILL.md": "---\nname: child\ndescription: Child\n---\nChild",
+            "bundle/child/scripts/child.py": "print('child')",
+            "outside.txt": "ignored",
+        })
+        with zipfile.ZipFile(io.BytesIO(z)) as zf:
+            entries = _discover_skill_entries(zf)
+            parent = next(entry for entry in entries if entry.root == "bundle")
+            child = next(entry for entry in entries if entry.root == "bundle/child")
+            parent_resources = _resource_entries_for_skill(zf, parent, entries)
+            child_resources = _resource_entries_for_skill(zf, child, entries)
+
+        assert parent_resources == [("bundle/scripts/parent.py", "scripts/parent.py")]
+        assert child_resources == [
+            ("bundle/child/scripts/child.py", "scripts/child.py")
+        ]
+
+
+class TestImportPackages:
+    def test_imports_each_discovered_skill_with_its_resources(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+
+        import models  # noqa: F401 - registers ORM models with Base.metadata
+        from db.database import Base
+        from models.skill import Skill, SkillFile
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+
+        z = _make_zip({
+            "skills/alpha/SKILL.md": (
+                "---\nname: alpha\ndescription: Alpha skill\n---\nAlpha body"
+            ),
+            "skills/alpha/scripts/run.py": "print('alpha')",
+            "skills/alpha/assets/logo.bin": b"\x00\x01",
+            "skills/beta/skill.md": (
+                "---\nname: beta\ndescription: Beta skill\n---\nBeta body"
+            ),
+            "skills/beta/files/references/ref.md": "# Beta ref",
+            "README.md": "not part of either skill",
+        })
+
+        with Session(engine) as session:
+            imported = SkillPackageRepository.import_packages(session, 123, z)
+            assert [skill.name for skill in imported] == ["alpha", "beta"]
+
+            alpha = session.query(Skill).filter(Skill.name == "alpha").one()
+            beta = session.query(Skill).filter(Skill.name == "beta").one()
+
+            alpha_paths = {
+                sf.path
+                for sf in session.query(SkillFile).filter(
+                    SkillFile.skill_id == alpha.skill_id
+                )
+            }
+            beta_paths = {
+                sf.path
+                for sf in session.query(SkillFile).filter(
+                    SkillFile.skill_id == beta.skill_id
+                )
+            }
+
+        assert alpha.content == "Alpha body"
+        assert beta.content == "Beta body"
+        assert alpha_paths == {"scripts/run.py", "assets/logo.bin"}
+        assert beta_paths == {"references/ref.md"}
 
 
 # ---------------------------------------------------------------------------
