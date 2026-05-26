@@ -21,6 +21,43 @@ function prettyJson(raw: string): string {
   }
 }
 
+function formatToolName(toolName: string): string {
+  return toolName.replaceAll('_', ' ');
+}
+
+function getHistoryGroupKey(record: ToolExecutionRecord): string {
+  if (!record.subagentName) return 'main';
+  return `subagent:${record.subagentId ?? 'unknown'}:${record.subagentName}:${record.parentToolName ?? ''}`;
+}
+
+interface ToolHistoryGroup {
+  key: string;
+  label?: string;
+  records: ToolExecutionRecord[];
+}
+
+function groupHistoryRecords(history: ToolExecutionRecord[]): ToolHistoryGroup[] {
+  const groups: ToolHistoryGroup[] = [];
+
+  history.forEach((record) => {
+    const key = getHistoryGroupKey(record);
+    const lastGroup = groups[groups.length - 1];
+
+    if (lastGroup?.key === key) {
+      lastGroup.records.push(record);
+      return;
+    }
+
+    groups.push({
+      key,
+      label: record.subagentName,
+      records: [record],
+    });
+  });
+
+  return groups;
+}
+
 /** Label + dark code block used for input/output/stdout sections. */
 function CodeBlock({
   label,
@@ -53,11 +90,20 @@ function CodeBlock({
   );
 }
 
-function ToolEntryRow({ record }: Readonly<{ record: ToolExecutionRecord }>) {
+function ToolEntryRow({
+  record,
+  hideSubagentName = false,
+}: Readonly<{
+  record: ToolExecutionRecord;
+  hideSubagentName?: boolean;
+}>) {
   const [expanded, setExpanded] = useState(record.status === 'running');
   const previousStatusRef = useRef(record.status);
   const stdoutScrollRef = useRef<HTMLPreElement>(null);
   const isCode = isCodeTool(record.toolName);
+  const displayName = hideSubagentName && record.subagentName
+    ? formatToolName(record.toolName)
+    : record.displayName;
 
   const hasInput = Boolean(record.toolInput);
   const hasOutput = Boolean(record.toolOutput);
@@ -111,7 +157,7 @@ function ToolEntryRow({ record }: Readonly<{ record: ToolExecutionRecord }>) {
           <Wrench className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
         )}
         <span className="flex-1 text-[11px] font-medium text-neutral-700 dark:text-neutral-300 truncate">
-          {record.displayName}
+          {displayName}
         </span>
         {record.status === 'running' ? (
           <span className="flex items-center gap-1 text-[10px] text-blue-500 shrink-0">
@@ -193,6 +239,7 @@ export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHist
   }, [anyRunning]);
 
   if (history.length === 0) return null;
+  const groupedHistory = groupHistoryRecords(history);
 
   return (
     <div className={`shrink-0 transition-all duration-200 ${panelOpen ? 'w-72' : 'w-9'}`}>
@@ -247,9 +294,39 @@ export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHist
         {/* Entries */}
         {panelOpen && (
           <div className="max-h-[calc(100vh-24rem)] overflow-y-auto">
-            {history.map((record) => (
-              <ToolEntryRow key={record.id} record={record} />
-            ))}
+            {groupedHistory.map((group) => {
+              if (!group.label) {
+                return group.records.map((record) => (
+                  <ToolEntryRow key={record.id} record={record} />
+                ));
+              }
+
+              return (
+                <div
+                  key={`${group.key}-${group.records[0]?.id}`}
+                  className="m-1.5 overflow-hidden rounded-md border border-sky-200/70 dark:border-sky-700/40 bg-sky-50/60 dark:bg-sky-950/20"
+                >
+                  <div className="flex items-center gap-1.5 border-b border-sky-200/60 dark:border-sky-700/30 px-2.5 py-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                      {group.label}
+                    </span>
+                    <span className="text-[10px] text-sky-600/70 dark:text-sky-300/70">
+                      {group.records.length}
+                    </span>
+                  </div>
+                  <div className="bg-white/70 dark:bg-neutral-900/40">
+                    {group.records.map((record) => (
+                      <ToolEntryRow
+                        key={record.id}
+                        record={record}
+                        hideSubagentName
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

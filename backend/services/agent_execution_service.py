@@ -4,6 +4,8 @@ import ast
 import json
 import posixpath
 import shutil
+import threading
+from contextlib import nullcontext
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
@@ -43,6 +45,201 @@ _REMOTE_WORKSPACE_PREFIXES = (
     "/home/user/workspace/",
     "home/user/workspace/",
 )
+
+
+class _LazySandboxHandle:
+    """Proxy that creates the conversation sandbox on first runtime use."""
+
+    def __init__(
+        self,
+        *,
+        session_key: str,
+        provider: Any,
+        working_dir: str,
+        conversation: Any = None,
+        db: Session | None = None,
+        skills_loader: Any = None,
+        processed_files: list[dict] | None = None,
+        tmp_base: str | None = None,
+    ) -> None:
+        self.session_key = session_key
+        self.working_dir = working_dir
+        self.provider_name = getattr(provider, "PROVIDER_NAME", None) or getattr(
+            provider, "provider_name", "unknown"
+        )
+        self._provider = provider
+        self._conversation = conversation
+        self._db = db
+        self._skills_loader = skills_loader
+        self._processed_files = processed_files or []
+        self._tmp_base = tmp_base or ""
+        self._handle = None
+        self._remote_pre_existing_files: set = set()
+        self._remote_inputs_prepared = False
+        self._lock = threading.RLock()
+
+    @property
+    def sandbox_id_if_created(self) -> str | None:
+        return getattr(self._handle, "sandbox_id", None)
+
+    @property
+    def sandbox_id(self) -> str:
+        return self.get().sandbox_id
+
+    @property
+    def active_skills(self) -> dict:
+        if self._handle is None:
+            return {}
+        return self._handle.active_skills
+
+    @property
+    def pre_existing_remote_files(self) -> set:
+        return set(self._remote_pre_existing_files)
+
+    def is_materialized(self) -> bool:
+        return self._handle is not None
+
+    def get_if_created(self) -> Any | None:
+        return self._handle
+
+    def get(self) -> Any:
+        with self._lock:
+            if self._handle is None:
+                from services.sandbox_session_service import sandbox_session_service as _sss
+
+                self._handle = _sss.get_or_create(
+                    self.session_key,
+                    self._provider,
+                    self.working_dir,
+                    conversation=self._conversation,
+                    db=self._db,
+                    skills_loader=self._skills_loader,
+                )
+                if self._handle.provider_name != "subprocess":
+                    self._prepare_remote_workspace(_sss)
+            return self._handle
+
+    def _prepare_remote_workspace(self, sandbox_session_service: Any) -> None:
+        if self._remote_inputs_prepared or self._handle is None:
+            return
+        with sandbox_session_service.use(
+            self.session_key,
+            conversation=self._conversation,
+            db=self._db,
+            expected_seconds=30,
+        ):
+            _ensure_remote_workspace_layout(self._provider, self._handle)
+            try:
+                self._remote_pre_existing_files = {
+                    _remote_workspace_relative(path)
+                    for path in self._provider.list_files(self._handle)
+                    if _is_remote_output_file(path)
+                }
+            except Exception as snap_exc:
+                logger.warning(
+                    "IT4: could not snapshot remote files before turn (%s): %s",
+                    self.session_key,
+                    snap_exc,
+                )
+
+            for pf in self._processed_files:
+                filename = _safe_workspace_filename(pf.get("filename", ""))
+                file_path = pf.get("file_path")
+                if not filename:
+                    continue
+                try:
+                    abs_file_path = file_path or ""
+                    if abs_file_path and not os.path.isabs(abs_file_path):
+                        abs_file_path = os.path.join(self._tmp_base, abs_file_path)
+                    if abs_file_path and os.path.isfile(abs_file_path):
+                        with open(abs_file_path, "rb") as fh:
+                            raw = fh.read()
+                    else:
+                        content = pf.get("content", "")
+                        raw = (
+                            content.encode("utf-8")
+                            if isinstance(content, str)
+                            else bytes(content)
+                        )
+                    remote_input_path = f"{_WORKSPACE_INPUT_DIR}/{filename}"
+                    self._provider.write_file(self._handle, remote_input_path, raw)
+                    logger.debug("IT4: pushed '%s' into sandbox %s", filename, self.session_key)
+                except Exception as push_exc:
+                    logger.warning(
+                        "IT4: failed to push file '%s' into sandbox %s: %s",
+                        filename,
+                        self.session_key,
+                        push_exc,
+                    )
+        self._remote_inputs_prepared = True
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.get(), name)
+
+
+class _LazySandboxProvider:
+    """Provider proxy that materializes the matching lazy handle on use."""
+
+    def __init__(self, provider: Any, lazy_handle: _LazySandboxHandle) -> None:
+        self._provider = provider
+        self._lazy_handle = lazy_handle
+        self.PROVIDER_NAME = getattr(provider, "PROVIDER_NAME", lazy_handle.provider_name)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._provider, name)
+
+    def _resolve(self, handle: Any) -> Any:
+        if isinstance(handle, _LazySandboxHandle):
+            return handle.get()
+        return handle
+
+    def _lease(self):
+        if not self._lazy_handle.session_key:
+            return nullcontext()
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            return _sss.use(
+                self._lazy_handle.session_key,
+                conversation=self._lazy_handle._conversation,
+                db=self._lazy_handle._db,
+                expected_seconds=30,
+            )
+        except Exception:
+            return nullcontext()
+
+    def get_supported_languages(self) -> list[str]:
+        return self._provider.get_supported_languages()
+
+    def run_code(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.run_code(resolved, *args, **kwargs)
+
+    def ensure_skill(self, handle: Any, skill: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.ensure_skill(resolved, skill, *args, **kwargs)
+
+    def list_active_skills(self, handle: Any) -> dict[str, dict[str, Any]]:
+        if isinstance(handle, _LazySandboxHandle) and not handle.is_materialized():
+            return {}
+        return self._provider.list_active_skills(self._resolve(handle))
+
+    def list_files(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.list_files(resolved, *args, **kwargs)
+
+    def read_file(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.read_file(resolved, *args, **kwargs)
+
+    def write_file(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.write_file(resolved, *args, **kwargs)
 
 
 def _safe_workspace_filename(filename: str) -> str:
@@ -360,11 +557,11 @@ class AgentExecutionService:
                     _copy_exc,
                 )
 
-        # 11. Sandbox session + file push (IT-4)
-        # Derives a stable session key then obtains (or reuses) a sandbox handle
-        # for the conversation.  For non-subprocess providers, user-uploaded files
-        # are pushed into the remote sandbox workspace so LLM code can access them
-        # with a simple open('filename') call.
+        # 11. Lazy sandbox session (IT-4)
+        # Derives a stable session key and binds a lazy handle/provider pair.
+        # The actual sandbox is created only when code execution or Skill
+        # activation first needs it.  Remote workspace setup and input-file push
+        # happen at that same first-use boundary.
         sandbox_handle = None
         sandbox_provider = None
         sandbox_session_key = None
@@ -372,11 +569,11 @@ class AgentExecutionService:
 
         if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
             from tools.sandbox.factory import resolve_provider
-            from services.sandbox_session_service import sandbox_session_service as _sss, SandboxSessionService
+            from services.sandbox_session_service import SandboxSessionService
             from repositories.skill_repository import SkillRepository as _SkillRepo
 
             sandbox_session_key = SandboxSessionService.session_key(agent_id, effective_conv_id)
-            sandbox_provider = resolve_provider(fresh_agent)
+            resolved_sandbox_provider = resolve_provider(fresh_agent)
 
             # Phase 3: skills_loader to re-activate skills after sandbox recreation
             _skill_ids = [
@@ -388,66 +585,24 @@ class AgentExecutionService:
                     return _SkillRepo.get_by_ids(_db, _app_id, ids)
                 return _loader
 
-            sandbox_handle = _sss.get_or_create(
-                sandbox_session_key,
-                sandbox_provider,
-                working_dir,
+            sandbox_handle = _LazySandboxHandle(
+                session_key=sandbox_session_key,
+                provider=resolved_sandbox_provider,
+                working_dir=working_dir,
                 conversation=conversation,
                 db=db,
-                skills_loader=_make_skills_loader(db, fresh_agent.app_id, _skill_ids) if _skill_ids else None,
+                skills_loader=(
+                    _make_skills_loader(db, fresh_agent.app_id, _skill_ids)
+                    if _skill_ids
+                    else None
+                ),
+                processed_files=processed_files,
+                tmp_base=tmp_base,
             )
-
-            # Only remote (non-subprocess) providers need explicit push/pull.
-            # SubprocessProvider uses working_dir directly so nothing to do here.
-            if sandbox_handle.provider_name != "subprocess":
-                with _sss.use(
-                    sandbox_session_key,
-                    conversation=conversation,
-                    db=db,
-                    expected_seconds=30,
-                ):
-                    _ensure_remote_workspace_layout(sandbox_provider, sandbox_handle)
-
-                    # Snapshot remote files BEFORE this turn so finalize can diff
-                    try:
-                        pre_existing_remote_files = {
-                            _remote_workspace_relative(path)
-                            for path in sandbox_provider.list_files(sandbox_handle)
-                            if _is_remote_output_file(path)
-                        }
-                    except Exception as _snap_exc:
-                        logger.warning(
-                            "IT4: could not snapshot remote files before turn (%s): %s",
-                            sandbox_session_key,
-                            _snap_exc,
-                        )
-
-                    # Push user-uploaded files into the sandbox workspace
-                    for pf in processed_files:
-                        _filename = _safe_workspace_filename(pf.get("filename", ""))
-                        _file_path = pf.get("file_path")
-                        if not _filename:
-                            continue
-                        try:
-                            _abs_file_path = _file_path or ""
-                            if _abs_file_path and not os.path.isabs(_abs_file_path):
-                                _abs_file_path = os.path.join(tmp_base, _abs_file_path)
-                            if _abs_file_path and os.path.isfile(_abs_file_path):
-                                with open(_abs_file_path, "rb") as _fh:
-                                    _raw = _fh.read()
-                            else:
-                                _content = pf.get("content", "")
-                                _raw = _content.encode("utf-8") if isinstance(_content, str) else bytes(_content)
-                            _remote_input_path = f"{_WORKSPACE_INPUT_DIR}/{_filename}"
-                            sandbox_provider.write_file(sandbox_handle, _remote_input_path, _raw)
-                            logger.debug("IT4: pushed '%s' into sandbox %s", _filename, sandbox_session_key)
-                        except Exception as _push_exc:
-                            logger.warning(
-                                "IT4: failed to push file '%s' into sandbox %s: %s",
-                                _filename,
-                                sandbox_session_key,
-                                _push_exc,
-                            )
+            sandbox_provider = _LazySandboxProvider(
+                resolved_sandbox_provider,
+                sandbox_handle,
+            )
 
         return AgentExecutionContext(
             agent_id=agent_id,
@@ -492,6 +647,11 @@ class AgentExecutionService:
         """
         if ctx.sandbox_handle is None or not ctx.sandbox_session_key:
             return False
+        if (
+            isinstance(ctx.sandbox_handle, _LazySandboxHandle)
+            and not ctx.sandbox_handle.is_materialized()
+        ):
+            return False
         try:
             from services.sandbox_session_service import sandbox_session_service as _sss
 
@@ -520,6 +680,11 @@ class AgentExecutionService:
     ) -> None:
         """Clear the active-turn sandbox lease and refresh idle activity."""
         if ctx.sandbox_handle is None or not ctx.sandbox_session_key:
+            return
+        if (
+            isinstance(ctx.sandbox_handle, _LazySandboxHandle)
+            and not ctx.sandbox_handle.is_materialized()
+        ):
             return
         try:
             from services.sandbox_session_service import sandbox_session_service as _sss
@@ -576,12 +741,20 @@ class AgentExecutionService:
             if ctx.working_dir
             else None
         )
+        sandbox_handle = ctx.sandbox_handle
+        if isinstance(sandbox_handle, _LazySandboxHandle):
+            if sandbox_handle.is_materialized():
+                ctx.pre_existing_remote_files = sandbox_handle.pre_existing_remote_files
+                sandbox_handle = sandbox_handle.get_if_created()
+            else:
+                sandbox_handle = None
+
         if (
-            ctx.sandbox_handle is not None
+            sandbox_handle is not None
             and ctx.sandbox_provider is not None
             and ctx.working_dir
             and output_dir
-            and ctx.sandbox_handle.provider_name != "subprocess"
+            and sandbox_handle.provider_name != "subprocess"
         ):
             try:
                 from services.sandbox_session_service import sandbox_session_service as _sss
@@ -592,7 +765,7 @@ class AgentExecutionService:
                     db=db,
                     expected_seconds=30,
                 ):
-                    remote_files = ctx.sandbox_provider.list_files(ctx.sandbox_handle)
+                    remote_files = ctx.sandbox_provider.list_files(sandbox_handle)
                     for remote_path in remote_files:
                         if not _is_remote_output_file(remote_path):
                             continue
@@ -605,7 +778,7 @@ class AgentExecutionService:
                             logger.warning("IT4: skipping unsafe remote path '%s'", remote_path)
                             continue
                         try:
-                            file_bytes = ctx.sandbox_provider.read_file(ctx.sandbox_handle, remote_rel)
+                            file_bytes = ctx.sandbox_provider.read_file(sandbox_handle, remote_rel)
                             dest = os.path.join(output_dir, basename)
                             os.makedirs(output_dir, exist_ok=True)
                             with open(dest, "wb") as _fh:

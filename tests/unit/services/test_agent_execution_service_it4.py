@@ -3,10 +3,10 @@ Unit tests — IT-4 File Round-Trip
 ====================================
 
 Verification criteria from the RFC:
-  1. ``_prepare_turn`` obtains a sandbox handle via SandboxSessionService when
-     ``enable_code_interpreter`` is True.
-  2. For non-subprocess providers, ``_prepare_turn`` pushes each processed_file
-     into the sandbox via ``provider.write_file``.
+  1. ``_prepare_turn`` binds a lazy sandbox handle when
+     ``enable_code_interpreter`` is True, without creating the sandbox yet.
+  2. For non-subprocess providers, the first sandbox use pushes each
+     processed_file into the sandbox via ``provider.write_file``.
   3. For SubprocessProvider (provider_name == 'subprocess'), no push/pull occurs.
   4. ``_finalize_turn`` pulls new remote output/ files (not in
      pre_existing_remote_files) into local output/ before ``sync_output_files``.
@@ -113,12 +113,12 @@ def _base_ctx(working_dir, provider_name="subprocess", processed_files=None, rem
 
 
 # ---------------------------------------------------------------------------
-# 1. _prepare_turn calls SandboxSessionService.get_or_create
+# 1. _prepare_turn binds a lazy sandbox without creating it
 # ---------------------------------------------------------------------------
 
 
 class TestPrepareTurnSandboxHandleCreation:
-    def test_get_or_create_called_when_code_interpreter_enabled(self, tmp_path, monkeypatch):
+    def test_get_or_create_deferred_until_code_execution(self, tmp_path, monkeypatch):
         agent = _make_agent(enable_code_interpreter=True)
         svc = _make_service(agent)
 
@@ -126,6 +126,8 @@ class TestPrepareTurnSandboxHandleCreation:
         mock_provider = MagicMock()
         mock_provider.create_sandbox.return_value = mock_handle
         mock_provider.PROVIDER_NAME = "subprocess"
+        mock_provider.get_supported_languages.return_value = []
+        mock_provider.run_code.return_value = "OK"
 
         mock_sss = MagicMock()
         mock_sss.get_or_create.return_value = mock_handle
@@ -147,9 +149,12 @@ class TestPrepareTurnSandboxHandleCreation:
                 )
             )
 
-        assert ctx.sandbox_handle is not None
-        assert ctx.sandbox_provider is not None
-        assert ctx.sandbox_session_key is not None
+            assert ctx.sandbox_handle is not None
+            assert ctx.sandbox_provider is not None
+            assert ctx.sandbox_session_key is not None
+            mock_sss.get_or_create.assert_not_called()
+
+            ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
         mock_sss.get_or_create.assert_called_once()
 
     def test_no_sandbox_when_code_interpreter_disabled(self, tmp_path, monkeypatch):
@@ -184,7 +189,7 @@ class TestPrepareTurnSandboxHandleCreation:
 
 
 class TestPrepareTurnFilePush:
-    """Push processed_files into non-subprocess sandbox."""
+    """Push processed_files into non-subprocess sandbox on first use."""
 
     def test_writes_file_to_remote_sandbox(self, tmp_path):
         agent = _make_agent(enable_code_interpreter=True)
@@ -198,7 +203,9 @@ class TestPrepareTurnFilePush:
         mock_provider = MagicMock()
         mock_provider.PROVIDER_NAME = "opensandbox"
         mock_provider.create_sandbox.return_value = mock_handle
+        mock_provider.get_supported_languages.return_value = []
         mock_provider.list_files.return_value = []
+        mock_provider.run_code.return_value = "OK"
 
         mock_sss = MagicMock()
         mock_sss.get_or_create.return_value = mock_handle
@@ -228,6 +235,10 @@ class TestPrepareTurnFilePush:
                     user_context={"user_id": "u1", "app_id": "1"},
                 )
             )
+
+            mock_provider.write_file.assert_not_called()
+
+            ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
 
         mock_provider.write_file.assert_called_once_with(
             mock_handle, "input/data.xlsx", b"XLSX_CONTENT"
@@ -284,6 +295,7 @@ class TestPrepareTurnFilePush:
         mock_provider = MagicMock()
         mock_provider.PROVIDER_NAME = "opensandbox"
         mock_provider.create_sandbox.return_value = mock_handle
+        mock_provider.get_supported_languages.return_value = []
         mock_provider.list_files.return_value = []
         mock_provider.write_file.side_effect = RuntimeError("network error")
 
@@ -315,7 +327,8 @@ class TestPrepareTurnFilePush:
                 )
             )
 
-        assert ctx.sandbox_handle is not None  # Turn still completes
+            assert ctx.sandbox_handle is not None  # Turn still completes
+            ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
 
 
 # ---------------------------------------------------------------------------

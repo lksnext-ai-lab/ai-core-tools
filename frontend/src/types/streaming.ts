@@ -62,6 +62,9 @@ export interface ActiveTool {
   toolCallId?: string;
   displayName: string;
   input?: string;
+  parentToolName?: string;
+  subagentName?: string;
+  subagentId?: number;
   status: 'running' | 'complete';
   startedAt: number;
 }

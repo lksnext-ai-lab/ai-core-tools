@@ -116,6 +116,16 @@ def _tool_name_for_language(language: str) -> str:
     return "python_repl" if language == "python" else f"{language}_repl"
 
 
+def _sandbox_id_for_log(sandbox_handle: Any) -> str:
+    sandbox_id = getattr(sandbox_handle, "sandbox_id_if_created", None)
+    if sandbox_id:
+        return sandbox_id
+    is_materialized = getattr(sandbox_handle, "is_materialized", None)
+    if callable(is_materialized) and not is_materialized():
+        return "<lazy>"
+    return getattr(sandbox_handle, "sandbox_id", "<unknown>")
+
+
 def _build_available_tool_metadata(
     agent: Agent,
     *,
@@ -604,7 +614,7 @@ async def create_agent(
             agent.agent_id,
             [t.name for t in repl_tools],
             working_dir,
-            sandbox_handle.sandbox_id,
+            _sandbox_id_for_log(sandbox_handle),
             sandbox_handle.provider_name,
         )
 
@@ -1005,7 +1015,7 @@ class IACTTool(BaseTool):
                 agent.agent_id,
                 [t.name for t in repl_tools],
                 working_dir,
-                sandbox_handle.sandbox_id,
+                _sandbox_id_for_log(sandbox_handle),
                 sandbox_handle.provider_name,
             )
 

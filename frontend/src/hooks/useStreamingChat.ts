@@ -72,11 +72,20 @@ interface UseStreamingChatReturn {
   readonly abortStream: () => void;
 }
 
-function buildActiveTool(toolName: string, toolCallId?: string): ActiveTool {
+function buildActiveTool(
+  toolName: string,
+  toolCallId?: string,
+  subagentName?: string,
+  subagentId?: number,
+  parentToolName?: string,
+): ActiveTool {
   return {
     name: toolName,
     toolCallId,
     displayName: toolName.replaceAll('_', ' '),
+    parentToolName,
+    subagentName,
+    subagentId,
     status: 'running' as const,
     startedAt: Date.now(),
   };
@@ -232,10 +241,28 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   getStreamingMessage('using_tool', { name: toolName });
                 setThinkingMessage(thinkingMsg);
                 setActiveTools((prev) => {
-                  if (toolCallId && prev.some((tool) => tool.toolCallId === toolCallId && tool.status === 'running')) {
-                    return prev;
+                  if (!toolCallId) {
+                    return [...prev, buildActiveTool(toolName, toolCallId, subagentName, subagentId, parentToolName)];
                   }
-                  return [...prev, buildActiveTool(toolName, toolCallId)];
+
+                  const existingIdx = prev.findIndex(
+                    (tool) => tool.toolCallId === toolCallId && tool.status === 'running',
+                  );
+                  if (existingIdx !== -1) {
+                    const updated = [...prev];
+                    updated[existingIdx] = {
+                      ...updated[existingIdx],
+                      parentToolName: updated[existingIdx].parentToolName ?? parentToolName,
+                      subagentName: updated[existingIdx].subagentName ?? subagentName,
+                      subagentId: updated[existingIdx].subagentId ?? subagentId,
+                    };
+                    return updated;
+                  }
+
+                  return [
+                    ...prev,
+                    buildActiveTool(toolName, toolCallId, subagentName, subagentId, parentToolName),
+                  ];
                 });
                 if (isCodeTool(toolName)) {
                   setCodeOutputLines([]);
