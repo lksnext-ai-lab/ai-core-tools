@@ -92,9 +92,8 @@ class FileReference:
         # No text extraction needed for images
         if self.file_type == "image":
             return "ready"
-        # Documents (.doc, .docx) don't have text extraction implemented yet
-        if "not implemented" in self.content.lower():
-            return "uploaded"  # File uploaded but not fully processed
+        # Processing status reflects upload availability. Text extraction support
+        # is exposed separately via has_extractable_content/content_preview.
         return "ready"
     
     def _has_extractable_content(self) -> bool:

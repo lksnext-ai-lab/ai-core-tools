@@ -19,9 +19,13 @@ interface AttachedFilesPanelProps {
 }
 
 function getStatusClassName(status?: string): string {
-  if (status === 'ready') return 'bg-green-100 text-green-700';
+  if (status === 'ready' || status === 'uploaded') return 'bg-green-100 text-green-700';
   if (status === 'error') return 'bg-red-100 text-red-700';
   return 'bg-yellow-100 text-yellow-700';
+}
+
+function getDisplayStatus(status?: string): string | undefined {
+  return status === 'uploaded' ? 'ready' : status;
 }
 
 function getExtractableLabel(fileType?: string, hasExtractableContent?: boolean): string {
@@ -110,10 +114,9 @@ export default function AttachedFilesPanel({
                       getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {file.processing_status === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
-                    {file.processing_status === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
-                    {file.processing_status === 'uploaded' && <><Loader2 className="w-3 h-3 animate-spin" /> Uploaded</>}
-                    {file.processing_status === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
+                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
+                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
+                    {getDisplayStatus(file.processing_status) === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
                   </span>
                 )}
               </div>
