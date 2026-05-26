@@ -31,7 +31,12 @@ from tools.skill_tools import (
     create_skill_loader_tool,
     generate_skills_system_prompt_section,
 )
-from tools.sandbox import resolve_provider, create_sandbox_repl_tools, create_sandbox_skill_tools
+from tools.sandbox import (
+    create_sandbox_builtin_tools,
+    create_sandbox_repl_tools,
+    create_sandbox_skill_tools,
+    resolve_provider,
+)
 
 logger = get_logger(__name__)
 
@@ -183,6 +188,24 @@ def _build_available_tool_metadata(
             "category": "code_execution",
             "description": description,
         })
+
+    if "bash" in code_languages:
+        for name, description in [
+            ("Read", "Read an absolute-path file in the sandbox with line numbers."),
+            ("Write", "Create or overwrite an absolute-path file in the sandbox."),
+            ("Edit", "Replace exact text in an absolute-path sandbox file."),
+            ("Glob", "Find sandbox files by glob pattern."),
+            ("Grep", "Search sandbox file contents with regex."),
+            ("NotebookEdit", "Edit Jupyter notebook cells in the sandbox."),
+            ("Bash", "Run Linux shell commands in the sandbox."),
+            ("BashOutput", "Read output from a background Bash command."),
+            ("KillShell", "Terminate a background Bash command."),
+        ]:
+            metadata.append({
+                "name": name,
+                "category": "sandbox_builtin",
+                "description": description,
+            })
 
     if getattr(agent, "skill_associations", None):
         metadata.extend([
@@ -504,6 +527,14 @@ async def create_agent(
             + "\n\n<code_interpreter>\n"
             + f"You have access to the following code execution tools: {_tool_names}.\n"
             + "Each tool accepts source code in the corresponding language and returns stdout + stderr.\n"
+            + (
+                "When bash is available, you also have Claude-style sandbox builtin tools: "
+                "`Read`, `Write`, `Edit`, `Glob`, `Grep`, `NotebookEdit`, `Bash`, "
+                "`BashOutput`, and `KillShell`. These operate inside the Linux sandbox. "
+                "Use absolute sandbox paths with file editing tools; run `Bash` with `pwd` "
+                "when you need the sandbox workspace root.\n"
+                if "bash" in _ci_languages else ""
+            )
             + "Read uploaded files from input/<filename>.\n"
             + "Use work/ for temporary files, package installs, scripts, and dependencies.\n"
             + "Save only final user-facing deliverables in output/ and print the output/<filename> path.\n"
@@ -609,10 +640,13 @@ async def create_agent(
             session_service=sandbox_session_service,
         )
         tools.extend(repl_tools)
+        builtin_tools = create_sandbox_builtin_tools(sandbox_handle, sandbox_provider)
+        tools.extend(builtin_tools)
         logger.info(
-            "REPL tools added for agent %s (languages=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
+            "Sandbox tools added for agent %s (repl=%s, builtins=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
             agent.agent_id,
             [t.name for t in repl_tools],
+            [t.name for t in builtin_tools],
             working_dir,
             _sandbox_id_for_log(sandbox_handle),
             sandbox_handle.provider_name,

@@ -22,8 +22,12 @@ from typing import Any
 import config as settings
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
+from utils.logger import get_logger
 
 from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
+from .builtin_tools import create_sandbox_builtin_tools
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Per-language metadata used to customise each REPL tool's name and docstring.

@@ -88,7 +88,7 @@ class SubprocessProvider(SandboxProvider):
     """Sandbox provider that executes code in a subprocess."""
 
     PROVIDER_NAME = "subprocess"
-    SUPPORTED_LANGUAGES: list[str] = ["python"]
+    SUPPORTED_LANGUAGES: list[str] = ["python", "bash"]
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -137,8 +137,8 @@ class SubprocessProvider(SandboxProvider):
     ) -> str:
         """Execute *code* in a subprocess under *handle.working_dir*.
 
-        Only ``"python"`` is supported.  Requests for other languages return an
-        error string so the LLM can surface a meaningful message to the user.
+        Python runs from a temporary script file. Bash runs through
+        ``bash -lc`` in the sandbox working directory.
 
         When *on_stdout* is provided, each stdout line is forwarded to it in
         real time via a reader thread; stderr is still collected and appended
@@ -166,23 +166,29 @@ class SubprocessProvider(SandboxProvider):
         working_dir = handle.working_dir
         script_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".py",
-                dir=working_dir,
-                delete=False,
-                encoding="utf-8",
-            ) as f:
-                f.write(code)
-                script_path = f.name
+            if language == "bash":
+                command = ["bash", "-lc", code]
+                interpreter_for_log = "bash"
+            else:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix=".py",
+                    dir=working_dir,
+                    delete=False,
+                    encoding="utf-8",
+                ) as f:
+                    f.write(code)
+                    script_path = f.name
+                command = [sys.executable, script_path]
+                interpreter_for_log = sys.executable
 
-            logger.info("SubprocessProvider using interpreter: %s", sys.executable)
+            logger.info("SubprocessProvider using interpreter: %s", interpreter_for_log)
             safe_env = _safe_env()
 
             if on_stdout is None and on_stderr is None:
                 # Fast path: wait for completion and return all output at once.
                 result = subprocess.run(
-                    [sys.executable, script_path],
+                    command,
                     capture_output=True,
                     text=True,
                     timeout=effective_timeout,
@@ -191,10 +197,7 @@ class SubprocessProvider(SandboxProvider):
                 )
                 output = result.stdout or ""
                 if result.stderr:
-                    output += (
-                        f"\n[stderr]\n{result.stderr}"
-                        f"\n[sandbox] interpreter: {sys.executable}"
-                    )
+                    output += f"\n[stderr]\n{result.stderr}\n[sandbox] interpreter: {interpreter_for_log}"
                 logger.info(
                     "SubprocessProvider executed in %s (exit=%d, output_len=%d)",
                     working_dir,
@@ -204,7 +207,7 @@ class SubprocessProvider(SandboxProvider):
             else:
                 # Streaming path: forward each stdout/stderr line via callbacks.
                 proc = subprocess.Popen(
-                    [sys.executable, script_path],
+                    command,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -252,10 +255,7 @@ class SubprocessProvider(SandboxProvider):
 
                 output = "".join(stdout_lines)
                 if stderr_lines:
-                    output += (
-                        f"\n[stderr]\n{''.join(stderr_lines)}"
-                        f"\n[sandbox] interpreter: {sys.executable}"
-                    )
+                    output += f"\n[stderr]\n{''.join(stderr_lines)}\n[sandbox] interpreter: {interpreter_for_log}"
                 logger.info(
                     "SubprocessProvider (streaming) executed in %s (exit=%d, output_len=%d)",
                     working_dir,

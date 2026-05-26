@@ -104,3 +104,43 @@ async def test_create_agent_passes_parent_sandbox_to_agent_tools(tmp_path):
         sandbox_session_key="conv_7_42",
         sandbox_session_service=session_service,
     )
+
+
+@pytest.mark.asyncio
+async def test_create_agent_adds_sandbox_builtins_when_bash_available(tmp_path):
+    from tools.agentTools import create_agent
+    from tools.sandbox.provider import SandboxHandle
+
+    agent = _make_agent()
+    handle = SandboxHandle(
+        sandbox_id="prepared-001",
+        working_dir=str(tmp_path),
+        provider_name="subprocess",
+        metadata={},
+    )
+    provider = MagicMock()
+    provider.get_supported_languages.return_value = ["python", "bash"]
+    created_agent = MagicMock()
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=MagicMock()),
+        patch("tools.agentTools.get_output_parser", return_value=None),
+        patch("tools.agentTools.create_langchain_agent", return_value=created_agent) as create_langchain_agent,
+        patch("tools.agentTools.MCPClientManager.get_client", new=AsyncMock(return_value=None)),
+    ):
+        await create_agent(
+            agent,
+            working_dir=str(tmp_path),
+            sandbox_handle=handle,
+            sandbox_provider=provider,
+        )
+
+    tool_names = {
+        getattr(tool, "name", None)
+        for tool in create_langchain_agent.call_args.kwargs["tools"]
+    }
+    assert "python_repl" in tool_names
+    assert "bash_repl" in tool_names
+    assert "Read" in tool_names
+    assert "Bash" in tool_names
+    assert "KillShell" in tool_names
