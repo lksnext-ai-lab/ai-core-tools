@@ -34,6 +34,13 @@ function EnterpriseFeaturePage() {
             <span><strong>SharePoint Sync</strong> — Index Microsoft SharePoint and OneDrive drives directly into your silos with incremental delta sync</span>
           </li>
           <li className="flex items-start gap-2">
+            <span className="mt-0.5 text-green-500 font-bold">✓</span>
+            <span>
+              <strong>Agent Metrics</strong> — Token, latency, error and tool-usage
+              dashboards at App and Agent level
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
             <span className="mt-0.5 text-gray-300 font-bold">+</span>
             <span className="text-gray-400">More Enterprise connectors and integrations coming soon</span>
           </li>

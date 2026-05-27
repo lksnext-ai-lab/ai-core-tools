@@ -2,6 +2,8 @@ import os
 import asyncio
 import ast
 import json
+import uuid as _uuid
+from datetime import datetime as _dt
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
@@ -984,6 +986,14 @@ class AgentExecutionService:
         )
 
         mcp_client = None
+        # Metrics: generate event_id and propagate to sub-agent calls
+        event_id = str(_uuid.uuid4())
+        started_at = _dt.utcnow()
+        if user_context is not None:
+            user_context = {**user_context, 'current_event_id': event_id}
+        else:
+            user_context = {'current_event_id': event_id}
+
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, mcp_client = await create_agent(
@@ -1023,7 +1033,39 @@ class AgentExecutionService:
                     ls_settings.source,
                 )
 
-            result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+            _status = "SUCCESS"
+            _error_code = None
+            _error_message = None
+            result = None
+            try:
+                result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+            except asyncio.TimeoutError:
+                _status = "TIMEOUT"
+                _error_code = "TIMEOUT"
+                _error_message = "Execution timed out"
+                raise
+            except Exception as _exc:
+                _status = "ERROR"
+                _error_code = type(_exc).__name__
+                _error_message = str(_exc)[:2000]
+                raise
+            finally:
+                finished_at = _dt.utcnow()
+                duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+                _fire_metrics_hook(
+                    event_id=event_id,
+                    fresh_agent=fresh_agent,
+                    user_context=user_context or {},
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=duration_ms,
+                    status=_status,
+                    error_code=_error_code,
+                    error_message=_error_message,
+                    result=result if _status == "SUCCESS" else None,
+                    image_files=image_files or [],
+                    message=message,
+                )
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model
@@ -1086,4 +1128,138 @@ class AgentExecutionService:
     
     def _update_request_count(self, agent: Agent, db: Session):
         """Update agent request count"""
-        self.agent_execution_repo.update_agent_request_count(db, agent.agent_id) 
+        self.agent_execution_repo.update_agent_request_count(db, agent.agent_id)
+
+
+# ── Module-level helpers for metrics instrumentation ──────────────────────────
+
+def _fire_metrics_hook(*, event_id, fresh_agent, user_context, started_at,
+                        finished_at, duration_ms, status, error_code,
+                        error_message, result, image_files, message):
+    """Build the metrics payload and fire the hook as a background task.
+    Never raises — all errors are logged and swallowed."""
+    try:
+        from services.metrics_hooks import get_execution_hook
+        hook = get_execution_hook()
+        if hook is None:
+            return
+        payload = _build_metrics_payload(
+            event_id=event_id,
+            fresh_agent=fresh_agent,
+            user_context=user_context,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=duration_ms,
+            status=status,
+            error_code=error_code,
+            error_message=error_message,
+            result=result,
+            image_files=image_files,
+            message=message,
+        )
+        asyncio.create_task(hook(payload))
+    except Exception:
+        logger.exception("_fire_metrics_hook failed — metrics dropped, execution unaffected")
+
+
+def _build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
+                             finished_at, duration_ms, status, error_code,
+                             error_message, result, image_files, message):
+    """Build a MetricsHookPayload dict from the available execution context."""
+    # 1. Detect caller_type
+    ctx = user_context or {}
+    caller_type_override = ctx.get('caller_type_override')
+    if caller_type_override:
+        caller_type = caller_type_override
+    elif ctx.get('api_key_id') is not None:
+        caller_type = "PUBLIC_API"
+    elif ctx.get('mcp_caller', False):
+        caller_type = "MCP"
+    elif ctx.get('parent_execution_id') is not None:
+        caller_type = "AGENT_AS_TOOL"
+    else:
+        caller_type = "INTERNAL_PLAYGROUND"
+
+    # 2. Extract token counts from result messages
+    input_tokens = None
+    output_tokens = None
+    total_tokens = None
+    tool_calls_summary = None
+    response_chars = None
+
+    if result is not None and isinstance(result, dict):
+        messages = result.get("messages") or []
+        # Walk in reverse to find the last message with usage_metadata
+        for msg in reversed(messages):
+            usage = getattr(msg, 'usage_metadata', None)
+            if usage is not None:
+                input_tokens = (
+                    usage.get('input_tokens')
+                    or usage.get('prompt_tokens')
+                )
+                output_tokens = (
+                    usage.get('output_tokens')
+                    or usage.get('completion_tokens')
+                )
+                total_tokens = usage.get('total_tokens')
+                break
+
+        # 3. Collect tool call summary from AIMessage.tool_calls (up to 20)
+        tool_calls_list = []
+        for msg in messages:
+            tc_list = getattr(msg, 'tool_calls', None)
+            if tc_list:
+                for tc in tc_list:
+                    if len(tool_calls_list) >= 20:
+                        break
+                    if isinstance(tc, dict):
+                        tool_calls_list.append({
+                            "tool_name": tc.get("name", ""),
+                            "tool_type": "MCP",
+                            "status": "SUCCESS",
+                        })
+        tool_calls_summary = tool_calls_list if tool_calls_list else None
+
+        # Extract response chars from last message
+        for msg in reversed(messages):
+            content = getattr(msg, 'content', None)
+            if content and isinstance(content, str):
+                response_chars = len(content)
+                break
+
+    # 4. Build event payload
+    event_payload = {
+        "event_id": event_id,
+        "app_id": getattr(fresh_agent, 'app_id', None),
+        "agent_id": getattr(fresh_agent, 'agent_id', None),
+        "conversation_id": ctx.get('conversation_id'),
+        "user_id": ctx.get('user_id'),
+        "api_key_id": ctx.get('api_key_id'),
+        "caller_type": caller_type,
+        "parent_execution_id": ctx.get('parent_execution_id'),
+        "started_at": started_at.isoformat(),
+        "finished_at": finished_at.isoformat() if finished_at else None,
+        "duration_ms": duration_ms,
+        "status": status,
+        "error_code": error_code,
+        "error_message": error_message,
+        "model_name": getattr(getattr(fresh_agent, 'ai_service', None), 'description', None),
+        "ai_service_id": getattr(fresh_agent, 'ai_service_id', None),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "tool_calls": tool_calls_summary,
+        "retrieved_docs": None,
+        "had_files": len(image_files) > 0,
+        "file_count": len(image_files),
+        "had_images": len(image_files) > 0,
+        "output_parser_used": getattr(fresh_agent, 'output_parser_id', None) is not None,
+        "parser_succeeded": None,
+        "prompt_chars": len(message) if isinstance(message, str) else None,
+        "response_chars": response_chars,
+    }
+
+    return {
+        "event": event_payload,
+        "tool_calls": [],
+    }

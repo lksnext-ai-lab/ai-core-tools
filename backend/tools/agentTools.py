@@ -506,6 +506,7 @@ class IACTTool(BaseTool):
     react_agent: Any = None
     mcp_client: Any = None
     llm: Any = None
+    _parent_event_id: Optional[str] = None
 
     def __init__(self, agent: Agent, user_context: Optional[Dict] = None) -> None:
         super().__init__(agent=agent, user_context=user_context)
@@ -519,6 +520,8 @@ class IACTTool(BaseTool):
             raise ValueError("No LLM found for agent")
         self.react_agent = None
         self.mcp_client = None
+        # Store parent event_id for metrics propagation (set by create())
+        object.__setattr__(self, '_parent_event_id', (user_context or {}).get('current_event_id'))
 
     @classmethod
     async def create(cls, agent: Agent, user_context: Optional[Dict] = None) -> "IACTTool":
@@ -595,6 +598,14 @@ class IACTTool(BaseTool):
             raise RuntimeError(
                 "IACTTool must be built via 'await IACTTool.create(...)' before use."
             )
+        import uuid as _uuid
+        from datetime import datetime as _dt
+        sub_event_id = str(_uuid.uuid4())
+        sub_started_at = _dt.utcnow()
+        _sub_status = "SUCCESS"
+        _sub_error_code = None
+        _sub_error = None
+        result_str = None
         try:
             # Format the message using prompt_template if available, otherwise use query directly
             if self.agent.prompt_template:
@@ -610,28 +621,61 @@ class IACTTool(BaseTool):
                         formatted_prompt = query
             else:
                 formatted_prompt = query
-            
+
             messages = [HumanMessage(content=formatted_prompt)]
             result = self.react_agent.invoke({"messages": messages})
-            
+
             # Extract the content from the last AI message
             if isinstance(result, dict) and "messages" in result:
                 messages_list = result["messages"]
                 # Find the last AI message with content
                 for msg in reversed(messages_list):
                     if hasattr(msg, 'content') and msg.content:
-                        return str(msg.content)
+                        result_str = str(msg.content)
+                        return result_str
                 # Fallback: return the last message content
                 if messages_list:
                     last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
-            
+                    result_str = str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+                    return result_str
+
             # If result is a string, return it directly
-            return str(result)
-            
-        except Exception as e:
-            logger.error(f"Error executing agent tool {self.name}: {str(e)}")
-            return f"Error executing agent tool: {str(e)}"
+            result_str = str(result)
+            return result_str
+
+        except Exception as _exc:
+            _sub_status = "ERROR"
+            _sub_error_code = type(_exc).__name__
+            _sub_error = str(_exc)
+            logger.error(f"Error executing agent tool {self.name}: {str(_exc)}")
+            result_str = f"Error executing agent tool: {str(_exc)}"
+            return result_str
+        finally:
+            sub_finished_at = _dt.utcnow()
+            sub_duration_ms = int((sub_finished_at - sub_started_at).total_seconds() * 1000)
+            try:
+                from services.agent_execution_service import _fire_metrics_hook
+                parent_event_id = object.__getattribute__(self, '_parent_event_id')
+                _fire_metrics_hook(
+                    event_id=sub_event_id,
+                    fresh_agent=self.agent,
+                    user_context={
+                        **(self.user_context or {}),
+                        'parent_execution_id': parent_event_id,
+                        'caller_type_override': 'AGENT_AS_TOOL',
+                    },
+                    started_at=sub_started_at,
+                    finished_at=sub_finished_at,
+                    duration_ms=sub_duration_ms,
+                    status=_sub_status,
+                    error_code=_sub_error_code,
+                    error_message=_sub_error,
+                    result=None,
+                    image_files=[],
+                    message=query,
+                )
+            except Exception:
+                pass  # Metrics never break execution
     
     async def _arun(self, query: str, *args, **kwargs) -> str:
         """Asynchronous execution of the agent tool"""

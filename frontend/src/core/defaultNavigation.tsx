@@ -107,6 +107,13 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      path: '/apps/:appId/metrics',
+      name: 'Metrics',
+      icon: <BarChart2 size={16} />,
+      section: 'appNavigation',
+      enterpriseFeature: 'metrics'
+    },
+    {
       path: '/apps/:appId/skills',
       name: 'Skills',
       icon: <Zap size={16} />,
