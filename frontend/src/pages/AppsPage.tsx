@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
-import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, BarChart2, Check } from 'lucide-react';
+import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, BarChart2, Check, Package } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -10,6 +10,10 @@ import Speedometer from '../components/ui/Speedometer';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
 import AppImportStepper from '../components/import/AppImportStepper';
+import ClaudePluginImportModal from '../components/import/ClaudePluginImportModal';
+import { AppRole } from '../types/roles';
+import { hasMinRole } from '../utils/roleUtils';
+import type { ClaudePluginImportResponse } from '../types/import';
 
 // Define the App type (like your Pydantic models!)
 interface UsageStats {
@@ -55,6 +59,7 @@ function AppsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [usageStats, setUsageStats] = useState<Record<number, UsageStats>>({});
   const [showImportModal, setShowImportModal] = useState(false);
+  const [pluginImportApp, setPluginImportApp] = useState<App | null>(null);
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
@@ -234,6 +239,15 @@ Type the app name to confirm: "${app.name}"`;
   function handleImportComplete() {
     setShowImportModal(false);
     setSuccess('App imported successfully!');
+    void refreshApps();
+    setTimeout(() => setSuccess(null), 5000);
+  }
+
+  function handleClaudePluginImportComplete(result: ClaudePluginImportResponse) {
+    const agentCount = result.imported_agents.length;
+    const skillCount = result.imported_skills.length;
+    setSuccess(`Imported ${skillCount} skills and ${agentCount} agents from ${result.plugin_name || 'Claude plugin'}.`);
+    setError(null);
     void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
   }
@@ -508,6 +522,12 @@ Type the app name to confirm: "${app.name}"`;
                     icon: <Upload className="w-4 h-4" />,
                     variant: 'secondary'
                   },
+                  ...(hasMinRole(app.role, AppRole.ADMINISTRATOR) ? [{
+                    label: 'Import Claude Plugin',
+                    onClick: () => setPluginImportApp(app),
+                    icon: <Package className="w-4 h-4" />,
+                    variant: 'secondary' as const
+                  }] : []),
                   ...(app.role === 'owner' ? [] : [{
                     label: 'Leave App',
                     onClick: () => handleLeaveApp(app),
@@ -561,6 +581,16 @@ Type the app name to confirm: "${app.name}"`;
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           onImportComplete={handleImportComplete}
+        />
+      )}
+
+      {pluginImportApp && (
+        <ClaudePluginImportModal
+          appId={pluginImportApp.app_id}
+          appName={pluginImportApp.name}
+          isOpen={Boolean(pluginImportApp)}
+          onClose={() => setPluginImportApp(null)}
+          onImportComplete={handleClaudePluginImportComplete}
         />
       )}
     </div>

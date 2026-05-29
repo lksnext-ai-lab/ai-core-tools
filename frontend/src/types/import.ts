@@ -111,6 +111,25 @@ export interface FullAppImportResponse {
   };
 }
 
+export interface ClaudePluginImportResponse {
+  success: boolean;
+  message: string;
+  plugin_name: string | null;
+  imported_skills: Array<{
+    skill_id: number;
+    name: string;
+    created: boolean;
+  }>;
+  imported_agents: Array<{
+    agent_id: number;
+    name: string;
+    created: boolean;
+    skill_ids: number[];
+    missing_skills: string[];
+  }>;
+  warnings: string[];
+}
+
 export const COMPONENT_TYPE_LABELS: Record<string, string> = {
   ai_service: 'AI Service',
   embedding_service: 'Embedding Service',

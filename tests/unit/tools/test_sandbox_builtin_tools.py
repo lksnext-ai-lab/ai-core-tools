@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 
 
@@ -23,21 +22,36 @@ def test_create_sandbox_builtin_tools_exposes_claude_style_tools(tmp_path, monke
     tools, _handle = _make_tools(tmp_path, monkeypatch)
 
     assert set(tools) == {
+        "SandboxInfo",
+        "PWD",
         "Read",
         "Write",
         "Edit",
+        "LS",
         "Glob",
         "Grep",
-        "NotebookEdit",
+        "Stat",
         "Bash",
         "BashOutput",
         "KillShell",
     }
+    for tool in tools.values():
+        assert "Sandbox-only operation" in tool.description
 
 
 def test_file_search_and_edit_tools_operate_inside_sandbox(tmp_path, monkeypatch):
     tools, _handle = _make_tools(tmp_path, monkeypatch)
     target = tmp_path / "work" / "notes.txt"
+
+    pwd_result = tools["PWD"].invoke({})
+    assert pwd_result.strip() == str(tmp_path)
+
+    sandbox_info = tools["SandboxInfo"].invoke({})
+    assert "sandbox\tlinux" in sandbox_info
+    assert f"cwd\t{tmp_path}" in sandbox_info
+    assert "builtin_tools\tSandboxInfo, PWD, Read" in sandbox_info
+    assert "Read\tdefault=2000_lines" in sandbox_info
+    assert "provider" not in sandbox_info.lower()
 
     write_result = tools["Write"].invoke({
         "file_path": str(target),
@@ -74,48 +88,16 @@ def test_file_search_and_edit_tools_operate_inside_sandbox(tmp_path, monkeypatch
     })
     assert str(target) in glob_result
 
+    (target.parent / ".secret").write_text("hidden\n", encoding="utf-8")
+    ls_result = tools["LS"].invoke({"path": str(target.parent)})
+    assert f"f\t" in ls_result
+    assert "notes.txt" in ls_result
+    assert ".secret" not in ls_result
 
-def test_notebook_edit_replaces_and_inserts_cells(tmp_path, monkeypatch):
-    tools, _handle = _make_tools(tmp_path, monkeypatch)
-    notebook = tmp_path / "work" / "demo.ipynb"
-    notebook.parent.mkdir(parents=True, exist_ok=True)
-    notebook.write_text(
-        json.dumps({
-            "cells": [
-                {
-                    "cell_type": "markdown",
-                    "id": "intro",
-                    "metadata": {},
-                    "source": ["old\n"],
-                }
-            ],
-            "metadata": {},
-            "nbformat": 4,
-            "nbformat_minor": 5,
-        }),
-        encoding="utf-8",
-    )
-
-    replace_result = tools["NotebookEdit"].invoke({
-        "notebook_path": str(notebook),
-        "cell_id": "intro",
-        "new_source": "new text\n",
-    })
-    assert "Replaced cell intro" in replace_result
-
-    insert_result = tools["NotebookEdit"].invoke({
-        "notebook_path": str(notebook),
-        "cell_id": "intro",
-        "new_source": "print('ok')\n",
-        "cell_type": "code",
-        "edit_mode": "insert",
-    })
-    assert "Inserted code cell" in insert_result
-
-    data = json.loads(notebook.read_text(encoding="utf-8"))
-    assert data["cells"][0]["source"] == ["new text\n"]
-    assert data["cells"][1]["cell_type"] == "code"
-    assert data["cells"][1]["source"] == ["print('ok')\n"]
+    stat_result = tools["Stat"].invoke({"path": str(target)})
+    assert f"path\t{target}" in stat_result
+    assert "type\tfile" in stat_result
+    assert "size\t" in stat_result
 
 
 def test_background_bash_output_and_kill(tmp_path, monkeypatch):

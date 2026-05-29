@@ -32,6 +32,7 @@ import type {
   DomainUrlListResponse,
   DomainUrlActionResponse,
 } from '../types/crawl';
+import type { ClaudePluginImportResponse } from '../types/import';
 
 type ConflictMode = 'fail' | 'rename' | 'override';
 
@@ -727,6 +728,23 @@ class ApiService {
     formData.append('file', file);
 
     const response = await fetch(`${this.baseURL}/internal/apps/${appId}/skills/import`, {
+      method: 'POST',
+      headers: this.prepareHeaders({ body: formData }),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importClaudePlugin(appId: number, file: File): Promise<ClaudePluginImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/import-claude-plugin`, {
       method: 'POST',
       headers: this.prepareHeaders({ body: formData }),
       body: formData,

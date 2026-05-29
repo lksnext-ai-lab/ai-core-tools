@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Literal, Optional, Dict, Any
+from typing import Literal, Optional, Dict, Any, List
 from datetime import datetime
 
 class AppUsageStatsSchema(BaseModel):
@@ -119,6 +119,37 @@ class LangSmithTestResponseSchema(BaseModel):
     project_name: Optional[str] = None
     source: Optional[Literal["app", "env", "request"]] = None
 
+
+class ClaudePluginImportedSkillSchema(BaseModel):
+    """Skill imported from a Claude Code plugin ZIP."""
+
+    skill_id: int
+    name: str
+    created: bool
+
+
+class ClaudePluginImportedAgentSchema(BaseModel):
+    """Agent imported from a Claude Code plugin ZIP."""
+
+    agent_id: int
+    name: str
+    created: bool
+    skill_ids: List[int] = []
+    missing_skills: List[str] = []
+
+
+class ClaudePluginImportResponseSchema(BaseModel):
+    """Response for importing Claude Code plugin components into an app."""
+
+    success: bool
+    message: str
+    plugin_name: Optional[str] = None
+    imported_skills: List[ClaudePluginImportedSkillSchema] = []
+    imported_agents: List[ClaudePluginImportedAgentSchema] = []
+    warnings: List[str] = []
+
+
+# ==================== COLLABORATION SCHEMAS ====================
 
 class CollaboratorListItemSchema(BaseModel):
     id: int

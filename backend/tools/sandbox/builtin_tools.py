@@ -30,6 +30,14 @@ _BASH_DEFAULT_TIMEOUT_S = 120
 _BASH_MAX_TIMEOUT_S = 600
 
 
+class SandboxInfoArgs(BaseModel):
+    pass
+
+
+class PWDArgs(BaseModel):
+    pass
+
+
 class ReadArgs(BaseModel):
     file_path: str = Field(description="The absolute path to the file to read")
     offset: int | None = Field(
@@ -67,6 +75,21 @@ class GlobArgs(BaseModel):
     )
 
 
+class LSArgs(BaseModel):
+    path: str | None = Field(
+        default=None,
+        description="Directory or file to list inside the sandbox. Defaults to the current working directory.",
+    )
+    show_hidden: bool = Field(
+        default=False,
+        description="Include dotfiles and hidden entries. Defaults to false.",
+    )
+    limit: int | None = Field(
+        default=None,
+        description="Maximum entries to return. Defaults to 200, maximum 1000.",
+    )
+
+
 class GrepArgs(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -98,17 +121,8 @@ class GrepArgs(BaseModel):
     head_limit: int | None = Field(default=None, description="Limit returned entries")
 
 
-class NotebookEditArgs(BaseModel):
-    notebook_path: str = Field(
-        description="The absolute path to the Jupyter notebook file to edit"
-    )
-    new_source: str = Field(description="The new source for the cell")
-    cell_id: str | None = Field(
-        default=None,
-        description="The ID of the cell to edit, delete, or insert after",
-    )
-    cell_type: Literal["code", "markdown"] | None = Field(default=None)
-    edit_mode: Literal["replace", "insert", "delete"] = Field(default="replace")
+class StatArgs(BaseModel):
+    path: str = Field(description="File or directory path inside the sandbox")
 
 
 class BashArgs(BaseModel):
@@ -215,9 +229,79 @@ def _path_exists(provider: SandboxProvider, handle: SandboxHandle, file_path: st
     return "__mattin_exists__" in result
 
 
+def _sandbox_info_tool(provider: SandboxProvider, handle: SandboxHandle):
+    def SandboxInfo() -> str:
+        """Sandbox-only operation: summarize actionable sandbox workspace rules, tools, and limits."""
+        languages = ", ".join(provider.get_supported_languages())
+        tools = (
+            "SandboxInfo, PWD, Read, Write, Edit, LS, Stat, Glob, Grep, "
+            "Bash, BashOutput, KillShell"
+        )
+        quoted_languages = shlex.quote(languages)
+        quoted_tools = shlex.quote(tools)
+        quoted_read_limit = shlex.quote(str(_DEFAULT_READ_LIMIT))
+        quoted_max_line = shlex.quote(str(_MAX_READ_LINE_CHARS))
+        quoted_ls_default = shlex.quote("200")
+        quoted_ls_max = shlex.quote("1000")
+        quoted_bash_default = shlex.quote(str(_BASH_DEFAULT_TIMEOUT_S))
+        quoted_bash_max = shlex.quote(str(_BASH_MAX_TIMEOUT_S))
+        quoted_bash_output = shlex.quote(str(_BASH_OUTPUT_LIMIT))
+        quoted_tool_output = shlex.quote(str(settings.SANDBOX_MAX_OUTPUT_CHARS))
+        command = (
+            "printf 'sandbox\tlinux\\n'; "
+            "printf 'cwd\t'; pwd; "
+            f"printf 'runtimes\t%s\\n' {quoted_languages}; "
+            f"printf 'builtin_tools\t%s\\n' {quoted_tools}; "
+            "printf 'dirs\\n'; "
+            "for d in input work output; do "
+            "[ -d \"$d\" ] && exists=yes || exists=no; "
+            "case \"$d\" in "
+            "input) desc='user uploads/source files' ;; "
+            "work) desc='scratch/intermediate files' ;; "
+            "output) desc='final user-facing deliverables' ;; "
+            "esac; "
+            "printf '%s\\t%s\\t%s\\n' \"$d\" \"$exists\" \"$desc\"; "
+            "done; "
+            "printf 'paths\\n'; "
+            "printf 'file_tools_require\\tabsolute sandbox paths\\n'; "
+            "printf 'relative_paths_from\\tcwd\\n'; "
+            "printf 'rules\\n'; "
+            "printf 'all_operations\\tsandbox-only\\n'; "
+            "printf 'existing_files\\tRead before Edit or overwrite with Write\\n'; "
+            "printf 'large_output\\twrite to work/ or output/, then inspect chunks\\n'; "
+            "printf 'limits\\n'; "
+            f"printf 'Read\\tdefault=%s_lines max_line=%s_chars action=use_offset_limit\\n' {quoted_read_limit} {quoted_max_line}; "
+            f"printf 'LS\\tdefault=%s_entries max=%s action=filter_or_descend\\n' {quoted_ls_default} {quoted_ls_max}; "
+            f"printf 'Bash\\tdefault_timeout=%ss max_timeout=%ss action=background_for_long_tasks\\n' {quoted_bash_default} {quoted_bash_max}; "
+            f"printf 'BashOutput\\tmax=%s_chars action=redirect_large_output_to_file\\n' {quoted_bash_output}; "
+            f"printf 'tool_output\\tmax=%s_chars action=write_large_results_to_files\\n' {quoted_tool_output}"
+        )
+        return _run_bash(provider, handle, command, timeout=5, max_output_chars=4000)
+
+    return StructuredTool.from_function(
+        func=SandboxInfo,
+        name="SandboxInfo",
+        description=SandboxInfo.__doc__ or "",
+        args_schema=SandboxInfoArgs,
+    )
+
+
+def _pwd_tool(provider: SandboxProvider, handle: SandboxHandle):
+    def PWD() -> str:
+        """Sandbox-only operation: print the current working directory inside the sandbox."""
+        return _run_bash(provider, handle, "pwd", timeout=5, max_output_chars=1000)
+
+    return StructuredTool.from_function(
+        func=PWD,
+        name="PWD",
+        description=PWD.__doc__ or "",
+        args_schema=PWDArgs,
+    )
+
+
 def _read_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set[str]):
     def Read(file_path: str, offset: int | None = None, limit: int | None = None) -> str:
-        """Read file contents from the sandbox filesystem with line numbers."""
+        """Sandbox-only operation: read file contents from the sandbox filesystem with line numbers."""
         if err := _abs_path_error(file_path):
             return err
         start = max(1, int(offset or 1))
@@ -247,7 +331,7 @@ def _read_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set
 
 def _write_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set[str]):
     def Write(file_path: str, content: str) -> str:
-        """Create or completely overwrite a file in the sandbox filesystem."""
+        """Sandbox-only operation: create or completely overwrite a file in the sandbox filesystem."""
         if err := _abs_path_error(file_path):
             return err
         if file_path not in read_files and _path_exists(provider, handle, file_path):
@@ -280,7 +364,7 @@ def _edit_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set
         new_string: str,
         replace_all: bool = False,
     ) -> str:
-        """Replace exact text in a sandbox file."""
+        """Sandbox-only operation: replace exact text in a sandbox file."""
         if err := _abs_path_error(file_path):
             return err
         if file_path not in read_files:
@@ -345,7 +429,7 @@ print(f"Replaced {count if replace_all else 1} occurrence(s) in {path}.")
 
 def _glob_tool(provider: SandboxProvider, handle: SandboxHandle):
     def Glob(pattern: str, path: str | None = None) -> str:
-        """Find files by glob pattern, sorted by modification time newest first."""
+        """Sandbox-only operation: find files by glob pattern in the sandbox, sorted by modification time newest first."""
         root = path or "."
         script = r"""
 import glob
@@ -379,6 +463,109 @@ print("\n".join(matches))
     )
 
 
+def _ls_tool(provider: SandboxProvider, handle: SandboxHandle):
+    def LS(path: str | None = None, show_hidden: bool = False, limit: int | None = None) -> str:
+        """Sandbox-only operation: list sandbox directory entries in a compact token-efficient format."""
+        capped_limit = max(1, min(1000, int(limit or 200)))
+        target = path or "."
+        script = r"""
+import json
+import os
+import stat
+import sys
+
+payload = json.loads(os.environ["MATTIN_LS_PAYLOAD"])
+target = payload["path"]
+show_hidden = bool(payload.get("show_hidden"))
+limit = int(payload.get("limit") or 200)
+
+def kind(mode):
+    if stat.S_ISDIR(mode):
+        return "d"
+    if stat.S_ISLNK(mode):
+        return "l"
+    if stat.S_ISREG(mode):
+        return "f"
+    return "o"
+
+def compact_size(size):
+    if size < 1024:
+        return str(size)
+    units = ("K", "M", "G", "T")
+    value = float(size)
+    for unit in units:
+        value /= 1024.0
+        if value < 1024:
+            return f"{value:.1f}{unit}".rstrip("0").rstrip(".")
+    return f"{value:.1f}P".rstrip("0").rstrip(".")
+
+try:
+    st = os.lstat(target)
+except FileNotFoundError:
+    print(f"[Error] Path not found: {target}")
+    sys.exit(0)
+
+if not stat.S_ISDIR(st.st_mode):
+    name = os.path.basename(target.rstrip(os.sep)) or target
+    suffix = "/" if stat.S_ISDIR(st.st_mode) else "@" if stat.S_ISLNK(st.st_mode) else ""
+    print(target)
+    print(f"{kind(st.st_mode)}\t{compact_size(st.st_size)}\t{name}{suffix}")
+    sys.exit(0)
+
+try:
+    entries = list(os.scandir(target))
+except PermissionError:
+    print(f"[Error] Permission denied: {target}")
+    sys.exit(0)
+
+if not show_hidden:
+    entries = [entry for entry in entries if not entry.name.startswith(".")]
+
+def sort_key(entry):
+    try:
+        entry_mode = entry.stat(follow_symlinks=False).st_mode
+        is_dir = stat.S_ISDIR(entry_mode)
+    except OSError:
+        is_dir = False
+    return (0 if is_dir else 1, entry.name.lower())
+
+entries.sort(key=sort_key)
+total = len(entries)
+shown = entries[:limit]
+
+print(os.path.abspath(target))
+for entry in shown:
+    try:
+        entry_stat = entry.stat(follow_symlinks=False)
+        entry_kind = kind(entry_stat.st_mode)
+        size = "-" if entry_kind == "d" else compact_size(entry_stat.st_size)
+        suffix = "/" if entry_kind == "d" else "@" if entry_kind == "l" else ""
+        print(f"{entry_kind}\t{size}\t{entry.name}{suffix}")
+    except OSError as exc:
+        print(f"?\t-\t{entry.name}\t{exc.__class__.__name__}")
+
+if total > limit:
+    print(f"... {total - limit} more")
+"""
+        payload = {
+            "path": target,
+            "show_hidden": show_hidden,
+            "limit": capped_limit,
+        }
+        command = (
+            f"export MATTIN_LS_PAYLOAD={shlex.quote(json.dumps(payload))}; "
+            + _python_payload(script)
+        )
+        return _run_bash(provider, handle, command, timeout=10, max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS)
+
+    return StructuredTool.from_function(
+        func=LS,
+        name="LS",
+        description=LS.__doc__ or "",
+        args_schema=LSArgs,
+    )
+
+
 def _grep_tool(provider: SandboxProvider, handle: SandboxHandle):
     def Grep(
         pattern: str,
@@ -394,7 +581,7 @@ def _grep_tool(provider: SandboxProvider, handle: SandboxHandle):
         multiline: bool = False,
         head_limit: int | None = None,
     ) -> str:
-        """Search file contents in the sandbox, preferring ripgrep when present."""
+        """Sandbox-only operation: search sandbox file contents, preferring ripgrep when present."""
         if output_mode not in {"content", "files_with_matches", "count"}:
             return "[Error] output_mode must be content, files_with_matches, or count."
         target = path or "."
@@ -519,101 +706,66 @@ for path in iter_files(target):
     )
 
 
-def _notebook_edit_tool(provider: SandboxProvider, handle: SandboxHandle):
-    def NotebookEdit(
-        notebook_path: str,
-        new_source: str,
-        cell_id: str | None = None,
-        cell_type: str | None = None,
-        edit_mode: str = "replace",
-    ) -> str:
-        """Edit, insert, or delete a Jupyter notebook cell by cell_id."""
-        if err := _abs_path_error(notebook_path):
-            return err
-        if edit_mode not in {"replace", "insert", "delete"}:
-            return "[Error] edit_mode must be replace, insert, or delete."
-        if edit_mode == "insert" and cell_type not in {"code", "markdown"}:
-            return "[Error] cell_type is required for insert and must be code or markdown."
-        payload = {
-            "notebook_path": notebook_path,
-            "new_source": new_source,
-            "cell_id": cell_id,
-            "cell_type": cell_type,
-            "edit_mode": edit_mode,
-        }
+def _stat_tool(provider: SandboxProvider, handle: SandboxHandle):
+    def Stat(path: str) -> str:
+        """Sandbox-only operation: return compact metadata for a sandbox file or directory."""
         script = r"""
 import json
 import os
-import uuid
+import stat
+import sys
+from datetime import datetime, timezone
 
-payload = json.loads(os.environ["MATTIN_NOTEBOOK_PAYLOAD"])
-path = payload["notebook_path"]
-with open(path, "r", encoding="utf-8") as fh:
-    nb = json.load(fh)
-cells = nb.setdefault("cells", [])
-cell_id = payload.get("cell_id")
-mode = payload.get("edit_mode") or "replace"
-idx = None
-if cell_id:
-    for i, cell in enumerate(cells):
-        if cell.get("id") == cell_id:
-            idx = i
-            break
-elif cells:
-    idx = 0
+payload = json.loads(os.environ["MATTIN_STAT_PAYLOAD"])
+path = payload["path"]
 
-if mode in {"replace", "delete"} and idx is None:
-    print("[Error] Cell not found.")
-    raise SystemExit(0)
+try:
+    st = os.lstat(path)
+except FileNotFoundError:
+    print(f"[Error] Path not found: {path}")
+    sys.exit(0)
 
-def source_lines(text):
-    return text.splitlines(keepends=True)
-
-if mode == "delete":
-    removed = cells.pop(idx)
-    print(f"Deleted cell {removed.get('id', idx)} from {path}.")
-elif mode == "insert":
-    new_cell = {
-        "cell_type": payload["cell_type"],
-        "id": uuid.uuid4().hex[:8],
-        "metadata": {},
-        "source": source_lines(payload.get("new_source") or ""),
-    }
-    if payload["cell_type"] == "code":
-        new_cell.update({"execution_count": None, "outputs": []})
-    insert_at = 0 if idx is None else idx + 1
-    cells.insert(insert_at, new_cell)
-    print(f"Inserted {payload['cell_type']} cell {new_cell['id']} at index {insert_at}.")
+mode = st.st_mode
+if stat.S_ISDIR(mode):
+    kind = "directory"
+elif stat.S_ISLNK(mode):
+    kind = "symlink"
+elif stat.S_ISREG(mode):
+    kind = "file"
 else:
-    cell = cells[idx]
-    if payload.get("cell_type"):
-        cell["cell_type"] = payload["cell_type"]
-        if payload["cell_type"] == "code":
-            cell.setdefault("outputs", [])
-            cell.setdefault("execution_count", None)
-        else:
-            cell.pop("outputs", None)
-            cell.pop("execution_count", None)
-    cell["source"] = source_lines(payload.get("new_source") or "")
-    print(f"Replaced cell {cell.get('id', idx)} in {path}.")
+    kind = "other"
 
-tmp = path + ".mattin-notebook-tmp"
-with open(tmp, "w", encoding="utf-8") as fh:
-    json.dump(nb, fh, ensure_ascii=False, indent=1)
-    fh.write("\n")
-os.replace(tmp, path)
+print(f"path\t{os.path.abspath(path)}")
+print(f"type\t{kind}")
+print(f"size\t{st.st_size}")
+print(f"mode\t{oct(stat.S_IMODE(mode))[2:]}")
+print(f"mtime\t{datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat().replace('+00:00', 'Z')}")
+
+if stat.S_ISLNK(mode):
+    try:
+        print(f"target\t{os.readlink(path)}")
+    except OSError:
+        pass
+elif stat.S_ISDIR(mode):
+    try:
+        total = len(os.listdir(path))
+        visible = len([name for name in os.listdir(path) if not name.startswith(".")])
+        print(f"entries\t{visible}/{total}")
+    except OSError:
+        pass
 """
+        payload = {"path": path}
         command = (
-            f"export MATTIN_NOTEBOOK_PAYLOAD={shlex.quote(json.dumps(payload))}; "
+            f"export MATTIN_STAT_PAYLOAD={shlex.quote(json.dumps(payload))}; "
             + _python_payload(script)
         )
-        return _run_bash(provider, handle, command)
+        return _run_bash(provider, handle, command, timeout=10, max_output_chars=4000)
 
     return StructuredTool.from_function(
-        func=NotebookEdit,
-        name="NotebookEdit",
-        description=NotebookEdit.__doc__ or "",
-        args_schema=NotebookEditArgs,
+        func=Stat,
+        name="Stat",
+        description=Stat.__doc__ or "",
+        args_schema=StatArgs,
     )
 
 
@@ -624,7 +776,7 @@ def _bash_tool(provider: SandboxProvider, handle: SandboxHandle):
         timeout: int | None = None,
         run_in_background: bool = False,
     ) -> str:
-        """Execute a bash command in the sandbox."""
+        """Sandbox-only operation: execute a bash command inside the sandbox."""
         timeout_s = _timeout_ms_to_seconds(timeout)
         if not run_in_background:
             return _run_bash(
@@ -640,12 +792,18 @@ def _bash_tool(provider: SandboxProvider, handle: SandboxHandle):
         out_file = f"{base_dir}/output.log"
         pid_file = f"{base_dir}/pid"
         status_file = f"{base_dir}/status"
+        status_command = command + '; printf %s "$?" > ' + shlex.quote(status_file)
+        quoted_status_command = shlex.quote(status_command)
+        quoted_base_dir = shlex.quote(base_dir)
+        quoted_out_file = shlex.quote(out_file)
+        quoted_pid_file = shlex.quote(pid_file)
+        quoted_bash_id = shlex.quote(bash_id)
         wrapped = (
-            f"mkdir -p {shlex.quote(base_dir)}; "
-            f"nohup bash -lc {shlex.quote(command + '; printf %s \"$?\" > ' + shlex.quote(status_file))} "
-            f"> {shlex.quote(out_file)} 2>&1 < /dev/null & "
-            f"printf '%s' \"$!\" > {shlex.quote(pid_file)}; "
-            f"printf 'Started background shell %s (pid %s)\\n' {shlex.quote(bash_id)} \"$(cat {shlex.quote(pid_file)})\""
+            f"mkdir -p {quoted_base_dir}; "
+            f"nohup bash -lc {quoted_status_command} "
+            f"> {quoted_out_file} 2>&1 < /dev/null & "
+            f"printf '%s' \"$!\" > {quoted_pid_file}; "
+            f"printf 'Started background shell %s (pid %s)\\n' {quoted_bash_id} \"$(cat {quoted_pid_file})\""
         )
         result = _run_bash(provider, handle, wrapped, timeout=5, max_output_chars=2000)
         handle.metadata.setdefault(_BG_SHELLS_KEY, {})[bash_id] = {
@@ -673,7 +831,7 @@ def _timeout_ms_to_seconds(timeout_ms: int | None) -> int:
 
 def _bash_output_tool(provider: SandboxProvider, handle: SandboxHandle):
     def BashOutput(bash_id: str, filter: str | None = None) -> str:
-        """Retrieve new output from a background bash shell."""
+        """Sandbox-only operation: retrieve new output from a background bash shell running in the sandbox."""
         shells = handle.metadata.get(_BG_SHELLS_KEY, {})
         info = shells.get(bash_id) if isinstance(shells, dict) else None
         if not info:
@@ -719,7 +877,7 @@ def _bash_output_tool(provider: SandboxProvider, handle: SandboxHandle):
 
 def _kill_shell_tool(provider: SandboxProvider, handle: SandboxHandle):
     def KillShell(shell_id: str) -> str:
-        """Kill a running background bash shell."""
+        """Sandbox-only operation: kill a running background bash shell in the sandbox."""
         shells = handle.metadata.get(_BG_SHELLS_KEY, {})
         info = shells.get(shell_id) if isinstance(shells, dict) else None
         if not info:
@@ -752,12 +910,15 @@ def create_sandbox_builtin_tools(
         return []
     read_files: set[str] = set()
     return [
+        _sandbox_info_tool(provider, handle),
+        _pwd_tool(provider, handle),
         _read_tool(provider, handle, read_files),
         _write_tool(provider, handle, read_files),
         _edit_tool(provider, handle, read_files),
+        _ls_tool(provider, handle),
         _glob_tool(provider, handle),
         _grep_tool(provider, handle),
-        _notebook_edit_tool(provider, handle),
+        _stat_tool(provider, handle),
         _bash_tool(provider, handle),
         _bash_output_tool(provider, handle),
         _kill_shell_tool(provider, handle),

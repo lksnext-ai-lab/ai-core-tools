@@ -19,10 +19,12 @@ import {
   ChevronRight,
   X,
   Sparkles,
+  Package,
   Infinity as InfinityIcon,
   type LucideIcon,
 } from 'lucide-react';
 import Speedometer from '../components/ui/Speedometer';
+import ClaudePluginImportModal from '../components/import/ClaudePluginImportModal';
 
 interface App {
   app_id: number;
@@ -32,6 +34,7 @@ interface App {
   owner_name?: string;
   owner_email?: string;
   role: string;
+  user_role?: string;
   langsmith_configured: boolean;
   agent_rate_limit: number;
   agent_count: number;
@@ -71,6 +74,7 @@ interface FeatureCard {
 }
 
 const EDITOR_ROLES = new Set(['owner', 'administrator', 'editor']);
+const ADMIN_ROLES = new Set(['owner', 'administrator']);
 
 function AppDashboard() {
   const { appId } = useParams();
@@ -84,6 +88,7 @@ function AppDashboard() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(true);
+  const [showPluginImportModal, setShowPluginImportModal] = useState(false);
 
   const loadAppData = useCallback(async () => {
     if (!appId) return;
@@ -303,7 +308,9 @@ function AppDashboard() {
   const maxRequests = topAgents.length > 0 ? (topAgents[0].request_count ?? 0) : 0;
   const hasActivity = maxRequests > 0;
 
-  const canEdit = EDITOR_ROLES.has(currentApp.role);
+  const currentRole = currentApp.user_role ?? currentApp.role;
+  const canEdit = EDITOR_ROLES.has(currentRole);
+  const canImportPlugin = ADMIN_ROLES.has(currentRole);
 
   // Extracted render helpers to avoid nested ternaries (SonarLint S3358)
   let speedometerContent: React.ReactNode;
@@ -448,6 +455,15 @@ function AppDashboard() {
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {canImportPlugin && (
+              <button
+                onClick={() => setShowPluginImportModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-700 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors font-medium"
+              >
+                <Package className="w-3.5 h-3.5" />
+                Import Plugin
+              </button>
+            )}
             {canEdit && (
               <button
                 onClick={() => navigate(`/apps/${appId}/agents`)}
@@ -605,6 +621,19 @@ function AppDashboard() {
             })}
           </div>
         </div>
+      )}
+
+      {appId && (
+        <ClaudePluginImportModal
+          appId={Number.parseInt(appId)}
+          appName={currentApp.name}
+          isOpen={showPluginImportModal}
+          onClose={() => setShowPluginImportModal(false)}
+          onImportComplete={() => {
+            void loadAppData();
+            void loadAgents();
+          }}
+        />
       )}
     </div>
   );

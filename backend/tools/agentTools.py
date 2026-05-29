@@ -191,15 +191,18 @@ def _build_available_tool_metadata(
 
     if "bash" in code_languages:
         for name, description in [
-            ("Read", "Read an absolute-path file in the sandbox with line numbers."),
-            ("Write", "Create or overwrite an absolute-path file in the sandbox."),
-            ("Edit", "Replace exact text in an absolute-path sandbox file."),
-            ("Glob", "Find sandbox files by glob pattern."),
-            ("Grep", "Search sandbox file contents with regex."),
-            ("NotebookEdit", "Edit Jupyter notebook cells in the sandbox."),
-            ("Bash", "Run Linux shell commands in the sandbox."),
-            ("BashOutput", "Read output from a background Bash command."),
-            ("KillShell", "Terminate a background Bash command."),
+            ("SandboxInfo", "Sandbox-only: summarize workspace rules, tools, and actionable limits."),
+            ("PWD", "Sandbox-only: print the current sandbox working directory."),
+            ("Read", "Sandbox-only: read an absolute-path file with line numbers."),
+            ("Write", "Sandbox-only: create or overwrite an absolute-path file."),
+            ("Edit", "Sandbox-only: replace exact text in an absolute-path file."),
+            ("LS", "Sandbox-only: list directory entries in compact form."),
+            ("Glob", "Sandbox-only: find files by glob pattern."),
+            ("Grep", "Sandbox-only: search file contents with regex."),
+            ("Stat", "Sandbox-only: inspect compact file or directory metadata."),
+            ("Bash", "Sandbox-only: run Linux shell commands."),
+            ("BashOutput", "Sandbox-only: read output from a background Bash command."),
+            ("KillShell", "Sandbox-only: terminate a background Bash command."),
         ]:
             metadata.append({
                 "name": name,
@@ -528,11 +531,11 @@ async def create_agent(
             + f"You have access to the following code execution tools: {_tool_names}.\n"
             + "Each tool accepts source code in the corresponding language and returns stdout + stderr.\n"
             + (
-                "When bash is available, you also have Claude-style sandbox builtin tools: "
-                "`Read`, `Write`, `Edit`, `Glob`, `Grep`, `NotebookEdit`, `Bash`, "
-                "`BashOutput`, and `KillShell`. These operate inside the Linux sandbox. "
-                "Use absolute sandbox paths with file editing tools; run `Bash` with `pwd` "
-                "when you need the sandbox workspace root.\n"
+                "When bash is available, you also have sandbox builtin tools: "
+                "`SandboxInfo`, `PWD`, `Read`, `Write`, `Edit`, `LS`, `Glob`, `Grep`, `Stat`, `Bash`, "
+                "`BashOutput`, and `KillShell`. These operate exclusively inside the Linux sandbox. "
+                "Use `SandboxInfo` for workspace rules and limits; use `PWD` when you need "
+                "the sandbox workspace root. Use absolute sandbox paths with file editing tools.\n"
                 if "bash" in _ci_languages else ""
             )
             + "Read uploaded files from input/<filename>.\n"
