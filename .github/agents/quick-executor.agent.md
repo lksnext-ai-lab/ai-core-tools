@@ -83,13 +83,24 @@ Based on what you read in the codebase, pick the sequence. Common patterns:
 
 | Task type | Subagent sequence |
 |---|---|
-| Backend bug fix | `@backend-expert` → `@test-expert` (regression test) |
-| Frontend bug fix | `@react-expert` |
+| **Bug fix (reproduce-first)** | `@test-expert` (write failing regression test) → `@backend-expert` / `@react-expert` (fix until green) → `@test-expert` re-run to confirm |
 | Backend feature touching a model | `@backend-expert` → `@alembic-expert` (migration) → `@test-expert` |
 | Documentation update | `@docs-manager` |
 | Full-stack small change | `@backend-expert` → `@react-expert` → `@test-expert` |
 
 State the sequence to the user before invoking the first subagent so they know what's about to happen.
+
+### Reproduce-first for bugs (mandatory when the input is a Bug Analysis)
+
+When the task is a **bug fix** — especially when a `Bug Analysis` block from `@bug-analyzer` is present in the conversation — execute **reproduce-first**, do NOT jump straight to the fix:
+
+1. **Invoke `@test-expert` FIRST** to write a regression test that reproduces the bug. Pass it the `Regression test` line and `Affected files` from the Bug Analysis. The test **must fail on the current code** — that proves it actually reproduces the bug.
+2. **Run the test** and confirm it fails for the expected reason (not a setup error). If it passes, the repro is wrong — send it back to `@test-expert` before continuing.
+3. **Invoke `@backend-expert` / `@react-expert`** (per the Bug Analysis `Scope` / `Affected files`) to apply the **minimal fix that addresses the root cause**, not the symptom.
+4. **Re-run the test** to confirm it now passes (green), and run the surrounding suite to check for regressions.
+5. Proceed to the commit / push / PR confirmation gates.
+
+This ordering guarantees the bug is actually covered and prevents "fixes" that merely mask the symptom. For trivial, non-bug improvements you may use the plain fix-then-verify order from the table above.
 
 ### Step 2 — Invoke each subagent (auto, sequential)
 
@@ -219,6 +230,11 @@ If the task description suggests this is bigger than "ad-hoc small":
 ### `@issue-reader`
 - **Receives handoff FROM** `@issue-reader` when the user clicks "Execute autonomously with @quick-executor"
 - The Issue Analysis block at the top of the conversation is your source for task scope, FR/AC, and the Suggested branch name
+
+### `@bug-analyzer`
+- **Receives handoff FROM** `@bug-analyzer` when the user clicks "Fix now with @quick-executor"
+- The **Bug Analysis** block at the top of the conversation is your source for the root-cause hypothesis, affected files, the regression test to write, and the `fix/` Suggested branch
+- When a Bug Analysis is present you MUST use the **reproduce-first** ordering (failing test before fix) — see "Reproduce-first for bugs" above. The handoff prompt restates this; honor it.
 
 ### `@feature-planner` + `@plan-executor`
 - **Redirects to** when the task is too big for ad-hoc execution (see "When to Redirect" above)

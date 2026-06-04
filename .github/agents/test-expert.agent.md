@@ -134,6 +134,17 @@ Two-step flow: `resolve-library-id` → `query-docs`. Do NOT query for vanilla `
 - Return the ORM object so tests can navigate relationships
 - Keep the dependency chain shallow — fixtures depending on > 3 others usually need refactoring
 
+### Reproduce-first bug fixing
+
+When the task is fixing a bug (e.g. dispatched by `@quick-executor` from a `@bug-analyzer` Bug Analysis), write the test **before** the fix exists — this is the single highest-value testing discipline:
+
+1. **Write a test that reproduces the bug** — encode the exact failing scenario (the inputs, state, and call that trigger it). Name it for the symptom, e.g. `test_upload_rejects_pdf_over_size_limit`.
+2. **Confirm it FAILS on the current code**, and fails for the *right reason* — the actual bug, not a setup/import error. A test that passes before the fix does not reproduce the bug; rewrite it.
+3. **Hand back** so the implementer applies the fix (you don't write production code).
+4. **Confirm it PASSES after the fix**, and run the surrounding suite to catch regressions.
+
+The test must remain meaningful afterwards: it should fail again if someone reintroduces the bug. Prefer asserting on the observable behavior (status code, returned value, raised exception, persisted state) rather than on implementation details, so the test survives refactors of the fix.
+
 ## Generic Test Templates
 
 ### Unit test (service with mocked repo)

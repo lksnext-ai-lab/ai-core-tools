@@ -2,7 +2,7 @@
 name: feature-planner
 description: Structured feature planning and specification agent. Transforms ideas (or an Issue Analysis from @issue-reader) into implementation-ready plans with persistent tracking in /plans. Never modifies application code.
 model: GPT-5 mini
-tools: ['read', 'edit', 'search']
+tools: [read, edit, search, 'context7/*', 'docs-langchain/*']
 handoffs:
   - label: "Execute plan with @plan-executor"
     agent: plan-executor
@@ -292,12 +292,11 @@ What is explicitly out of scope for this feature?
 
 ### When Creating a New Plan
 
-1. **Detect prior Issue Analysis** — If the conversation contains an "Issue Analysis" block from `@issue-reader`, **reuse it**:
-   - Use the block's `Problem statement` for the spec's `Context` and `Problem Statement`
-   - Use its `Functional requirements` and `Acceptance criteria` as the seed for the spec's corresponding sections (still refine with the user)
-   - Set `issue_link` in both the `spec.md` header and the `index.yaml` entry to the issue URL from the block's `Source`
-   - Skip step 2's clarification probes for anything the Issue Analysis already answers
-2. **Clarify**: When no Issue Analysis is present, ask the user targeted questions to understand the feature idea. Do not create a plan from vague one-liners. Probe for: who benefits, what problem it solves, what the expected behavior is.
+1. **Detect a prior analysis block** — If the conversation contains an **"Issue Analysis"** block (from `@issue-reader`) or a **"Bug Analysis"** block (from `@bug-analyzer`), **reuse it**:
+   - **Issue Analysis** → use its `Problem statement` for the spec's `Context`/`Problem Statement`, and its `Functional requirements` + `Acceptance criteria` as the seed for those sections (still refine with the user). Set `issue_link` from the block's `Source`.
+   - **Bug Analysis** → use its `Root-cause hypothesis` + `Proposed fix` as the `Context`/`Problem Statement`/`Functional Requirements`, list the `Affected files` under Implementation Notes, and turn its `Regression test` line into an explicit **acceptance criterion** (`AC: the regression test reproducing <bug> fails before the fix and passes after`). This path is for bugs whose fix is large/architectural enough to deserve a tracked spec.
+   - Skip step 2's clarification probes for anything the analysis already answers.
+2. **Clarify**: When no analysis block is present, ask the user targeted questions to understand the feature idea. Do not create a plan from vague one-liners. Probe for: who benefits, what problem it solves, what the expected behavior is.
 3. **Name**: Derive a `plan-slug` in kebab-case (2-5 words). Confirm with the user.
 4. **Scaffold**: Create `/plans/<plan-slug>/spec.md` from the template with status `draft`. Populate Context, Problem Statement, and Goals from the conversation (or from the Issue Analysis if present).
 5. **Register**: Add an entry to `/plans/index.yaml` (create the file if it doesn't exist). Include `issue_link` if applicable.
@@ -413,6 +412,10 @@ Extensions allow you to add related features to a completed plan while maintaini
 ### Issue Reader (`@issue-reader`)
 - **Receives handoff FROM** `@issue-reader` when the user starts from a GitHub issue and clicks "Plan formally with @feature-planner"
 - The Issue Analysis block in the conversation history is your canonical source for `Context`, `Problem Statement`, `Functional Requirements`, `Acceptance Criteria` and the `issue_link` metadata field
+
+### Bug Analyzer (`@bug-analyzer`)
+- **Receives handoff FROM** `@bug-analyzer` when a chat-reported bug's fix is large/architectural and the user clicks "Plan formally with @feature-planner"
+- The **Bug Analysis** block is your source: root-cause hypothesis + proposed fix → `Context`/`Problem Statement`/`Functional Requirements`; affected files → Implementation Notes; the regression test → an explicit acceptance criterion (the test must fail before the fix and pass after)
 
 ### Test Expert (`@test-expert`)
 - **Delegate to**: `@test-expert` when the user requests test specifications derived from acceptance criteria

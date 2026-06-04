@@ -6,7 +6,7 @@ This directory contains the configuration for GitHub-native tooling and a struct
 
 ```
 .github/
-├── agents/                      # Specialized Copilot agents (15 — see Agent map below)
+├── agents/                      # Specialized Copilot agents (16 — see Agent map below)
 ├── instructions/                # Path-scoped instruction files (alembic, docs, git-github, handoff, plan-extensions)
 ├── prompts/                     # Slash-command prompt files (start-from-issue, dispatch-mission)
 ├── skills/                      # Shared procedural definitions
@@ -30,6 +30,10 @@ Invoke any agent with `@<agent-name>` in GitHub Copilot Chat. Each agent has a t
 Issue-Driven Entry (start here when work begins from a GitHub issue):
   @issue-reader ──► @feature-planner ──► @plan-executor ──► implementer subagents  (formal, with spec)
                 └─► @quick-executor ──► implementer subagents                       (ad-hoc, no spec)
+
+Bug-Driven Entry (start here when a bug is reported in chat, no GitHub issue):
+  @bug-analyzer ──► @quick-executor ──► implementer subagents   (small fix, reproduce-first)
+                └─► @feature-planner ──► @plan-executor ──► ... (large/architectural fix, with spec)
 
 Ad-hoc Execution (small tasks):
   @quick-executor ──► @backend-expert   ┐
@@ -63,6 +67,12 @@ AI Environment:
 >
 > You can also invoke it via the slash command `/start-from-issue 123`.
 
+> **`@bug-analyzer` is the canonical entry point** when a bug is reported directly in the chat (no GitHub issue). It investigates the codebase to locate the root cause, emits a **Bug Analysis** block with `file:line` evidence + a regression test, and offers two handoff buttons:
+> - **"Fix now with @quick-executor"** — small/localized fixes (most bugs), executed **reproduce-first** (failing test before the fix)
+> - **"Plan formally with @feature-planner"** — large/architectural fixes that deserve a tracked spec
+>
+> Invoke directly (`@bug-analyzer <description>`) or via the slash command `/report-bug`. It is read-only and runs on Claude Sonnet 4.6 because root-cause diagnosis is the highest-risk step — a wrong hypothesis wastes the whole downstream fix.
+
 > **`@quick-executor` vs `@plan-executor`**: Both auto-invoke implementer subagents and run git directly with commit/push/PR confirmation gates. The difference is the input:
 > - **`@quick-executor`** takes a task description (from an Issue Analysis or directly from you) and decides the subagent sequence on the fly. No spec file, no `/plans/` artifacts. Use for **ad-hoc tasks ≲ 5 files**.
 > - **`@plan-executor`** reads a structured spec at `/plans/<slug>/spec.md` (produced by `@feature-planner`) and executes its FR/AC step by step with a tracked `status.yaml`. Use for **features that benefit from a tracked specification**.
@@ -71,7 +81,7 @@ AI Environment:
 
 > **Why `@git-github` is not used as a subagent**: it requires terminal execution (`tools: [execute]`), which is unavailable in subagent context. Agents that need git operations either run commands directly via the `git-github.skill.md` skill (`@plan-executor`, `@release-manager`) or hand off to the user with a change summary for them to invoke `@git-github` directly (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`, `@docs-manager`).
 
-> **Direct invocation by the user** (never as subagents): `@git-github`, `@issue-reader`.
+> **Direct invocation by the user** (never as subagents): `@git-github`, `@issue-reader`, `@bug-analyzer`.
 
 ---
 
@@ -102,6 +112,36 @@ AI Environment:
 - ❌ Invent issue content if the MCP server is unavailable (asks the user to paste instead)
 
 **Requires**: the `@github` MCP server to be active in VS Code (`Manage MCP Servers`).
+
+---
+
+### `@bug-analyzer`
+
+**Purpose**: Entry point for bugs reported directly in the chat (no GitHub issue). Investigates the codebase to locate the root cause, distills it into a structured **Bug Analysis** block, and offers two handoff buttons. The bug-driven sibling of `@issue-reader`, with an added root-cause investigation phase.
+
+**Model**: `Claude Sonnet 4.6` — diagnosis is the highest-leverage, highest-risk step (a wrong root cause cascades into a wrong fix). Under token-based billing this is one bounded call, cheap versus the cost of a misdiagnosis.
+
+**Key capabilities**:
+- Takes free-text bug reports (`@bug-analyzer the playground freezes uploading a PDF > 10MB`)
+- Asks at most ONE clarifying question if reproduction / expected-vs-actual is missing
+- Actively traces the code path (`read`/`search`) and grounds every root-cause claim in real `file:line` evidence
+- Verifies suspected library-API misuse against the `context7` / `docs-langchain` MCP before asserting it
+- Never fabricates a cause — marks `Confidence: low` and proposes how to instrument when it can't locate it
+- Always specifies a regression test that reproduces the bug
+- Read-only — never edits code, commits, or files a GitHub issue
+
+**Invocation**:
+- `@bug-analyzer <description>` — free text
+- `/report-bug <description>` — slash command equivalent
+
+**Hands off to** (user clicks one):
+- `@quick-executor` — small/localized fix, executed reproduce-first (failing test → fix → green), seeded from the Bug Analysis (`fix/` branch + affected files)
+- `@feature-planner` — large/architectural fix; the Bug Analysis becomes the spec's Context/Problem/FR and the regression test an acceptance criterion
+
+**Never does**:
+- ❌ Write code, tests, commits, or migrations (read-only — diagnosis only)
+- ❌ Fabricate a root cause it cannot ground in `file:line`
+- ❌ Create plan files or orchestrate execution
 
 ---
 
@@ -538,7 +578,7 @@ Scoped `.instructions.md` files automatically applied by Copilot when matching f
 
 > **Hybrid agent ↔ instruction pattern**: the 4 domain-expert agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`) are intentionally **generic role-based** — they describe the role (Python backend engineer, React engineer, …) and best practices that apply to any project. The **project-specific knowledge** lives in the matching `*-conventions.instructions.md` files above, and Copilot auto-loads them when the agent is invoked on the relevant files. This keeps the agents reusable across projects while the instructions stay the single source of truth for Mattin AI's conventions.
 >
-> Workflow-coupled agents (`@quick-executor`, `@feature-planner`, `@plan-executor`, `@issue-reader`, `@release-manager`, `@oss-manager`, `@docs-manager`, `@version-bumper`, `@website-maintainer`, `@git-github`, `@ai-dev-architect`) stay project-coupled — their entire purpose IS this project's workflow.
+> Workflow-coupled agents (`@bug-analyzer`, `@quick-executor`, `@feature-planner`, `@plan-executor`, `@issue-reader`, `@release-manager`, `@oss-manager`, `@docs-manager`, `@version-bumper`, `@website-maintainer`, `@git-github`, `@ai-dev-architect`) stay project-coupled — their entire purpose IS this project's workflow.
 
 ---
 

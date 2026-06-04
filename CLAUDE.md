@@ -8,6 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech Stack**: Python 3.11+, FastAPI, SQLAlchemy, Alembic, LangChain/LangGraph, PostgreSQL + pgvector, React 18, TypeScript, Vite, Tailwind CSS.
 
+## Claude Code Agent System (`.claude/`)
+
+This repo ships a native **Claude Code** multi-agent system under [`.claude/`](.claude/README.md) — separate from and parallel to the `.github/` GitHub Copilot ecosystem (the two never modify each other). It provides spec-driven development, issue resolution, full-stack implementation experts, and a **self-correcting review board** that audits every change before it is committed.
+
+Because Claude Code subagents cannot spawn other subagents, the **main conversation orchestrates**: a slash-command spawns specialist subagents, runs auditors in parallel on the diff, loops expert ⇄ auditors until the change converges, then commits behind confirmation gates.
+
+**Entry commands:** `/spec` · `/plan` · `/implement` · `/solve-issue` · `/fix` · `/review` · `/production-audit` · `/ship` · `/new-agent`.
+**21 agents** (research · discovery/spec/plan · 7 implementation experts · 8-auditor review board incl. a `reliability-auditor` for concurrency / fault tolerance / isolation · system maintenance), **4 shared skills** (incl. a `production-standards` best-practice rubric), and **PowerShell hooks** (secret guards + frontend eslint + session context).
+
+Full roster, delegation graph, and conventions: **[`.claude/README.md`](.claude/README.md)**. Specs live (untracked) under `.claude/specs/`.
+
 ## Development Commands
 
 ### Backend
