@@ -108,15 +108,49 @@ docker compose up -d
 
 ## Primer login (modo FAKE)
 
-En `AICT_LOGIN=FAKE` el usuario debe existir previamente en la tabla `"User"`. Tras el primer `up`:
+En `AICT_LOGIN=FAKE` el usuario debe existir previamente en la tabla `"User"`.
+La forma soportada de crearlos es el script de seeding, que se ejecuta **dentro
+del contenedor backend** y reutiliza su configuración de base de datos (no
+necesitas Python ni acceso directo a Postgres en el host). Es idempotente: los
+usuarios que ya existan se respetan.
+
+### Opción recomendada: script de seeding
+
+Tras el primer `docker compose up -d`:
 
 ```bash
-docker exec -it mattin-postgres psql -U mattin -d mattin_ai -c \
-  "INSERT INTO \"User\" (email, name, create_date, is_active, auth_method, email_verified)
-   VALUES ('tu@email.com', 'Tu Nombre', NOW(), true, 'dev', true);"
+# Usuarios por defecto, o los de AICT_DEV_SEED_USERS si lo definiste en .env
+docker compose exec backend python -m utils.seed_dev_users --yes
+
+# Usuarios concretos (CSV "email:Nombre", el nombre es opcional)
+docker compose exec backend python -m utils.seed_dev_users --yes \
+  --users "tu@email.com:Tu Nombre,otro@cliente.com:Otro"
+
+# Ver qué usuarios se crearían sin escribir nada
+docker compose exec backend python -m utils.seed_dev_users --list
 ```
 
-Para insertar varios de golpe:
+Los wrappers comprueban que el stack esté arrancado y reenvían los argumentos:
+
+```bash
+# Linux / macOS / servidor
+./seed-users.sh --users "tu@email.com:Tu Nombre"
+
+# Windows (PowerShell)
+.\seed-users.ps1 --users "tu@email.com:Tu Nombre"
+```
+
+> El script solo siembra si `AICT_LOGIN` es `FAKE` o `LOCAL` (evita crear
+> usuarios sin contraseña en un despliegue OIDC). Para forzarlo deliberadamente,
+> añade `--force`.
+
+Para sembrar los usuarios de forma declarativa al desplegar, define
+`AICT_DEV_SEED_USERS` en el `.env` (ver `.env.example`) y lanza el script sin
+`--users`.
+
+### Alternativa: SQL directo
+
+Si prefieres no usar el script, puedes insertar directamente vía `psql`:
 
 ```bash
 docker exec -i mattin-postgres psql -U mattin -d mattin_ai <<EOF

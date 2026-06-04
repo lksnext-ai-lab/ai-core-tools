@@ -198,6 +198,7 @@ For domain-specific tasks, invoke these specialized agents:
 | Agent | Invoke With | Use For |
 |-------|-------------|---------|
 | Issue Reader | `@issue-reader` (or `/start-from-issue`) | **Entry point for issue-driven work**. Reads a GitHub issue via the `@github` MCP server, emits an Issue Analysis block, and offers handoff to `@feature-planner` (formal spec) or `@quick-executor` (autonomous ad-hoc) |
+| Bug Analyzer | `@bug-analyzer` (or `/report-bug`) | **Entry point for chat-reported bugs** (no GitHub issue needed). Investigates the codebase to locate the root cause, emits a Bug Analysis block with `file:line` evidence + a regression test, and offers handoff to `@quick-executor` (small fix, reproduce-first) or `@feature-planner` (large/architectural). Read-only. |
 | Backend Expert | `@backend-expert` | Python/FastAPI development, services, repositories |
 | React Expert | `@react-expert` | React/TypeScript frontend, components, hooks |
 | Alembic Expert | `@alembic-expert` | Database migrations, schema changes |
