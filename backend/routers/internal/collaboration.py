@@ -106,7 +106,8 @@ async def list_collaborators(
                 status=collab.status.value,
                 invited_at=collab.invited_at,
                 accepted_at=collab.accepted_at,
-                invited_by_name=collab.inviter.name if collab.inviter else "Unknown"
+                invited_by_name=collab.inviter.name if collab.inviter else "Unknown",
+                platform_role=collab.user.platform_role if collab.user else 'editor',
             ))
         
         return result
@@ -146,6 +147,11 @@ async def invite_collaborator(
                 detail="Only app owners can invite collaborators"
             )
         
+        # Platform-role constraint: viewers can only be assigned viewer app-role
+        target_user = UserService.get_user_by_email(db, invitation_data.email)
+        if target_user and target_user.platform_role == 'viewer' and invitation_data.role != 'viewer':
+            raise ValueError("Users with viewer platform role can only be invited as app viewers")
+
         collaboration = collaboration_service.invite_user_to_app(
             app_id=app_id,
             user_email=invitation_data.email,
@@ -195,6 +201,11 @@ async def update_collaborator_role(
     try:
         _, collaboration_service = get_services(db)
         
+        # Platform-role constraint: viewers can only hold viewer app-role
+        target_user = UserService.get_user_by_id(db, user_id)
+        if target_user and target_user.platform_role == 'viewer' and role_data.role != 'viewer':
+            raise ValueError("Users with viewer platform role can only be assigned the viewer app role")
+
         success = collaboration_service.update_collaborator_role(
             app_id=app_id,
             user_id=user_id,

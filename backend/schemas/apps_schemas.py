@@ -142,7 +142,8 @@ class CollaboratorListItemSchema(BaseModel):
     invited_at: Optional[datetime] = None
     accepted_at: Optional[datetime] = None
     invited_by_name: Optional[str] = None
-    
+    platform_role: str = 'editor'
+
     model_config = ConfigDict(from_attributes=True)
 
 

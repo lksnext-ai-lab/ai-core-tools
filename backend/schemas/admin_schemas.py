@@ -18,6 +18,11 @@ class UserDetailResponse(BaseModel):
     owned_apps_count: int
     api_keys_count: int
     is_active: bool
+    platform_role: str = 'editor'
+
+
+class SetPlatformRoleRequest(BaseModel):
+    role: str
 
 
 class SystemStatsResponse(BaseModel):

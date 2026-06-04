@@ -856,6 +856,11 @@ class ApiService {
     return response.json();
   }
 
+  // ==================== USER SEARCH ====================
+  async searchPlatformUsers(q: string): Promise<Array<{ user_id: number; name: string; email: string; platform_role: string }>> {
+    return this.request(`/internal/users/search?q=${encodeURIComponent(q)}`);
+  }
+
   // ==================== COLLABORATION ====================
   async getCollaborators(appId: number) {
     return this.request(`/internal/collaboration/?app_id=${appId}`);

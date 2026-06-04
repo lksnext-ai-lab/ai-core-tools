@@ -24,6 +24,7 @@ interface Collaborator {
   invited_at: string;
   accepted_at?: string;
   invited_by_name?: string;
+  platform_role?: string;
 }
 
 interface AppOwner {
@@ -459,10 +460,12 @@ function CollaborationPage() {
                         <select
                           value={member.role}
                           onChange={(e) => void handleUpdateRole(member.user_id, e.target.value)}
-                          className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          disabled={member.platform_role === 'viewer'}
+                          title={member.platform_role === 'viewer' ? 'Viewer platform role — cannot be promoted' : undefined}
+                          className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                         >
-                          <option value="editor">Editor</option>
-                          <option value="administrator">Administrator</option>
+                          {member.platform_role !== 'viewer' && <option value="editor">Editor</option>}
+                          {member.platform_role !== 'viewer' && <option value="administrator">Administrator</option>}
                           <option value="viewer">Viewer</option>
                         </select>
                       )}

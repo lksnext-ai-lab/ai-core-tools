@@ -20,7 +20,7 @@ import {
   FileText,
   CreditCard,
   Sliders,
-  Cpu
+  Cpu,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -43,6 +43,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps',
       name: 'My Apps',
       icon: <Layers size={16} />,
+      section: 'mainFeatures',
+      editorOnly: true
+    },
+    {
+      path: '/about',
+      name: 'About',
+      icon: <Info size={16} />,
       section: 'mainFeatures'
     }
   ],
@@ -209,12 +216,6 @@ export const defaultNavigation: NavigationConfig = {
       section: 'admin',
       adminOnly: true,
       saasOnly: true
-    },
-    {
-      path: '/about',
-      name: 'About',
-      icon: <Info size={16} />,
-      section: 'admin'
     }
   ]
 };

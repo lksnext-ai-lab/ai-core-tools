@@ -10,7 +10,9 @@ export interface User {
   name?: string;
   is_authenticated: boolean;
   is_admin?: boolean;
-  is_omniadmin?: boolean;
+  platform_role?: 'viewer' | 'editor' | 'admin';
+  /** True for editors and admins; false for viewers */
+  is_editor?: boolean;
 }
 
 interface UserContextType {
@@ -63,15 +65,16 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
               email: userData.email,
               name: userData.name,
               is_authenticated: true,
-              is_admin: userData.is_admin || userData.is_omniadmin,
-              is_omniadmin: userData.is_omniadmin
+              is_admin: userData.is_admin,
+              platform_role: userData.platform_role,
+              is_editor: userData.platform_role !== 'viewer',
             });
             return;
           }
         } catch (error) {
           console.error('Failed to fetch user from backend:', error);
         }
-        
+
         // Fallback: use OIDC profile if backend call fails
         const oidcUser = oidcContext.user as any;
         const userData: User = {
@@ -79,8 +82,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           email: oidcUser.profile?.email || '',
           name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
           is_authenticated: true,
-          is_admin: false,
-          is_omniadmin: false
+          is_admin: false
         };
         setUser(userData);
       } else if (authService.isAuthenticated()) {
@@ -92,8 +94,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             email: userData.email,
             name: userData.name,
             is_authenticated: true,
-            is_admin: userData.is_admin || userData.is_omniadmin,
-            is_omniadmin: userData.is_omniadmin
+            is_admin: userData.is_admin,
+            platform_role: userData.platform_role,
+            is_editor: userData.platform_role !== 'viewer',
           });
         } catch (error) {
           console.error('Failed to fetch user data in dev mode during refresh:', error);
@@ -142,8 +145,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
                 email: userData.email,
                 name: userData.name,
                 is_authenticated: true,
-                is_admin: userData.is_admin || userData.is_omniadmin,
-                is_omniadmin: userData.is_omniadmin
+                is_admin: userData.is_admin,
+                platform_role: userData.platform_role,
+                is_editor: userData.platform_role !== 'viewer',
               });
               setLoading(false);
               return;
@@ -159,8 +163,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             email: oidcUser.profile?.email || '',
             name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
             is_authenticated: true,
-            is_admin: false,
-            is_omniadmin: false
+            is_admin: false
           };
           setUser(userData);
         } else if (authService.isAuthenticated()) {
@@ -172,8 +175,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
               email: userData.email,
               name: userData.name,
               is_authenticated: true,
-              is_admin: userData.is_admin || userData.is_omniadmin,
-              is_omniadmin: userData.is_omniadmin
+              is_admin: userData.is_admin,
+              platform_role: userData.platform_role,
+              is_editor: userData.platform_role !== 'viewer',
             });
           } catch (error) {
             console.error('Failed to fetch user data in dev mode:', error);
@@ -184,7 +188,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
               name: '',
               is_authenticated: true,
               is_admin: false,
-              is_omniadmin: false
             });
           }
         } else {

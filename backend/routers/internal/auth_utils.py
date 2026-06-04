@@ -343,3 +343,34 @@ elif AuthConfig.LOGIN_MODE == "LOCAL":
 else:
     logger.info("🔐 Using OIDC authentication")
     get_current_user_oauth = get_current_user_oidc
+
+
+from typing import Annotated
+from utils.config import is_omniadmin as _is_omniadmin
+
+
+async def require_editor_for_writes(
+    request: Request,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthContext:
+    """Block viewer-role users from write operations (POST/PUT/PATCH/DELETE).
+
+    Exemptions — viewer-legitimate writes:
+      - POST .../invitations/{id}/respond  (accept or decline a collaboration invite)
+    """
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return auth_context
+    # Viewers may accept/decline their own invitations
+    if request.url.path.endswith("/respond"):
+        return auth_context
+    email = auth_context.identity.email
+    if _is_omniadmin(email):
+        return auth_context
+    user = UserService.get_user_by_email(db, email)
+    if user and user.platform_role == 'viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewer role cannot create or modify resources",
+        )
+    return auth_context

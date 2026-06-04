@@ -8,7 +8,7 @@ export interface User {
   owned_apps_count: number;
   api_keys_count: number;
   is_active: boolean;
-  is_omniadmin?: boolean;
+  platform_role?: 'viewer' | 'editor' | 'admin';
 }
 
 export interface UserListResponse {
@@ -82,6 +82,13 @@ class AdminService {
   async resetUserMarketplaceQuota(userId: number): Promise<{ message: string; user_id: number; previous_count: number; new_count: number; reset_by: string; timestamp: string }> {
     return await apiService.request(`${this.baseUrl}/users/${userId}/reset-marketplace-quota`, {
       method: 'POST',
+    });
+  }
+
+  async setPlatformRole(userId: number, role: 'viewer' | 'editor' | 'admin'): Promise<{ message: string; user_id: number; platform_role: string }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/set-platform-role`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
     });
   }
 }

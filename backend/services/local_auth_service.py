@@ -57,10 +57,11 @@ class LocalAuthService:
         # Create user record
         user = User(
             email=email,
-            name=email.split("@")[0],  # Default name from email prefix
+            name=email.split("@")[0],
             auth_method="local",
             email_verified=False,
             is_active=True,
+            platform_role="viewer",
         )
         db.add(user)
         db.flush()  # Get user_id

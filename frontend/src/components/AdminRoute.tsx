@@ -27,8 +27,8 @@ function AdminRoute({ children }: Readonly<AdminRouteProps>) {
     );
   }
 
-  // If not authenticated or not admin, redirect to home
-  if (!user?.is_admin) {
+  // is_admin = env-var omniadmin; platform_role='admin' = DB-promoted admin
+  if (!user?.is_admin && user?.platform_role !== 'admin') {
     return <Navigate to="/" replace />;
   }
 

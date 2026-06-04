@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from .auth_utils import require_editor_for_writes
 
 # Import internal routers
 # Note: Most routers are imported by apps router for /internal/apps/{app_id}/... structure
@@ -21,8 +22,16 @@ internal_router = APIRouter()
 # Include sub-routers based on frontend expectations
 # Most routes are nested under apps: /internal/apps/{app_id}/...
 # Exceptions: collaboration, admin, version, apps_usage, conversations, auth, user (standalone)
-internal_router.include_router(apps_router, prefix="/apps")
-internal_router.include_router(collaboration_router, prefix="/collaboration")
+internal_router.include_router(
+    apps_router,
+    prefix="/apps",
+    dependencies=[Depends(require_editor_for_writes)],
+)
+internal_router.include_router(
+    collaboration_router,
+    prefix="/collaboration",
+    dependencies=[Depends(require_editor_for_writes)],
+)
 internal_router.include_router(admin_router, prefix="/admin")
 internal_router.include_router(version_router, prefix="/version")
 internal_router.include_router(apps_usage_router, prefix="/usage-stats")

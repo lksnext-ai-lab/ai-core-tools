@@ -11,7 +11,7 @@ from services.system_settings_service import SystemSettingsService
 from services.marketplace_quota_service import MarketplaceQuotaService
 from utils.config import is_omniadmin
 from routers.internal.auth_utils import get_current_user_oauth
-from schemas.admin_schemas import UserListResponse, UserDetailResponse, SystemStatsResponse, MarketplaceQuotaResetResponse
+from schemas.admin_schemas import UserListResponse, UserDetailResponse, SystemStatsResponse, MarketplaceQuotaResetResponse, SetPlatformRoleRequest
 from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
 from utils.logger import get_logger
 from datetime import datetime, timezone
@@ -25,11 +25,18 @@ SYSTEM_AI_SERVICE_NOT_FOUND = "System AI service not found"
 SYSTEM_EMBEDDING_SERVICE_NOT_FOUND = "System embedding service not found"
 
 
-def require_admin(auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)]):
-    """Dependency to require admin access"""
-    if not is_omniadmin(auth_context.identity.email):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return auth_context
+async def require_admin(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Dependency to require omniadmin access (env var or DB platform_role)"""
+    email = auth_context.identity.email
+    if is_omniadmin(email):
+        return auth_context
+    user = UserService.get_user_by_email(db, email)
+    if user and user.platform_role == 'admin':
+        return auth_context
+    raise HTTPException(status_code=403, detail="Admin access required")
 
 
 @router.get(
@@ -90,7 +97,8 @@ async def get_user(
             created_at=user.created_at.isoformat(),
             owned_apps_count=len(user.owned_apps) if user.owned_apps else 0,
             api_keys_count=len(user.api_keys) if user.api_keys else 0,
-            is_active=user.is_active
+            is_active=user.is_active,
+            platform_role=user.platform_role or 'editor',
         )
     except HTTPException:
         raise
@@ -181,6 +189,36 @@ async def deactivate_user(
     except Exception as e:
         logger.error(f"Error deactivating user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deactivating user: {str(e)}")
+
+
+@router.post(
+    "/users/{user_id}/set-platform-role",
+    responses={
+        400: {"description": "Bad request"},
+        404: {"description": "User not found"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def set_user_platform_role(
+    user_id: int,
+    body: SetPlatformRoleRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Set a user's platform role (viewer, editor, or admin)"""
+    try:
+        user = UserService.set_platform_role(db, user_id, body.role, auth_context.identity.email)
+        logger.info(f"Platform role set to '{body.role}' for user {user.email} by {auth_context.identity.email}")
+        return {
+            "message": f"Platform role updated to '{body.role}' for {user.email}",
+            "user_id": user.user_id,
+            "platform_role": user.platform_role,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error setting platform role for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error setting platform role: {str(e)}")
 
 
 @router.post(

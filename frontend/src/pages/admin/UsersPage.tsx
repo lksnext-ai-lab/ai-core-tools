@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Crown, Check, X, Ban, Trash2, RefreshCcw } from 'lucide-react';
+import { Crown, Check, X, Ban, Trash2, RefreshCcw, UserCheck, Eye, Pencil } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import Alert from '../../components/ui/Alert';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useUser } from '../../contexts/UserContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
 
 function UsersPage() {
   const confirm = useConfirm();
   const mutate = useApiMutation();
+  const { user: currentUser } = useUser();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,7 @@ function UsersPage() {
   const [deletingUser, setDeletingUser] = useState<number | null>(null);
   const [activatingUser, setActivatingUser] = useState<number | null>(null);
   const [resettingQuota, setResettingQuota] = useState<number | null>(null);
+  const [settingRole, setSettingRole] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const perPage = 10;
@@ -133,6 +136,30 @@ function UsersPage() {
     setResettingQuota(null);
   }
 
+  async function handleSetPlatformRole(userId: number, role: 'viewer' | 'editor' | 'admin', userName: string) {
+    const labels: Record<string, string> = { viewer: 'Viewer', editor: 'Editor', admin: 'Admin' };
+    const ok = await confirm({
+      title: `Set role to ${labels[role]}?`,
+      message: `Change ${userName}'s platform role to ${labels[role]}?`,
+      confirmLabel: 'Confirm',
+    });
+    if (!ok) return;
+
+    setSettingRole(userId);
+    const result = await mutate(
+      () => adminService.setPlatformRole(userId, role),
+      {
+        loading: 'Updating role…',
+        success: (data) => data?.message ?? 'Role updated',
+        error: (err) => errorMessage(err, 'Failed to update role'),
+      },
+    );
+    setSettingRole(null);
+    if (result === undefined) return;
+
+    await loadUsers();
+  }
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     setCurrentPage(1); // Reset to first page when searching
@@ -196,6 +223,9 @@ function UsersPage() {
                   User
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -204,7 +234,6 @@ function UsersPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   API Keys
                 </th>
-
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
@@ -216,7 +245,7 @@ function UsersPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center">
+                  <td colSpan={7} className="px-6 py-8 text-center">
                     <div className="text-gray-500">
                       <p className="text-lg font-medium">No users found</p>
                       <p className="text-sm mt-1">
@@ -230,18 +259,26 @@ function UsersPage() {
                   <tr key={user.user_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-900">
-                            {user.name || 'No name'}
-                          </span>
-                          {user.is_omniadmin && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                              <Crown className="w-3 h-3 mr-1" /> Admin
-                            </span>
-                          )}
+                        <div className="text-sm font-medium text-gray-900">
+                          {user.name || 'No name'}
                         </div>
                         <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.platform_role === 'admin' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          <Crown className="w-3 h-3 mr-1" /> Admin
+                        </span>
+                      ) : user.platform_role === 'editor' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          <Pencil className="w-3 h-3 mr-1" /> Editor
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                          <Eye className="w-3 h-3 mr-1" /> Viewer
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {user.is_active ? (
@@ -260,17 +297,36 @@ function UsersPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {user.api_keys_count}
                     </td>
-
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {user.is_omniadmin ? (
-                        <span className="text-xs text-gray-500 italic">Protected account</span>
+                      {user.email === currentUser?.email ? (
+                        <span className="text-xs text-gray-500 italic">Your account</span>
                       ) : (
                         <ActionDropdown
                           actions={[
-                            // Show activate/deactivate for non-omniadmins
+                            ...(user.platform_role !== 'viewer' ? [{
+                              label: settingRole === user.user_id ? 'Setting...' : 'Set as Viewer',
+                              onClick: () => { void handleSetPlatformRole(user.user_id, 'viewer', user.name || user.email); },
+                              icon: <Eye className="w-4 h-4" />,
+                              variant: 'default' as const,
+                              disabled: settingRole === user.user_id
+                            }] : []),
+                            ...(user.platform_role !== 'editor' ? [{
+                              label: settingRole === user.user_id ? 'Setting...' : 'Set as Editor',
+                              onClick: () => { void handleSetPlatformRole(user.user_id, 'editor', user.name || user.email); },
+                              icon: <Pencil className="w-4 h-4" />,
+                              variant: 'default' as const,
+                              disabled: settingRole === user.user_id
+                            }] : []),
+                            ...(user.platform_role !== 'admin' ? [{
+                              label: settingRole === user.user_id ? 'Setting...' : 'Set as Admin',
+                              onClick: () => { void handleSetPlatformRole(user.user_id, 'admin', user.name || user.email); },
+                              icon: <UserCheck className="w-4 h-4" />,
+                              variant: 'default' as const,
+                              disabled: settingRole === user.user_id
+                            }] : []),
                             ...(user.is_active ? [
                               {
                                 label: activatingUser === user.user_id ? 'Deactivating...' : 'Deactivate',

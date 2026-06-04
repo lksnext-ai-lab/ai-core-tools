@@ -184,6 +184,7 @@ export interface NavigationItem {
   section?: string;
   protected?: boolean;
   adminOnly?: boolean;
+  editorOnly?: boolean;  // Only shown to editors and admins (not viewers)
   saasOnly?: boolean;  // Only shown when deployment_mode === 'saas'
   children?: NavigationItem[];  // Renders as a collapsible group in the sidebar
   enterpriseFeature?: string;  // Capability key — shows [EE] badge + upgrade page link when not enabled

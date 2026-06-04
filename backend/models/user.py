@@ -1,7 +1,15 @@
+import enum
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
+
+
+class PlatformRole(str, enum.Enum):
+    VIEWER = "viewer"
+    EDITOR = "editor"
+    ADMIN = "admin"
+
 
 class User(Base):
     '''User model class constructor'''
@@ -13,6 +21,7 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     auth_method = Column(String(50), default='oidc', nullable=True)
     email_verified = Column(Boolean, default=True, nullable=False)
+    platform_role = Column(String(50), default=PlatformRole.VIEWER.value, nullable=False)
 
     # Relationships
     owned_apps = relationship('App', foreign_keys='App.owner_id', back_populates='owner', lazy=True)
