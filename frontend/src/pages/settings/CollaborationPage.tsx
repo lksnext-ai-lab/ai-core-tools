@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Users, Handshake, Crown, Info, Lock, Lightbulb } from 'lucide-react';
+import { Users, Handshake, Crown, Info, Lock, Lightbulb, AlertTriangle } from 'lucide-react';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
@@ -404,15 +404,26 @@ function CollaborationPage() {
               {
                 header: 'Role',
                 render: (member) => (
-                  member.role === 'owner' ? (
-                    <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
-                      <Crown className="w-3 h-3 mr-1" /> Owner
-                    </span>
-                  ) : (
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
-                      {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                    </span>
-                  )
+                  <div className="flex items-center gap-1">
+                    {member.role === 'owner' ? (
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                        <Crown className="w-3 h-3 mr-1" /> Owner
+                      </span>
+                    ) : (
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
+                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                      </span>
+                    )}
+                    {member.platform_role === 'viewer' && member.role !== 'viewer' && member.role !== 'owner' && (
+                      <span className="relative group inline-flex items-center">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 cursor-help flex-shrink-0" />
+                        <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block w-56 rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs shadow-md z-50">
+                          <span className="block font-semibold text-amber-700 mb-1">Platform viewer</span>
+                          <span className="block text-gray-600 leading-relaxed whitespace-normal">This user can only see agents published in the marketplace. They cannot edit app content.</span>
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 )
               },
               {
