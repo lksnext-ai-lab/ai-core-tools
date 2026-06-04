@@ -37,12 +37,11 @@ class ConfigService {
     const runtimeConfig = (globalThis as any).__RUNTIME_CONFIG__;
     
     // Fallback chain: runtime config -> build-time env vars -> default.
-    // Use `||` for the runtime value so an empty string placeholder falls
-    // through to the build-time env (`import.meta.env.VITE_API_BASE_URL`).
-    // This preserves Docker/runtime overwrite behavior while allowing local
-    // dev `.env` values to take precedence when `public/config.js` is empty.
-    const baseUrl = (runtimeConfig?.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL) ||
-             import.meta.env.VITE_API_URL ||
+    // Use `??` so an explicit empty string in the runtime config (Docker same-origin
+    // deployment) is preserved as "" rather than falling through to localhost:8000.
+    // When no runtime config is injected (local dev), fall back to build-time env.
+    const baseUrl = (runtimeConfig?.VITE_API_BASE_URL ?? import.meta.env.VITE_API_BASE_URL) ??
+             import.meta.env.VITE_API_URL ??
              'http://localhost:8000';
     
     return {

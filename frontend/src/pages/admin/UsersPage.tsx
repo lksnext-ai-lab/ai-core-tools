@@ -138,9 +138,17 @@ function UsersPage() {
 
   async function handleSetPlatformRole(userId: number, role: 'viewer' | 'editor' | 'admin', userName: string) {
     const labels: Record<string, string> = { viewer: 'Viewer', editor: 'Editor', admin: 'Admin' };
+
+    const target = users.find((u) => u.user_id === userId);
+    const ownedApps = target?.owned_apps_count ?? 0;
+    const isDowngradeWithApps = role === 'viewer' && ownedApps > 0;
+
     const ok = await confirm({
       title: `Set role to ${labels[role]}?`,
-      message: `Change ${userName}'s platform role to ${labels[role]}?`,
+      message: isDowngradeWithApps
+        ? `${userName} owns ${ownedApps} app${ownedApps !== 1 ? 's' : ''}. As a viewer they will no longer be able to modify them, but will retain ownership. Are you sure you want to downgrade their role to Viewer?`
+        : `Change ${userName}'s platform role to ${labels[role]}?`,
+      variant: isDowngradeWithApps ? 'warning' : undefined,
       confirmLabel: 'Confirm',
     });
     if (!ok) return;
@@ -150,11 +158,7 @@ function UsersPage() {
       () => adminService.setPlatformRole(userId, role),
       {
         loading: 'Updating role…',
-        success: (data) => {
-          const base = data?.message ?? 'Role updated';
-          const warn = data?.warnings?.length ? ` Warning: ${data.warnings[0]}` : '';
-          return base + warn;
-        },
+        success: (data) => data?.message ?? 'Role updated',
         error: (err) => errorMessage(err, 'Failed to update role'),
       },
     );
