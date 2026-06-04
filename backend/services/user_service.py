@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from models.user import User, PlatformRole
 from repositories.user_repository import UserRepository
-from typing import Tuple, List, Dict, Any
+from typing import Tuple, List, Dict, Any, Optional
 from utils.config import is_omniadmin
 from utils.logger import get_logger
 
@@ -292,7 +292,8 @@ class UserService:
         return user
     
     @staticmethod
-    def set_platform_role(db: Session, user_id: int, role: str, admin_email: str) -> User:
+    def set_platform_role(db: Session, user_id: int, role: str, admin_email: str) -> dict:
+        from models.app import App
         logger = get_logger(__name__)
         valid_roles = {r.value for r in PlatformRole}
         if role not in valid_roles:
@@ -308,7 +309,14 @@ class UserService:
         db.refresh(user)
 
         logger.info(f"Platform role set to '{role}' - Admin: {admin_email}, Target: {user.email} (ID: {user_id})")
-        return user
+
+        warnings: List[str] = []
+        if role == 'viewer':
+            owned = db.query(App).filter(App.owner_id == user_id).count()
+            if owned:
+                warnings.append(f"User owns {owned} app(s). They retain ownership but cannot modify them while a viewer.")
+
+        return {"user": user, "warnings": warnings}
 
     @staticmethod
     def get_active_users_count(db: Session) -> int:

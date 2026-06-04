@@ -150,7 +150,11 @@ function UsersPage() {
       () => adminService.setPlatformRole(userId, role),
       {
         loading: 'Updating role…',
-        success: (data) => data?.message ?? 'Role updated',
+        success: (data) => {
+          const base = data?.message ?? 'Role updated';
+          const warn = data?.warnings?.length ? ` Warning: ${data.warnings[0]}` : '';
+          return base + warn;
+        },
         error: (err) => errorMessage(err, 'Failed to update role'),
       },
     );

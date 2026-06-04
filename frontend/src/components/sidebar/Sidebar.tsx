@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const renderItems = (items: NavigationItem[], section: string, useAppStyle = false) =>
     items
       .filter(item => !(item.adminOnly && !user?.is_admin && user?.platform_role !== 'admin'))
-      .filter(item => !(item.editorOnly && user?.platform_role === 'viewer'))
+      .filter(item => !(item.editorOnly && !user?.is_admin && user?.platform_role === 'viewer'))
       .filter(item => !(item.saasOnly && !isSaasMode))
       .map((item, index) => {
         const path = appId ? item.path.replace(':appId', appId) : item.path;
@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <ul className="mt-1 ml-4 space-y-0.5 border-l border-gray-100 pl-3">
                   {item.children
                     .filter(child => !(child.adminOnly && !user?.is_admin && user?.platform_role !== 'admin'))
-                    .filter(child => !(child.editorOnly && user?.platform_role === 'viewer'))
+                    .filter(child => !(child.editorOnly && !user?.is_admin && user?.platform_role === 'viewer'))
                     .filter(child => !(child.saasOnly && !isSaasMode))
                     .map((child, ci) => {
                       const childPath = appId ? child.path.replace(':appId', appId) : child.path;
@@ -289,7 +289,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Administration — only show section header when there are visible items */}
-            {navigationConfig.admin && navigationConfig.admin.some(item => !item.adminOnly || user?.is_admin || user?.platform_role === 'admin') && (
+            {navigationConfig.admin && navigationConfig.admin.some(item =>
+              (!item.adminOnly || user?.is_admin || user?.platform_role === 'admin') &&
+              !(item.saasOnly && !isSaasMode)
+            ) && (
               <div>
                 <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                   Administration

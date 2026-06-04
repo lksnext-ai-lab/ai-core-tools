@@ -45,7 +45,7 @@ interface App {
 // React Component = Function that returns HTML-like JSX
 function AppsPage() {
   const { user } = useUser();
-  const isEditor = user?.is_editor ?? true;
+  const isEditor = user?.is_admin || (user?.is_editor ?? false);
 
   // State = variables that trigger re-renders when they change
   const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []

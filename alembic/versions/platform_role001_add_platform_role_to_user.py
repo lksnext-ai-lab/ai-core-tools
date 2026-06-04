@@ -19,6 +19,8 @@ def upgrade():
         'User',
         sa.Column('platform_role', sa.String(50), nullable=False, server_default='editor')
     )
+    # Align DB-level default with application intent after backfill
+    op.alter_column('User', 'platform_role', server_default='viewer')
 
 
 def downgrade():

@@ -207,12 +207,15 @@ async def set_user_platform_role(
 ):
     """Set a user's platform role (viewer, editor, or admin)"""
     try:
-        user = UserService.set_platform_role(db, user_id, body.role, auth_context.identity.email)
+        result = UserService.set_platform_role(db, user_id, body.role, auth_context.identity.email)
+        user = result["user"]
+        warnings = result["warnings"]
         logger.info(f"Platform role set to '{body.role}' for user {user.email} by {auth_context.identity.email}")
         return {
             "message": f"Platform role updated to '{body.role}' for {user.email}",
             "user_id": user.user_id,
             "platform_role": user.platform_role,
+            "warnings": warnings,
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

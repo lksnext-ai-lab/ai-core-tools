@@ -84,7 +84,7 @@ class UserSearchResultItem(BaseModel):
 async def search_users(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
-    q: Annotated[str, Query(min_length=2, description="Search query (name or email)")] = "",
+    q: Annotated[str, Query(min_length=2, description="Search query (name or email)")],
 ):
     current_email = auth_context.identity.email
     users, _ = UserService.search_users(db, q, page=1, per_page=10)

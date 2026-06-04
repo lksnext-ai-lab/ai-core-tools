@@ -85,7 +85,7 @@ class AdminService {
     });
   }
 
-  async setPlatformRole(userId: number, role: 'viewer' | 'editor' | 'admin'): Promise<{ message: string; user_id: number; platform_role: string }> {
+  async setPlatformRole(userId: number, role: 'viewer' | 'editor' | 'admin'): Promise<{ message: string; user_id: number; platform_role: string; warnings?: string[] }> {
     return await apiService.request(`${this.baseUrl}/users/${userId}/set-platform-role`, {
       method: 'POST',
       body: JSON.stringify({ role }),

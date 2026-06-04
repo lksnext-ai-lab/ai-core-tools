@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
 
 interface EditorRouteProps {
@@ -8,6 +8,7 @@ interface EditorRouteProps {
 
 function EditorRoute({ children }: Readonly<EditorRouteProps>) {
   const { user, loading } = useUser();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -15,6 +16,10 @@ function EditorRoute({ children }: Readonly<EditorRouteProps>) {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
+  }
+
+  if (!user?.is_authenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (!user?.is_admin && user?.platform_role === 'viewer') {
