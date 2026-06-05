@@ -58,7 +58,10 @@ _DISPATCH: Dict[str, str] = {
 
 PROVIDER_ERROR_STATUS: Dict[str, int] = {
     "invalid_request": 400,
-    "unauthorized": 401,
+    # Provider authentication failures (invalid external API keys) were being mapped to HTTP 401. 
+    # The frontend treats any 401 as a user authentication failure and clears the session. 
+    # External provider credential errors are configuration errors, not user authentication failures, so they are now mapped to HTTP 400.
+    "unauthorized": 400,
     "not_found": 404,
     "timeout": 408,
     "network": 502,
