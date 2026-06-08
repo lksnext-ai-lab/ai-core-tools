@@ -250,7 +250,13 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         mcp_client = await MCPClientManager().get_client(agent, user_context)
         if (mcp_client):
             mcp_tools = await mcp_client.get_tools()
-            logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
+            
+            for tool in mcp_tools:
+                logger.info(f"MCP tool %s schema=%s", tool.name, getattr(tool, "args_schema", None))
+
+                if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
+                    normalize_openai_schema(tool.args_schema)
+
             if (mcp_tools):
                 tools.extend(mcp_tools)
     except Exception as e:
@@ -292,6 +298,34 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     logger.info(f"Output parser: {agent.output_parser_id is not None}")
 
     return agent_chain, mcp_client
+
+
+def normalize_openai_schema(schema):
+    if not isinstance(schema, (dict, list)):
+        return
+
+    if isinstance(schema, dict):
+
+        # OpenAI exige required completo
+        if (
+            schema.get("type") == "object"
+            and "properties" in schema
+        ):
+            schema["required"] = list(schema["properties"].keys())
+
+        # Inferir type si falta
+        if "type" not in schema:
+            if "properties" in schema:
+                schema["type"] = "object"
+            elif "items" in schema:
+                schema["type"] = "array"
+
+        for value in schema.values():
+            normalize_openai_schema(value)
+
+    else:
+        for item in schema:
+            normalize_openai_schema(item)
 
 
 def prepare_agent_config(agent):

@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel, Field
 from typing import Type, Dict, Any, List, get_origin, get_args
 from sqlalchemy.orm import Session
@@ -197,9 +199,17 @@ def get_parser_model_by_id(parser_id: int, ancestor_parsers: set = None) -> Type
                 field['type'] = 'list'
                 field['list_item_type'] = referenced_model
 
-        return create_model_from_json_schema(schema_data, parser.name)
+        return create_model_from_json_schema(schema_data, sanitize_schema_name(parser.name))
     finally:
         # Al salir de esta rama de recursión, el parser deja de ser un ancestro
         # activo, por lo que puede ser referenciado de nuevo en ramas paralelas
         # (p. ej. dos hermanos que apuntan al mismo parser hijo).
         ancestor_parsers.discard(parser_id)
+
+def sanitize_schema_name(name: str) -> str:
+    name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+    
+    if not re.match(r"^[a-zA-Z_]", name):
+        name = f"Schema_{name}"
+    
+    return name
