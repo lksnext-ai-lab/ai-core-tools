@@ -113,6 +113,39 @@ class AgentRepository:
         db.commit()
         return True
     
+
+    @staticmethod
+    def convert_to_ocr(db: Session, agent_id: int):
+        agent = db.query(Agent).filter(
+            Agent.agent_id == agent_id
+        ).first()
+
+        db.execute(
+            OCRAgent.__table__.insert().values(
+                agent_id=agent.agent_id,
+                vision_service_id=None,
+                vision_system_prompt="",
+                text_system_prompt=""
+            )
+        )
+
+        agent.type = "ocr_agent"
+        db.commit()
+    
+    @staticmethod
+    def convert_to_agent(db: Session, agent_id: int):
+        db.query(OCRAgent).filter(
+            OCRAgent.agent_id == agent_id
+        ).delete()
+
+        agent = db.query(Agent).filter(
+            Agent.agent_id == agent_id
+        ).first()
+
+        agent.type = "agent"
+
+        db.commit()
+    
     # ==================== AGENT ASSOCIATIONS ====================
     
     @staticmethod
