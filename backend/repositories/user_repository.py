@@ -74,15 +74,19 @@ class UserRepository:
         if per_page < 1 or per_page > 100:
             per_page = 10
 
-        users_query = self.db.query(User).options(
-            joinedload(User.owned_apps),
-            joinedload(User.api_keys)
-        )
+        base_query = self.db.query(User)
         if exclude_emails:
-            users_query = users_query.filter(User.email.notin_(exclude_emails))
-        total = users_query.count()
+            base_query = base_query.filter(User.email.notin_(exclude_emails))
+        total = base_query.count()
         offset = (page - 1) * per_page
-        users = users_query.offset(offset).limit(per_page).all()
+        users = (
+            base_query
+            .options(joinedload(User.owned_apps), joinedload(User.api_keys))
+            .order_by(User.user_id)
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
 
         return users, total
 
@@ -93,20 +97,24 @@ class UserRepository:
         if per_page < 1 or per_page > 100:
             per_page = 10
 
-        users_query = self.db.query(User).options(
-            joinedload(User.owned_apps),
-            joinedload(User.api_keys)
-        ).filter(
+        base_query = self.db.query(User).filter(
             or_(
                 User.name.ilike(f'%{query}%'),
                 User.email.ilike(f'%{query}%')
             )
         )
         if exclude_emails:
-            users_query = users_query.filter(User.email.notin_(exclude_emails))
-        total = users_query.count()
+            base_query = base_query.filter(User.email.notin_(exclude_emails))
+        total = base_query.count()
         offset = (page - 1) * per_page
-        users = users_query.offset(offset).limit(per_page).all()
+        users = (
+            base_query
+            .options(joinedload(User.owned_apps), joinedload(User.api_keys))
+            .order_by(User.user_id)
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
 
         return users, total
     

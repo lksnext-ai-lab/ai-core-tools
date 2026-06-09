@@ -99,6 +99,7 @@ async def get_user(
             api_keys_count=len(user.api_keys) if user.api_keys else 0,
             is_active=user.is_active,
             platform_role=user.platform_role or 'editor',
+            is_omniadmin=is_omniadmin(user.email),
         )
     except HTTPException:
         raise
