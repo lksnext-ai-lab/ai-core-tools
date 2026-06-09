@@ -1,6 +1,7 @@
 from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
+from utils.schema_utils import sanitize_identifier
 from models.agent import Agent
 from models.silo import Silo, SiloType
 from langchain.tools import BaseTool, tool
@@ -488,7 +489,7 @@ class IACTTool(BaseTool):
 
         self.agent = agent
         self.user_context = user_context
-        self.name = agent.name.replace(" ", "_")
+        self.name = sanitize_identifier(agent.name)
         self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
         if self.llm is None:
