@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from typing import Union, List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
@@ -190,7 +191,10 @@ class AgentService:
         if agent_id == 0:
             agent_id = None
 
-        agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        #agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        agent = AgentRepository.get_by_id(db, agent_id) if agent_id else None
+
+        logger.info(f"agent_id={agent_id}, agent_type={agent_type}, existing_agent_found={bool(agent)}")
 
         if not agent:
             # Enforce per-app agent limit before creation (SaaS mode only)
@@ -202,8 +206,20 @@ class AgentService:
             # Create the appropriate agent instance based on type
             if agent_type == 'ocr_agent':
                 agent = OCRAgent()
+                logger.error("Ha pasado por OCRAgent")
             else:
                 agent = Agent()
+                logger.error("Ha pasado por Agent normal")
+        
+        current_type = agent.type
+        new_type = agent_data["type"]
+
+        if current_type == "agent" and new_type == "ocr_agent":
+            AgentRepository.convert_to_ocr(db, agent.agent_id)
+            agent = AgentRepository.get_ocr_agent_by_id(db, agent.agent_id)
+        if current_type == "ocr_agent" and new_type == "agent":
+            AgentRepository.convert_to_agent(db, agent.agent_id)
+            agent = AgentRepository.get_by_id(db, agent.agent_id)
         
         update_method = self._update_normal_agent
         update_method(agent, agent_data)
