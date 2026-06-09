@@ -50,8 +50,10 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       if (oidcContext?.user) {
         try {
           const baseUrl = configService.getApiBaseUrl();
-          const token = oidcContext.user.access_token;
-          
+          // Bearer must be the OIDC ID token (aud = client_id) to pass the backend
+          // audience validation; the access token's aud is api://<client_id>.
+          const token = oidcContext.user.id_token;
+
           const response = await fetch(`${baseUrl}/internal/me`, {
             headers: {
               'Authorization': `Bearer ${token}`
@@ -132,8 +134,10 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         if (oidcContext?.user) {
           try {
             const baseUrl = configService.getApiBaseUrl();
-            const token = oidcContext.user.access_token;
-            
+            // Bearer must be the OIDC ID token (aud = client_id) to pass the backend
+            // audience validation; the access token's aud is api://<client_id>.
+            const token = oidcContext.user.id_token;
+
             const response = await fetch(`${baseUrl}/internal/me`, {
               headers: {
                 'Authorization': `Bearer ${token}`

@@ -18,11 +18,15 @@ class AuthService {
   }
 
   setOIDCToken(user: User) {
-    if (user.access_token) {
-      const expiresAt = user.expires_at 
+    // Send the ID token (aud = client_id) as the bearer, NOT the access token.
+    // Azure AD issues the access token for the `<audience>/.default` scope with
+    // aud = api://<client_id>, which fails the backend's ID-token audience
+    // validation (ENTRA_TOKEN_TYPE=id_token, validate_audience=true) → 401.
+    if (user.id_token) {
+      const expiresAt = user.expires_at
         ? new Date(user.expires_at * 1000).toISOString()
         : undefined;
-      this.setToken(user.access_token, expiresAt);
+      this.setToken(user.id_token, expiresAt);
     }
   }
 
