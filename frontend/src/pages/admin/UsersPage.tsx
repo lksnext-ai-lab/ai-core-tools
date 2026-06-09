@@ -309,8 +309,10 @@ function UsersPage() {
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {user.email === currentUser?.email ? (
-                        <span className="text-xs text-gray-500 italic">Your account</span>
+                      {user.email === currentUser?.email || user.is_omniadmin ? (
+                        <span className="text-xs text-gray-500 italic">
+                          {user.is_omniadmin ? 'System account' : 'Your account'}
+                        </span>
                       ) : (
                         <ActionDropdown
                           actions={[

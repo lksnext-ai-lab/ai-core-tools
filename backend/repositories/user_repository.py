@@ -67,30 +67,32 @@ class UserRepository:
             self.db.rollback()
             raise e
     
-    def get_all_paginated(self, page: int = 1, per_page: int = 10) -> Tuple[List[User], int]:
+    def get_all_paginated(self, page: int = 1, per_page: int = 10, exclude_emails: list = None) -> Tuple[List[User], int]:
         """Get all users with pagination"""
         if page < 1:
             page = 1
         if per_page < 1 or per_page > 100:
             per_page = 10
-        
+
         users_query = self.db.query(User).options(
             joinedload(User.owned_apps),
             joinedload(User.api_keys)
         )
+        if exclude_emails:
+            users_query = users_query.filter(User.email.notin_(exclude_emails))
         total = users_query.count()
         offset = (page - 1) * per_page
         users = users_query.offset(offset).limit(per_page).all()
-        
+
         return users, total
-    
-    def search_users(self, query: str, page: int = 1, per_page: int = 10) -> Tuple[List[User], int]:
+
+    def search_users(self, query: str, page: int = 1, per_page: int = 10, exclude_emails: list = None) -> Tuple[List[User], int]:
         """Search users by name or email"""
         if page < 1:
             page = 1
         if per_page < 1 or per_page > 100:
             per_page = 10
-        
+
         users_query = self.db.query(User).options(
             joinedload(User.owned_apps),
             joinedload(User.api_keys)
@@ -100,10 +102,12 @@ class UserRepository:
                 User.email.ilike(f'%{query}%')
             )
         )
+        if exclude_emails:
+            users_query = users_query.filter(User.email.notin_(exclude_emails))
         total = users_query.count()
         offset = (page - 1) * per_page
         users = users_query.offset(offset).limit(per_page).all()
-        
+
         return users, total
     
     def get_total_count(self) -> int:

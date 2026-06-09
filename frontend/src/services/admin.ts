@@ -9,6 +9,7 @@ export interface User {
   api_keys_count: number;
   is_active: boolean;
   platform_role?: 'viewer' | 'editor' | 'admin';
+  is_omniadmin?: boolean;
 }
 
 export interface UserListResponse {

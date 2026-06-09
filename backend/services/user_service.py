@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from models.user import User, PlatformRole
 from repositories.user_repository import UserRepository
 from typing import Tuple, List, Dict, Any, Optional
-from utils.config import is_omniadmin
+from utils.config import is_omniadmin, get_omniadmins
 from utils.logger import get_logger
 
 class UserService:
@@ -125,11 +125,11 @@ class UserService:
             Tuple of (users_list, total_count)
         """
         user_repo = UserRepository(db)
-        users, total = user_repo.get_all_paginated(page, per_page)
-        
+        users, total = user_repo.get_all_paginated(page, per_page, exclude_emails=get_omniadmins())
+
         # Convert to dict format
         users_list = [UserService._user_to_dict(user) for user in users]
-        
+
         return users_list, total
     
     @staticmethod
@@ -162,11 +162,11 @@ class UserService:
             Tuple of (users_list, total_count)
         """
         user_repo = UserRepository(db)
-        users, total = user_repo.search_users(query, page, per_page)
-        
+        users, total = user_repo.search_users(query, page, per_page, exclude_emails=get_omniadmins())
+
         # Convert to dict format
         users_list = [UserService._user_to_dict(user) for user in users]
-        
+
         return users_list, total
     
     @staticmethod
@@ -300,6 +300,9 @@ class UserService:
             raise ValueError(f"Invalid platform role '{role}'. Must be one of: {', '.join(valid_roles)}")
 
         user = UserService._get_user_or_raise(db, user_id)
+
+        if is_omniadmin(user.email):
+            raise PermissionError("Cannot change the platform role of an omniadmin user")
 
         if user.email == admin_email:
             raise ValueError("Cannot change your own platform role")
