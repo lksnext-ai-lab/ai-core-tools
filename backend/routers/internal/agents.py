@@ -32,6 +32,7 @@ from schemas.marketplace_schemas import (
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from services.file_management_service import FileManagementService, FileReference
+from services.audio_transcription_service import AudioTranscriptionService
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -920,6 +921,7 @@ async def upload_file_for_chat(
     agent_id: int,
     file: Annotated[UploadFile, File()],
     conversation_id: Annotated[Optional[int], Form()] = None,
+    language: Annotated[Optional[str], Form()] = None,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
     role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
     db: Annotated[Session, Depends(get_db)] = None,
@@ -931,6 +933,7 @@ async def upload_file_for_chat(
     Args:
         conversation_id: Optional conversation ID to associate the file with.
                         If provided, file will be specific to that conversation.
+        language: Optional language of the audio file. Only needed for audio files to assist with transcription. Should be in ISO 639-1 format (e.g. "en" for English).
     """
     try:
         # Verify agent belongs to this app
@@ -950,6 +953,7 @@ async def upload_file_for_chat(
             agent_id=agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            language=language,
             has_memory=bool(getattr(agent, "has_memory", False)),
         )
         
@@ -965,7 +969,7 @@ async def upload_file_for_chat(
             "processing_status": file_ref.processing_status,
             "content_preview": file_ref.content_preview,
             "has_extractable_content": file_ref.has_extractable_content,
-            "mime_type": file_ref.mime_type
+            "mime_type": file_ref.mime_type,
         }
         
     except HTTPException:
@@ -973,6 +977,41 @@ async def upload_file_for_chat(
     except Exception as e:
         logger.error(f"Error in file upload endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="File upload failed")
+
+
+@agents_router.post(
+    "/{agent_id}/transcribe-audio",
+    summary="Transcribe audio",
+    tags=["Agents"],
+)
+async def transcribe_audio(
+    app_id: int,
+    agent_id: int,
+    audio_file: Annotated[UploadFile, File()],
+    language: Annotated[Optional[str], Form()] = 'en',
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    """
+    Internal API: Transcribe uploaded audio file (OAuth authentication)
+    """
+    try:
+        _get_agent_or_404(db, agent_id, app_id)
+
+        temp_path = await _save_uploaded_file(audio_file)
+
+        transcript = await AudioTranscriptionService.transcribe_audio(temp_path, language)
+
+        try:
+            os.remove(temp_path)
+        except Exception as e:
+            logger.error(f"Error removing temporary file: {e}")
+
+        return {"transcript": transcript}
+    except Exception as e:
+        logger.error(f"Audio transcription error: {e}")
+        raise HTTPException(status_code=500, detail="Audio transcription failed")
 
 
 @agents_router.get(

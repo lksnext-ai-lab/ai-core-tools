@@ -8,6 +8,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import UploadFile, HTTPException
 
+from .audio_transcription_service import AudioTranscriptionService
+
+from tools.audioTools import extract_text_from_audio
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
 
@@ -184,6 +187,7 @@ class FileManagementService:
         agent_id: int,
         user_context: Dict = None,
         conversation_id: Optional[int] = None,
+        language: Optional[str] = None,
         has_memory: bool = False,
     ) -> FileReference:
         """
@@ -208,6 +212,7 @@ class FileManagementService:
             agent_id: ID of the agent.
             user_context: User context (api_key, user_id, etc.).
             conversation_id: Optional conversation ID to organize files.
+            language: Optional language of the audio file (e.g. "en" for English). Only needed for audio files to assist with transcription.
             has_memory: Whether the target agent persists conversation state.
                 Callers MUST pass this so the storage strategy is correct;
                 defaulting to ``False`` keeps backward compatibility with
@@ -229,7 +234,7 @@ class FileManagementService:
             file_type = self._get_file_type(file.filename)
 
             # Process file based on type (also returns file size)
-            content, temp_path, file_size = await self._process_file_content(file, file_type)
+            content, temp_path, file_size = await self._process_file_content(file, file_type, language)
 
             storage_strategy = self._resolve_storage_strategy(has_memory, conversation_id)
 
@@ -518,6 +523,10 @@ class FileManagementService:
         elif ext in ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']:
             return "document"
         
+        # Audio files
+        elif ext in ['.wav', '.mp3', '.ogg', '.flac', '.aac']:
+            return "audio"
+        
         else:
             return "unknown"
     
@@ -525,13 +534,14 @@ class FileManagementService:
         """Get file type from file path"""
         return self._get_file_type(os.path.basename(file_path))
     
-    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str, int]:
+    async def _process_file_content(self, file: UploadFile, file_type: str, language: Optional[str] = None) -> tuple[str, str, int]:
         """
         Process file content based on file type
         
         Args:
             file: Uploaded file
             file_type: Type of file
+            language: Optional language of the audio file (e.g. "en" for English). Only needed for audio files to assist with transcription.
             
         Returns:
             Tuple of (processed_content, temp_file_path, file_size_bytes)
@@ -560,6 +570,13 @@ class FileManagementService:
                 elif file_type == "document":
                     # For documents, return basic info (in production, use document processing)
                     content = f"Document file: {file.filename} (Document processing not implemented)"
+                    return content, temp_path, file_size
+                
+                elif file_type == "audio":
+                    # Use existing audio tools for wav files
+                    if not temp_path.lower().endswith(".wav"):
+                        temp_path = AudioTranscriptionService.convert_to_wav(temp_path)
+                    content = extract_text_from_audio(temp_path, language)
                     return content, temp_path, file_size
                 
                 else:

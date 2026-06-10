@@ -71,6 +71,12 @@ function ChatInterface({
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
+  // Audio recording
+  const [isRecording, setIsRecording] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -235,19 +241,20 @@ function ChatInterface({
 
   // ─── Message sending ─────────────────────────────────────────────────────────
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() && persistentFiles.length === 0) return;
+  const handleSendMessage = async (messageOverride?: string) => {
+    const messageText = messageOverride !== undefined ? messageOverride : inputMessage;
+
+    if (!messageText?.trim() && persistentFiles.length === 0) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       type: 'user',
-      content: inputMessage,
+      content: messageText,
       timestamp: new Date(),
       files: persistentFiles.map((f) => f.filename),
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    const messageText = inputMessage;
     setInputMessage('');
     // Force scroll to bottom so the user sees the streaming response
     resetScrollLock();
@@ -346,9 +353,15 @@ function ChatInterface({
       }
     }
 
-    for (const file of newFiles) {
+    for (const file of files) {
+      let language: string | undefined;
+
+      language = window.prompt(
+        `Language for "${file.name}"? (es, en, eu)`
+      ) || 'en';
+
       try {
-        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId);
+        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId, language);
       } catch (error) {
         console.error(`Error uploading file ${file.name}:`, error);
       }
@@ -446,6 +459,78 @@ function ChatInterface({
   }));
 
   const canSend = !isStreaming && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+
+  const handleStartRecording = async () => {
+    try {
+      // For using user's microphone
+      const audioTracks = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // For using system audio (not supported in all browsers, and may require additional permissions)
+      //const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      //const audioTracks = new MediaStream(stream.getAudioTracks());
+
+      const recorder = new MediaRecorder(audioTracks);
+
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+
+        const audioFile = new File(
+          [audioBlob],
+          `recording-${Date.now()}.webm`,
+          {
+            type: 'audio/webm',
+          }
+        );
+
+        const language = window.prompt('Language used in the recording? (es, en, eu)') || 'en';
+
+        const response = await apiService.uploadRecordedAudio(
+          appId,
+          agentId,
+          audioFile,
+          currentConversationId,
+          language
+        )
+
+        const transcript = response.transcript;
+
+        setInputMessage(transcript);
+
+        if (!transcript) {
+          alert('No transcript available for the recording.');
+        }
+
+        await handleSendMessage(transcript);
+      };
+
+      recorder.start();
+
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  };
+
+  const handleStopRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+
+    if (!recorder) return;
+
+    recorder.stop();
+
+    recorder.stream.getTracks().forEach((track) => track.stop());
+
+    setIsRecording(false);
+  };
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -776,7 +861,7 @@ function ChatInterface({
                   onChange={handleFileUpload}
                   className="hidden"
                   id="file-upload"
-                  accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
+                  accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx,.wav,.mp3,.ogg,.flac,.aac"
                 />
                 <button
                   type="button"
@@ -830,7 +915,7 @@ function ChatInterface({
                 }}
               />
 
-              {/* Send / Abort button */}
+              {/* Send / Record / Abort button */}
               {isStreaming ? (
                 <button
                   type="button"
@@ -850,10 +935,30 @@ function ChatInterface({
                     <rect x="6" y="6" width="12" height="12" rx="2" />
                   </svg>
                 </button>
-              ) : (
+              ) : isRecording ? (
                 <button
                   type="button"
-                  onClick={handleSendMessage}
+                  onClick={handleStopRecording}
+                  className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30
+                            text-red-600 dark:text-red-400
+                            hover:bg-red-200 dark:hover:bg-red-900/50
+                            transition-all duration-150 active:scale-95 shrink-0"
+                  aria-label="Stop recording"
+                  title="Stop recording"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                </button>
+              ) : inputMessage.trim().length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage()}
                   disabled={!canSend}
                   className="pg-btn-send shrink-0 !p-2"
                   aria-label="Send message"
@@ -871,6 +976,28 @@ function ChatInterface({
                       strokeWidth={2}
                       d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
                     />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStartRecording}
+                  className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-900/30
+                            text-indigo-600 dark:text-indigo-400
+                            hover:bg-indigo-200 dark:hover:bg-indigo-900/50
+                            transition-all duration-150 active:scale-95 shrink-0"
+                  aria-label="Record audio"
+                  title="Record audio"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z" />
+                    <path d="M17 11a1 1 0 10-2 0 3 3 0 01-6 0 1 1 0 10-2 0 5 5 0 004 4.9V19H9a1 1 0 100 2h6a1 1 0 100-2h-2v-3.1A5 5 0 0017 11z" />
                   </svg>
                 </button>
               )}

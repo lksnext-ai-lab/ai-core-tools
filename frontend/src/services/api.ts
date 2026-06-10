@@ -1835,7 +1835,8 @@ class ApiService {
     }
   }
 
-  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null): Promise<{ file_id: string }> {
+  // ==================== FILE MANAGEMENT API ====================
+  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null, language?: string): Promise<{ file_id: string }> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -1843,7 +1844,34 @@ class ApiService {
       formData.append('conversation_id', conversationId.toString());
     }
 
+    if (language) {
+      formData.append('language', language);
+    }
+
     return this.request(`/internal/apps/${appId}/agents/${agentId}/upload-file`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async uploadRecordedAudio(
+    appId: number,
+    agentId: number,
+    file: File,
+    conversationId?: number | null,
+    language: string = 'en'
+  ) {
+    const formData = new FormData();
+
+    formData.append('audio_file', file);
+
+    if (conversationId) {
+      formData.append('conversation_id', conversationId.toString());
+    }
+
+    formData.append('language', language);
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/transcribe-audio`, {
       method: 'POST',
       body: formData,
     });
