@@ -94,6 +94,7 @@ async def call_agent(
     db: Annotated[Session, Depends(get_db)],
     files: Annotated[List[UploadFile], File(description="Optional files to attach (images, PDFs, text files)")] = None,
     file_references: Annotated[Optional[str], Form(description="JSON array of existing file_ids to include. If not provided, all files are included.")] = None,
+    language: Annotated[Optional[str], Form(description="Optional language code for the transcription of an audio file, e.g. 'en'")] = None,
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters for silo-based agents")] = None,
     conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue existing conversation")] = None,    
     user_token: Annotated[Optional[str], Form(description="End-user Bearer token to forward to MCP servers. When provided, every MCP tool call in this execution will include Authorization: Bearer <token>.")] = None,
@@ -124,6 +125,7 @@ async def call_agent(
     - Text files (.txt, .md, .json, .csv): Content is read directly
     - Images (.jpg, .jpeg, .png, .gif, .bmp): Sent to vision models
     - Documents (.doc, .docx): Basic support
+    - Audio files (.mp3, .wav, .ogg, .flac, .aac): Transcribed to text (language can be specified)
     """
     validate_api_key_for_app(app_id, api_key, db)
     agent = validate_agent_ownership(db, agent_id, app_id)
@@ -142,6 +144,7 @@ async def call_agent(
             agent_id=agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            language=language,
             has_memory=bool(agent.has_memory),
         )
 
@@ -204,6 +207,7 @@ async def call_agent_stream(
     conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue")] = None,
     user_token: Annotated[Optional[str], Form(description="End-user Bearer token to forward to MCP servers.")] = None,
 
+    language: Annotated[Optional[str], Form(description="Optional language code for the transcription of an audio file, e.g. 'en'")] = None,
 ):
     """
     Call an agent with Server-Sent Events streaming response.
@@ -237,6 +241,7 @@ async def call_agent_stream(
             agent_id=agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            language=language,
             has_memory=bool(agent.has_memory),
         )
 

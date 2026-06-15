@@ -7,13 +7,16 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import AudioMessage from './AudioMessage';
 
 interface Message {
   id: string;
-  type: 'user' | 'agent' | 'error';
+  type: 'user' | 'agent-text' | 'agent-audio' | 'error';
   content: string;
   timestamp: Date;
   files?: string[];
+  audioUrl?: string;
+  transcript?: string;
 }
 
 /** Shape returned by the API for each history message. */
@@ -71,6 +74,13 @@ function ChatInterface({
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
+  // Audio response
+  type ResponseMode = 'text' | 'audio';
+
+  const [responseMode, setResponseMode] = useState<ResponseMode>('text');
+  const [audioLanguage, setAudioLanguage] = useState<'en' | 'es' | 'eu' | 'ca' | 'gl' | 'fr'>('en');
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+
   // Audio recording
   const [isRecording, setIsRecording] = useState(false);
 
@@ -80,6 +90,9 @@ function ChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const audioUrlsRef = useRef<string[]>([]); // To track and revoke audio URLs
+
   /** Tracks the ID of the message just committed from streaming — skips entrance animation */
   const lastStreamedMsgIdRef = useRef<string | null>(null);
   /** True while the user has manually scrolled away from the bottom. Pauses auto-scroll
@@ -184,7 +197,7 @@ function ChatInterface({
             const loadedMessages: Message[] = response.messages.map(
               (msg: RawHistoryMessage, index: number) => ({
                 id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent',
+                type: msg.role === 'user' ? 'user' : 'agent-text',
                 content: msg.content,
                 timestamp: new Date(),
               })
@@ -200,7 +213,7 @@ function ChatInterface({
             const loadedMessages: Message[] = response.messages.map(
               (msg: RawHistoryMessage, index: number) => ({
                 id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent',
+                type: msg.role === 'user' ? 'user' : 'agent-text',
                 content: msg.content,
                 timestamp: new Date(),
               })
@@ -239,9 +252,19 @@ function ChatInterface({
     }
   }, [metadataFields, filterMetadata]);
 
+  useEffect(() => {
+    return () => {
+      // Cleanup all object URLs on unmount
+      audioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      audioUrlsRef.current = [];
+    };
+  }, []);
+
   // ─── Message sending ─────────────────────────────────────────────────────────
 
   const handleSendMessage = async (messageOverride?: string) => {
+    console.log('Current responseMode', responseMode);
+
     const messageText = messageOverride !== undefined ? messageOverride : inputMessage;
 
     if (!messageText?.trim() && persistentFiles.length === 0) return;
@@ -281,12 +304,43 @@ function ChatInterface({
 
       const agentMsgId = (Date.now() + 1).toString();
       lastStreamedMsgIdRef.current = agentMsgId;
-      const agentMsg: Message = {
-        id: agentMsgId,
-        type: 'agent',
-        content: responseContent,
-        timestamp: new Date(),
-      };
+
+      let audioUrl: string | undefined;
+
+      if (responseMode === 'audio' && responseContent.trim().length > 0) {
+        try {
+          const audioBlob = await apiService.synthesizeAudio(appId, agentId, responseContent, audioLanguage);
+
+          audioUrl = URL.createObjectURL(audioBlob);
+          audioUrlsRef.current.push(audioUrl);
+        } catch (audioError) {
+          setIsAudioPlaying(false);
+          console.error('Error synthesizing or playing audio:', audioError);
+        }
+      }
+
+      console.log('responseMode:', responseMode);
+      console.log('audioUrl:', audioUrl);
+
+      const agentMsg: Message =
+        responseMode === 'audio'
+          ? {
+            id: agentMsgId,
+            type: 'agent-audio',
+            content: '',
+            transcript: responseContent,
+            audioUrl,
+            timestamp: new Date(),
+          }
+          : {
+            id: agentMsgId,
+            type: 'agent-text',
+            content: responseContent,
+            timestamp: new Date(),
+          };
+
+      console.log(agentMsg);
+
       // Commit the message and release the streaming hold in the same batch
       setMessages((prev) => [...prev, agentMsg]);
       setHoldStreamingContent(false);
@@ -315,6 +369,10 @@ function ChatInterface({
   const handleResetConversation = async () => {
     try {
       await apiService.resetAgentConversation(appId, agentId);
+
+      audioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      audioUrlsRef.current = [];
+
       setMessages([]);
       setPersistentFiles([]);
       setFilterMetadata(undefined);
@@ -354,14 +412,8 @@ function ChatInterface({
     }
 
     for (const file of files) {
-      let language: string | undefined;
-
-      language = window.prompt(
-        `Language for "${file.name}"? (es, en, eu)`
-      ) || 'en';
-
       try {
-        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId, language);
+        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId, audioLanguage);
       } catch (error) {
         console.error(`Error uploading file ${file.name}:`, error);
       }
@@ -490,7 +542,7 @@ function ChatInterface({
           }
         );
 
-        const language = window.prompt('Language used in the recording? (es, en, eu)') || 'en';
+        const language = audioLanguage;
 
         const response = await apiService.uploadRecordedAudio(
           appId,
@@ -778,35 +830,71 @@ function ChatInterface({
 
                   // Agent message — skip entrance animation for the message just committed from streaming
                   const wasStreamed = message.id === lastStreamedMsgIdRef.current;
-                  return (
-                    <div
-                      key={message.id}
-                      className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
-                    >
-                      <div className="max-w-[90%] lg:max-w-[80%]">
-                        <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
-                          <MessageContent
-                            content={message.content}
-                            resolveFileUrl={resolveFileUrl}
-                          />
-                        </div>
-                        <div className="mt-1">
-                          <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {message.timestamp.toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                  if (message.type === 'agent-text') {
+                    return (
+                      <div
+                        key={message.id}
+                        className={`flex justify-start ${
+                          wasStreamed ? '' : 'animate-slide-in-left'
+                        }`}
+                      >
+                        <div className="max-w-[90%] lg:max-w-[80%]">
+                          <div className="pg-bubble-agent">
+                            <MessageContent
+                              content={message.content}
+                              resolveFileUrl={resolveFileUrl}
+                            />
+                          </div>
+
+                          <div className="mt-1">
+                            <span className="text-xs text-gray-400">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  };
+                  if (message.type === 'agent-audio') {
+                    return (
+                      <div
+                        key={message.id}
+                        className={`flex justify-start ${
+                          wasStreamed ? '' : 'animate-slide-in-left'
+                        }`}
+                      >
+                        <div className="max-w-[90%] lg:max-w-[80%]">
+                          <div className="pg-bubble-agent">
+                            <AudioMessage
+                              audioUrl={message.audioUrl!}
+                              transcript={message.transcript}
+                              onPlay={() => setIsAudioPlaying(true)}
+                              onPause={() => setIsAudioPlaying(false)}
+                              onEnded={() => setIsAudioPlaying(false)}
+                            />
+                          </div>
+
+                          <div className="mt-1">
+                            <span className="text-xs text-gray-400">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  };
                 })}
 
                 {/* Streaming state — single component handles thinking + tools + content.
                     showStreaming stays true briefly after isStreaming flips to false,
                     keeping content visible until the final message is committed. */}
-                {showStreaming && (
+                {showStreaming && responseMode === 'text' && (
                   <StreamingMessage
                     content={streamingContent}
                     isStreaming={isStreaming}
@@ -851,6 +939,37 @@ function ChatInterface({
 
           {/* Input area */}
           <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
+            <div className="mb-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setResponseMode('text')}
+                className={`px-2 py-1 rounded-md text-xs ${responseMode === 'text' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
+              >
+                Text
+              </button>
+              <button
+                type="button"
+                onClick={() => setResponseMode('audio')}
+                className={`px-2 py-1 rounded-md text-xs ${responseMode === 'audio' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
+              >
+                Audio
+              </button>
+
+              <select
+                value={audioLanguage}
+                onChange={(e) => setAudioLanguage(e.target.value as 'en' | 'es' | 'eu' | 'ca' | 'gl' | 'fr')}
+                className="text-xs rounded-md px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
+              >
+                <option value="en">EN</option>
+                <option value="es">ES</option>
+                <option value="ca">CA</option>
+                <option value="gl">GL</option>
+                <option value="eu">EU</option>
+                <option value="fr">FR</option>
+              </select>
+
+              {isAudioPlaying && <span className="text-xs text-gray-500">Playing...</span>}
+            </div>
             <div className="pg-glass rounded-xl px-3 py-2.5 flex items-end gap-2">
               {/* File attach button */}
               <div>
@@ -861,7 +980,7 @@ function ChatInterface({
                   onChange={handleFileUpload}
                   className="hidden"
                   id="file-upload"
-                  accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx,.wav,.mp3,.ogg,.flac,.aac"
+                  accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx,.wav,.mp3,.ogg,.flac,.aac,.m4a,.webm"
                 />
                 <button
                   type="button"

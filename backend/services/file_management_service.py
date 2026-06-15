@@ -524,7 +524,7 @@ class FileManagementService:
             return "document"
         
         # Audio files
-        elif ext in ['.wav', '.mp3', '.ogg', '.flac', '.aac']:
+        elif ext in ['.wav', '.mp3', '.ogg', '.flac', '.aac', '.m4a', '.webm']:
             return "audio"
         
         else:
@@ -1056,6 +1056,7 @@ class FileManagementService:
         agent_id: int,
         user_context: Dict,
         conversation_id: Optional[int],
+        language: Optional[str] = None,
         has_memory: bool = False,
     ) -> List["FileReference"]:
         """Upload new files and merge with the existing attached files for a chat turn.
@@ -1099,6 +1100,7 @@ class FileManagementService:
                             agent_id=agent_id,
                             user_context=user_context,
                             conversation_id=conversation_id,
+                            language=language,
                             has_memory=has_memory,
                         )
                         all_refs.append(file_ref)

@@ -1877,6 +1877,35 @@ class ApiService {
     });
   }
 
+  async synthesizeAudio(
+    appId: number,
+    agentId: number,
+    text: string,
+    language: string = 'en',
+  ): Promise<Blob> {
+    const formData = new FormData();
+    formData.append('text', text);
+    formData.append('language', language);
+
+    const headers: Record<string, string> = {};
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`/internal/apps/${appId}/agents/${agentId}/synthesize-audio`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
   async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null): Promise<{ files: AttachedFile[] }> {
     const url = conversationId
       ? `/internal/apps/${appId}/agents/${agentId}/files?conversation_id=${conversationId}`

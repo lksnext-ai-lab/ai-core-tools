@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
-from fastapi.responses import StreamingResponse
+import tempfile
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse, StreamingResponse
 from utils.security import generate_signature
 import os
 from typing import Annotated, Any, AsyncGenerator, List, Optional
@@ -1012,6 +1014,43 @@ async def transcribe_audio(
     except Exception as e:
         logger.error(f"Audio transcription error: {e}")
         raise HTTPException(status_code=500, detail="Audio transcription failed")
+
+
+@agents_router.post(
+        "/{agent_id}/synthesize-audio",
+        summary="Synthesize audio from text",
+        tags=["Agents"],
+)
+async def synthesize_audio(
+    app_id: int,
+    agent_id: int,
+    text: Annotated[str, Form()],
+    language: Annotated[Optional[str], Form()] = None,
+    background_tasks: BackgroundTasks = None,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    try:
+        _get_agent_or_404(db, agent_id, app_id)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix="") as tf:
+            output_base = tf.name
+
+        wav_path = AudioTranscriptionService.synthesize_audio(text, language, output_base)
+
+        if background_tasks:
+            background_tasks.add_task(os.remove, wav_path)
+        
+        return FileResponse(
+            path=wav_path,
+            media_type="audio/wav",
+            filename="agent-response.wav",
+            background=background_tasks,
+        )
+    except Exception as e:
+        logger.error(f"Audio synthesis error: {e}")
+        raise HTTPException(status_code=500, detail="Audio synthesis failed")
 
 
 @agents_router.get(

@@ -1,9 +1,12 @@
 import os
+import re
 import tempfile
 import subprocess
 
+from fastapi import HTTPException
+
 from utils.logger import get_logger
-from tools.audioTools import extract_text_from_audio
+from tools.audioTools import extract_text_from_audio, turn_text_to_speech
 
 logger = get_logger(__name__)
 
@@ -63,3 +66,46 @@ class AudioTranscriptionService:
                     logger.info(f"Removed temporary WAV file {wav_path}")
                 except Exception as e:
                     logger.error(f"Error removing temporary WAV file {wav_path}: {e}")
+        
+    @staticmethod
+    def strip_markdown(text: str) -> str:
+        # negritas
+        text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+
+        # cursivas
+        text = re.sub(r"\*(.*?)\*", r"\1", text)
+
+        # código inline
+        text = re.sub(r"`(.*?)`", r"\1", text)
+
+        # títulos markdown
+        text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+
+        # enlaces [texto](url) -> texto
+        text = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", text)
+
+        return text
+    
+    @staticmethod
+    def synthesize_audio(text: str, language: str | None, output_path: str) -> str:
+        """
+        Synthesize speech from text and return the generated WAV path.
+
+        Args:
+            text: Text to synthesize.
+            language: Language code ('en', 'es', 'eu', 'ca', 'gl', 'fr'). Defaults to "en" when missing.
+            output_path: Base output path without extension.
+
+        Returns:
+            Absolute path to generated WAV file.
+        """
+        try:
+            selected_language = language or "en"
+
+            plain_text = AudioTranscriptionService.strip_markdown(text)
+
+            wav_path = turn_text_to_speech(plain_text, selected_language, output_path)
+            return wav_path
+        except Exception as e:
+            logger.error(f"Error synthesizing audio for text '{text}': {e}")
+            raise HTTPException(status_code=500, detail="Audio synthesis failed")
