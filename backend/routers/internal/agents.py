@@ -736,6 +736,7 @@ async def chat_with_agent_stream(
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
     response_mode: Annotated[Optional[str], Form()] = "text",
+    audio_language: Annotated[Optional[str], Form()] = "en",
 ):
     """
     Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)
@@ -761,6 +762,7 @@ async def chat_with_agent_stream(
             "app_id": app_id,
             "token": jwt_token,
             "response_mode": response_mode,
+            "audio_language": audio_language,
         }
 
         fms = FileManagementService()

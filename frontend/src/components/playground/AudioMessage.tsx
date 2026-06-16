@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 interface AudioMessageProps {
     audioUrl: string;
     transcript?: string;
+    autoPlay?: boolean;
     onPlay?: () => void;
     onEnded?: () => void;
     onPause?: () => void;
@@ -14,16 +15,9 @@ export default function AudioMessage({
     onPlay,
     onEnded,
     onPause,
+    autoPlay = false,
 }: AudioMessageProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
-
-    useEffect(() => {
-        console.log('AudioMessage mounted:', audioUrl);
-
-        return () => {
-            console.log('AudioMessage unmounted:', audioUrl);
-        }
-    }, [audioUrl]);
 
     useEffect(() => {
         const audio = audioRef.current;
@@ -31,9 +25,11 @@ export default function AudioMessage({
         if (!audio) return;
 
         const handleCanPlay = () => {
-            audio.play().catch((err) => {
-                console.warn('Autoplay blocked: ', err);
-            });
+            if (autoPlay) {
+                audio.play().catch((err) => {
+                    console.warn('Autoplay blocked: ', err);
+                });
+            }
         };
 
         audio.addEventListener('canplay', handleCanPlay);
@@ -41,7 +37,7 @@ export default function AudioMessage({
         return () => {
             audio.removeEventListener('canplay', handleCanPlay);
         }
-    }, [audioUrl]);
+    }, [audioUrl, autoPlay]);
 
     return (
         <div className="space-y-2">

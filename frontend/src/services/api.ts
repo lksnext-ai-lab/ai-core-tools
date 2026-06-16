@@ -1779,6 +1779,7 @@ class ApiService {
       searchParams?: unknown;
       conversationId?: number | null;
       responseMode?: string;
+      audioLanguage?: string;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     }
@@ -1798,6 +1799,9 @@ class ApiService {
 
     if (options.responseMode) {
       formData.append('response_mode', options.responseMode);
+    }
+    if (options.audioLanguage) {
+      formData.append('audio_language', options.audioLanguage);
     }
 
     const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;

@@ -18,6 +18,7 @@ interface Message {
 
   audioUrl?: string;
   audioFileId?: string;
+  autoPlay?: boolean;
 
   transcript?: string;
 }
@@ -204,8 +205,6 @@ function ChatInterface({
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
 
-          console.log('RAW HISTORY RESPONSE', response.messages);
-
           if (response.messages && response.messages.length > 0) {
             const loadedMessages: Message[] = await Promise.all(response.messages.map(
               async (msg: RawHistoryMessage, index: number) => {
@@ -236,6 +235,7 @@ function ChatInterface({
                     transcript: msg.transcript,
                     audioFileId: msg.audio_file_id,
                     audioUrl,
+                    autoPlay: false,
                     timestamp: new Date(),
                   };
                 }
@@ -248,7 +248,6 @@ function ChatInterface({
                 };
               }
             ));
-            console.log('SETTING HISTORY', loadedMessages);
 
             setMessages(loadedMessages);
           } else {
@@ -286,6 +285,7 @@ function ChatInterface({
                     transcript: msg.transcript,
                     audioFileId: msg.audio_file_id,
                     audioUrl,
+                    autoPlay: false,
                     timestamp: new Date(),
                   };
                 }
@@ -407,6 +407,7 @@ function ChatInterface({
           transcript: responseContent,
           audioFileId: result.audioFileId,
           audioUrl,
+          autoPlay: true,
           timestamp: new Date(),
         };
 
@@ -955,6 +956,7 @@ function ChatInterface({
                             <AudioMessage
                               audioUrl={message.audioUrl!}
                               transcript={message.transcript}
+                              autoPlay={message.autoPlay}
                               onPlay={() => setIsAudioPlaying(true)}
                               onPause={() => setIsAudioPlaying(false)}
                               onEnded={() => setIsAudioPlaying(false)}
