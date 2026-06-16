@@ -39,6 +39,7 @@ class FileReference:
         "text": "text/plain",
         "image": "image/jpeg",  # Default, will be overridden based on extension
         "document": "application/msword",
+        "audio_response": "audio/wav",
         "unknown": "application/octet-stream"
     }
     
@@ -1182,4 +1183,129 @@ class FileManagementService:
             
         except Exception as e:
             logger.error(f"Error getting file stats: {str(e)}")
-            return {} 
+            return {}
+    
+    async def register_audio_response(
+        self,
+        file_path: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ) -> Optional[FileReference]:
+
+        try:
+            if not os.path.exists(file_path):
+                logger.warning(
+                    f"register_audio_response: file not found at {file_path}"
+                )
+                return None
+
+            filename = os.path.basename(file_path)
+            file_id = str(uuid.uuid4())
+            file_size = os.path.getsize(file_path)
+
+            relative_path = os.path.relpath(
+                file_path,
+                self._tmp_base_folder
+            ).replace(os.sep, "/")
+
+            file_ref = FileReference(
+                file_id=file_id,
+                filename=filename,
+                file_type="audio_response",
+                content="Generated audio response",
+                file_path=relative_path,
+                file_size_bytes=file_size,
+                conversation_id=str(conversation_id)
+                if conversation_id
+                else None,
+            )
+
+            file_ref.processing_status = "ready"
+
+            #
+            # IMPORTANTE:
+            # NO añadir a self._files
+            #
+            # NO aparecerá en AttachedFilesPanel
+            #
+
+            session_key = self._get_session_key(
+                agent_id,
+                user_context,
+                str(conversation_id)
+                if conversation_id
+                else None,
+            )
+
+            session_dir = os.path.join(
+                self._persistent_dir,
+                session_key,
+                "audio_responses",
+            )
+
+            os.makedirs(session_dir, exist_ok=True)
+
+            metadata_file = os.path.join(
+                session_dir,
+                f"{file_id}.json",
+            )
+
+            with open(metadata_file, "w") as f:
+                json.dump(file_ref.to_dict(), f, indent=2)
+
+            logger.info(
+                "Registered audio response %s (id=%s)",
+                filename,
+                file_id,
+            )
+
+            return file_ref
+
+        except Exception as e:
+            logger.error(
+                f"Error registering audio response: {e}",
+                exc_info=True,
+            )
+            return None
+    
+    async def get_audio_response(
+        self,
+        file_id: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ):
+        try:
+
+            session_key = self._get_session_key(
+                agent_id,
+                user_context,
+                str(conversation_id)
+                if conversation_id
+                else None,
+            )
+
+            audio_dir = os.path.join(
+                self._persistent_dir,
+                session_key,
+                "audio_responses",
+            )
+
+            metadata_file = os.path.join(
+                audio_dir,
+                f"{file_id}.json",
+            )
+
+            if not os.path.exists(metadata_file):
+                return None
+
+            with open(metadata_file) as f:
+                return json.load(f)
+
+        except Exception as e:
+            logger.error(
+                f"Error getting audio response: {e}",
+                exc_info=True,
+            )
+            return None

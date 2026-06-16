@@ -4,9 +4,12 @@ import ast
 import json
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
+from services.conversation_message_service import ConversationMessageService
+from services.audio_transcription_service import AudioTranscriptionService
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
 from services.agent_execution_context import AgentExecutionContext
@@ -230,6 +233,15 @@ class AgentExecutionService:
             conversation.conversation_id if conversation else None
         )
 
+        if conversation:
+            ConversationMessageService.create(
+                db=db,
+                conversation_id=conversation.conversation_id,
+                role="user",
+                content=message,
+                message_type="text"
+            )
+
         # 9. Resolve working directory
         app_config = get_app_config()
         tmp_base = app_config['TMP_BASE_FOLDER']
@@ -292,12 +304,13 @@ class AgentExecutionService:
         import re as _re
         from tools.agentTools import parse_agent_response
 
+        file_service = FileManagementService()
+
         response = raw_response
         files_data: List[Dict[str, Any]] = []
 
         # 1 + 2. Sync output files and inject markers
         if ctx.working_dir:
-            file_service = FileManagementService()
             new_files = await file_service.sync_output_files(
                 working_dir=ctx.working_dir,
                 agent_id=ctx.agent_id,
@@ -321,6 +334,49 @@ class AgentExecutionService:
         # 3. Parse response
         parsed_response = parse_agent_response(response, ctx.agent)
 
+        audio_ref = None
+
+        if (
+            ctx.working_dir
+            and ctx.user_context
+            and ctx.user_context.get("response_mode") == "audio"
+            and isinstance(parsed_response, str)
+        ):
+            os.makedirs(ctx.working_dir, exist_ok=True)
+
+            audio_base_path = os.path.join(
+                ctx.working_dir,
+                f"audio_{uuid4().hex}"
+            )
+
+            AudioTranscriptionService.synthesize_audio(
+                text=parsed_response,
+                language=ctx.user_context.get("audio_language", "en"),
+                output_path=audio_base_path,
+            )
+
+            audio_ref = await file_service.register_audio_response(
+                file_path=audio_base_path + ".wav",
+                agent_id=ctx.agent_id,
+                user_context=ctx.user_context,
+                conversation_id=(ctx.effective_conv_id if ctx.effective_conv_id else None),
+            )
+
+        audio_file_id = None
+
+        if audio_ref:
+            audio_file_id = audio_ref.file_id
+            
+        if ctx.conversation:
+            ConversationMessageService.create(
+                db=db,
+                conversation_id=ctx.conversation.conversation_id,
+                role="agent",
+                content=parsed_response,
+                message_type="audio" if ctx.user_context.get("response_mode") == "audio" else "text",
+                audio_file_id=audio_file_id
+            )
+        
         # 4. Update request count
         self._update_request_count(ctx.agent, db)
 
@@ -383,6 +439,8 @@ class AgentExecutionService:
 
         return {
             "response": parsed_response,
+            "message_type": "audio" if ctx.user_context.get("response_mode") == "audio" else "text",
+            "audio_file_id": audio_file_id,
             "agent_id": ctx.agent_id,
             "conversation_id": (
                 ctx.conversation.conversation_id if ctx.conversation else None

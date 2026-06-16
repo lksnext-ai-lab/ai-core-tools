@@ -15,7 +15,10 @@ interface Message {
   content: string;
   timestamp: Date;
   files?: string[];
+
   audioUrl?: string;
+  audioFileId?: string;
+
   transcript?: string;
 }
 
@@ -23,6 +26,12 @@ interface Message {
 interface RawHistoryMessage {
   role: string;
   content: string;
+
+  message_type: 'text' | 'audio';
+
+  transcript?: string;
+
+  audio_file_id?: string;
 }
 
 /** Shape returned by the API for each attached/persistent file. */
@@ -115,6 +124,8 @@ function ChatInterface({
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
   const showStreaming = isStreaming || holdStreamingContent;
 
+    const isBusy = isStreaming;
+
   // ─── Scroll helpers ──────────────────────────────────────────────────────────
 
   /** Scroll the messages container to its bottom. Uses scrollTo on the container
@@ -193,15 +204,52 @@ function ChatInterface({
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
 
+          console.log('RAW HISTORY RESPONSE', response.messages);
+
           if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map(
-              (msg: RawHistoryMessage, index: number) => ({
-                id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent-text',
-                content: msg.content,
-                timestamp: new Date(),
-              })
-            );
+            const loadedMessages: Message[] = await Promise.all(response.messages.map(
+              async (msg: RawHistoryMessage, index: number) => {
+                if (msg.role === 'user') {
+                  return {
+                    id: `history-${index}`,
+                    type: 'user',
+                    content: msg.content,
+                    timestamp: new Date(),
+                  };
+                }
+
+                if (msg.message_type === 'audio') {
+
+                  const audioUrl = msg.audio_file_id
+                    ? await apiService.getFileDownloadUrl(
+                        appId,
+                        agentId,
+                        msg.audio_file_id,
+                        currentConversationId
+                      )
+                    : undefined;
+
+                  return {
+                    id: `history-${index}`,
+                    type: 'agent-audio',
+                    content: '',
+                    transcript: msg.transcript,
+                    audioFileId: msg.audio_file_id,
+                    audioUrl,
+                    timestamp: new Date(),
+                  };
+                }
+
+                return {
+                  id: `history-${index}`,
+                  type: 'agent-text',
+                  content: msg.content,
+                  timestamp: new Date(),
+                };
+              }
+            ));
+            console.log('SETTING HISTORY', loadedMessages);
+
             setMessages(loadedMessages);
           } else {
             setMessages([]);
@@ -210,14 +258,46 @@ function ChatInterface({
           const response = await apiService.getConversationHistory(appId, agentId);
 
           if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map(
-              (msg: RawHistoryMessage, index: number) => ({
-                id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent-text',
-                content: msg.content,
-                timestamp: new Date(),
-              })
-            );
+            const loadedMessages: Message[] = await Promise.all(response.messages.map(
+              async (msg: RawHistoryMessage, index: number) => {
+                if (msg.role === 'user') {
+                  return {
+                    id: `history-${index}`,
+                    type: 'user',
+                    content: msg.content,
+                    timestamp: new Date(),
+                  };
+                }
+
+                if (msg.message_type === 'audio') {
+                  const audioUrl = msg.audio_file_id
+                    ? await apiService.getFileDownloadUrl(
+                        appId,
+                        agentId,
+                        msg.audio_file_id,
+                        currentConversationId
+                      )
+                    : undefined;
+
+                  return {
+                    id: `history-${index}`,
+                    type: 'agent-audio',
+                    content: '',
+                    transcript: msg.transcript,
+                    audioFileId: msg.audio_file_id,
+                    audioUrl,
+                    timestamp: new Date(),
+                  };
+                }
+
+                return {
+                  id: `history-${index}`,
+                  type: 'agent-text',
+                  content: msg.content,
+                  timestamp: new Date(),
+                };
+              }
+            ));
             setMessages(loadedMessages);
           } else {
             setMessages([]);
@@ -294,6 +374,8 @@ function ChatInterface({
       const result = await sendMessage(messageText, {
         conversationId: currentConversationId,
         searchParams,
+        responseMode,
+        audioLanguage,
       });
 
       const rawResponse = result.response || '';
@@ -305,44 +387,46 @@ function ChatInterface({
       const agentMsgId = (Date.now() + 1).toString();
       lastStreamedMsgIdRef.current = agentMsgId;
 
-      let audioUrl: string | undefined;
+      if (
+        result.messageType === 'audio' &&
+        result.audioFileId
+      ) {
 
-      if (responseMode === 'audio' && responseContent.trim().length > 0) {
-        try {
-          const audioBlob = await apiService.synthesizeAudio(appId, agentId, responseContent, audioLanguage);
+        const audioUrl =
+          await apiService.getFileDownloadUrl(
+            appId,
+            agentId,
+            result.audioFileId,
+            result.conversationId || currentConversationId
+          );
 
-          audioUrl = URL.createObjectURL(audioBlob);
-          audioUrlsRef.current.push(audioUrl);
-        } catch (audioError) {
-          setIsAudioPlaying(false);
-          console.error('Error synthesizing or playing audio:', audioError);
-        }
+        const agentMsg: Message = {
+          id: agentMsgId,
+          type: 'agent-audio',
+          content: '',
+          transcript: responseContent,
+          audioFileId: result.audioFileId,
+          audioUrl,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, agentMsg]);
+
+      } else {
+
+        const agentMsg: Message = {
+          id: agentMsgId,
+          type: 'agent-text',
+          content: responseContent,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, agentMsg]);
+
       }
 
       console.log('responseMode:', responseMode);
-      console.log('audioUrl:', audioUrl);
 
-      const agentMsg: Message =
-        responseMode === 'audio'
-          ? {
-            id: agentMsgId,
-            type: 'agent-audio',
-            content: '',
-            transcript: responseContent,
-            audioUrl,
-            timestamp: new Date(),
-          }
-          : {
-            id: agentMsgId,
-            type: 'agent-text',
-            content: responseContent,
-            timestamp: new Date(),
-          };
-
-      console.log(agentMsg);
-
-      // Commit the message and release the streaming hold in the same batch
-      setMessages((prev) => [...prev, agentMsg]);
       setHoldStreamingContent(false);
 
       if (result.conversationId && !currentConversationId) {
@@ -510,7 +594,7 @@ function ChatInterface({
     content_preview: f.content_preview,
   }));
 
-  const canSend = !isStreaming && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+  const canSend = !isBusy && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   const handleStartRecording = async () => {
     try {
@@ -1035,7 +1119,7 @@ function ChatInterface({
               />
 
               {/* Send / Record / Abort button */}
-              {isStreaming ? (
+              {isBusy ? (
                 <button
                   type="button"
                   onClick={abortStream}

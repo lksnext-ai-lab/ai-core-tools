@@ -1778,6 +1778,7 @@ class ApiService {
       files?: File[];
       searchParams?: unknown;
       conversationId?: number | null;
+      responseMode?: string;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     }
@@ -1793,6 +1794,10 @@ class ApiService {
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));
+    }
+
+    if (options.responseMode) {
+      formData.append('response_mode', options.responseMode);
     }
 
     const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;

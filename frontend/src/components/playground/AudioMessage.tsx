@@ -18,14 +18,30 @@ export default function AudioMessage({
     const audioRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
+        console.log('AudioMessage mounted:', audioUrl);
+
+        return () => {
+            console.log('AudioMessage unmounted:', audioUrl);
+        }
+    }, [audioUrl]);
+
+    useEffect(() => {
         const audio = audioRef.current;
 
         if (!audio) return;
 
-        audio.play().catch((err) => {
-            console.warn('Autoplay blocked: ', err);
-        })
-    }, []);
+        const handleCanPlay = () => {
+            audio.play().catch((err) => {
+                console.warn('Autoplay blocked: ', err);
+            });
+        };
+
+        audio.addEventListener('canplay', handleCanPlay);
+
+        return () => {
+            audio.removeEventListener('canplay', handleCanPlay);
+        }
+    }, [audioUrl]);
 
     return (
         <div className="space-y-2">

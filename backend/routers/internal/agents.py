@@ -735,6 +735,7 @@ async def chat_with_agent_stream(
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
+    response_mode: Annotated[Optional[str], Form()] = "text",
 ):
     """
     Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)
@@ -759,6 +760,7 @@ async def chat_with_agent_stream(
             "oauth": True,
             "app_id": app_id,
             "token": jwt_token,
+            "response_mode": response_mode,
         }
 
         fms = FileManagementService()
@@ -1207,6 +1209,19 @@ async def download_file(
             file_data = next((f for f in files if f.get("file_id") == file_id), None)
             if file_data:
                 break
+        
+        if not file_data:
+            for try_conv_id in conv_ids_to_try:
+
+                file_data = await file_service.get_audio_response(
+                    file_id=file_id,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=try_conv_id,
+                )
+
+                if file_data:
+                    break
 
         if not file_data or not file_data.get("file_path"):
             raise HTTPException(status_code=404, detail="File not found")
