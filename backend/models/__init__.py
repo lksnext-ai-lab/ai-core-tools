@@ -27,6 +27,8 @@ from .crawl_policy import CrawlPolicy
 from .crawl_job import CrawlJob
 from .sharepoint_source import SharePointSource
 from .sharepoint_file import SharePointFile
+from .agent_execution_event import AgentExecutionEvent
+from .agent_tool_call import AgentToolCall
 from .media import Media
 from .mcp_server import MCPServer, MCPServerAgent
 from .system_setting import SystemSetting
@@ -52,4 +54,6 @@ __all__ = [
     'TierConfig',
     'UsageRecord',
     'UserCredential',
+    'AgentExecutionEvent',
+    'AgentToolCall',
 ]

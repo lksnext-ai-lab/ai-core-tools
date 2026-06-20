@@ -8,6 +8,8 @@ and tool events to the client.
 """
 
 from typing import AsyncGenerator, Dict, List, Any
+from datetime import datetime as _dt
+import uuid as _uuid
 
 import psycopg.errors
 from sqlalchemy.orm import Session
@@ -23,7 +25,7 @@ from tools.streaming_utils import (
     map_stream_event,
     SSE_TOKEN,
 )
-from services.agent_execution_service import AgentExecutionService
+from services.agent_execution_service import AgentExecutionService, _fire_metrics_hook
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,6 +90,14 @@ class AgentStreamingService:
         """
         effective_db = db or self.db
         mcp_client = None
+
+        # Metrics instrumentation
+        event_id = str(_uuid.uuid4())
+        started_at = _dt.utcnow()
+        _status = "SUCCESS"
+        _error_code = None
+        _error_message = None
+        _stream_messages = []  # collect last update messages for token extraction
 
         try:
             # ----------------------------------------------------------------
@@ -187,6 +197,11 @@ class AgentStreamingService:
                 config=config,
                 stream_mode=["messages", "updates"],
             ):
+                # Collect messages from updates for token extraction in metrics
+                if mode == "updates" and isinstance(chunk, dict):
+                    for node_output in chunk.values():
+                        if isinstance(node_output, dict) and "messages" in node_output:
+                            _stream_messages = node_output["messages"]
                 events = map_stream_event(mode, chunk)
                 if events:
                     for event in events:
@@ -226,14 +241,42 @@ class AgentStreamingService:
                 type(exc).__name__,
                 str(exc),
             )
+            _status = "ERROR"
+            _error_code = type(exc).__name__
+            _error_message = "Connection error, please retry."
             yield format_sse_event("error", {"message": "Connection error, please retry."})
         except Exception as exc:
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
+            _status = "ERROR"
+            _error_code = type(exc).__name__
+            _error_message = str(exc)[:2000]
             yield format_sse_event("error", {"message": str(exc)})
 
         finally:
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
+            # Fire metrics hook — same pattern as _execute_agent_async
+            try:
+                _ctx = locals().get('ctx')
+                if _ctx is not None:
+                    finished_at = _dt.utcnow()
+                    duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+                    _fire_metrics_hook(
+                        event_id=event_id,
+                        fresh_agent=_ctx.fresh_agent,
+                        user_context=_ctx.user_context,
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        duration_ms=duration_ms,
+                        status=_status,
+                        error_code=_error_code,
+                        error_message=_error_message,
+                        result={"messages": _stream_messages} if _stream_messages else None,
+                        image_files=_ctx.image_files or [],
+                        message=message,
+                    )
+            except Exception:
+                logger.exception("stream metrics hook dispatch failed")
 
     # ------------------------------------------------------------------
     # Private helpers
