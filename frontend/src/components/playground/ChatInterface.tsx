@@ -319,8 +319,14 @@ function ChatInterface({
 
   // ─── File upload ─────────────────────────────────────────────────────────────
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
+  const uploadFiles = async (files: File[] | FileList) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
+    const existingNames = new Set(persistentFiles.map((f) => f.filename));
+    const newFiles = fileArray.filter((f) => !existingNames.has(f.name));
+    if (newFiles.length === 0) return;
+
     setIsLoadingFiles(true);
 
     let targetConversationId = currentConversationId;
@@ -336,12 +342,11 @@ function ChatInterface({
       } catch (convError) {
         console.error('Error creating conversation for file upload:', convError);
         setIsLoadingFiles(false);
-        event.target.value = '';
         return;
       }
     }
 
-    for (const file of files) {
+    for (const file of newFiles) {
       try {
         await apiService.uploadFileForChat(appId, agentId, file, targetConversationId);
       } catch (error) {
@@ -350,19 +355,27 @@ function ChatInterface({
     }
 
     try {
-      const response = await apiService.listAttachedFiles(
-        appId,
-        agentId,
-        targetConversationId
-      );
+      const response = await apiService.listAttachedFiles(appId, agentId, targetConversationId);
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error('Error reloading persistent files:', error);
     } finally {
       setIsLoadingFiles(false);
     }
+  };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    await uploadFiles(event.target.files ?? []);
     event.target.value = '';
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+      f.type.startsWith('image/')
+    );
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    await uploadFiles(imageFiles);
   };
 
   const refreshFileList = async (convId: number | null) => {
@@ -799,6 +812,7 @@ function ChatInterface({
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={`Message ${agentName}...`}
                 disabled={isStreaming}
                 className="flex-1 bg-transparent border-none outline-none resize-none
