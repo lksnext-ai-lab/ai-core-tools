@@ -1,0 +1,19 @@
+# Local development overlay — run ONLY the datastores in Docker.
+#
+# Publishes Postgres (and Qdrant) to the host so a natively-run backend
+# (uvicorn on the host) can reach them, while backend/frontend/caddy run
+# outside Docker. Use together with the base compose file:
+#
+#   # start just the DB (Qdrant only needed if VECTOR_DB_TYPE=QDRANT)
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yml up -d postgres
+#
+# Data persists in the same named volume as the full stack.
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  qdrant:
+    ports:
+      - "6333:6333"
+      - "6334:6334"

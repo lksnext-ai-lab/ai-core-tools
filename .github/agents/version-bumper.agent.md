@@ -1,5 +1,7 @@
 ---
 name: version-bumper
+user-invocable: false
+model: GPT-5 mini
 description: Specialized agent for managing semantic versioning in pyproject.toml. Bumps major, minor, or patch versions following semantic versioning principles. Invoked mainly for the post-release next-dev-cycle bump (e.g. `0.4.2` → `0.4.3.dev0`) — the release version itself is handled inside `@release-manager`.
 tools: ['read', 'edit']
 handoffs:

@@ -5,6 +5,9 @@ from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
@@ -134,6 +137,12 @@ class AgentService:
             marketplace_profile=_serialize_marketplace_profile(
                 getattr(agent, 'marketplace_profile', None)
             ),
+            # RAG retrieval config (step_008)
+            rag_k=getattr(agent, 'rag_k', None) if isinstance(getattr(agent, 'rag_k', None), (int, type(None))) else None,
+            rag_search_type=getattr(agent, 'rag_search_type', None) if isinstance(getattr(agent, 'rag_search_type', None), (str, type(None))) else None,
+            rag_score_threshold=getattr(agent, 'rag_score_threshold', None) if isinstance(getattr(agent, 'rag_score_threshold', None), (float, int, type(None))) else None,
+            rag_max_retrieval_calls=getattr(agent, 'rag_max_retrieval_calls', None) if isinstance(getattr(agent, 'rag_max_retrieval_calls', None), (int, type(None))) else None,
+            rag_fixed_filters=getattr(agent, 'rag_fixed_filters', None) if isinstance(getattr(agent, 'rag_fixed_filters', None), (list, type(None))) else None,
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
@@ -204,10 +213,47 @@ class AgentService:
                 agent = OCRAgent()
             else:
                 agent = Agent()
-        
+
+        # Validate rag_fixed_filters fields against the silo's metadata_definition.
+        # Fixed filters are only meaningful with a silo; reject them otherwise so a
+        # caller never persists dead, never-applied scoping config.
+        raw_fixed_filters = agent_data.get('rag_fixed_filters')
+        if raw_fixed_filters:
+            silo_id = agent_data.get('silo_id') or getattr(agent, 'silo_id', None)
+            if not silo_id:
+                raise ValueError(
+                    "rag_fixed_filters can only be set on an agent that has a silo"
+                )
+            from tools.vector_stores.metadata_filters import SYSTEM_METADATA_FIELDS
+            silo_info = AgentRepository.get_silo_with_metadata_definition(db, silo_id)
+            metadata_def = silo_info.get('metadata_definition') if silo_info else None
+            # With no metadata_definition only the system fields are filterable.
+            declared_fields = frozenset(
+                f['name'] for f in ((metadata_def or {}).get('fields') or [])
+                if isinstance(f, dict) and f.get('name')
+            ) | SYSTEM_METADATA_FIELDS
+            unknown = [
+                c['field'] for c in raw_fixed_filters
+                if isinstance(c, dict) and c.get('field') not in declared_fields
+            ]
+            if unknown:
+                raise ValueError(
+                    f"rag_fixed_filters references unknown metadata fields: {unknown}. "
+                    f"Allowed fields: {sorted(declared_fields)}"
+                )
+
         update_method = self._update_normal_agent
         update_method(agent, agent_data)
-        
+
+        # Threshold search needs a threshold value, else it degrades to plain similarity at
+        # retrieval. Checked on the merged state (the schema can't see the stored value on a
+        # partial update).
+        if agent.rag_search_type == 'similarity_score_threshold' and agent.rag_score_threshold is None:
+            raise ValueError(
+                "rag_score_threshold is required when rag_search_type is "
+                "'similarity_score_threshold'"
+            )
+
         # Set type only if it's not already set (OCRAgent sets it in __init__)
         if not hasattr(agent, 'type') or agent.type is None:
             agent.type = agent_type
@@ -244,7 +290,7 @@ class AgentService:
         agent.enable_code_interpreter = bool(enable_ci_value)
 
         agent.server_tools = data.get('server_tools') or []
-        
+
         # Memory management fields
         if data.get('memory_max_messages') is not None:
             agent.memory_max_messages = data['memory_max_messages']
@@ -252,24 +298,48 @@ class AgentService:
             agent.memory_max_tokens = data['memory_max_tokens']
         if data.get('memory_summarize_threshold') is not None:
             agent.memory_summarize_threshold = data['memory_summarize_threshold']
-        
+
         agent.output_parser_id = data.get('output_parser_id') or None
-        
+
         # Handle temperature field - default to DEFAULT_AGENT_TEMPERATURE if not provided
         agent.temperature = data.get('temperature', DEFAULT_AGENT_TEMPERATURE)
-        
+
         # OCR-specific fields (only set if the agent is an OCRAgent instance)
         if isinstance(agent, OCRAgent):
             agent.vision_service_id = data.get('vision_service_id')
             agent.vision_system_prompt = data.get('vision_system_prompt')
             agent.text_system_prompt = data.get('text_system_prompt')
-        
+
         # Handle is_tool field - can be boolean from API or 'on' from form
         is_tool_value = data.get('is_tool')
         if isinstance(is_tool_value, bool):
             agent.is_tool = is_tool_value
         else:
             agent.is_tool = is_tool_value == 'on'
+
+        # RAG retrieval config (step_008).
+        # New agents: apply opinionated defaults (k=10, max_calls=4) when caller omits the field.
+        # Updates: only touch the column when the caller explicitly supplies a value.
+        is_new = not getattr(agent, 'agent_id', None)
+
+        if data.get('rag_k') is not None:
+            agent.rag_k = data['rag_k']
+        elif is_new:
+            agent.rag_k = 10
+
+        if data.get('rag_max_retrieval_calls') is not None:
+            agent.rag_max_retrieval_calls = data['rag_max_retrieval_calls']
+        elif is_new:
+            agent.rag_max_retrieval_calls = 4
+
+        if data.get('rag_search_type') is not None:
+            agent.rag_search_type = data['rag_search_type']
+
+        # score_threshold and fixed_filters: clear-able via explicit None/empty
+        if 'rag_score_threshold' in data:
+            agent.rag_score_threshold = data['rag_score_threshold']
+        if 'rag_fixed_filters' in data:
+            agent.rag_fixed_filters = data['rag_fixed_filters']
 
     def update_agent_tools(self, db: Session, agent_id: int, tool_ids: list, form_data: dict = None):
         """Update agent tools associations"""

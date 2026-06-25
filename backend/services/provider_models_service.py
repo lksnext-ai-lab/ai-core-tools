@@ -29,6 +29,7 @@ from tools.ai.model_catalog import (
     PROVIDER_MISTRAL,
     PROVIDER_OLLAMA,
     PROVIDER_OPENAI,
+    PROVIDER_OPENROUTER,
     drop_dated_snapshots_when_alias_exists,
     is_chat_model,
     is_embedding_model,
@@ -48,6 +49,7 @@ _DISPATCH: Dict[str, str] = {
     PROVIDER_MISTRAL: "list_mistral_models",
     PROVIDER_GOOGLE: "list_google_models",
     PROVIDER_OLLAMA: "list_ollama_models",
+    PROVIDER_OPENROUTER: "list_openrouter_models",
     # Custom is handled in-line: the AI Service runtime is ChatOllama, so
     # listing reuses the Ollama tags endpoint. Embeddings under Custom
     # use HuggingFace Inference which has no generic listing — those go
@@ -58,7 +60,10 @@ _DISPATCH: Dict[str, str] = {
 
 PROVIDER_ERROR_STATUS: Dict[str, int] = {
     "invalid_request": 400,
-    "unauthorized": 401,
+    # Provider authentication failures (invalid external API keys) were being mapped to HTTP 401. 
+    # The frontend treats any 401 as a user authentication failure and clears the session. 
+    # External provider credential errors are configuration errors, not user authentication failures, so they are now mapped to HTTP 400.
+    "unauthorized": 400,
     "not_found": 404,
     "timeout": 408,
     "network": 502,
@@ -131,7 +136,7 @@ class ProviderModelsService:
         without an API key when the server has auth disabled, so the
         check is skipped for those providers.
         """
-        if req.provider in (PROVIDER_OLLAMA, PROVIDER_CUSTOM):
+        if req.provider in (PROVIDER_OLLAMA, PROVIDER_CUSTOM, PROVIDER_OPENROUTER):
             return
 
         api_key = req.api_key or ""

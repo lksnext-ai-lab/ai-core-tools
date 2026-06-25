@@ -23,11 +23,12 @@ keep the event loop free.
 ``UVICORN_WORKERS``, each running its own lifespan. Without coordination
 every worker would launch its own sweep loop, all competing to delete
 the same files. ``start_file_cleanup_worker()`` therefore acquires a
-non-blocking exclusive ``fcntl.flock`` on
-``$TMP_BASE_FOLDER/.cleanup.lock``. Only the first worker that wins the
-lock runs the sweep; others log a notice and return ``None``. The lock
-is released automatically when the file descriptor is closed (process
-exit, including SIGKILL) so no manual lockfile cleanup is needed.
+non-blocking exclusive ``filelock.FileLock`` on
+``$TMP_BASE_FOLDER/.cleanup.lock`` (cross-platform: fcntl on POSIX,
+msvcrt on Windows). Only the first worker that wins the lock runs the
+sweep; others log a notice and return ``None``. The OS releases the lock
+automatically on process exit (including SIGKILL) so no manual lockfile
+cleanup is needed.
 
 **About the staggered "starting" logs**: with multiple uvicorn workers
 each lifespan runs in its own process. The second worker typically
@@ -40,10 +41,11 @@ leader lock" notice.
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import os
 import time
 from typing import List
+
+from filelock import FileLock, Timeout
 
 from utils.logger import get_logger
 
@@ -191,62 +193,45 @@ async def _worker_loop() -> None:
             raise
 
 
-# Module-level FD for the leader lock. Held for the lifetime of the
-# leader process so the kernel keeps the flock; closing the FD (process
-# exit) releases it automatically.
-_lock_fd: int | None = None
+# Module-level lock for leader election, held for the lifetime of the leader
+# process and released on shutdown. filelock gives cross-process, cross-platform
+# locking (fcntl on POSIX, msvcrt on Windows), so this works under Docker,
+# bare-metal, and multiple uvicorn workers alike.
+_leader_lock: FileLock | None = None
 
 
 def _try_acquire_leader_lock() -> bool:
-    """Try to acquire the cleanup leader lock.
+    """Try to become the cleanup leader.
 
-    Returns True if this process is the leader and should run the sweep;
-    False if another process already holds the lock.
-
-    The lock file lives under ``$TMP_BASE_FOLDER/.cleanup.lock`` so it
-    shares the same volume that the workers operate on — guaranteeing
-    that all uvicorn workers of the same container see the same file.
-    The PID is written to the lock file purely for diagnostics
-    (``cat .cleanup.lock`` reveals which worker owns the sweep).
+    Returns True if this process acquired the lock and should run the sweep;
+    False if another worker already holds it. The lock file lives under
+    ``$TMP_BASE_FOLDER/.cleanup.lock`` so every worker on the same host sees it.
     """
-    global _lock_fd
+    global _leader_lock
     cfg = _config()
     lock_dir = cfg['TMP_BASE_FOLDER']
     os.makedirs(lock_dir, exist_ok=True)
     lock_path = os.path.join(lock_dir, '.cleanup.lock')
 
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    lock = FileLock(lock_path)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except (BlockingIOError, OSError):
-        os.close(fd)
+        lock.acquire(timeout=0)  # non-blocking; Timeout means another worker leads
+    except Timeout:
         return False
-
-    # Persist our PID for diagnostics; ignore write failures (cosmetic).
-    try:
-        os.ftruncate(fd, 0)
-        os.write(fd, f"{os.getpid()}\n".encode())
-    except OSError:
-        pass
-
-    _lock_fd = fd
+    _leader_lock = lock
     return True
 
 
 def _release_leader_lock() -> None:
     """Release the leader lock if held. Idempotent and exception-safe."""
-    global _lock_fd
-    if _lock_fd is None:
+    global _leader_lock
+    if _leader_lock is None:
         return
     try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_UN)
-    except OSError:
+        _leader_lock.release()
+    except Exception:
         pass
-    try:
-        os.close(_lock_fd)
-    except OSError:
-        pass
-    _lock_fd = None
+    _leader_lock = None
 
 
 def start_file_cleanup_worker() -> asyncio.Task | None:

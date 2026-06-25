@@ -184,7 +184,7 @@ class QdrantStore(VectorStoreInterface):
         PGVector format:  {"field": {"$op": value}, ...}
         Qdrant format:    {"must": [...], "must_not": [...]}
 
-        Supported operators: $eq, $ne, $gt, $gte, $lt, $lte
+        Supported operators: $eq, $ne, $gt, $gte, $lt, $lte, $in
         """
         must: List[Dict[str, Any]] = []
         must_not: List[Dict[str, Any]] = []
@@ -199,19 +199,28 @@ class QdrantStore(VectorStoreInterface):
                 continue
 
             for operator, value in condition.items():
+                key = f'{self._QDRANT_METADATA_PREFIX}{field_name}'
+
+                if operator == '$in':
+                    if not isinstance(value, list) or not value:
+                        logger.warning(
+                            "Qdrant filter: $in value for field '%s' is empty or not a list; condition discarded",
+                            field_name,
+                        )
+                        continue
+                    must.append({'key': key, 'match': {'any': value}})
+                    continue
+
                 native_op = self._PGVECTOR_TO_QDRANT_OPERATOR.get(operator)
                 if native_op is None:
                     logger.warning(f"Unknown filter operator '{operator}' for Qdrant; skipping field '{field_name}'")
                     continue
-
-                key = f'{self._QDRANT_METADATA_PREFIX}{field_name}'
 
                 if native_op == 'must_not_match':
                     must_not.append({'key': key, 'match': {'value': value}})
                 elif native_op == 'match':
                     must.append({'key': key, 'match': {'value': value}})
                 else:
-                    # range operators: gt, gte, lt, lte
                     must.append({'key': key, 'range': {native_op: value}})
 
         qdrant_filter: Dict[str, Any] = {}
@@ -230,56 +239,84 @@ class QdrantStore(VectorStoreInterface):
     ) -> None:
         """
         Delete documents from Qdrant collection.
-        
+
         Args:
             collection_name: Name of the collection
             ids: Document IDs to delete (list) or metadata filter (dict)
-            embedding_service: Service used for embeddings
-            
-        Note: 
-            If ids is a dict (metadata filter), we first search for matching
-            documents and then delete them by their IDs.
-            The filter dict uses PGVector-style operators ($eq, $ne, etc.) and
-            is automatically translated to the Qdrant native filter format.
+            embedding_service: Service used for embeddings (only required for
+                list-based deletion via the LangChain vector-store wrapper;
+                filter-based deletion uses the raw client and does not need it).
+
+        Note:
+            When ``ids`` is a dict (metadata filter), Qdrant's native
+            filter-based delete is used — no embedding service is required and
+            all matching points are removed regardless of collection size.
         """
-        vector_store = self._get_vector_store(collection_name, embedding_service)
-        
         if isinstance(ids, list):
-            # Direct deletion by IDs
+            vector_store = self._get_vector_store(collection_name, embedding_service)
             vector_store.delete(ids=ids)
         else:
-            # Deletion by metadata filter
+            # Native filter-based delete removes all matching points atomically
+            # regardless of collection size (no scroll/page-size limit).
             if ids is None:
                 logger.warning("No valid metadata filter provided for Qdrant deletion; skipping")
                 return
 
-            # Auto-detect filter format: pass Qdrant-native filters through unchanged,
-            # translate PGVector-style filters ($eq, $ne, etc.) to Qdrant format.
-            if self._is_qdrant_native_filter(ids):
-                qdrant_filter = ids
-            else:
-                qdrant_filter = self._translate_pgvector_filter_to_qdrant(ids)
-
-            # Search and get IDs
-            results = self.client.scroll(
-                collection_name=collection_name,
-                scroll_filter=qdrant_filter,
-                limit=1000,
-                with_payload=False,
-                with_vectors=False
-            )[0]
-            
-            ids_to_delete = [point.id for point in results]
-            
-            if ids_to_delete:
-                self.client.delete(
-                    collection_name=collection_name,
-                    points_selector=ids_to_delete
+            qdrant_filter = self._build_qdrant_filter(ids)
+            if qdrant_filter is None:
+                logger.warning(
+                    "Qdrant delete_documents: filter translated to None for collection %s; skipping",
+                    collection_name,
                 )
+                return
+
+            from qdrant_client.models import FilterSelector
+
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=FilterSelector(filter=qdrant_filter),
+            )
+            logger.debug(
+                "Qdrant delete_documents: issued filter-based delete on collection %s",
+                collection_name,
+            )
     
+    def delete_documents_excluding(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        exclude: Dict[str, Any],
+        embedding_service=None,
+    ) -> None:
+        if not filter_metadata:
+            raise ValueError("filter_metadata is required for delete_documents_excluding")
+
+        from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
+
+        base = self._build_qdrant_filter(filter_metadata)
+        if base is None:
+            logger.warning(
+                "Qdrant delete_documents_excluding: filter translated to None for %s; skipping",
+                collection_name,
+            )
+            return
+
+        # must_not on the fresh-batch marker preserves the just-written chunks; points
+        # lacking the field do not match must_not and are deleted (legacy chunks included).
+        must_not = [FieldCondition(key=f, match=MatchValue(value=v)) for f, v in exclude.items()]
+        combined = Filter(
+            must=list(base.must or []),
+            should=list(base.should or []),
+            must_not=list(base.must_not or []) + must_not,
+        )
+        self.client.delete(
+            collection_name=collection_name,
+            points_selector=FilterSelector(filter=combined),
+        )
+
     def delete_collection(
-        self, 
-        collection_name: str, 
+        self,
+        collection_name: str,
         embedding_service=None
     ) -> None:
         """
@@ -325,16 +362,19 @@ class QdrantStore(VectorStoreInterface):
         """
         vector_store = self._get_vector_store(collection_name, embedding_service)
 
-        # Handle empty queries — always use similarity path
+        # Translate PGVector-style filter dict to a qdrant_client.models.Filter object
+        # once before dispatching.  QdrantVectorStore.filter= expects models.Filter | None
+        # (not a raw dict) — passing a dict is silently mishandled or raises at runtime.
+        qdrant_filter = self._build_qdrant_filter(filter_metadata) if filter_metadata else None
+
         if not query or (isinstance(query, str) and not query.strip()):
             query = " "
 
-        # Dispatch on search_type
         if search_type == "mmr":
             docs = vector_store.max_marginal_relevance_search(
                 query,
                 k=k,
-                filter=filter_metadata,
+                filter=qdrant_filter,
                 fetch_k=fetch_k if fetch_k else k * 4,
                 lambda_mult=lambda_mult if lambda_mult is not None else 0.5,
             )
@@ -350,7 +390,7 @@ class QdrantStore(VectorStoreInterface):
             results_with_scores = vector_store.similarity_search_with_relevance_scores(
                 query,
                 k=k,
-                filter=filter_metadata,
+                filter=qdrant_filter,
                 score_threshold=score_threshold,
             )
             return [
@@ -365,7 +405,7 @@ class QdrantStore(VectorStoreInterface):
         results_with_scores = vector_store.similarity_search_with_score(
             query,
             k=k,
-            filter=filter_metadata
+            filter=qdrant_filter
         )
         return [
             Document(
@@ -402,9 +442,14 @@ class QdrantStore(VectorStoreInterface):
         vector_store = self._get_vector_store(collection_name, embedding_service)
 
         if search_params is not None:
+            # as_retriever forwards search_kwargs verbatim; the underlying search
+            # expects models.Filter | None, not a raw dict.
+            translated_params = dict(search_params)
+            if "filter" in translated_params and isinstance(translated_params["filter"], dict):
+                translated_params["filter"] = self._build_qdrant_filter(translated_params["filter"])
             return vector_store.as_retriever(
                 search_type=search_type,
-                search_kwargs=search_params,
+                search_kwargs=translated_params,
                 **kwargs
             )
         return vector_store.as_retriever(search_type=search_type, **kwargs)

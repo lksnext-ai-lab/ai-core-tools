@@ -1,8 +1,9 @@
 ---
 name: test-expert
+user-invocable: false
 description: Expert in pytest, async testing, transactional test isolation, mocking, and CI integration for FastAPI + SQLAlchemy projects. Generic role — project-specific conventions (fixtures map, factory-boy, test DB, savepoint isolation) auto-apply via `testing-conventions.instructions.md` when editing `tests/**`. Verifies library APIs against official docs via the `context7` MCP server before implementing.
 model: Claude Sonnet 4.6
-tools: ['read', 'edit', 'search', 'execute']
+tools: ['read', 'edit', 'search', 'execute', 'context7/*']
 handoffs:
   - label: "Commit with @git-github"
     agent: git-github
@@ -215,11 +216,21 @@ class TestCreateAgent:
   ```
   Never run `git` commands yourself.
 
-### `@plan-executor`
-When your task originates from a plan execution step file:
-1. Append a `## Result` section with `**Completed by**: @test-expert`, `**Completed at**: YYYY-MM-DD`, `**Status**`, and a summary (tests written, coverage impact, any issues)
-2. Update `/plans/<slug>/execution/status.yaml` — set `status:` and `completed_at:`
-3. Suggest the user invoke `@plan-executor` to continue
+### As an executor subagent (`@quick-executor` or `@plan-executor`) — no terminal access
+When invoked indirectly by an executor (loaded as a subagent **without** the `execute` tool), you **write the test files** but you **cannot run `pytest` yourself**. Your Result must let the executor run them — this is essential for the reproduce-first flow (the failing test must be run before AND after the fix):
+
+1. **Always include a `## Terminal Commands Required` block** with the exact `pytest` node id(s) the executor must run:
+   ```
+   ## Terminal Commands Required
+   Reproduce-first — confirm the regression test FAILS on current code:
+   1. poetry run pytest tests/integration/test_<x>.py::test_<repro> -v
+   # the executor re-runs this SAME command after the fix to confirm it PASSES,
+   # then a suite check: poetry run pytest tests/unit -q   (or the relevant scope)
+   ```
+2. Report `**Status**: done | blocked | needs-revision` and a short summary (tests written, what they assert, expected fail→pass).
+3. **With `@plan-executor`**: append the `## Result` (Completed by/at, Status, summary) **and** the `## Terminal Commands Required` block to the step file, then update `/plans/<slug>/execution/status.yaml`.
+   **With `@quick-executor`**: there is no step file — return the same `## Result` + `## Terminal Commands Required` **inline** as your response.
+4. Suggest the user invoke the executor to continue.
 
 ## What This Agent Does NOT Do
 

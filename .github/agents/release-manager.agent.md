@@ -88,12 +88,12 @@ This is the canonical workflow for all patch, minor, and major releases. A `rele
 8. **Update CHANGELOG.md**: Delegate to `@oss-manager`
    - Move `[Unreleased]` content to `[{VERSION}] - {YYYY-MM-DD}`
    - Parse commits since last tag for missing entries
-9. **Stage and commit (signed)**:
+9. **Stage and commit**:
    ```bash
    git add pyproject.toml CHANGELOG.md
-   git commit -S -m "chore(release): bump version to {VERSION}"
+   git commit -m "chore(release): bump version to {VERSION}"
    ```
-10. **Verify signature**: `git log --show-signature -1`
+10. **Verify commit**: `git log -1`
 11. **Push release branch**: `git push -u origin release/{VERSION}`
 
 #### Phase 3 — Pull Request to Main
@@ -111,8 +111,8 @@ This is the canonical workflow for all patch, minor, and major releases. A `rele
 
 #### Phase 4 — Tag Main
 14. **Pull main**: `git checkout main && git pull origin main`
-15. **Create signed tag**: `git tag -s v{VERSION} -m "Release v{VERSION}"`
-16. **Verify tag**: `git log --show-signature -1`
+15. **Create annotated tag**: `git tag -a v{VERSION} -m "Release v{VERSION}"`
+16. **Verify tag**: `git log -1`
 17. **Push tag**: `git push origin v{VERSION}`
 18. **Ask about lks mirror**: Ask user whether to push to `lks`; push only on explicit confirmation:
     ```bash
@@ -121,9 +121,9 @@ This is the canonical workflow for all patch, minor, and major releases. A `rele
 
 #### Phase 5 — Back-merge to Develop
 19. **Checkout develop**: `git checkout develop && git pull origin develop`
-20. **Merge main (no-ff, signed)**:
+20. **Merge main (no-ff)**:
     ```bash
-    git merge --no-ff -S main -m "chore: back-merge main into develop after release v{VERSION}"
+    git merge --no-ff main -m "chore: back-merge main into develop after release v{VERSION}"
     ```
 21. **Push develop**: `git push origin develop`
 
@@ -132,7 +132,7 @@ This is the canonical workflow for all patch, minor, and major releases. A `rele
     - Patch release `0.4.1` → bump to `0.4.2.dev0`
     - Minor release `0.5.0` → bump to `0.5.1.dev0`
     - Major release `1.0.0` → bump to `1.0.1.dev0`
-23. **Commit (signed)**: `git commit -S -m "chore: start {NEXT_DEV_VERSION} development cycle"`
+23. **Commit**: `git commit -m "chore: start {NEXT_DEV_VERSION} development cycle"`
 24. **Push develop**: `git push origin develop`
 
 #### Phase 7 — GitHub Release & Cleanup
@@ -160,7 +160,7 @@ For emergency fixes that must go directly to `main`:
 2. **Fix is applied** (delegate to `@backend-expert` or `@react-expert` as needed)
 3. **Bump patch version in `pyproject.toml`** directly (e.g. `0.4.1` → `0.4.2`) — do NOT use `@version-bumper` for this
 4. **Update CHANGELOG.md**: Delegate to `@oss-manager`
-5. **Commit (signed)**: `git commit -S -m "chore(release): bump version to {VERSION}"`
+5. **Commit**: `git commit -m "chore(release): bump version to {VERSION}"`
 6. **Push hotfix branch**: `git push -u origin hotfix/{HOTFIX_DESC}`
 7. **Create PR to main**: Same as Phase 3
 8. **Tag main**: Same as Phase 4
@@ -175,8 +175,8 @@ For emergency fixes that must go directly to `main`:
 - ✅ **Edit `pyproject.toml` directly** on the release branch for the release version bump — do NOT delegate to `@version-bumper` for this
 - ✅ **Delegate to `@version-bumper`** only for the next-dev-cycle bump on `develop` (Phase 6)
 - ✅ Delegate to `@oss-manager` for `CHANGELOG.md` updates — never edit it directly
-- ✅ Use GPG-signed commits (`git commit -S`) for all release commits
-- ✅ Use GPG-signed tags (`git tag -s`) for version tags
+- ✅ Use plain (unsigned) commits (`git commit`) for all release commits
+- ✅ Use annotated tags (`git tag -a`) for version tags
 - ✅ Open a PR from `release/<version>` to `main` — never merge directly without a PR
 - ✅ Tag `main` **after** the PR is merged (not before)
 - ✅ Back-merge `main` into `develop` after tagging so `develop` is never behind
@@ -192,7 +192,7 @@ For emergency fixes that must go directly to `main`:
 - ❌ Never start a release from a branch other than `develop` (unless hotfix)
 - ❌ Never delegate the release version bump to `@version-bumper` — edit `pyproject.toml` directly on the release branch
 - ❌ Never manually edit `CHANGELOG.md` — delegate to `@oss-manager`
-- ❌ Never create unsigned tags or commits
+- ❌ Never create lightweight tags — use annotated `git tag -a`
 - ❌ Never force-push to `main` or `develop`
 - ❌ Never merge the release branch to `main` without a PR
 - ❌ Never tag `main` before the PR is actually merged
@@ -253,7 +253,7 @@ git checkout -b release/0.4.1
 # Edit pyproject.toml: version = "0.4.1.dev0" → version = "0.4.1"
 # @oss-manager updates CHANGELOG.md
 git add pyproject.toml CHANGELOG.md
-git commit -S -m "chore(release): bump version to 0.4.1"
+git commit -m "chore(release): bump version to 0.4.1"
 git push -u origin release/0.4.1
 
 # Phase 3 — PR to main (wait for merge)
@@ -266,16 +266,16 @@ rm /tmp/release-pr.md
 
 # Phase 4 — tag main
 git checkout main && git pull origin main
-git tag -s v0.4.1 -m "Release v0.4.1"
+git tag -a v0.4.1 -m "Release v0.4.1"
 git push origin v0.4.1
 
 # Phase 5 — back-merge to develop
 git checkout develop && git pull origin develop
-git merge --no-ff -S main -m "chore: back-merge main into develop after release v0.4.1"
+git merge --no-ff main -m "chore: back-merge main into develop after release v0.4.1"
 git push origin develop
 
 # Phase 6 — next dev version (@version-bumper bumps to 0.4.2.dev0)
-git commit -S -m "chore: start 0.4.2.dev0 development cycle"
+git commit -m "chore: start 0.4.2.dev0 development cycle"
 git push origin develop
 
 # Phase 7 — GitHub release & cleanup
@@ -299,7 +299,7 @@ git branch -d release/0.4.1
 2. **Phase 2** — Create `release/0.4.1`, edit `pyproject.toml` → `0.4.1`, delegate changelog to `@oss-manager`, commit + push
 3. **Phase 3** — Open PR `release/0.4.1` → `main`, wait for user go-ahead to merge
 4. **Phase 4** — Pull `main`, tag `v0.4.1`, push tag
-5. **Phase 5** — Back-merge `main` → `develop` (signed), push
+5. **Phase 5** — Back-merge `main` → `develop` (merge commit), push
 6. **Phase 6** — Delegate next dev bump (`0.4.2.dev0`) to `@version-bumper`, commit + push
 7. **Phase 7** — Create GitHub release `v0.4.1`, delete release branch
 
@@ -308,7 +308,7 @@ git branch -d release/0.4.1
 ✅ Released v0.4.1 (patch)
 
 Branch:  release/0.4.1 → main (merged via PR)
-Tag:     v0.4.1 (signed)
+Tag:     v0.4.1 (annotated)
 Develop: back-merged, bumped to 0.4.2.dev0
 GitHub Release: https://github.com/lksnext-ai-lab/ai-core-tools/releases/tag/v0.4.1
 ```

@@ -11,6 +11,7 @@ class ProviderEnum(enum.Enum):
     Custom = "Custom"
     Google = "Google"
     GoogleCloud = "GoogleCloud"
+    OpenRouter = "OpenRouter"
 
 class AIService(BaseService):
     __tablename__ = 'AIService'

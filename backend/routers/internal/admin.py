@@ -1,20 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from lks_idprovider import AuthContext
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from db.database import get_db
-from models.app import App
 from models.agent import Agent
 from models.api_key import APIKey
-from services.user_service import UserService
-from services.system_settings_service import SystemSettingsService
-from services.marketplace_quota_service import MarketplaceQuotaService
-from utils.config import is_omniadmin
+from models.app import App
 from routers.internal.auth_utils import get_current_user_oauth
-from schemas.admin_schemas import UserListResponse, UserDetailResponse, SystemStatsResponse, MarketplaceQuotaResetResponse, SetPlatformRoleRequest
+from schemas.admin_schemas import (
+    AppTransferSummary,
+    DeleteUserRequest,
+    MarketplaceQuotaResetResponse,
+    OwnedAppsConflictResponse,
+    OwnedAppConflictItem,
+    SetPlatformRoleRequest,
+    SystemStatsResponse,
+    TransferOwnerRequest,
+    UserDetailResponse,
+    UserListResponse,
+)
 from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
+from services.marketplace_quota_service import MarketplaceQuotaService
+from services.system_settings_service import SystemSettingsService
+from services.user_service import UserService
+from utils.config import is_omniadmin
 from utils.logger import get_logger
-from datetime import datetime, timezone
 
 logger = get_logger(__name__)
 
@@ -99,6 +113,7 @@ async def get_user(
             api_keys_count=len(user.api_keys) if user.api_keys else 0,
             is_active=user.is_active,
             platform_role=user.platform_role or 'editor',
+            is_omniadmin=is_omniadmin(user.email),
         )
     except HTTPException:
         raise
@@ -108,8 +123,16 @@ async def get_user(
 
 @router.delete(
     "/users/{user_id}",
+    status_code=status.HTTP_200_OK,
     responses={
+        400: {"description": "Bad request — self-deletion or invalid transfer recipient"},
+        403: {"description": "Forbidden — target user is an omniadmin"},
         404: {"description": "User not found"},
+        409: {
+            "description": "Conflict — user owns apps (mode=block) or tier limit exceeded",
+            "model": OwnedAppsConflictResponse,
+        },
+        501: {"description": "Not implemented — transfer_apps stub not yet wired"},
         500: {"description": "Internal server error"},
     },
 )
@@ -117,22 +140,176 @@ async def delete_user(
     user_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
-):
-    """Delete a user and all associated data"""
+    body: Optional[DeleteUserRequest] = None,
+    mode: Annotated[
+        Optional[str],
+        Query(description="Deletion mode: block | cascade_apps | transfer_apps (query-param fallback)"),
+    ] = None,
+    transfer_to_user_id: Annotated[
+        Optional[int],
+        Query(description="Recipient user_id for mode=transfer_apps (query-param fallback)"),
+    ] = None,
+) -> dict:
+    """Delete a user account and orchestrate all associated data.
+
+    Body fields take precedence over query-param fallbacks; omitting both defaults to ``mode='block'``.
+    Actor identity is always resolved from the session (NFR-1 / IDOR prevention).
+    """
+    from services.user_deletion_errors import (
+        OmniadminDeletionError,
+        OwnedAppsPresentError,
+        SelfDeletionError,
+        UserNotFoundError,
+    )
+    from services.app_ownership_errors import (
+        TierLimitExceededError,
+        TransferRecipientInvalidError,
+    )
+
+    _VALID_MODES = {"block", "cascade_apps", "transfer_apps"}
+    effective_mode: str = "block"
+    effective_transfer_to: Optional[int] = None
+
+    if body is not None:
+        effective_mode = body.mode
+        effective_transfer_to = body.transfer_to_user_id
+    elif mode is not None:
+        if mode not in _VALID_MODES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid mode '{mode}'. Must be one of: {sorted(_VALID_MODES)}.",
+            )
+        effective_mode = mode
+        effective_transfer_to = transfer_to_user_id
+    actor_user_id: int = int(auth_context.identity.id)
+
     try:
-        user = UserService.get_user_by_id(db, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
-        
-        success = UserService.delete_user(db, user_id)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to delete user")
-        
-        return {"message": f"User {user.email} and all associated data have been deleted successfully"}
+        UserService.delete_user(
+            db,
+            user_id,
+            actor_user_id=actor_user_id,
+            mode=effective_mode,  # type: ignore[arg-type]
+            transfer_to_user_id=effective_transfer_to,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except SelfDeletionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+    except OmniadminDeletionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message)
+    except OwnedAppsPresentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=OwnedAppsConflictResponse(
+                detail=exc.message,
+                owned_apps=[
+                    OwnedAppConflictItem(app_id=a["app_id"], name=a["name"])
+                    for a in exc.owned_apps
+                ],
+            ).model_dump(),
+        )
+    except TransferRecipientInvalidError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+    except TierLimitExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+    except NotImplementedError as exc:
+        logger.warning(
+            "delete_user: transfer_apps stub hit — user_id=%s actor=%s",
+            user_id,
+            auth_context.identity.email,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=str(exc) or "transfer_apps mode is not yet implemented.",
+        )
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+    except Exception:
+        logger.error(
+            "delete_user: unexpected error user_id=%s actor=%s",
+            user_id,
+            auth_context.identity.email,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user due to an unexpected error.",
+        )
+
+    logger.info(
+        "admin:delete_user user_id=%s mode=%s actor=%s",
+        user_id,
+        effective_mode,
+        auth_context.identity.email,
+    )
+    return {"message": f"User {user_id} and all associated data have been deleted successfully"}
+
+
+@router.post(
+    "/apps/{app_id}/transfer",
+    response_model=AppTransferSummary,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"description": "Recipient user is invalid (inactive, same as current owner, or does not exist)"},
+        404: {"description": "App not found"},
+        409: {"description": "Transfer would exceed the recipient's SaaS app-count limit"},
+    },
+)
+async def transfer_app_ownership(
+    app_id: int,
+    body: TransferOwnerRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AppTransferSummary:
+    """Immediately reassign app ownership to another user (OMNIADMIN only, no handshake)."""
+    from services.app_ownership_service import AppOwnershipService
+    from services.app_ownership_errors import (
+        AppNotFoundError,
+        TierLimitExceededError,
+        TransferRecipientInvalidError,
+    )
+
+    actor_user_id: int = int(auth_context.identity.id)
+
+    try:
+        app, previous_owner_id = AppOwnershipService.transfer_direct(
+            db,
+            app_id=app_id,
+            new_owner_id=body.new_owner_id,
+            actor_user_id=actor_user_id,
+        )
+    except AppNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except TransferRecipientInvalidError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+    except TierLimitExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "transfer_app_ownership: unexpected error app_id=%s new_owner_id=%s actor=%s",
+            app_id,
+            body.new_owner_id,
+            auth_context.identity.email,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Transfer failed due to an unexpected error.")
+
+    logger.info(
+        "admin:transfer_app app_id=%s previous_owner_id=%s new_owner_id=%s by=%s",
+        app_id,
+        previous_owner_id,
+        body.new_owner_id,
+        auth_context.identity.email,
+    )
+
+    return AppTransferSummary(
+        app_id=app.app_id,
+        name=app.name,
+        previous_owner_id=previous_owner_id,
+        new_owner_id=app.owner_id,
+    )
 
 
 @router.post(
@@ -194,7 +371,8 @@ async def deactivate_user(
 @router.post(
     "/users/{user_id}/set-platform-role",
     responses={
-        400: {"description": "Bad request"},
+        400: {"description": "Bad request — invalid role value or self-change attempt"},
+        403: {"description": "Forbidden — cannot modify an omniadmin"},
         404: {"description": "User not found"},
         500: {"description": "Internal server error"},
     },
@@ -217,6 +395,8 @@ async def set_user_platform_role(
             "platform_role": user.platform_role,
             "warnings": warnings,
         }
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -237,41 +417,24 @@ async def reset_user_marketplace_quota(
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    """
-    Reset a user's current month marketplace quota to 0.
-    
-    This endpoint is only accessible to OMNIADMIN users and is used for:
-    - Granting additional quota when a user reports counting errors
-    - Providing extra quota to VIP users
-    - Testing/debugging purposes
-    
-    The reset only affects the current UTC month; previous months remain unchanged.
-    """
+    """Reset a user's current-month marketplace quota to 0 (OMNIADMIN only)."""
     try:
-        # Get the target user and validate exists
         user = UserService.get_user_by_id(db, user_id)
         if not user:
             raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
         
-        # Get current usage before reset
         previous_count = MarketplaceQuotaService.get_current_month_usage(user_id, db)
-        
-        # Perform the reset (handle case where no record exists - idempotent behavior)
         try:
             MarketplaceQuotaService.reset_user_current_month_usage(user_id, db)
         except ValueError:
-            # No usage record exists for current month - user already at 0, which is desired state
-            # Log this and return success anyway (idempotent)
+            # No usage record for the current month — idempotent, already at 0.
             logger.info(
                 f"OMNIADMIN {auth_context.identity.email} attempted to reset marketplace quota "
                 f"for user {user.email} (ID: {user_id}) but no usage record exists. "
                 f"User already has 0 usage for current month."
             )
         
-        # Get current timestamp
         timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        
-        # Log the reset action for audit trail
         logger.info(
             f"OMNIADMIN {auth_context.identity.email} (email) reset marketplace quota "
             f"for user {user.email} (ID: {user_id}). Previous count: {previous_count}, New count: 0. "
@@ -305,12 +468,9 @@ async def get_system_stats(
 ):
     """Get system-wide statistics"""
     try:
-        # Get user stats
         user_stats = UserService.get_user_stats(db)
         active_users = UserService.get_active_users_count(db)
         inactive_users = UserService.get_inactive_users_count(db)
-        
-        # Get other counts using the same db session
         total_apps = db.query(App).count()
         total_agents = db.query(Agent).count()
         total_api_keys = db.query(APIKey).count()
@@ -371,8 +531,6 @@ async def update_setting(
     try:
         service = SystemSettingsService(db)
         service.update_setting(key, update.value)
-        
-        # Get full setting with resolved value for response
         all_settings = service.get_all_settings()
         updated_setting = next((s for s in all_settings if s["key"] == key), None)
         
@@ -414,10 +572,6 @@ async def reset_setting(
         logger.error(f"Error resetting setting '{key}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error resetting setting: {str(e)}")
 
-
-# ==================== SAAS ADMIN ENDPOINTS ====================
-# These endpoints are always registered but guarded by OMNIADMIN requirement.
-# SaaS-specific functionality is a no-op / returns empty data in self-managed mode.
 
 from schemas.admin_schemas import UserAdminRead, TierOverrideRequest
 from schemas.tier_config_schemas import TierConfigRead, TierConfigUpdate
@@ -507,7 +661,6 @@ async def override_user_tier(
     sub_repo.set_admin_override(user_id, body.tier)
     db.commit()
 
-    # Recalculate freeze state based on new effective tier
     try:
         FreezeService.apply_freeze(db, user_id, body.tier)
         db.commit()
@@ -602,10 +755,10 @@ async def create_system_ai_service(
     from datetime import datetime
 
     svc = AIService()
-    svc.app_id = None  # NULL = system/platform service
+    svc.app_id = None
     svc.name = body.name
     svc.provider = body.provider
-    svc.description = body.model_name  # model name stored in description
+    svc.description = body.model_name  # stored in description column
     svc.api_key = body.api_key
     svc.endpoint = body.base_url or ""
     svc.create_date = datetime.now()
@@ -691,10 +844,10 @@ async def create_system_embedding_service(
     from datetime import datetime
 
     svc = EmbeddingService()
-    svc.app_id = None  # NULL = system/platform service
+    svc.app_id = None
     svc.name = body.name
     svc.provider = body.provider
-    svc.description = body.model_name  # model name stored in description
+    svc.description = body.model_name  # stored in description column
     svc.api_key = body.api_key
     svc.endpoint = body.base_url or ""
     svc.api_version = body.api_version
@@ -784,14 +937,10 @@ async def delete_system_embedding_service(
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail=SYSTEM_EMBEDDING_SERVICE_NOT_FOUND)
 
-    # Nullify references in silos before deleting
     db.query(Silo).filter(Silo.embedding_service_id == service_id).update(
         {Silo.embedding_service_id: None}, synchronize_session='fetch'
     )
     EmbeddingServiceRepository.delete(db, svc)
-
-
-# ==================== PROVIDER MODEL DISCOVERY (system) ====================
 
 
 @router.post(
@@ -802,9 +951,7 @@ async def list_system_ai_service_provider_models(
     body: ListProviderModelsRequest,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
 ):
-    """List models for a provider using the credentials in the body.
-    Used by the System AI Service wizard (OMNIADMIN only).
-    """
+    """List models for a provider using the credentials in the body (System AI Service wizard, OMNIADMIN only)."""
     body.purpose = "chat"
     try:
         return ProviderModelsService.list_models(body)
@@ -831,9 +978,7 @@ async def list_system_embedding_service_provider_models(
     body: ListProviderModelsRequest,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
 ):
-    """List embedding models for a provider using the credentials in the
-    body. Used by the System Embedding Service wizard (OMNIADMIN only).
-    """
+    """List embedding models for a provider using the credentials in the body (System Embedding Service wizard, OMNIADMIN only)."""
     body.purpose = "embedding"
     try:
         return ProviderModelsService.list_models(body)
@@ -859,11 +1004,7 @@ async def test_system_ai_service_connection_with_config(
     db: Annotated[Session, Depends(get_db)],
     service_id: Optional[int] = Query(None, description="Edit-mode: recover stored API key when the request sends a masked placeholder"),
 ):
-    """Test a system AI service connection with the provided config (OMNIADMIN).
-
-    When ``service_id`` is supplied and ``api_key`` is empty/masked, the
-    persisted key for that system service is used.
-    """
+    """Test a system AI service connection (OMNIADMIN). Falls back to the stored key when api_key is empty or masked."""
     from services.ai_service_service import AIServiceService
     from repositories.ai_service_repository import AIServiceRepository
     from utils.secret_utils import is_masked_key
@@ -877,8 +1018,7 @@ async def test_system_ai_service_connection_with_config(
             or is_masked_key(api_key)
         ):
             stored = AIServiceRepository.get_by_id(db, service_id)
-            # Only honor the stored key when the target is actually a system
-            # service (app_id is NULL) — never leak an app-scoped key here.
+            # Only use stored key for system services (app_id IS NULL) — never leak an app-scoped key.
             if stored and stored.app_id is None and stored.api_key:
                 api_key = stored.api_key
 
@@ -905,6 +1045,217 @@ async def test_system_ai_service_connection_with_config(
         raise HTTPException(status_code=500, detail="Test failed")
 
 
+from schemas.local_auth_schemas import AdminCreateUserRequest, AdminSetPasswordRequest
+from services.auth.credential_service import (
+    CredentialError as _CredentialError,
+    CredentialService as _CredentialService,
+    UserAlreadyExistsError as _UserAlreadyExistsError,
+)
+from services.auth.refresh_service import RefreshService as _RefreshService
+from utils.config import Config as _Config
+
+
+def _set_password_token_expires_at() -> str:
+    """Compute the ISO-8601 expiry timestamp for a set-password token."""
+    max_age_hours: int = _Config.get_int_env_var(
+        "LOCAL_SET_PASSWORD_TOKEN_MAX_AGE_HOURS", default=48
+    )
+    return (datetime.now(timezone.utc) + timedelta(hours=max_age_hours)).isoformat()
+
+
+class _LocalUserCreatedResponse(BaseModel):
+    """Response returned to an admin after creating a LOCAL auth user account."""
+
+    user_id: int
+    email: str
+    name: Optional[str]
+    set_password_token: str
+    expires_at: str
+
+
+class _ResetLinkResponse(BaseModel):
+    """Response returned to an admin when issuing a reset link."""
+
+    set_password_token: str
+    expires_at: str
+
+
+class _PasswordUpdatedResponse(BaseModel):
+    """Response for admin set-password."""
+
+    message: str
+
+
+class _SessionsRevokedResponse(BaseModel):
+    """Response for admin revoke-sessions."""
+
+    message: str
+
+
+@router.post(
+    "/users/local",
+    response_model=_LocalUserCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create LOCAL auth user (admin)",
+    description=(
+        "Create a new LOCAL auth user account and return a one-time set-password "
+        "token (FR-C4/FR-D1/AD-12). The token is returned in the response body for "
+        "the admin to hand to the user. It is NOT logged."
+    ),
+)
+async def create_local_user(
+    body: AdminCreateUserRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> _LocalUserCreatedResponse:
+    """Create a LOCAL auth user and issue a first-time set-password token. Returns 404 in OIDC mode."""
+    from utils.auth_config import AuthConfig
+
+    if AuthConfig.LOGIN_MODE != "LOCAL":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
+    try:
+        user = await _CredentialService.admin_create_user(db, email=str(body.email), name=body.name)
+    except _UserAlreadyExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+    try:
+        token = _CredentialService.issue_set_password_token(db, user.user_id)
+    except _CredentialError as exc:
+        logger.error("admin:create_local_user token_issue_failed user_id=%s — %s", user.user_id, exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to issue setup link.")
+    except Exception as exc:
+        logger.error("admin:create_local_user unexpected user_id=%s — %s", user.user_id, type(exc).__name__, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to issue setup link.")
+
+    logger.info(
+        "admin:create_local_user user_id=%s email=%s by=%s",
+        user.user_id,
+        user.email,
+        auth_context.identity.email,
+    )
+
+    return _LocalUserCreatedResponse(
+        user_id=user.user_id,
+        email=user.email,
+        name=user.name,
+        set_password_token=token,
+        expires_at=_set_password_token_expires_at(),
+    )
+
+
+@router.post(
+    "/users/{user_id}/set-password",
+    response_model=_PasswordUpdatedResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Admin: forcibly set user password",
+    description=(
+        "Directly set a LOCAL auth user's password (emergency admin reset). "
+        "Resets lockout state and revokes all existing sessions."
+    ),
+)
+async def admin_set_user_password(
+    user_id: int,
+    body: AdminSetPasswordRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> _PasswordUpdatedResponse:
+    """Forcibly set a LOCAL auth user's password (admin emergency reset). Returns 404 in OIDC mode."""
+    from utils.auth_config import AuthConfig
+
+    if AuthConfig.LOGIN_MODE != "LOCAL":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
+    user = UserService.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+
+    try:
+        await _CredentialService.admin_set_password(
+            db, user_id=user_id, new_password=body.new_password.get_secret_value()
+        )
+    except _CredentialError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    logger.info(
+        "admin:set_password user_id=%s by=%s",
+        user_id,
+        auth_context.identity.email,
+    )
+    return _PasswordUpdatedResponse(message="Password updated.")
+
+
+@router.post(
+    "/users/{user_id}/reset-link",
+    response_model=_ResetLinkResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Admin: issue set-password reset link",
+    description=(
+        "Generate a new one-time set-password token for an existing LOCAL auth user. "
+        "Returns the token in the response body for the admin to forward to the user."
+    ),
+)
+async def issue_reset_link(
+    user_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> _ResetLinkResponse:
+    """Issue a new set-password token for a LOCAL auth user. Returns 404 in OIDC mode."""
+    from utils.auth_config import AuthConfig
+
+    if AuthConfig.LOGIN_MODE != "LOCAL":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
+    user = UserService.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+
+    try:
+        token = _CredentialService.issue_set_password_token(db, user_id)
+    except _CredentialError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    logger.info(
+        "admin:reset_link_issued user_id=%s by=%s",
+        user_id,
+        auth_context.identity.email,
+    )
+
+    return _ResetLinkResponse(set_password_token=token, expires_at=_set_password_token_expires_at())
+
+
+@router.post(
+    "/users/{user_id}/revoke-sessions",
+    response_model=_SessionsRevokedResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Admin: revoke all sessions for a user",
+    description="Revoke all refresh tokens for a user, forcing re-authentication on all devices.",
+)
+async def admin_revoke_sessions(
+    user_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> _SessionsRevokedResponse:
+    """Revoke all active refresh tokens for a LOCAL auth user. Returns 404 in OIDC mode."""
+    from utils.auth_config import AuthConfig
+
+    if AuthConfig.LOGIN_MODE != "LOCAL":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
+    user = UserService.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+
+    _RefreshService.revoke_all(db, user_id)
+
+    logger.info(
+        "admin:revoke_sessions user_id=%s by=%s",
+        user_id,
+        auth_context.identity.email,
+    )
+    return _SessionsRevokedResponse(message=f"All sessions revoked for user {user_id}.")
+
+
 @router.post("/system-embedding-services/test-connection")
 async def test_system_embedding_service_connection_with_config(
     config: CreateUpdateEmbeddingServiceSchema,
@@ -912,11 +1263,7 @@ async def test_system_embedding_service_connection_with_config(
     db: Annotated[Session, Depends(get_db)],
     service_id: Annotated[Optional[int], Query(description="Edit-mode: recover stored API key when the request sends a masked placeholder")] = None,
 ):
-    """Test a system embedding service connection with the provided config (OMNIADMIN).
-
-    When ``service_id`` is supplied and ``api_key`` is empty/masked, the
-    persisted key for that system service is used.
-    """
+    """Test a system embedding service connection (OMNIADMIN). Falls back to the stored key when api_key is empty or masked."""
     from services.embedding_service_service import EmbeddingServiceService
     from repositories.embedding_service_repository import EmbeddingServiceRepository
     from utils.secret_utils import is_masked_key

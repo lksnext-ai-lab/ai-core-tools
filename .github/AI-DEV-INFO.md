@@ -6,9 +6,9 @@ This directory contains the configuration for GitHub-native tooling and a struct
 
 ```
 .github/
-├── agents/                      # Specialized Copilot agents (16 — see Agent map below)
+├── agents/                      # Specialized Copilot agents (18 — see Agent map below)
 ├── instructions/                # Path-scoped instruction files (alembic, docs, git-github, handoff, plan-extensions)
-├── prompts/                     # Slash-command prompt files (start-from-issue, dispatch-mission)
+├── prompts/                     # Slash-command prompt files (start-from-issue, report-bug, quick-execute, integrate-prs)
 ├── skills/                      # Shared procedural definitions
 ├── workflows/                   # GitHub Actions CI/CD pipelines
 ├── copilot-instructions.md      # Master repo-wide guidance
@@ -32,7 +32,8 @@ Issue-Driven Entry (start here when work begins from a GitHub issue):
                 └─► @quick-executor ──► implementer subagents                       (ad-hoc, no spec)
 
 Bug-Driven Entry (start here when a bug is reported in chat, no GitHub issue):
-  @bug-analyzer ──► @quick-executor ──► implementer subagents   (small fix, reproduce-first)
+  @bug-analyzer ──► (triage: not a code defect? → verdict + remedy + STOP)
+                ├─► @quick-executor ──► implementer subagents   (small fix, reproduce-first; executor files the tracking issue, gated)
                 └─► @feature-planner ──► @plan-executor ──► ... (large/architectural fix, with spec)
 
 Ad-hoc Execution (small tasks):
@@ -46,8 +47,9 @@ Ad-hoc Execution (small tasks):
 Feature Lifecycle (formal, spec-driven):
   @feature-planner ──► @plan-executor ──► @backend-expert  ┐
                             │          ├──► @react-expert   │ auto-invoked subagents
-                            │          ├──► @alembic-expert │ (file ops only)
-                            │          └──► @docs-manager   ┘
+                            │          ├──► @alembic-expert │ (file ops only;
+                            │          ├──► @test-expert    │  alembic & test return
+                            │          └──► @docs-manager   ┘  Terminal Commands)
                             │
                             └── git / gh CLI  ──► (run directly by plan-executor — terminal access)
 
@@ -56,6 +58,11 @@ Release Lifecycle:
                    ├──► @oss-manager    (subagent, file ops)
                    ├──► git / gh CLI    (run directly by release-manager)
                    └── @website-maintainer  (cross-repo sync of mattinai.github.io after release)
+
+PR Integration Entry (start here to land open PRs into develop):
+  @pr-triager ──► audits all open PRs (drift vs develop, conflicts, CI, reviews) → PR Health Report + order
+              └─► @pr-integrator ──► per PR: update from develop → verify CI → squash-merge (gated) → delete branch
+                                     (on conflicts: opt-in assisted resolution via experts, double-gated + diff review; never merges red / unreviewed / DIRTY)
 
 AI Environment:
   @ai-dev-architect ──► (creates/maintains all .github/ artifacts: agents, instructions, prompts, skills)
@@ -71,6 +78,8 @@ AI Environment:
 > - **"Fix now with @quick-executor"** — small/localized fixes (most bugs), executed **reproduce-first** (failing test before the fix)
 > - **"Plan formally with @feature-planner"** — large/architectural fixes that deserve a tracked spec
 >
+> Before investigating it **triages** whether the report is even a code defect — if it's config/infra/data/expected/upstream/duplicate it emits a verdict with the real remedy and **stops** (no fix machinery). For genuine code bugs it also emits a ready-to-file **Issue body**; the executor files the GitHub tracking issue (gated, skippable) and the PR closes it with `Closes #N`.
+>
 > Invoke directly (`@bug-analyzer <description>`) or via the slash command `/report-bug`. It is read-only and runs on Claude Sonnet 4.6 because root-cause diagnosis is the highest-risk step — a wrong hypothesis wastes the whole downstream fix.
 
 > **`@quick-executor` vs `@plan-executor`**: Both auto-invoke implementer subagents and run git directly with commit/push/PR confirmation gates. The difference is the input:
@@ -81,7 +90,7 @@ AI Environment:
 
 > **Why `@git-github` is not used as a subagent**: it requires terminal execution (`tools: [execute]`), which is unavailable in subagent context. Agents that need git operations either run commands directly via the `git-github.skill.md` skill (`@plan-executor`, `@release-manager`) or hand off to the user with a change summary for them to invoke `@git-github` directly (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`, `@docs-manager`).
 
-> **Direct invocation by the user** (never as subagents): `@git-github`, `@issue-reader`, `@bug-analyzer`.
+> **Direct invocation by the user** (never as subagents): `@git-github`, `@issue-reader`, `@bug-analyzer`, `@pr-triager`, `@pr-integrator`.
 
 ---
 
@@ -117,18 +126,20 @@ AI Environment:
 
 ### `@bug-analyzer`
 
-**Purpose**: Entry point for bugs reported directly in the chat (no GitHub issue). Investigates the codebase to locate the root cause, distills it into a structured **Bug Analysis** block, and offers two handoff buttons. The bug-driven sibling of `@issue-reader`, with an added root-cause investigation phase.
+**Purpose**: Entry point for bugs reported directly in the chat (no GitHub issue). First **triages** whether the report is a code defect (vs config/infra/data/expected/upstream/duplicate) — stopping with a verdict + remedy if not. For genuine code bugs it investigates the codebase to locate the root cause, distills it into a structured **Bug Analysis** block (plus a ready-to-file Issue body), and offers two handoff buttons. The bug-driven sibling of `@issue-reader`, with an added triage + root-cause investigation phase.
 
 **Model**: `Claude Sonnet 4.6` — diagnosis is the highest-leverage, highest-risk step (a wrong root cause cascades into a wrong fix). Under token-based billing this is one bounded call, cheap versus the cost of a misdiagnosis.
 
 **Key capabilities**:
 - Takes free-text bug reports (`@bug-analyzer the playground freezes uploading a PDF > 10MB`)
+- **Triages first** — classifies the report as a code defect vs config/env, infra/connectivity, data, expected behaviour, upstream dependency, or duplicate; if it's not a code bug, emits a **Triage Verdict** with the real remedy and stops (no Bug Analysis, no issue, no fix)
 - Asks at most ONE clarifying question if reproduction / expected-vs-actual is missing
 - Actively traces the code path (`read`/`search`) and grounds every root-cause claim in real `file:line` evidence
 - Verifies suspected library-API misuse against the `context7` / `docs-langchain` MCP before asserting it
 - Never fabricates a cause — marks `Confidence: low` and proposes how to instrument when it can't locate it
 - Always specifies a regression test that reproduces the bug
-- Read-only — never edits code, commits, or files a GitHub issue
+- Emits a ready-to-file **Issue body** (per `.github/ISSUE_TEMPLATE/bug_report.md`); the executor files the GitHub tracking issue (gated) before the fix and links it via `Closes #N`
+- Read-only — never edits code, runs `gh`, or commits; it emits the Issue body, the executor files it
 
 **Invocation**:
 - `@bug-analyzer <description>` — free text
@@ -234,7 +245,7 @@ AI Environment:
 @plan-executor what can you do?
 ```
 
-**Auto-invokes as subagents** (file operations only, no terminal): `@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`
+**Auto-invokes as subagents** (file operations only, no terminal): `@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`, `@docs-manager`
 **Runs directly** (terminal): all git/gh operations via the `git-github.skill.md` skill
 **Pauses for confirmation**: every commit, PR creation
 
@@ -245,6 +256,7 @@ AI Environment:
 - `@backend-expert` — models, services, routes
 - `@react-expert` — frontend components and pages
 - `@alembic-expert` — database migrations
+- `@test-expert` — unit/integration tests for the implemented FRs/ACs (returns a `## Terminal Commands Required` block with the `pytest` run)
 - `@docs-manager` — documentation updates at plan completion
 
 **Note**: `@git-github` is NOT used as a subagent here. `@plan-executor` executes git/gh commands directly following `git-github.skill.md`.
@@ -383,11 +395,11 @@ poetry run pytest -k "test_name" -v -s  # Single test with output
 
 ### `@git-github`
 
-**Purpose**: Autonomous expert in git operations and GitHub CLI workflows. Handles all branching, committing (GPG-signed), pushing, PR creation, issue management, and releases. **Always invoked directly by the user** — never used as a subagent, because it requires terminal execution which is unavailable in subagent context.
+**Purpose**: Autonomous expert in git operations and GitHub CLI workflows. Handles all branching, committing, pushing, PR creation, issue management, and releases. **Always invoked directly by the user** — never used as a subagent, because it requires terminal execution which is unavailable in subagent context.
 
 **Key capabilities**:
 - Conventional Commits format: `type(scope): description`
-- GPG-signed commits (`git commit -S`) — always, no exceptions
+- Plain (unsigned) commits (`git commit`) — no GPG configured
 - Always pulls before pushing (`git pull origin <branch>`)
 - Uses `--body-file` for all `gh issue create` / `gh pr create` — never `--body` or heredoc
 - Multi-remote: `origin` (GitHub, primary) and `lks` (GitLab mirror, only on explicit request)
@@ -483,7 +495,7 @@ clean/<description>
 
 **Key capabilities**:
 - Pre-flight validation: clean working tree, on `develop`, synced with remote
-- Standard releases: merges `develop` → `main` with `--no-ff`, creates signed tag, pushes both
+- Standard releases: merges `develop` → `main` with `--no-ff`, creates annotated tag, pushes both
 - Hotfix releases: branches from `main`, merges back to both `main` and `develop`
 - Pre-releases: tags on `develop` without merging to `main`, uses `--prerelease` flag
 - Always returns to `develop` after the release completes
@@ -561,17 +573,44 @@ clean/<description>
 
 ---
 
+### `@pr-triager`
+
+**Purpose**: Entry point for landing open PRs into `develop`. Audits every open PR via `gh`/`git` (base, behind-count vs `origin/develop`, mergeable/conflict state, CI, reviews, age, size), classifies each by `mergeStateStatus`, and emits a prioritized **PR Health Report** + integration order. Read-only.
+
+**Model**: `GPT-5 mini` — high-volume `gh` reads, no code generation.
+
+**Invocation**: `@pr-triager` (all open PRs) · `@pr-triager #168` (one) · `/integrate-prs`.
+
+**Hands off to**: `@pr-integrator` — integrate the report in order.
+
+**Never does**: merge, push, update branches, or resolve conflicts — diagnosis only.
+
+---
+
+### `@pr-integrator`
+
+**Purpose**: Integrates PRs into `develop` on the team default (**squash merge**). Per PR: updates the branch from `origin/develop` (merge — never rebase a shared branch), verifies CI is green, and squash-merges **behind confirmation gates**, deleting the branch. Detects whether a **merge queue** is enabled and, if so, just adds approved+green PRs to the queue (the queue handles update-and-retest). On conflicts it offers an **opt-in assisted resolution**: classify the files, delegate to the matching expert subagent (`@backend-expert`/`@react-expert`/`@alembic-expert` by path), then a **mandatory diff-review gate** before anything is staged/pushed/merged — never applies or merges a resolution the user hasn't approved. Runs `gh`/`git` directly.
+
+**Model**: `Claude Sonnet 4.6` — judgment on merge/conflict safety.
+
+**Confirmation gates**: update-push, merge, plus (when assisted resolution is used) conflict-resolution + resolution-review. Never merges a DIRTY / red / unreviewed / wrong-base / cross-fork PR, nor a conflict resolution the user hasn't reviewed.
+
+**Receives from**: `@pr-triager` — the PR Health Report.
+
+---
+
 ## Instructions (`instructions/`)
 
 Scoped `.instructions.md` files automatically applied by Copilot when matching files are edited. They carry the **project-specific conventions** (paths, key utilities, entities, patterns) — domain-expert agents are kept **role-generic** and lean on these files for the project specifics.
 
 | File | Scope | Purpose |
 |---|---|---|
+| `domain-model.instructions.md` | `backend/**`, `frontend/**`, `alembic/**`, `tests/**` | Product & domain reference — core concepts, RBAC, all entities + relationships, API surface, agent execution flow, memory, client deployment, env vars. Extracted from `copilot-instructions.md` so the heavy catalog loads only when implementing, not on every triage/planning/release call. |
 | `backend-conventions.instructions.md` | `backend/**` | Layered architecture, real file paths, key utilities (`vector_store_factory`, `embeddingTools`, `langsmith_config`), `AICT_LOGIN` auth modes, tenant scoping with `@require_min_role`, memory thread-ID format, Poetry usage |
 | `react-conventions.instructions.md` | `frontend/**` | Library + per-client (`clients/<name>/`) extension model, `ExtensibleBaseApp`, centralized `services/api.ts`, constants synced with backend, Vite commands, Tailwind dark mode + a11y |
 | `testing-conventions.instructions.md` | `tests/**` | Savepoint-based transactional isolation, full fixtures map, factory-boy setup, test DB on port 5433, CI workflow, mocking patterns |
 | `alembic.instructions.md` | `alembic/**` | Migration naming (PascalCase entities, snake_case junctions), model registry in `backend/models/__init__.py`, ignored tables filter, round-trip downgrade test |
-| `git-github.instructions.md` | `**` (global) | GPG signing, branch naming, Conventional Commits, remote config (`origin` / `gitlab` / `mattinai`), `gh --body-file` rule |
+| `git-github.instructions.md` | `**` (global) | branch naming, Conventional Commits, remote config (`origin` / `gitlab` / `mattinai`), `gh --body-file` rule |
 | `docs.instructions.md` | `docs/**` | Documentation structure, kebab-case naming, metadata tracking |
 | `handoff.instructions.md` | `.github/agents/*.agent.md` | Standard protocol for agent-to-agent handoffs via VS Code native buttons |
 | `plan-extensions.instructions.md` | `plans/**` | Extension workflow, global step numbering, `status.yaml` structure |

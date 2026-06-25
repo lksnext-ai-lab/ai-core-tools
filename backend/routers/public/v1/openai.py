@@ -454,8 +454,16 @@ async def chat_completions(
                     )
 
             yield "data: [DONE]\n\n"
-            
-        return StreamingResponse(openai_sse_generator(), media_type="text/event-stream")
+
+        async def _stream_with_cleanup():
+            try:
+                async for chunk in openai_sse_generator():
+                    yield chunk
+            finally:
+                # Release request session; get_db teardown is too late for streaming.
+                db.close()
+
+        return StreamingResponse(_stream_with_cleanup(), media_type="text/event-stream")
         
     else:
         execution_service = AgentExecutionService(db)

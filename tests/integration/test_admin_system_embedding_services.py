@@ -13,23 +13,19 @@ from datetime import datetime
 
 
 @pytest.fixture(scope="function")
-def admin_headers(fake_user, client, db, monkeypatch):
+def admin_headers(fake_user, db, monkeypatch):
     """
     Auth headers for fake_user promoted to OMNIADMIN via monkeypatch.
 
     monkeypatch.setenv is safe here because is_omniadmin uses os.getenv at
     call time (not module-level), so patching before the request is sufficient.
+    Token is minted directly via mint_access_token (LOCAL issuer).
     """
+    from utils.local_auth_tokens import mint_access_token
+
     monkeypatch.setenv("AICT_OMNIADMINS", fake_user.email)
     db.flush()
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": fake_user.email},
-    )
-    assert response.status_code == 200, (
-        f"Admin login failed ({response.status_code}): {response.text}"
-    )
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(fake_user.user_id, fake_user.email, fake_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 

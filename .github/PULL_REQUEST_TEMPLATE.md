@@ -41,7 +41,7 @@ Explain how reviewers can verify that your changes work as intended. Include ste
 ## Checklist
 Before submitting, please confirm that you have completed the following. Replace the empty square brackets with an `x` to indicate completion.
 
-* [ ] All commits in this pull request are signed using GPG, as required by our commit signing policy (see `.github/instructions/git-github.instructions.md`).
+* [ ] Commit messages follow Conventional Commits (`type(scope): description`).
 * [ ] I have read the contributing guidelines and my change adheres to the coding standards of this project (see `docs/README.md#contributing`).
 * [ ] I have added tests that prove my fix or feature works, or confirm that tests are not needed for this change.
 * [ ] I have run all existing tests and they all pass locally.

@@ -292,6 +292,7 @@ What is explicitly out of scope for this feature?
 
 ### When Creating a New Plan
 
+0. **Load domain context first** — When the feature touches domain entities (Agent, Silo, App, AIService, MCP, etc.), pull the full model with `#file:.github/instructions/domain-model.instructions.md` before scoping. It does **not** auto-apply here because you edit `/plans/**`, not code. This grounds your Context, FR/AC, and Implementation Notes in the real entity graph and relationships instead of guesses.
 1. **Detect a prior analysis block** — If the conversation contains an **"Issue Analysis"** block (from `@issue-reader`) or a **"Bug Analysis"** block (from `@bug-analyzer`), **reuse it**:
    - **Issue Analysis** → use its `Problem statement` for the spec's `Context`/`Problem Statement`, and its `Functional requirements` + `Acceptance criteria` as the seed for those sections (still refine with the user). Set `issue_link` from the block's `Source`.
    - **Bug Analysis** → use its `Root-cause hypothesis` + `Proposed fix` as the `Context`/`Problem Statement`/`Functional Requirements`, list the `Affected files` under Implementation Notes, and turn its `Regression test` line into an explicit **acceptance criterion** (`AC: the regression test reproducing <bug> fails before the fix and passes after`). This path is for bugs whose fix is large/architectural enough to deserve a tracked spec.
@@ -356,6 +357,7 @@ Extensions allow you to add related features to a completed plan while maintaini
 
 ### Always Do
 
+- ✅ Pull `#file:.github/instructions/domain-model.instructions.md` when a feature touches domain entities — it does not auto-load under `/plans/`
 - ✅ Clarify vague requirements before creating a plan — never guess
 - ✅ Enforce the `spec.md` template structure on every plan
 - ✅ Keep `index.yaml` synchronized with the actual plan folders

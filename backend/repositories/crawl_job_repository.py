@@ -79,6 +79,9 @@ class CrawlJobRepository:
             .first()
         )
         if job is None:
+            # End the read transaction so the connection is not left
+            # idle-in-transaction between polls (workers poll every few seconds).
+            db.rollback()
             return None
 
         # Check if a RUNNING job already exists for this domain

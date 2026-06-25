@@ -40,8 +40,10 @@ def valid_policy_payload(**overrides) -> dict:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def viewer_headers(db, client, fake_app, fake_user):
+def viewer_headers(db, fake_app, fake_user):
     """Auth headers for a VIEWER on fake_app."""
+    from utils.local_auth_tokens import mint_access_token
+
     configure_factories(db)
     viewer_user = UserFactory(email="viewer-crawl@mattin-test.com", name="Viewer User")
     collab = AppCollaborator(
@@ -55,9 +57,7 @@ def viewer_headers(db, client, fake_app, fake_user):
     )
     db.add(collab)
     db.flush()
-    response = client.post("/internal/auth/dev-login", json={"email": viewer_user.email})
-    assert response.status_code == 200
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(viewer_user.user_id, viewer_user.email, viewer_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 

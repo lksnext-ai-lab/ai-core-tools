@@ -57,11 +57,16 @@ const Alert: React.FC<AlertProps> = ({
 }) => {
   const styles = alertStyles[type];
   const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
+  const assertive = type === 'error' || type === 'warning';
 
   return (
-    <div className={`${styles.container} border rounded-lg p-4 ${className}`}>
+    <div
+      className={`${styles.container} border rounded-lg p-4 ${className}`}
+      role={assertive ? 'alert' : 'status'}
+      aria-live={assertive ? 'assertive' : 'polite'}
+    >
       <div className="flex">
-        <span className={`${styles.iconColor} mr-3 shrink-0`}>{alertIcons[type]}</span>
+        <span className={`${styles.iconColor} mr-3 shrink-0`} aria-hidden="true">{alertIcons[type]}</span>
         <div className="flex-1">
           <h3 className={`text-sm font-medium ${styles.titleColor}`}>
             {title || defaultTitle}
@@ -69,6 +74,7 @@ const Alert: React.FC<AlertProps> = ({
           <p className={`text-sm ${styles.messageColor} mt-1`}>{message}</p>
           {onDismiss && (
             <button
+              type="button"
               onClick={onDismiss}
               className={`mt-2 text-sm ${styles.buttonColor} underline`}
             >

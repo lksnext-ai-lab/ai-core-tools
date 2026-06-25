@@ -2,8 +2,11 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from typing import AsyncGenerator, List, Optional, Annotated
+
+from schemas.agent_schemas import RuntimeSearchParamsSchema
 
 from .schemas import (
     AgentResponseSchema,
@@ -45,6 +48,22 @@ def _parse_json_param(value: Optional[str], param_name: str):
     except json.JSONDecodeError:
         logger.warning(f"Invalid {param_name} JSON, ignoring")
         return None
+
+
+def _validate_search_params(parsed):
+    """Bound caller search params (DoS guard). Returns the original dict unchanged so
+    the caller>agent precedence and explicit-None semantics in resolve_search_params
+    are preserved; raises 422 on out-of-range values."""
+    if parsed is None:
+        return None
+    if not isinstance(parsed, dict):
+        logger.warning("search_params is not a JSON object, ignoring")
+        return None
+    try:
+        RuntimeSearchParamsSchema(**parsed)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid search_params: {exc.errors()}")
+    return parsed
 
 
 
@@ -111,7 +130,7 @@ async def call_agent(
     fms = FileManagementService()
     all_file_references: List = []
     try:
-        parsed_search_params = _parse_json_param(search_params, "search_params")
+        parsed_search_params = _validate_search_params(_parse_json_param(search_params, "search_params"))
         parsed_file_references = _parse_json_param(file_references, "file_references")
 
         user_context = create_api_key_user_context(app_id, api_key)
@@ -203,7 +222,7 @@ async def call_agent_stream(
     agent = validate_agent_ownership(db, agent_id, app_id)
 
     try:
-        parsed_search_params = _parse_json_param(search_params, "search_params")
+        parsed_search_params = _validate_search_params(_parse_json_param(search_params, "search_params"))
         parsed_file_references = _parse_json_param(file_references, "file_references")
 
         user_context = create_api_key_user_context(app_id, api_key)
@@ -236,6 +255,10 @@ async def call_agent_stream(
                 async for chunk in base_generator:
                     yield chunk
             finally:
+                # Release the request DB session here: for a StreamingResponse the
+                # get_db dependency teardown does not run until late, leaving the
+                # connection checked out (idle-in-transaction) for every stream.
+                db.close()
                 await fms.cleanup_ephemeral_refs(all_file_references)
 
         logger.info(f"Public API streaming chat for agent {agent_id}")

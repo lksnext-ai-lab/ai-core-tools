@@ -18,7 +18,7 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 ### User
 
 **Table**: `User`  
-**Purpose**: Application users (authenticated via OIDC or FAKE mode)
+**Purpose**: Application users (authenticated via OIDC or LOCAL mode)
 
 | Column | Type | Description |
 |--------|------|-------------|

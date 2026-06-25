@@ -40,16 +40,13 @@ def setup_cross_app(db, fake_user, fake_app, fake_agent):
 
 
 @pytest.fixture
-def unrelated_user_headers(db, client, setup_cross_app):
+def unrelated_user_headers(db, setup_cross_app):
     """Auth headers for a user who has NO role on the main fake_app."""
+    from utils.local_auth_tokens import mint_access_token
+
     _, _, other_user = setup_cross_app
     db.flush()
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": other_user.email},
-    )
-    assert response.status_code == 200
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(other_user.user_id, other_user.email, other_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 
