@@ -31,6 +31,12 @@ class Config:
         'DOWNLOADS_PATH': 'data/tmp/downloads/',
         'IMAGES_PATH': 'data/tmp/images/',
         'REPO_BASE_FOLDER': 'data/repositories',
+        'STORAGE_BACKEND': 'local',
+        'S3_ENDPOINT_URL': '',
+        'S3_BUCKET': '',
+        'S3_ACCESS_KEY': '',
+        'S3_SECRET_KEY': '',
+        'S3_REGION': 'us-east-1',
         'PERMANENT_SESSION_LIFETIME_MINUTES': '30',
         'AICT_OMNIADMINS': '',
         # File lifecycle cleanup defaults. The background cleanup worker
@@ -209,6 +215,12 @@ class Config:
             'DOWNLOADS_PATH': Config.get_env_var('DOWNLOADS_PATH', Config.DEFAULTS['DOWNLOADS_PATH']),
             'IMAGES_PATH': Config.get_env_var('IMAGES_PATH', Config.DEFAULTS['IMAGES_PATH']),
             'REPO_BASE_FOLDER': Config.get_env_var('REPO_BASE_FOLDER', Config.DEFAULTS['REPO_BASE_FOLDER']),
+            'STORAGE_BACKEND': Config.get_env_var('STORAGE_BACKEND', Config.DEFAULTS['STORAGE_BACKEND']),
+            'S3_ENDPOINT_URL': Config.get_env_var('S3_ENDPOINT_URL', Config.DEFAULTS['S3_ENDPOINT_URL']),
+            'S3_BUCKET': Config.get_env_var('S3_BUCKET', Config.DEFAULTS['S3_BUCKET']),
+            'S3_ACCESS_KEY': Config.get_env_var('S3_ACCESS_KEY', Config.DEFAULTS['S3_ACCESS_KEY']),
+            'S3_SECRET_KEY': Config.get_env_var('S3_SECRET_KEY', Config.DEFAULTS['S3_SECRET_KEY']),
+            'S3_REGION': Config.get_env_var('S3_REGION', Config.DEFAULTS['S3_REGION']),
             'PERMANENT_SESSION_LIFETIME_MINUTES': Config.get_int_env_var(
                 'PERMANENT_SESSION_LIFETIME_MINUTES',
                 int(Config.DEFAULTS['PERMANENT_SESSION_LIFETIME_MINUTES'])
