@@ -151,6 +151,24 @@ services:
       - mattin-network
     restart: unless-stopped
 
+  garage:
+    image: dxflrs/garage:v1.0.0
+    container_name: mattin-garage
+    environment:
+      GARAGE_RPC_SECRET: "${GARAGE_RPC_SECRET:-insecure-dev-secret-change-in-prod}"
+      GARAGE_ADMIN_TOKEN: "${GARAGE_ADMIN_TOKEN:-dev-admin-token}"
+    volumes:
+      - garage-data:/var/lib/garage/data
+      - garage-meta:/var/lib/garage/meta
+      - ./garage.toml:/etc/garage.toml:ro
+    ports:
+      - "3900:3900"   # S3 API
+      - "3903:3903"   # Admin API
+    networks:
+      - mattin-network
+    profiles:
+      - garage
+
 networks:
   mattin-network:
     driver: bridge
@@ -160,3 +178,5 @@ volumes:
   qdrant-data:
   caddy-data:
   caddy-config:
+  garage-data:
+  garage-meta:
