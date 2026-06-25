@@ -144,7 +144,12 @@ class S3StorageBackend(StorageBackend):
         if byte_range:
             kwargs["Range"] = f"bytes={byte_range[0]}-{byte_range[1]}"
 
-        response = await asyncio.to_thread(self._client.get_object, **kwargs)
+        try:
+            response = await asyncio.to_thread(self._client.get_object, **kwargs)
+        except self._ClientError as exc:
+            if exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                raise FileNotFoundError(key) from exc
+            raise
         body = response["Body"]
         sentinel = object()
         it = body.iter_chunks(chunk_size=65536)
