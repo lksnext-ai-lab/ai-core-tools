@@ -95,7 +95,13 @@ class VectorStoreFactory:
         from tools.vector_stores.pgvector_store import PGVectorStore
         
         logger.debug("Creating PGVector store with existing database connection")
-        return PGVectorStore(db)
+        instance = PGVectorStore(db)
+        try:
+            # Ensure the backend tables exist so first-index workflows don't fail
+            instance.ensure_backend_ready()
+        except Exception as exc:
+            logger.warning("PGVector backend readiness check failed: %s", exc)
+        return instance
     
     @staticmethod
     def _create_qdrant_backend(db) -> VectorStoreInterface:
