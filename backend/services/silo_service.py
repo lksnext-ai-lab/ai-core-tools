@@ -1049,8 +1049,8 @@ class SiloService:
             "source_type": media.source_type,
             "source_url": media.source_url,
             "language": media.language,
-            "file_type": os.path.splitext(media.file_path)[1].lower() if media.file_path else None,
-            "source": media.file_path,
+            "file_type": os.path.splitext(media.storage_key)[1].lower() if media.storage_key else None,
+            "source": media.storage_key,
             "processing_mode": media.processing_mode or "basic",
             
             # Folder information
@@ -1061,7 +1061,7 @@ class SiloService:
             "ref": os.path.join(
                 str(media.repository_id),
                 FolderService.get_folder_path(media.folder_id, db) if media.folder_id else "",
-                f"{media.media_id}{os.path.splitext(media.file_path)[1]}" if media.file_path else ""
+                f"{media.media_id}{os.path.splitext(media.storage_key)[1]}" if media.storage_key else ""
             ).replace("\\", "/"),
             
             # Media metadata

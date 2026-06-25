@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Query
-from fastapi.responses import JSONResponse
-from typing import List, Optional, Annotated
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, StreamingResponse
+from typing import AsyncGenerator, List, Optional, Annotated
+import mimetypes
 import json
 import logging
 from lks_idprovider import AuthContext
@@ -22,6 +23,7 @@ from routers.controls import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
 from repositories.media_repository import MediaRepository
 from utils.error_handlers import ValidationError
+from services.storage_service import get_storage_backend
 
 # Import database dependency
 from db.database import get_db
@@ -602,6 +604,71 @@ async def get_media_status(
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
     return media
+
+
+def _parse_range(range_header: str | None) -> tuple[int, int | None] | None:
+    """Parse an HTTP Range header of the form ``bytes=START-END`` or ``bytes=START-``."""
+    if not range_header or not range_header.startswith("bytes="):
+        return None
+    parts = range_header[6:].split("-")
+    start = int(parts[0]) if parts[0] else 0
+    end = int(parts[1]) if len(parts) > 1 and parts[1] else None
+    return (start, end)
+
+
+@repositories_router.get(
+    "/{repository_id}/media/{media_id}/stream",
+    summary="Stream media file",
+    responses={404: {"description": "Media not found"}, 206: {"description": "Partial content"}},
+)
+async def stream_media(
+    app_id: int,
+    repository_id: int,
+    media_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+) -> StreamingResponse:
+    """
+    Proxy-stream a media file from storage, supporting HTTP Range requests.
+    Returns 206 Partial Content when a Range header is present, 200 otherwise.
+    """
+    media = MediaRepository.get_by_id(media_id, db)
+    if not media:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+    if media.repository_id != repository_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Media does not belong to this repository")
+
+    _validate_repository_app_ownership(repository_id, app_id, db)
+
+    byte_range = _parse_range(request.headers.get("Range"))
+    media_type, _ = mimetypes.guess_type(media.storage_key or "")
+    media_type = media_type or "application/octet-stream"
+
+    async def _iter_chunks() -> AsyncGenerator[bytes, None]:
+        async for chunk in get_storage_backend().stream(media.storage_key, byte_range=byte_range):
+            yield chunk
+
+    headers: dict[str, str] = {"Accept-Ranges": "bytes"}
+    if byte_range is not None:
+        start, end = byte_range
+        end_display = end if end is not None else "*"
+        headers["Content-Range"] = f"bytes {start}-{end_display}/*"
+        return StreamingResponse(
+            _iter_chunks(),
+            status_code=status.HTTP_206_PARTIAL_CONTENT,
+            media_type=media_type,
+            headers=headers,
+        )
+
+    return StreamingResponse(
+        _iter_chunks(),
+        status_code=status.HTTP_200_OK,
+        media_type=media_type,
+        headers=headers,
+    )
+
 
 @repositories_router.delete("/{repository_id}/media/{media_id}")
 async def delete_media(
