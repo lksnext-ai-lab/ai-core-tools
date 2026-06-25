@@ -497,7 +497,7 @@ async def delete_media(
     validate_media_ownership(db, media_id, repo_id)
 
     try:
-        MediaService.delete_media(
+        await MediaService.delete_media(
             media_id=media_id,
             app_id=app_id,
             repository_id=repo_id,

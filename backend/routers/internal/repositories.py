@@ -619,7 +619,7 @@ async def delete_media(
 
     logger.info(f"Delete media endpoint called - app_id={app_id}, repository_id={repository_id}, media_id={media_id}, user_id={user_id}")
 
-    result = MediaService.delete_media(
+    result = await MediaService.delete_media(
         app_id=app_id,
         repository_id=repository_id,
         media_id=media_id,

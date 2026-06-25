@@ -8,8 +8,8 @@ from utils.logger import get_logger
 
 from repositories.media_repository import MediaRepository
 from services.silo_service import SiloService
+from services.storage_service import get_storage_backend
 
-REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
 logger = get_logger(__name__)
 
 class MediaService:
@@ -89,7 +89,8 @@ class MediaService:
     ) -> dict:
         """
         Move a media item to a different folder within the same repository.
-        Updates file system location (media + audio), database record, and re-indexes in vector DB.
+        Updates the folder metadata in the database and re-indexes in vector DB.
+        The storage key is unchanged — folder is a DB/metadata concept only.
         """
         try:
             # Convert 0 to None for root folder
@@ -111,59 +112,8 @@ class MediaService:
                 if not FolderService.validate_folder_access(new_folder_id, repository_id, db):
                     raise ValueError(f"Folder {new_folder_id} does not belong to repository {repository_id}")
 
-            # Get old paths
-            old_media_path = media.file_path
-            if not old_media_path:
-                raise ValueError(f"Could not determine current path for media {media_id}")
-            
-            base_path = os.path.splitext(old_media_path)[0]
-            old_audio_path = f"{base_path}_audio.wav"
-
-            # Build new paths
-            repository_path = os.path.join(REPO_BASE_FOLDER, str(repository_id))
-            media_filename = os.path.basename(old_media_path)
-            audio_filename = os.path.basename(old_audio_path)
-            
-            if new_folder_id:
-                from services.folder_service import FolderService
-                folder_path = FolderService.get_folder_path(new_folder_id, db)
-                new_media_path = os.path.join(repository_path, folder_path, media_filename)
-                new_audio_path = os.path.join(repository_path, folder_path, audio_filename)
-            else:
-                new_media_path = os.path.join(repository_path, media_filename)
-                new_audio_path = os.path.join(repository_path, audio_filename)
-
-            # Create target directory if needed
-            os.makedirs(os.path.dirname(new_media_path), exist_ok=True)
-
-            # Move files with rollback on failure
-            media_moved = False
-            audio_moved = False
-            
-            try:
-                import shutil
-                shutil.move(old_media_path, new_media_path)
-                media_moved = True
-                logger.info(f"Moved media file from {old_media_path} to {new_media_path}")
-
-                if os.path.exists(old_audio_path):
-                    shutil.move(old_audio_path, new_audio_path)
-                    audio_moved = True
-                    logger.info(f"Moved audio file from {old_audio_path} to {new_audio_path}")
-
-            except Exception as e:
-                # Rollback: move files back if partially completed
-                if media_moved:
-                    shutil.move(new_media_path, old_media_path)
-                    logger.warning("Rolled back media file move")
-                if audio_moved:
-                    shutil.move(new_audio_path, old_audio_path)
-                    logger.warning("Rolled back audio file move")
-                raise ValueError(f"Failed to move files: {str(e)}")
-        
-            # Update database
+            # Update database — storage key stays the same (folder is metadata only)
             media.folder_id = new_folder_id
-            media.file_path = new_media_path
             db.add(media)
             db.commit()
             logger.info(f"Updated media {media_id} folder_id to {new_folder_id}")
@@ -178,7 +128,6 @@ class MediaService:
                 "message": "Media moved successfully",
                 "media_id": media_id,
                 "new_folder_id": new_folder_id,
-                "new_path": new_media_path
             }
 
         except Exception as e:
@@ -186,7 +135,7 @@ class MediaService:
             raise ValueError(f"Failed to move media: {str(e)}")
 
     @staticmethod
-    def delete_media(
+    async def delete_media(
         media_id: int,
         app_id: int,
         repository_id: int,
@@ -206,14 +155,15 @@ class MediaService:
             SiloService.delete_media(media)
             logger.info(f"Media {media_id} deleted from silo")
             
-            # Delete file from disk
-            if media.file_path and os.path.exists(media.file_path):
-                audio_path = os.path.splitext(media.file_path)[0] + "_audio.wav"
-                os.remove(media.file_path)
-                logger.info(f"File {media.file_path} deleted from disk")
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                    logger.info(f"Audio file {audio_path} deleted from disk")
+            # Delete files from storage
+            if media.storage_key:
+                backend = get_storage_backend()
+                await backend.delete(media.storage_key)
+                logger.info(f"File {media.storage_key} deleted from storage")
+                audio_key = os.path.splitext(media.storage_key)[0] + "_audio.wav"
+                if await backend.exists(audio_key):
+                    await backend.delete(audio_key)
+                    logger.info(f"Audio file {audio_key} deleted from storage")
             
             # Delete from database
             MediaRepository.delete(media, db)
@@ -264,17 +214,12 @@ class MediaService:
         db.add(media)
         db.flush()  # Get media_id without committing
         
-        # Save file
-        media_folder = os.path.join(REPO_BASE_FOLDER, str(repository_id))
-        os.makedirs(media_folder, exist_ok=True)
-        
-        file_path = os.path.join(media_folder, f"{media.media_id}{file_extension}")
-        
+        # Upload file to storage
         content = await file.read()
-        with open(file_path, 'wb') as f:
-            f.write(content)
-        
-        media.file_path = file_path
+        key = f"repositories/{repository_id}/{media.media_id}{file_extension}"
+        await get_storage_backend().upload(key, content, content_type=file.content_type)
+
+        media.storage_key = key
         db.commit()
         db.refresh(media)
         
