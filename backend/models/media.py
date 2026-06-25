@@ -13,7 +13,7 @@ class Media(Base):
     name = Column(String(255), nullable=False)
     source_type = Column(String(45), nullable=False)  # 'upload' | 'youtube'
     source_url = Column(String(500), nullable=True)
-    file_path = Column(String(500), nullable=True)
+    storage_key = Column(String(500), nullable=True)
     duration = Column(Float, nullable=True)
     language = Column(String(45), nullable=True)
     forced_language = Column(String(10), nullable=True)
