@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from typing import List, Annotated, Optional
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
+import asyncio
 import json
 import time
 
@@ -56,8 +57,6 @@ def _validate_silo_app_ownership(silo_id: int, app_id: int, db: Session) -> Silo
             detail="Silo does not belong to this app"
         )
     return silo
-
-# ==================== SILO MANAGEMENT ====================
 
 @silos_router.post(
     "/import",
@@ -532,11 +531,15 @@ async def reindex_silo_resource(
             detail="Resource does not belong to this silo",
         )
     try:
-        SiloService.index_resource(resource)
+        # Reindex is blocking I/O (DB + embedding HTTP + vector store); run it off the
+        # event loop so it does not stall other requests on this worker.
+        await asyncio.to_thread(SiloService.reindex_resource, resource)
         return {"message": f"Resource {resource_id} reindexed successfully", "resource_id": resource_id}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error reindexing resource {resource_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reindex resource")
 
 
 @silos_router.delete("/{silo_id}/documents",

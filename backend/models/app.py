@@ -17,7 +17,7 @@ class App(Base):
     repositories = relationship('Repository', lazy=True)
     domains = relationship('Domain', back_populates='app', lazy=True)
     agents = relationship('Agent', lazy=True)
-    ocr_agents = relationship('OCRAgent', lazy=True)
+    ocr_agents = relationship('OCRAgent', lazy=True, overlaps="agents")
     output_parsers = relationship('OutputParser', 
                                 back_populates='app',
                                 lazy=True)

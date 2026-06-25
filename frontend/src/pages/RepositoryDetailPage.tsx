@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FolderOpen, Video, FileText, ArrowDownToLine, ArrowLeftRight, Trash2, Tv, Search } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Video, FileText, ArrowDownToLine, ArrowLeftRight, Trash2, Tv, Search, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import FolderTree from '../components/FolderTree';
@@ -22,6 +22,7 @@ interface Resource {
 
 interface RepositoryDetail {
   repository_id: number;
+  silo_id?: number;
   name: string;
   created_at: string;
   resources: Resource[];
@@ -127,6 +128,8 @@ const RepositoryDetailPage: React.FC = () => {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [resourceToMove, setResourceToMove] = useState<Resource | null>(null);
   const [moveToFolderId, setMoveToFolderId] = useState<number | null>(null);
+  const [reindexingId, setReindexingId] = useState<number | null>(null);
+  const [reindexNotice, setReindexNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Folder-related state
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
@@ -480,6 +483,26 @@ const RepositoryDetailPage: React.FC = () => {
     setShowMoveModal(true);
   };
 
+  const handleReindexResource = async (resource: Resource) => {
+    if (reindexingId !== null) return;
+    const siloId = repository?.silo_id;
+    if (!siloId) {
+      setReindexNotice({ type: 'error', text: 'This repository is not linked to a silo.' });
+      return;
+    }
+    setReindexingId(resource.resource_id);
+    setReindexNotice(null);
+    try {
+      await apiService.reindexSiloResource(Number.parseInt(appId!), siloId, resource.resource_id);
+      setReindexNotice({ type: 'success', text: `"${resource.name}" reindexed successfully.` });
+    } catch (err) {
+      setReindexNotice({ type: 'error', text: err instanceof Error ? err.message : 'Reindex failed' });
+    } finally {
+      setReindexingId(null);
+      setTimeout(() => setReindexNotice(null), 4000);
+    }
+  };
+
   const confirmDeleteResource = async () => {
     if (!resourceToDelete) return;
 
@@ -686,6 +709,7 @@ const RepositoryDetailPage: React.FC = () => {
 
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} className="mb-6" />}
+      {reindexNotice && <Alert type={reindexNotice.type} message={reindexNotice.text} onDismiss={() => setReindexNotice(null)} className="mb-6" />}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -794,6 +818,17 @@ const RepositoryDetailPage: React.FC = () => {
                           >
                             <ArrowDownToLine className="w-4 h-4" />
                           </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleReindexResource(resource)}
+                              disabled={reindexingId !== null}
+                              title="Re-extract and reindex this file"
+                              aria-label={`Reindex ${resource.name}`}
+                              className="p-2 text-gray-400 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${reindexingId === resource.resource_id ? 'animate-spin' : ''}`} />
+                            </button>
+                          )}
                           {canEdit && (
                             <button
                               onClick={() => handleDeleteResource(resource)}

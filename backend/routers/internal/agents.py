@@ -389,13 +389,26 @@ async def create_or_update_agent(
         # OCR-specific fields
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
-        'text_system_prompt': agent_data.text_system_prompt
+        'text_system_prompt': agent_data.text_system_prompt,
+        # RAG retrieval config (step_008)
+        'rag_k': agent_data.rag_k,
+        'rag_search_type': agent_data.rag_search_type,
+        'rag_score_threshold': agent_data.rag_score_threshold,
+        'rag_max_retrieval_calls': agent_data.rag_max_retrieval_calls,
+        'rag_fixed_filters': agent_data.rag_fixed_filters,
     }
-    
-    logger.info(f"Creating/updating agent with data: {agent_dict}")
-    
-    # Create or update agent
-    created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
+
+    # Avoid logging full prompt bodies / filter values at INFO; log identity + shape only.
+    logger.info(
+        "Creating/updating agent id=%s app=%s type=%s name=%r silo_id=%s",
+        agent_id, app_id, agent_data.type, agent_data.name, agent_data.silo_id,
+    )
+
+    try:
+        # Create or update agent
+        created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     
     # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting)
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
@@ -773,6 +786,9 @@ async def chat_with_agent_stream(
                 async for chunk in base_generator:
                     yield chunk
             finally:
+                # Release the request DB session: get_db teardown runs too late
+                # for a StreamingResponse, leaving the connection checked out.
+                db.close()
                 await fms.cleanup_ephemeral_refs(all_file_references)
 
         logger.info(f"Streaming chat request for agent {agent_id} by user {auth_context.identity.id}")

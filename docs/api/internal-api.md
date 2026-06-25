@@ -4,11 +4,11 @@
 
 ## Overview
 
-The **Internal API** (`/internal/*`) provides endpoints for **frontend-to-backend communication** in the Mattin AI web application. All endpoints use **session-based authentication** (OIDC or FAKE mode) and enforce **role-based access control** (RBAC).
+The **Internal API** (`/internal/*`) provides endpoints for **frontend-to-backend communication** in the Mattin AI web application. All endpoints use **session-based authentication** (OIDC or LOCAL mode) and enforce **role-based access control** (RBAC).
 
 **Base URL**: `http://localhost:8000/internal` (dev) or `https://your-domain.com/internal` (production)
 
-**Authentication**: Session cookie (set after OIDC login or FAKE mode auto-login)
+**Authentication**: Session cookie (set after OIDC login or LOCAL email+password login)
 
 **OpenAPI Docs**: `http://localhost:8000/docs/internal`
 
@@ -16,23 +16,27 @@ The **Internal API** (`/internal/*`) provides endpoints for **frontend-to-backen
 
 ### Session-Based Auth
 
-After successful OIDC login (or FAKE mode auto-login), a session cookie is set. All Internal API requests must include this cookie.
+After a successful login, session cookies are set. All Internal API requests must include these cookies. Mutating requests (POST, PUT, PATCH, DELETE) to `/internal` that are cookie-authenticated require the `X-CSRF-Token` header — read the value from the `csrf_token` cookie. The paths `/auth/login` and `/auth/set-password` are exempt (no session cookie exists yet at those points). Bearer and `X-API-KEY` requests bypass CSRF enforcement entirely.
 
 **OIDC Flow**:
 
 ```
 1. User clicks "Login" → Redirect to /internal/auth/login
-2. Backend redirects to EntraID/Azure AD
+2. Backend redirects to Azure Entra ID
 3. User authenticates with provider
 4. Provider redirects to /internal/auth/callback with auth code
-5. Backend exchanges code for tokens
+5. Backend exchanges code for tokens; user info read from id_token
 6. Session cookie set → User redirected to app
 ```
 
-**FAKE Mode** (development):
+**LOCAL Mode** (email+password):
 
 ```
-User opens app → Auto-logged in as mock user → Session cookie set
+1. POST /internal/auth/login  {"email": "...", "password": "..."}
+2. Backend validates credentials; exponential lockout after repeated failures
+3. access_token, refresh_token, csrf_token cookies set → Login complete
+4. POST /internal/auth/refresh  (path-scoped refresh_token cookie sent automatically)
+   → New access_token and refresh_token issued; old refresh_token is retired
 ```
 
 ### get_current_user Dependency
@@ -495,7 +499,7 @@ Content-Type: application/json
 
 **Base**: `/internal/admin`
 
-All admin endpoints require the `OMNIADMIN` role (configured via `AICT_OMNIADMINS` environment variable).
+All admin endpoints require `OMNIADMIN` (configured via `AICT_OMNIADMINS` env var) or the `admin` platform role. The app-scoped collaborator role (`ADMINISTRATOR`) does not grant access.
 
 #### User Management
 
@@ -507,6 +511,10 @@ All admin endpoints require the `OMNIADMIN` role (configured via `AICT_OMNIADMIN
 | POST | `/users/{user_id}/activate` | Activate a deactivated user account |
 | POST | `/users/{user_id}/deactivate` | Deactivate an active user account |
 | POST | `/users/{user_id}/reset-marketplace-quota` | Reset user's current-month marketplace call count to 0 |
+| POST | `/users/local` | **(LOCAL mode)** Create a LOCAL auth user; response includes `user_id` and one-time `set_password_token` |
+| POST | `/users/{user_id}/reset-link` | **(LOCAL mode)** Re-issue a set-password token for an existing user |
+| POST | `/users/{user_id}/set-password` | **(LOCAL mode)** Force-set a user's password directly (resets lockout, revokes sessions) |
+| POST | `/users/{user_id}/revoke-sessions` | **(LOCAL mode)** Revoke all active refresh tokens for a user |
 
 **Example: Activate / Deactivate User**
 

@@ -77,3 +77,64 @@ async def test_iact_tool_create_survives_mcp_load_failure():
     assert tool.mcp_client is None
     # Base tools are still present despite the MCP failure.
     assert agentTools.get_current_date in mock_create.call_args.kwargs["tools"]
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_create_uses_sub_agent_rag_config():
+    """AC-17: the sub-agent retriever is built from the sub-agent's OWN RAG config.
+
+    ``get_retriever_tool`` must receive the params resolved for THIS agent plus its
+    own ``rag_max_retrieval_calls`` — not the root agent's caller params.
+    """
+    agent = _make_agent("RAG Sub-Agent")
+    agent.silo_id = 99
+    agent.rag_max_retrieval_calls = 3
+
+    resolved_sp = {"k": 7, "search_type": "mmr"}
+    resolved_pinned = {"anio": {"$eq": 2024}}
+    sentinel_tool = MagicMock()
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch(
+            "services.silo_service.resolve_search_params",
+            return_value=(resolved_sp, resolved_pinned),
+        ) as mock_resolve,
+        patch("tools.agentTools.get_retriever_tool", return_value=sentinel_tool) as mock_get_ret,
+    ):
+        await agentTools.IACTTool.create(agent)
+
+    # Precedence is resolved for the sub-agent itself, with NO caller search params.
+    assert mock_resolve.call_args.args[0] is agent
+    assert mock_resolve.call_args.args[1] is None
+
+    # The dynamic tool is built with the resolved params + the sub-agent's own ceiling.
+    ret_args = mock_get_ret.call_args.args
+    assert ret_args[0] is agent.silo
+    assert ret_args[1] == resolved_sp
+    assert ret_args[2] == 3
+    assert ret_args[3] == resolved_pinned
+
+    # The retriever tool is wired into the sub-agent's toolset.
+    assert sentinel_tool in mock_create.call_args.kwargs["tools"]
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_create_skips_retriever_without_silo():
+    """A sub-agent without a silo builds no retriever tool and never resolves params."""
+    agent = _make_agent("No-Silo Sub-Agent")
+    agent.silo_id = None
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch("services.silo_service.resolve_search_params") as mock_resolve,
+        patch("tools.agentTools.get_retriever_tool") as mock_get_ret,
+    ):
+        await agentTools.IACTTool.create(agent)
+
+    mock_resolve.assert_not_called()
+    mock_get_ret.assert_not_called()

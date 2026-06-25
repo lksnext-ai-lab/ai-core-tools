@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useUser } from '../contexts/UserContext';
 import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, BarChart2, Check } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
@@ -43,6 +44,9 @@ interface App {
 
 // React Component = Function that returns HTML-like JSX
 function AppsPage() {
+  const { user } = useUser();
+  const isEditor = user?.is_admin || (user?.is_editor ?? false);
+
   // State = variables that trigger re-renders when they change
   const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
   const [loading, setLoading] = useState(true);          // Like self.loading = True
@@ -267,22 +271,24 @@ Type the app name to confirm: "${app.name}"`;
           <h1 className="text-2xl font-bold text-gray-900">My Apps</h1>
           <p className="text-gray-600">Manage your AI applications and workspaces</p>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Import App
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}New App
-          </button>
-        </div>
+        {isEditor && (
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Import App
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+            >
+              <span className="mr-2">+</span>
+              {' '}New App
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Apps Table */}
@@ -526,7 +532,7 @@ Type the app name to confirm: "${app.name}"`;
         loading={loading}
       />
 
-      {!loading && apps.length === 0 && (
+      {!loading && apps.length === 0 && isEditor && (
         <div className="text-center py-6">
           <button
             onClick={() => setShowCreateModal(true)}

@@ -173,6 +173,13 @@ class AgentStreamingService:
             # ----------------------------------------------------------------
             # 6. Streaming loop — the only part that stays in this service
             # ----------------------------------------------------------------
+            # Return the sync connection to the pool for the duration of the
+            # stream: astream uses the async checkpointer, not this session, so
+            # holding it across LLM I/O would exhaust the pool. ctx objects expire
+            # but stay attached, so _finalize_turn reloads them on demand.
+            if effective_db is not None:
+                effective_db.commit()
+
             accumulated_content = ""
 
             async for mode, chunk in agent_chain.astream(

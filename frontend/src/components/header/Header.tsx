@@ -23,7 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { appId } = useParams();
   const { user } = useUser();
   const { logout } = useAuth();
-  const { isSaasMode } = useDeploymentMode();
+  const { isSaasMode, authMode, isLoading: modeLoading } = useDeploymentMode();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -52,7 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className={`bg-white border-b border-gray-200 h-14 flex items-center ${className}`}>
 
-      {/* Logo + Platform name — w-64 to match sidebar width */}
+      {/* w-64 matches sidebar width */}
       <div className="flex-shrink-0 w-64 flex items-center gap-2 pl-4 pr-3 min-w-0">
         <Link to="/apps" className="flex-shrink-0 flex items-center gap-2">
           <img
@@ -66,22 +66,16 @@ export const Header: React.FC<HeaderProps> = ({
         </Link>
       </div>
 
-      {/* Vertical divider — aligns with sidebar right border */}
       <div className="self-stretch w-px bg-gray-200 flex-shrink-0 my-2" />
 
-      {/* Spacer + custom children + right actions */}
       <div className="flex-1 min-w-0 flex items-center justify-between pl-4 pr-4 gap-4">
-
-        {/* Slot for custom children (e.g. search bar, breadcrumbs) */}
         <div className="flex-1 min-w-0">
           {children}
         </div>
 
-        {/* Right section — never shrinks */}
         <div className="flex-shrink-0 flex items-center gap-2">
           <PendingInvitationsNotification />
 
-          {/* User Menu Dropdown */}
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -162,6 +156,20 @@ export const Header: React.FC<HeaderProps> = ({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
                       Subscription
+                    </Link>
+                  )}
+
+                  {!modeLoading && authMode === 'local' && (
+                    <Link
+                      to="/change-password"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      role="menuitem"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                      Change password
                     </Link>
                   )}
 

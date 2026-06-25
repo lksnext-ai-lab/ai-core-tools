@@ -35,7 +35,6 @@ function PendingInvitationsNotification() {
     const newShowDetails = !showDetails;
     setShowDetails(newShowDetails);
     
-    // Refresh list when opening to ensure we don't show stale invitations
     if (newShowDetails) {
       loadPendingInvitations();
     }
@@ -47,14 +46,9 @@ function PendingInvitationsNotification() {
       setMessage(null);
       await apiService.respondToInvitation(invitationId, action);
       
-      // Remove the invitation from the list
       setInvitations(prev => prev.filter(inv => inv.id !== invitationId));
-      
-      // Show success message
       const actionText = action === 'accept' ? 'accepted' : 'declined';
       setMessage({ type: 'success', text: `Invitation ${actionText} successfully!` });
-      
-      // Auto-hide success message after 3 seconds
       setTimeout(() => setMessage(null), 3000);
       
     } catch (error) {
@@ -71,7 +65,6 @@ function PendingInvitationsNotification() {
 
   return (
     <div className="relative">
-      {/* Notification Bell */}
       <button
         onClick={toggleDetails}
         className="relative p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
@@ -81,16 +74,13 @@ function PendingInvitationsNotification() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-3.5-3.5a2.5 2.5 0 010-3.5L19 7h-5M9 17H4l3.5-3.5a2.5 2.5 0 000-3.5L4 7h5m0 0V4a2 2 0 112 4h2a2 2 0 112 4v3" />
         </svg>
         
-        {/* Badge */}
         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
           {invitations.length}
         </span>
       </button>
 
-      {/* Dropdown */}
       {showDetails && (
         <>
-          {/* Backdrop */}
           <button
             type="button"
             aria-label="Close notifications panel"
@@ -99,7 +89,6 @@ function PendingInvitationsNotification() {
             onKeyDown={(e) => { if (e.key === 'Escape') setShowDetails(false); }}
           />
           
-          {/* Notification Panel - positioned below the button */}
           <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
             <div className="p-3 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-900">
@@ -107,7 +96,6 @@ function PendingInvitationsNotification() {
               </h3>
             </div>
             
-            {/* Message Display */}
             {message && (
               <div className={`p-3 border-b border-gray-200 ${
                 message.type === 'success' ? 'bg-green-50' : 'bg-red-50'
@@ -139,19 +127,33 @@ function PendingInvitationsNotification() {
               {invitations.map((invitation) => (
                 <div key={invitation.id} className="p-3 border-b border-gray-100 last:border-b-0">
                   <div className="space-y-2">
-                    {/* Invitation Info */}
+                    {/* Ownership offers (role=owner) render differently from normal collaboration invites */}
                     <div>
-                      <h4 className="font-medium text-gray-900 text-sm">{invitation.app_name}</h4>
-                      <p className="text-xs text-gray-600">
-                        {invitation.inviter_name || invitation.inviter_email} invited you as an{' '}
-                        <span className="font-medium">{invitation.role}</span>
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-medium text-gray-900 dark:text-slate-100 text-sm">{invitation.app_name}</h4>
+                        {invitation.role.toLowerCase() === 'owner' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                            Ownership transfer
+                          </span>
+                        )}
+                      </div>
+                      {invitation.role.toLowerCase() === 'owner' ? (
+                        <p className="text-xs text-gray-600 dark:text-slate-300">
+                          {invitation.inviter_name || invitation.inviter_email} wants to transfer{' '}
+                          <span className="font-medium">ownership</span> of this app to you. Accepting makes you
+                          the owner; the current owner becomes an administrator.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-600 dark:text-slate-300">
+                          {invitation.inviter_name || invitation.inviter_email} invited you as an{' '}
+                          <span className="font-medium">{invitation.role}</span>
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
                         {new Date(invitation.invited_at).toLocaleDateString()}
                       </p>
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleInvitationResponse(invitation.id, 'accept')}

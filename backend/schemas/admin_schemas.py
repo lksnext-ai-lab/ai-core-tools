@@ -1,5 +1,6 @@
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
 
 
 class UserListResponse(BaseModel):
@@ -18,6 +19,12 @@ class UserDetailResponse(BaseModel):
     owned_apps_count: int
     api_keys_count: int
     is_active: bool
+    platform_role: str = 'editor'
+    is_omniadmin: bool = False
+
+
+class SetPlatformRoleRequest(BaseModel):
+    role: str
 
 
 class SystemStatsResponse(BaseModel):
@@ -43,8 +50,6 @@ class MarketplaceQuotaResetResponse(BaseModel):
     timestamp: str
 
 
-# ==================== SAAS ADMIN SCHEMAS ====================
-
 class UserAdminRead(BaseModel):
     """Extended user info for OMNIADMIN SaaS dashboard."""
     user_id: int
@@ -66,3 +71,43 @@ class UserAdminRead(BaseModel):
 class TierOverrideRequest(BaseModel):
     """Request body for OMNIADMIN manual tier override."""
     tier: str  # 'free', 'starter', or 'pro'
+
+
+class TransferOwnerRequest(BaseModel):
+    """Request body for OMNIADMIN administrative-direct ownership transfer."""
+
+    new_owner_id: int
+
+
+class AppTransferSummary(BaseModel):
+    """Minimal app summary returned after an ownership transfer."""
+
+    app_id: int
+    name: Optional[str] = None
+    previous_owner_id: int
+    new_owner_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DeleteUserRequest(BaseModel):
+    """Optional body for ``DELETE /admin/users/{user_id}``; defaults to mode='block'.
+
+    mode: 'block' — 409 if user owns apps; 'cascade_apps' — delete all owned apps first;
+    'transfer_apps' — reassign owned apps to transfer_to_user_id, then delete user.
+    """
+
+    mode: Literal["block", "cascade_apps", "transfer_apps"] = "block"
+    transfer_to_user_id: Optional[int] = None
+
+
+class OwnedAppConflictItem(BaseModel):
+    app_id: int
+    name: str
+
+
+class OwnedAppsConflictResponse(BaseModel):
+    """HTTP 409 body when deleting a user who owns apps with mode='block'."""
+
+    detail: str
+    owned_apps: List[OwnedAppConflictItem]

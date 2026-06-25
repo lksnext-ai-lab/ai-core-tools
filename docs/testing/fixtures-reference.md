@@ -127,7 +127,7 @@ def test_list_agents(client, auth_headers, fake_app):
     assert response.status_code == 200
 ```
 
-> **How it works:** Calls `POST /internal/auth/dev-login` with `fake_user.email`, gets a JWT, returns it as headers.
+> **How it works:** Calls `mint_access_token(fake_user.user_id, fake_user.email, fake_user.name)` directly (LOCAL issuer, HS256). No HTTP round-trip to a login endpoint. Using a Bearer header instead of a cookie means the CSRF enforcement dependency is a no-op for mutating test requests.
 
 ### `owner_headers`
 

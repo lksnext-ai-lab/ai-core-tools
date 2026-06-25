@@ -1,5 +1,6 @@
 ---
 name: docs-manager
+model: GPT-5 mini
 description: Expert in managing project documentation in the docs/ folder. Maintains index, TOC, sections, and tracks documentation freshness against git commits. Can self-describe its capabilities.
 tools: [read, edit]
 handoffs:
@@ -240,7 +241,7 @@ last_sync_summary:
 ### Git & GitHub Agent (`@git-github`)
 When your documentation work is complete and the user needs to commit and push:
 - **Delegate to**: `@git-github` agent
-- **Purpose**: Handles git operations — staging, committing (GPG-signed), pushing, branching, and PR creation
+- **Purpose**: Handles git operations — staging, committing, pushing, branching, and PR creation
 - **Skill**: Follows the `commit-and-push` skill for the standard workflow
 
 **When finishing a documentation task**, always suggest the user invoke `@git-github` to handle the git workflow. Provide a clear **change summary**:
@@ -270,6 +271,7 @@ When your task originates from a plan execution step file (`/plans/<slug>/execut
      - If status is `done`, add `completed_at: YYYY-MM-DD`
      - Save the updated manifest
 - **Then** suggest the user invoke `@plan-executor` to continue with the next step
+- **Invoked by `@quick-executor` instead?** There is no step file — return the same `## Result` block **inline** as your response so the executor can act on it directly
 - If the task cannot be completed, set status to `blocked` and explain why
 
 ## What This Agent Does NOT Do

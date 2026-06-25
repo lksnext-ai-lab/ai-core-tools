@@ -1,6 +1,3 @@
-# Import all models to ensure SQLAlchemy relationships are resolved
-# Import order matters for circular dependencies
-
 from .user import User
 from .app import App
 from .app_collaborator import AppCollaborator
@@ -21,7 +18,6 @@ from .repository import Repository
 from .resource import Resource
 from .folder import Folder
 from .domain import Domain
-# New crawling pipeline models (Domain must be imported before its children)
 from .domain_url import DomainUrl
 from .crawl_policy import CrawlPolicy
 from .crawl_job import CrawlJob
@@ -35,6 +31,7 @@ from .subscription import Subscription, SubscriptionTier, BillingStatus
 from .tier_config import TierConfig
 from .usage_record import UsageRecord
 from .user_credential import UserCredential
+from .refresh_token import RefreshToken
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -52,4 +49,5 @@ __all__ = [
     'TierConfig',
     'UsageRecord',
     'UserCredential',
+    'RefreshToken',
 ]

@@ -1,21 +1,24 @@
 from typing import Optional, List, Dict, Any
 import os
 import re
+import uuid
 from models.media import Media
 from models.silo import Silo
 from models.resource import Resource
 from db.database import SessionLocal
 from db.database import db as db_obj
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from utils.logger import get_logger
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tools.vector_store_factory import VectorStoreFactory
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from models.silo import SiloType
 from services.output_parser_service import OutputParserService
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from utils.error_handlers import (
-    handle_database_errors, NotFoundError, ValidationError, 
+    handle_database_errors, NotFoundError, ValidationError,
     validate_required_fields
 )
 from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
@@ -27,6 +30,12 @@ REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
 DEFAULT_SEARCH_LIMIT = 100
 MAX_SEARCH_LIMIT = 200
+
+# Per-chunk marker stamping each indexing run; lets reindex delete only stale chunks.
+INDEX_BATCH_FIELD = 'index_batch'
+
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
 
 logger = get_logger(__name__)
 
@@ -150,6 +159,130 @@ def _is_meaningful_chunk(text: str) -> bool:
     if alpha_space / len(stripped) < 0.40:
         return False
     return True
+
+
+def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> tuple[dict, dict]:
+    """Materialize RAG precedence: caller > agent > system.
+
+    Returns ``(search_params, pinned_filter)`` where:
+    - ``search_params``: tuning-only dict (no 'filter' key) — k, search_type,
+      score_threshold, fetch_k, lambda_mult.
+    - ``pinned_filter``: backend-ready ``{field: {op: value}}`` dict — the AND
+      combination of caller flat filter and ``agent.rag_fixed_filters``. The
+      agent's fixed filters WIN on (field, op) conflict: they are an
+      admin-configured scoping floor a caller must not be able to loosen
+      (security). Tuning params (k/search_type/...) keep caller > agent.
+
+    Never raises: filter-building errors are caught and logged as WARNING.
+
+    Args:
+        agent: Agent ORM instance (or SimpleNamespace in tests).  Must expose
+            ``rag_k``, ``rag_search_type``, ``rag_score_threshold``,
+            ``rag_fixed_filters``, ``rag_max_retrieval_calls`` and
+            optionally ``.silo`` (for metadata_definition + vector_db_type).
+        caller_search_params: Optional search-param dict supplied by the call
+            site (e.g. the public API chat endpoint).
+    """
+    caller: dict = caller_search_params or {}
+    silo = getattr(agent, "silo", None)
+
+    # ---- Tuning params (caller > agent > server_default) ----
+    resolved: dict = {}
+
+    # k: caller explicit value wins; otherwise use agent column (server_default 30)
+    resolved["k"] = caller["k"] if "k" in caller else (getattr(agent, "rag_k", None) or 30)
+
+    # search_type: caller wins; fall back to agent column (server_default 'similarity')
+    resolved["search_type"] = (
+        caller.get("search_type") or getattr(agent, "rag_search_type", None) or "similarity"
+    )
+
+    # score_threshold: caller wins (explicit None clears). Only concrete values are stored,
+    # so absent key == no threshold; never forward None to as_retriever.
+    if "score_threshold" in caller:
+        if caller["score_threshold"] is not None:
+            resolved["score_threshold"] = caller["score_threshold"]
+    else:
+        agent_threshold = getattr(agent, "rag_score_threshold", None)
+        if agent_threshold is not None:
+            resolved["score_threshold"] = agent_threshold
+
+    # fetch_k / lambda_mult: caller pass-through only
+    if "fetch_k" in caller:
+        resolved["fetch_k"] = caller["fetch_k"]
+    if "lambda_mult" in caller:
+        resolved["lambda_mult"] = caller["lambda_mult"]
+
+    # Threshold search without a threshold silently degrades to plain similarity — normalize
+    # and warn instead of a silent no-op (legacy agents, or a caller that cleared the value).
+    if resolved["search_type"] == "similarity_score_threshold" and "score_threshold" not in resolved:
+        logger.warning(
+            "resolve_search_params: 'similarity_score_threshold' requested without a "
+            "score_threshold; falling back to plain similarity search"
+        )
+        resolved["search_type"] = "similarity"
+
+    # ---- Pinned filters ----
+    if silo is None:
+        return resolved, {}
+
+    metadata_definition = getattr(silo, "metadata_definition", None)
+
+    def _build_backend_filter(clauses_input: list) -> dict:
+        """Build backend filter from a list of MetadataFilterClause-like dicts/instances."""
+        from tools.vector_stores.metadata_filters import (  # local import avoids cycles
+            MetadataFilterClause,
+            convert_clause_types,
+            to_backend_filter,
+        )
+        clauses = []
+        for item in clauses_input:
+            try:
+                if isinstance(item, MetadataFilterClause):
+                    clauses.append(item)
+                else:
+                    clauses.append(MetadataFilterClause(**item))
+            except Exception as exc:
+                logger.warning(
+                    "resolve_search_params: could not build filter clause from %r: %s",
+                    {k: v for k, v in item.items() if k != "value"} if isinstance(item, dict) else "?",
+                    exc,
+                )
+        if not clauses:
+            return {}
+        typed = convert_clause_types(clauses, metadata_definition)
+        return to_backend_filter(typed)
+
+    # Caller flat filter: {field: value} → convert to $eq clauses
+    caller_backend: dict = {}
+    raw_caller_filter = caller.get("filter") or {}
+    if raw_caller_filter:
+        try:
+            caller_clauses = [{"field": f, "op": "$eq", "value": v} for f, v in raw_caller_filter.items()]
+            caller_backend = _build_backend_filter(caller_clauses)
+        except Exception as exc:
+            logger.warning("resolve_search_params: failed to build caller filter: %s", exc)
+
+    # Agent rag_fixed_filters: list of {field, op, value}
+    agent_backend: dict = {}
+    raw_agent_filters: Optional[list] = getattr(agent, "rag_fixed_filters", None)
+    if raw_agent_filters:
+        try:
+            agent_backend = _build_backend_filter(raw_agent_filters)
+        except Exception as exc:
+            logger.warning("resolve_search_params: failed to build agent fixed filters: %s", exc)
+
+    # AND merge. Agent fixed filters passed FIRST so they win on (field, op)
+    # conflict — an admin scoping floor the caller cannot loosen (security).
+    # merge_filters_and is first-wins per (field, op). Caller filters on other
+    # fields still apply (AND).
+    if caller_backend or agent_backend:
+        from tools.vector_stores.metadata_filters import merge_filters_and  # local import
+        pinned_filter = merge_filters_and(agent_backend, caller_backend)
+    else:
+        pinned_filter = {}
+
+    return resolved, pinned_filter
 
 
 class SiloService:
@@ -500,14 +633,21 @@ class SiloService:
 
     @staticmethod
     def _create_documents_for_indexing(silo_id: int, contents: List[dict]) -> List[Document]:
-        """Helper method to create Document objects for indexing"""
-        return [
-            Document(
-                page_content=doc['content'],
-                metadata={"silo_id": silo_id, **(doc.get('metadata', {}))}
-            )
-            for doc in contents
-        ]
+        """Split each content item into chunks and attach metadata.
+
+        File-upload callers pre-split via ``extract_documents_from_file`` before
+        calling ``index_multiple_content``, so chunks already ≤ CHUNK_SIZE produce
+        exactly one chunk per input item (idempotent).
+        """
+        splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+        documents: List[Document] = []
+        for item in contents:
+            # silo_id last — a caller-supplied key must not override the parameter.
+            base_metadata = {**(item.get('metadata', {})), "silo_id": silo_id}
+            chunks = splitter.split_text(item['content'])
+            for chunk in chunks:
+                documents.append(Document(page_content=chunk, metadata=dict(base_metadata)))
+        return documents
 
     @staticmethod
     def index_single_content(silo_id: int, content: str, metadata: dict, db: Session):
@@ -541,6 +681,11 @@ class SiloService:
             embedding_service=embedding_service
         )
         logger.info(f"Documentos indexados correctamente en silo {silo_id}")
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService  # noqa: PLC0415
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after index_multiple_content for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
     def extract_documents_from_file(file_path: str, file_extension: str, base_metadata: dict = None):
@@ -554,7 +699,6 @@ class SiloService:
             List[Document]: List of Document objects
         """
         from langchain_core.documents import Document
-        from langchain_text_splitters import CharacterTextSplitter
         from langchain_community.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader
 
         if base_metadata is None:
@@ -572,7 +716,7 @@ class SiloService:
             raise ValueError(f"Unsupported file type: {file_extension}")
 
         pages = loader.load()
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
         docs = text_splitter.split_documents(pages)
 
         # Clean known PDF extraction artifacts (e.g. @@@@, 64/64/64/...) from
@@ -720,7 +864,13 @@ class SiloService:
                 session.close()
 
     @staticmethod
-    def index_resource(resource: Resource):
+    def index_resource(resource: Resource, index_batch: Optional[str] = None) -> str:
+        """Index a resource's file into its silo collection.
+
+        Every chunk is stamped with ``index_batch`` (generated if not supplied) so a
+        later reindex can delete only the stale chunks. Returns the batch used.
+        """
+        index_batch = index_batch or uuid.uuid4().hex
         # For resource operations, we need a fresh session since this might be called from other contexts
         session = SessionLocal()
         try:
@@ -728,8 +878,8 @@ class SiloService:
             resource_with_relations = session.query(Resource).filter(Resource.resource_id == resource.resource_id).first()
             if not resource_with_relations:
                 logger.error(f"Resource {resource.resource_id} not found for indexing")
-                return
-                
+                return index_batch
+
             collection_name = COLLECTION_PREFIX + str(resource_with_relations.repository.silo_id)
             
             # Build the correct file path including folder structure
@@ -748,7 +898,8 @@ class SiloService:
                 "resource_id": resource_with_relations.resource_id,
                 "silo_id": resource_with_relations.repository.silo_id,
                 "name": resource_with_relations.uri,
-                "file_type": file_extension
+                "file_type": file_extension,
+                INDEX_BATCH_FIELD: index_batch,
             }
             
             # Add folder information if resource is in a folder
@@ -769,25 +920,100 @@ class SiloService:
 
             if not docs:
                 logger.warning(f"No content extracted from resource {resource_with_relations.resource_id} ({resource_with_relations.uri}). The file may be empty or contain only images/scans without text.")
-                return
+                return index_batch
 
             embedding_service = resource_with_relations.repository.silo.embedding_service
-            
+
             if not embedding_service:
                 logger.warning(f"Silo {resource_with_relations.repository.silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
-                return
-                
+                return index_batch
+
             _get_vector_store(resource_with_relations.repository.silo).index_documents(
                 collection_name,
                 docs,
                 embedding_service
             )
             logger.info(f"Successfully indexed resource {resource_with_relations.resource_id} in silo {resource_with_relations.repository.silo_id}")
+            try:
+                from services.metadata_values_cache_service import MetadataValuesCacheService
+                MetadataValuesCacheService.invalidate(resource_with_relations.repository.silo_id)
+            except Exception as _cache_exc:
+                logger.warning("metadata_values_cache: invalidation failed after index_resource for silo=%d: %s", resource_with_relations.repository.silo_id, _cache_exc)
         except Exception as e:
             logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}")
             raise
         finally:
             session.close()
+
+        return index_batch
+
+    @staticmethod
+    def _delete_resource_chunks(resource_id: int, collection_name: str, silo) -> None:
+        """Delete all vector chunks for a resource. Propagates vector-store exceptions.
+
+        Single authoritative point for the ``resource_id`` filter; both
+        ``delete_resource`` (tolerant) and ``reindex_resource`` (fail-fast) delegate here.
+        """
+        embedding_service = silo.embedding_service
+        _get_vector_store(silo).delete_documents(
+            collection_name,
+            ids={"resource_id": {"$eq": resource_id}},
+            embedding_service=embedding_service,
+        )
+
+    @staticmethod
+    def reindex_resource(resource: Resource) -> None:
+        """Re-index a resource using index-then-swap (no empty-collection window).
+
+        The fresh batch is written first; only after it succeeds are the resource's
+        other chunks deleted. If indexing fails, the previous chunks are untouched
+        (worst case: transient duplicates that the next successful reindex resolves —
+        never zero chunks).
+
+        Raises:
+            ValueError: If the silo has no embedding service configured.
+            Exception: If the vector-store delete/index fails.
+        """
+        session = SessionLocal()
+        try:
+            resource_with_relations = session.scalars(
+                select(Resource).where(Resource.resource_id == resource.resource_id)
+            ).first()
+
+            if not resource_with_relations:
+                logger.warning(
+                    "reindex_resource: resource %s not found in database; aborting",
+                    resource.resource_id,
+                )
+                return
+
+            silo = resource_with_relations.repository.silo
+            silo_id = resource_with_relations.repository.silo_id
+
+            if not silo or not silo.embedding_service:
+                raise ValueError(f"Silo {silo_id} has no embedding service configured")
+
+            # Capture everything needed for the swap before the session closes.
+            collection_name = COLLECTION_PREFIX + str(silo_id)
+            embedding_service = silo.embedding_service
+            vector_store = _get_vector_store(silo)
+        finally:
+            session.close()
+
+        # 1) Write the fresh batch first — previous chunks remain searchable meanwhile.
+        new_batch = SiloService.index_resource(resource)
+
+        # 2) Swap: drop this resource's chunks that are not the fresh batch.
+        logger.info(
+            "reindex_resource: swapping stale chunks for resource %s in collection %s (batch %s)",
+            resource.resource_id, collection_name, new_batch,
+        )
+        vector_store.delete_documents_excluding(
+            collection_name,
+            filter_metadata={"resource_id": {"$eq": resource.resource_id}},
+            exclude={INDEX_BATCH_FIELD: new_batch},
+            embedding_service=embedding_service,
+        )
 
     @staticmethod
     def index_media_chunk(chunk: dict, media: Media, db: Session = None):
@@ -871,6 +1097,11 @@ class SiloService:
                 embedding_service
             )
             logger.info(f"Indexed media chunk (media {media.media_id}) in silo {media.repository.silo_id}")
+            try:
+                from services.metadata_values_cache_service import MetadataValuesCacheService
+                MetadataValuesCacheService.invalidate(media.repository.silo_id)
+            except Exception as _cache_exc:
+                logger.warning("metadata_values_cache: invalidation failed after index_media_chunk for silo=%d: %s", media.repository.silo_id, _cache_exc)
         except Exception as e:
             logger.error(f"Error indexing media chunk for media {media.media_id}: {str(e)}")
             raise
@@ -928,11 +1159,13 @@ class SiloService:
                 logger.warning(f"Silo {silo.silo_id} has no embedding service, skipping vector deletion for resource {resource.resource_id}")
                 return
 
-            _get_vector_store(silo).delete_documents(
-                collection_name,
-                ids={"resource_id": {"$eq": resource.resource_id}},
-                embedding_service=silo.embedding_service
-            )
+            SiloService._delete_resource_chunks(resource.resource_id, collection_name, silo)
+            # Only reached when _delete_resource_chunks succeeded — safe to invalidate.
+            try:
+                from services.metadata_values_cache_service import MetadataValuesCacheService
+                MetadataValuesCacheService.invalidate(silo.silo_id)
+            except Exception as _cache_exc:
+                logger.warning("metadata_values_cache: invalidation failed after delete_resource for silo=%d: %s", silo.silo_id, _cache_exc)
         except Exception as e:
             logger.error(f"Error deleting resource {resource.resource_id} from vector store: {str(e)}")
             # Don't raise the exception - allow the resource to be deleted from database and disk
@@ -963,7 +1196,12 @@ class SiloService:
             ids={"url": {"$eq": url}},
             embedding_service=embedding_service
         )
-            
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after delete_url for silo=%d: %s", silo_id, _cache_exc)
+
     @staticmethod
     def delete_content(silo_id: int, content_id: str, db: Session):
         """
@@ -982,25 +1220,35 @@ class SiloService:
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
         _get_vector_store(silo).delete_documents(
-            collection_name, 
+            collection_name,
             filter_metadata={"id": {"$eq": content_id}},
             embedding_service=silo.embedding_service
         )
         logger.info(f"Contenido {content_id} eliminado correctamente del silo {silo_id}")
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after delete_content for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
     def delete_collection(silo_id: int, db: Session):
         """Delete a collection using its silo's embedding service"""
         if not SiloService.check_silo_collection_exists(silo_id, db):
             return
-            
+
         # Get silo within the session to ensure relationships are loaded
         silo = SiloRepository.get_by_id(silo_id, db)
         if not silo:
             return
-            
+
         collection_name = COLLECTION_PREFIX + str(silo_id)
         _get_vector_store(silo).delete_collection(collection_name, silo.embedding_service)
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after delete_collection for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
     def delete_docs_in_collection(silo_id: int, ids: List[str], db: Session):
@@ -1021,11 +1269,16 @@ class SiloService:
 
         collection_name = COLLECTION_PREFIX + str(silo_id)
         _get_vector_store(silo).delete_documents(
-            collection_name, 
+            collection_name,
             ids=ids,
             embedding_service=silo.embedding_service
         )
         logger.info(f"Documentos eliminados correctamente del silo {silo_id}")
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after delete_docs_in_collection for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
     def delete_all_docs_in_collection(silo_id: int, db: Session):
@@ -1046,6 +1299,11 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         _get_vector_store(silo).delete_collection(collection_name, silo.embedding_service)
         logger.info(f"All documents deleted from silo {silo_id}")
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after delete_all_docs_in_collection for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
     def delete_docs_by_metadata(silo_id: int, filter_metadata: Dict[str, Any], db: Session) -> int:
@@ -1093,6 +1351,11 @@ class SiloService:
             embedding_service=silo.embedding_service
         )
         logger.info(f"Successfully deleted {doc_count} document(s) from silo {silo_id}")
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning("metadata_values_cache: invalidation failed after delete_docs_by_metadata for silo=%d: %s", silo_id, _cache_exc)
         return doc_count
 
     @staticmethod

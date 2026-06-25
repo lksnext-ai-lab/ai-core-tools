@@ -189,18 +189,7 @@ pytest-env = ">=1.1.0,<2.0.0"
 factory-boy = ">=3.3.0,<4.0.0"
 faker = ">=24.0.0,<30.0.0"
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-pythonpath = ["backend"]
-env = [
-    "AICT_LOGIN=FAKE",
-    "SQLALCHEMY_DATABASE_URI=postgresql://test_user:test_pass@localhost:5433/test_db",
-    "SECRET_KEY=test-secret-key-32chars-minimum-ok",
-    "AICT_OMNIADMINS=admin@test.com",
-    "AICT_MODE=SELF-HOSTED",
-    "FRONTEND_URL=http://localhost:5173",
-]
+# pytest is configured in pytest.ini (single source of truth).
 
 [tool.coverage.run]
 source = ["backend"]

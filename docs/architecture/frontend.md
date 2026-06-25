@@ -51,7 +51,7 @@ This architecture enables **single codebase, multiple brands** — one set of co
 
 The base app provides:
 - **Routing** (React Router)
-- **Authentication** (OIDC or FAKE mode)
+- **Authentication** (OIDC or LOCAL mode)
 - **Theme management** (light/dark mode)
 - **Global contexts** (user, theme, apps)
 - **Layout** (header, sidebar, footer)
@@ -281,7 +281,7 @@ function MyComponent() {
 4. Backend exchanges code for tokens
 5. Session cookie set, user redirected to app
 
-**FAKE mode** (development): Skip OIDC, use mock user.
+**LOCAL mode**: Email + password form; cookies set on successful `POST /internal/auth/login`.
 
 ### Navigation
 

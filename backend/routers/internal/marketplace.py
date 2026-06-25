@@ -726,6 +726,8 @@ async def marketplace_chat_stream(
                 # the connection is dropped), so it fires after the agent
                 # has actually used the files.
                 await fms.cleanup_ephemeral_refs(all_file_references)
+                # Release request session; get_db teardown is too late for streaming.
+                db.close()
 
         logger.info(
             f"Streaming marketplace chat for agent {agent.agent_id}, "

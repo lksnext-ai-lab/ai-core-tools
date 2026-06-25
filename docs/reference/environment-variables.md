@@ -44,32 +44,65 @@ DATABASE_HOST=postgres  # Service name in docker-compose
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC`, `FAKE`, or `LOCAL` |
-| `SECRET_KEY` | Yes | — | Session encryption key (256-bit) |
-| `AICT_OMNIADMINS` | No | — | Comma-separated emails of superusers |
-| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
-| `JWT_EXPIRATION_HOURS` | No | `24` | JWT token expiration (hours) |
+| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC` (Microsoft Entra) or `LOCAL` (admin-provisioned email+password). FAKE mode is retired. |
+| `SECRET_KEY` | **Yes** | — | Application secret key. Must be at least 32 characters and not a known placeholder. App fails fast at startup if the check fails. Used to sign JWTs and set-password tokens — rotating this value invalidates all active sessions. |
+| `AICT_OMNIADMINS` | No | — | Comma-separated email addresses of superusers |
+| `JWT_ALGORITHM` | No | `HS256` | **Legacy — read but unused at runtime.** LOCAL mode hardcodes HS256. |
+| `JWT_EXPIRATION_HOURS` | No | `24` | **Legacy — read but unused at runtime.** Access token TTL is controlled by `LOCAL_ACCESS_TTL_MINUTES`. |
 
-**Example**:
+> Generate a safe `SECRET_KEY`: `python -c "import secrets; print(secrets.token_hex(32))"`
+
+**OIDC mode**:
 ```bash
 AICT_LOGIN=OIDC
-SECRET_KEY=your-256-bit-secret-key-here-change-in-production
-AICT_OMNIADMINS=admin@example.com,superuser@example.com
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_HOURS=24
+SECRET_KEY=<64-char hex string>
+AICT_OMNIADMINS=admin@example.com
 ```
 
-**Development** (FAKE mode):
-```bash
-AICT_LOGIN=FAKE
-SECRET_KEY=dev-secret-key
-```
-
-**SaaS mode** (LOCAL — email+password):
+**LOCAL mode** (self-hosted email+password):
 ```bash
 AICT_LOGIN=LOCAL
-AICT_DEPLOYMENT_MODE=saas
-SECRET_KEY=your-256-bit-secret-key-here
+SECRET_KEY=<64-char hex string>
+AICT_OMNIADMINS=admin@example.com
+```
+
+### LOCAL Mode Tuning
+
+All variables are optional. The defaults are suitable for most deployments.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTH_COOKIE_SECURE` | `true` | Controls the `Secure` flag on session cookies. Set `false` only for plain-HTTP local development — never in production. |
+| `LOCAL_ACCESS_TTL_MINUTES` | `15` | Access token lifetime in minutes |
+| `LOCAL_REFRESH_TTL_DAYS` | `14` | Refresh token lifetime in days |
+| `LOCAL_LOCKOUT_THRESHOLD` | `5` | Failed login attempts before account lockout |
+| `LOCAL_LOCKOUT_BASE_SECONDS` | `60` | Base lockout duration in seconds (exponential backoff: `base * 2^(attempts - threshold)`) |
+| `LOCAL_TOKEN_LEEWAY_SECONDS` | `30` | Clock-skew tolerance for JWT validation |
+| `LOCAL_SET_PASSWORD_TOKEN_MAX_AGE_HOURS` | `48` | Validity window for admin-issued set-password links |
+
+### SMTP (LOCAL Mode)
+
+Used to email set-password links when calling `POST /internal/admin/users/{id}/reset-link`. Both `SMTP_HOST` and `SMTP_FROM` must be set to enable email delivery. When either is absent a `NoopEmailSender` is used: the token is returned only in the admin API response body (never logged) and the admin must forward it manually. For newly created users (`POST /internal/admin/users/local`) the token is always returned only in the response body — no email is sent regardless of SMTP configuration.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SMTP_HOST` | — | SMTP relay hostname. Required for email delivery. |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | — | SMTP authentication username (optional) |
+| `SMTP_PASSWORD` | — | SMTP authentication password. Never logged. |
+| `SMTP_TLS` | `true` | Enable STARTTLS |
+| `SMTP_FROM` | — | Sender address (e.g. `no-reply@example.com`). Required for email delivery. |
+| `SMTP_TIMEOUT_SECONDS` | `10` | Per-connection SMTP timeout |
+
+**Example (LOCAL mode with SMTP)**:
+```bash
+AICT_LOGIN=LOCAL
+SECRET_KEY=<64-char hex string>
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=no-reply@example.com
+SMTP_PASSWORD=smtp-password
+SMTP_FROM=no-reply@example.com
 ```
 
 ### LLM API Keys
@@ -280,7 +313,7 @@ VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/success
 VITE_OIDC_SCOPE=openid profile email
 ```
 
-**Development** (FAKE mode):
+**LOCAL mode** (OIDC disabled):
 ```bash
 VITE_OIDC_ENABLED=false
 ```
@@ -333,9 +366,10 @@ DATABASE_PORT=5432
 SQLALCHEMY_DATABASE_URI=postgresql://mattin:password@localhost:5432/mattin_ai
 DATABASE_PASSWORD=dev_password
 
-# Authentication
-AICT_LOGIN=FAKE
-SECRET_KEY=dev-secret-key-for-local-testing-only
+# Authentication — LOCAL mode for local development
+AICT_LOGIN=LOCAL
+SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
+AUTH_COOKIE_SECURE=false        # Required for plain-HTTP local dev
 
 # LLM API Keys (optional for development)
 OPENAI_API_KEY=sk-proj-...
@@ -357,8 +391,8 @@ DATABASE_NAME=mattin_ai
 DATABASE_PORT=5432
 
 # Authentication
-AICT_LOGIN=FAKE
-SECRET_KEY=docker-secret-key-change-in-production
+AICT_LOGIN=LOCAL
+SECRET_KEY=<generate a strong key — minimum 32 chars>
 
 # Ports
 BACKEND_PORT=8000
@@ -445,6 +479,6 @@ openssl rand -base64 24
 
 ## See Also
 
-- [Authentication Guide](../guides/authentication.md) — OIDC and FAKE mode setup
+- [Authentication Guide](../guides/authentication.md) — OIDC and LOCAL mode setup, cookie transport, provisioning workflow, and migration from FAKE mode
 - [Deployment Guide](../guides/deployment.md) — Docker and Kubernetes configuration
 - [LLM Integration](../ai/llm-integration.md) — API key configuration for LLM providers

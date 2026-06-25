@@ -62,9 +62,34 @@ class VectorStoreInterface(ABC):
         pass
     
     @abstractmethod
+    def delete_documents_excluding(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        exclude: Dict[str, Any],
+        embedding_service=None,
+    ) -> None:
+        """Delete documents matching ``filter_metadata`` whose metadata does NOT
+        match every (field, value) in ``exclude``. A document missing an exclude
+        field counts as not-matching and is deleted.
+
+        Powers index-then-swap reindex: write the fresh batch first, then delete
+        the resource's other chunks (``exclude`` = the fresh batch marker) so the
+        collection never passes through an empty state.
+
+        Args:
+            collection_name: Name of the collection/index.
+            filter_metadata: PGVector-style filter selecting the candidate set.
+            exclude: ``{field: value}`` the freshly-written chunks carry; matching
+                documents are preserved.
+            embedding_service: Service used for embeddings (backend-dependent).
+        """
+        pass
+
+    @abstractmethod
     def delete_collection(
-        self, 
-        collection_name: str, 
+        self,
+        collection_name: str,
         embedding_service=None
     ) -> None:
         """

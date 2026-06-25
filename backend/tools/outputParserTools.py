@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field
 from typing import Type, Dict, Any, List, get_origin, get_args
 from sqlalchemy.orm import Session
 from db.database import SessionLocal
-from db.database import db
 from models.output_parser import OutputParser
 import logging
 from datetime import date

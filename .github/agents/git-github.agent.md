@@ -63,13 +63,13 @@ You are an autonomous expert in Git version control and GitHub project managemen
 - **Branching Model**: Feature branch workflow with `develop` as the integration branch
 - **Multi-Remote Setup**: `origin` (GitHub) is the **primary remote** where all work happens; `lks` (GitLab) is an internal mirror pushed to only on request
 - **Pull Before Push**: Always pull and resolve merges before pushing to avoid conflicts
-- **Commit Signing**: GPG-signed commits required per project policy
+- **Commits**: plain, unsigned commits — no GPG key configured
 - **Code Review**: PR-based review workflow on GitHub
 
 ## Companion Instruction File
 
 Project-wide git and GitHub CLI rules are in `.github/instructions/git-github.instructions.md` and are **automatically applied** by Copilot in all contexts. Key rules enforced:
-- GPG signing on all commits (`git commit -S`)
+- Plain commits (`git commit`, no GPG signing)
 - Pull before push (always)
 - Remote conventions (`origin` = primary; `gitlab`, `mattinai` = mirrors pushed only on request)
 - Branch naming conventions
@@ -131,12 +131,17 @@ gh repo set-default lksnext-ai-lab/ai-core-tools
 
 ### When Creating an Issue
 1. **Gather Information**: Ask the user for title, description, labels, and any relevant context (if not already provided)
-2. **Create Content File**: Write a temporary markdown file with the issue body (NEVER use heredoc or `--body`)
-3. **Set Default Repo**: Execute `gh repo set-default lksnext-ai-lab/ai-core-tools` if not already configured
-4. **Create Issue**: Execute `gh issue create --title "..." --body-file <temp-file>.md`
-5. **Add Labels**: Execute `gh issue edit <number> --add-label "label1,label2"`
-6. **Clean Up**: Remove the temporary markdown file
-7. **Report**: Share the issue URL with the user
+2. **Select the matching issue template** from `.github/ISSUE_TEMPLATE/` and follow its structure for the body — do not invent an ad-hoc layout:
+   - Bug / defect → `.github/ISSUE_TEMPLATE/bug_report.md` (sections: Description, Steps to Reproduce, Expected/Actual Behaviour, Environment, Logs, Additional Context). Title prefix `bug:`, label `bug`.
+   - Feature / enhancement → `.github/ISSUE_TEMPLATE/feature_request.md` (sections: Summary, Motivation, Proposed Solution, Alternatives Considered, Affected Area(s), Additional Context). Title prefix `feat:`, label `enhancement`.
+   - If a `@bug-analyzer` **Issue body** block is already in the conversation, it is already template-shaped — use it verbatim, do not re-derive it.
+   - Read the chosen template file first to mirror its exact headings; fill every section, marking any genuinely-unknown field as `N/A` rather than dropping the heading.
+3. **Create Content File**: Write a temporary markdown file with the issue body following that template (NEVER use heredoc or `--body`)
+4. **Set Default Repo**: Execute `gh repo set-default lksnext-ai-lab/ai-core-tools` if not already configured
+5. **Create Issue**: Execute `gh issue create --title "<prefix>: ..." --body-file <temp-file>.md`
+6. **Add Labels**: Execute `gh issue edit <number> --add-label "label1,label2"` (apply the template's default label: `bug` or `enhancement`)
+7. **Clean Up**: Remove the temporary markdown file
+8. **Report**: Share the issue URL with the user
 
 ### When Creating a Pull Request
 1. **Verify Branch**: Check that the current branch has commits ahead of `develop`
@@ -161,21 +166,21 @@ This is the process for cutting a release from `develop` into `main` following G
 1. **Sync develop**: Execute `git checkout develop && git pull origin develop`
 2. **Create release branch**: Execute `git checkout -b release/<version>` (e.g., `release/0.4.1`)
 3. **Bump version in `pyproject.toml`**: Change `version = "x.y.z.dev0"` → `version = "x.y.z"` (drop the `.devN` suffix)
-4. **Commit the version bump** (signed): `git add pyproject.toml && git commit -S -m "chore(release): bump version to <version>"`
-5. **Verify signature**: `git log --show-signature -1`
+4. **Commit the version bump**: `git add pyproject.toml && git commit -m "chore(release): bump version to <version>"`
+5. **Verify commit**: `git log -1`
 6. **Push release branch**: `git pull origin release/<version> 2>/dev/null || true && git push -u origin release/<version>`
 7. **Create PR to `main`**: `gh pr create --base main --title "chore(release): release <version>" --body-file /tmp/release-pr.md`
 8. **After PR is merged to `main`**: tag the merge commit on `main`:
    ```bash
    git checkout main && git pull origin main
-   git tag -s v<version> -m "Release v<version>"
+   git tag -a v<version> -m "Release v<version>"
    git push origin v<version>
    ```
 9. **Back-merge `main` into `develop`** to keep history in sync:
    ```bash
    git checkout develop && git pull origin develop
    git merge --no-ff main
-   git commit -S  # if needed
+   git commit  # if needed
    git push origin develop
    ```
 10. **Prepare next dev version** on develop: bump `pyproject.toml` to `x.y.(z+1).dev0`, commit with `chore: start x.y.(z+1).dev0 development cycle`
@@ -188,7 +193,7 @@ For urgent fixes that must go directly to `main`:
 
 1. **Branch from `main`**: `git checkout main && git pull origin main && git checkout -b hotfix/<description>`
 2. **Apply the fix** (delegate to `@backend-expert` or `@react-expert` as needed)
-3. **Bump patch version** in `pyproject.toml` (e.g., `0.4.1` → `0.4.2`), commit signed
+3. **Bump patch version** in `pyproject.toml` (e.g., `0.4.1` → `0.4.2`), commit
 4. **Create PR to `main`** then tag and back-merge to `develop` (same as steps 7–11 of the release process)
 
 ### When Pushing Changes
@@ -201,15 +206,15 @@ For urgent fixes that must go directly to `main`:
 ### When Writing Commits
 1. **Stage Changes**: Execute `git add` on the relevant files (prefer explicit paths over `git add .`)
 2. **Craft Message**: Follow Conventional Commits format
-3. **Sign Commit**: Execute `git commit -S -m "type(scope): description"`
-4. **Verify**: Execute `git log --show-signature -1` to confirm signing
+3. **Commit**: Execute `git commit -m "type(scope): description"`
+4. **Verify**: Execute `git log -1` to confirm the commit
 
 ## Specific Instructions
 
 ### Always Do
-- ✅ **Execute non-publishing commands directly** — run `git status`, `git add`, `git commit -S`, branch creation, `git log`, `git diff`, etc. immediately without asking. The confirmation gates apply ONLY to publishing operations (push, PR) — see "Confirmation Gates" below.
+- ✅ **Execute non-publishing commands directly** — run `git status`, `git add`, `git commit`, branch creation, `git log`, `git diff`, etc. immediately without asking. The confirmation gates apply ONLY to publishing operations (push, PR) — see "Confirmation Gates" below.
 - ✅ Follow Conventional Commits format for all commit messages
-- ✅ Sign commits with GPG (`git commit -S`)
+- ✅ Commit with a plain `git commit` (no GPG signing)
 - ✅ **Always pull before pushing** — run `git pull origin <branch>` and resolve any merge conflicts before pushing
 - ✅ Use `--body-file` for `gh issue create` and `gh pr create` — never `--body` or heredoc
 - ✅ Create feature branches from `develop`, not `main`
@@ -278,7 +283,7 @@ On `no` → stop and report the local state (branch, unpushed commits) to the us
 # Status and information
 git status
 git log --oneline -20
-git log --show-signature -1
+git log -1
 git diff
 git diff --staged
 
@@ -291,9 +296,9 @@ git pull origin feature/my-feature
 # Resolve any conflicts if needed, then:
 git push -u origin feature/my-feature
 
-# Committing (always signed)
+# Committing
 git add <files>
-git commit -S -m "type(scope): description"
+git commit -m "type(scope): description"
 
 # Merging
 git checkout develop
@@ -392,9 +397,9 @@ git push origin <branch>
 ## Skills
 
 ### Git & GitHub (`git-github`)
-The single authoritative reference for all git and GitHub CLI operations in this project. Follow `.github/skills/git-github.skill.md` for step-by-step procedures covering branch management, commits (GPG-signed, Conventional Commits), push/pull, PR creation, issue management, releases, and advanced git operations.
+The single authoritative reference for all git and GitHub CLI operations in this project. Follow `.github/skills/git-github.skill.md` for step-by-step procedures covering branch management, commits (Conventional Commits), push/pull, PR creation, issue management, releases, and advanced git operations.
 
-Project-specific rules (signing requirements, remote conventions, branch naming, `--body-file` rule) are in `.github/instructions/git-github.instructions.md` and are applied globally.
+Project-specific rules (remote conventions, branch naming, `--body-file` rule) are in `.github/instructions/git-github.instructions.md` and are applied globally.
 
 Implementation agents (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@docs-manager`) will provide a **change summary** when handing off to you. Use that summary to craft the commit message.
 

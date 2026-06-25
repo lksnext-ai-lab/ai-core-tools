@@ -31,7 +31,7 @@ Three distinct router groups handle different authentication and use cases:
 
 ### Internal API Routers (`/internal/*`)
 
-**Authentication**: Session-based (OIDC or FAKE mode)
+**Authentication**: Session-based (OIDC or LOCAL mode — cookie + CSRF)
 **Purpose**: Frontend-to-backend communication for the web application
 
 | Router | Endpoint | Purpose |
@@ -335,7 +335,7 @@ Supporting utilities for cross-cutting concerns:
 
 | Utility | Purpose |
 |---------|---------|
-| **auth_config** | Authentication configuration (OIDC vs FAKE mode) |
+| **auth_config** | Authentication configuration (OIDC vs LOCAL mode) |
 | **config** | Application configuration loader |
 | **database** | Database session management, connection pooling |
 | **decorators** | Reusable function decorators |

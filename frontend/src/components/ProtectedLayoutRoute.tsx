@@ -2,6 +2,7 @@ import React from 'react';
 import { Layout } from './layout/Layout';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
+import EditorRoute from './EditorRoute';
 import type { NavigationConfig } from '../core/types';
 
 interface LayoutRouteProps {
@@ -18,7 +19,7 @@ interface LayoutRouteProps {
   showSidebar?: boolean;
   showHeader?: boolean;
   showFooter?: boolean;
-  routeType?: 'protected' | 'admin';
+  routeType?: 'protected' | 'admin' | 'editor';
 }
 
 /**
@@ -37,7 +38,7 @@ export const LayoutRoute: React.FC<LayoutRouteProps> = ({
   showFooter = true,
   routeType = 'protected',
 }) => {
-  const RouteWrapper = routeType === 'admin' ? AdminRoute : ProtectedRoute;
+  const RouteWrapper = routeType === 'admin' ? AdminRoute : routeType === 'editor' ? EditorRoute : ProtectedRoute;
 
   return (
     <RouteWrapper>
@@ -64,4 +65,8 @@ export const ProtectedLayoutRoute: React.FC<Omit<LayoutRouteProps, 'routeType'>>
 
 export const AdminLayoutRoute: React.FC<Omit<LayoutRouteProps, 'routeType'>> = (props) => (
   <LayoutRoute {...props} routeType="admin" />
+);
+
+export const EditorLayoutRoute: React.FC<Omit<LayoutRouteProps, 'routeType'>> = (props) => (
+  <LayoutRoute {...props} routeType="editor" />
 );

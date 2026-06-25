@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { authService } from '../services/auth';
 import { OIDCContext } from '../auth/OIDCProvider';
@@ -11,6 +11,9 @@ export interface User {
   is_authenticated: boolean;
   is_admin?: boolean;
   is_omniadmin?: boolean;
+  platform_role?: 'viewer' | 'editor' | 'admin';
+  /** True for editors and admins; false for viewers */
+  is_editor?: boolean;
 }
 
 interface UserContextType {
@@ -35,194 +38,156 @@ interface UserProviderProps {
   children: ReactNode;
 }
 
+async function fetchUserFromBackend(
+  bearerToken: string | null,
+): Promise<User | null> {
+  const baseUrl = configService.getApiBaseUrl();
+  const headers: Record<string, string> = {};
+
+  if (bearerToken) {
+    headers['Authorization'] = `Bearer ${bearerToken}`;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/internal/me`, {
+      credentials: 'include',
+      headers,
+    });
+
+    if (!response.ok) return null;
+
+    const userData: {
+      user_id: number;
+      email: string;
+      name?: string;
+      is_admin?: boolean;
+      is_omniadmin?: boolean;
+      platform_role?: 'viewer' | 'editor' | 'admin';
+    } = await response.json();
+
+    return {
+      user_id: userData.user_id,
+      email: userData.email,
+      name: userData.name,
+      is_authenticated: true,
+      is_admin: userData.is_admin ?? userData.is_omniadmin ?? false,
+      is_omniadmin: userData.is_omniadmin ?? false,
+      platform_role: userData.platform_role,
+      is_editor: (userData.is_admin ?? false) || userData.platform_role !== 'viewer',
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  // Access OIDC context directly to avoid circular dependency with useAuth
+
   const oidcContext = useContext(OIDCContext);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
-      // If using OIDC, get user from backend
       if (oidcContext?.user) {
-        try {
-          const baseUrl = configService.getApiBaseUrl();
-          const token = oidcContext.user.access_token;
-          
-          const response = await fetch(`${baseUrl}/internal/me`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (response.ok) {
-            const userData = await response.json();
-            setUser({
-              user_id: userData.user_id,
-              email: userData.email,
-              name: userData.name,
-              is_authenticated: true,
-              is_admin: userData.is_admin || userData.is_omniadmin,
-              is_omniadmin: userData.is_omniadmin
-            });
-            return;
-          }
-        } catch (error) {
-          console.error('Failed to fetch user from backend:', error);
+        const token = oidcContext.user.id_token ?? null;
+        const resolved = await fetchUserFromBackend(token);
+
+        if (resolved) {
+          setUser(resolved);
+          return;
         }
-        
-        // Fallback: use OIDC profile if backend call fails
-        const oidcUser = oidcContext.user as any;
-        const userData: User = {
+
+        // Backend unreachable — fall back to OIDC profile fields.
+        const oidcUser = oidcContext.user;
+        setUser({
           user_id: 0,
-          email: oidcUser.profile?.email || '',
-          name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
+          email: (oidcUser.profile as Record<string, string>)?.email ?? '',
+          name: (oidcUser.profile as Record<string, string>)?.name
+            ?? (oidcUser.profile as Record<string, string>)?.preferred_username,
           is_authenticated: true,
           is_admin: false,
-          is_omniadmin: false
-        };
-        setUser(userData);
-      } else if (authService.isAuthenticated()) {
-        // Dev mode: token exists, fetch actual user data from backend
-        try {
-          const userData = await authService.getCurrentUser();
-          setUser({
-            user_id: userData.user_id,
-            email: userData.email,
-            name: userData.name,
-            is_authenticated: true,
-            is_admin: userData.is_admin || userData.is_omniadmin,
-            is_omniadmin: userData.is_omniadmin
-          });
-        } catch (error) {
-          console.error('Failed to fetch user data in dev mode during refresh:', error);
-          // If fetch fails, clear user
-          setUser(null);
-        }
+          is_omniadmin: false,
+          platform_role: 'viewer',
+          is_editor: false,
+        });
       } else {
-        setUser(null);
+        // LOCAL mode: httpOnly cookie sent automatically; no bearer needed.
+        const resolved = await fetchUserFromBackend(null);
+        setUser(resolved);
       }
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
+    } catch {
       setUser(null);
     }
-  };
+  }, [oidcContext?.user]);
 
-  const logout = async () => {
-    // If using OIDC, use OIDC logout
+  const logout = useCallback(async () => {
     if (oidcContext?.user) {
       await oidcContext.logout();
     } else {
-      // Fake-login mode: just clear local storage
-      authService.clearAuth();
+      await authService.logout();
     }
     setUser(null);
-  };
+  }, [oidcContext?.user, oidcContext?.logout]);
 
   useEffect(() => {
     const initializeUser = async () => {
       try {
-        // If using OIDC, get user from backend
         if (oidcContext?.user) {
-          try {
-            const baseUrl = configService.getApiBaseUrl();
-            const token = oidcContext.user.access_token;
-            
-            const response = await fetch(`${baseUrl}/internal/me`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
-            
-            if (response.ok) {
-              const userData = await response.json();
-              setUser({
-                user_id: userData.user_id,
-                email: userData.email,
-                name: userData.name,
-                is_authenticated: true,
-                is_admin: userData.is_admin || userData.is_omniadmin,
-                is_omniadmin: userData.is_omniadmin
-              });
-              setLoading(false);
-              return;
-            }
-          } catch (error) {
-            console.error('Failed to fetch user from backend:', error);
+          const token = oidcContext.user.id_token ?? null;
+          const resolved = await fetchUserFromBackend(token);
+
+          if (resolved) {
+            setUser(resolved);
+            setLoading(false);
+            return;
           }
-          
-          // Fallback: use OIDC profile if backend call fails
-          const oidcUser = oidcContext.user as any;
-          const userData: User = {
+
+          // Backend unreachable — fall back to OIDC profile fields.
+          const oidcUser = oidcContext.user;
+          setUser({
             user_id: 0,
-            email: oidcUser.profile?.email || '',
-            name: oidcUser.profile?.name || oidcUser.profile?.preferred_username,
+            email: (oidcUser.profile as Record<string, string>)?.email ?? '',
+            name: (oidcUser.profile as Record<string, string>)?.name
+              ?? (oidcUser.profile as Record<string, string>)?.preferred_username,
             is_authenticated: true,
             is_admin: false,
-            is_omniadmin: false
-          };
-          setUser(userData);
-        } else if (authService.isAuthenticated()) {
-          // Dev mode: token exists, fetch actual user data from backend
-          try {
-            const userData = await authService.getCurrentUser();
-            setUser({
-              user_id: userData.user_id,
-              email: userData.email,
-              name: userData.name,
-              is_authenticated: true,
-              is_admin: userData.is_admin || userData.is_omniadmin,
-              is_omniadmin: userData.is_omniadmin
-            });
-          } catch (error) {
-            console.error('Failed to fetch user data in dev mode:', error);
-            // Fallback to minimal user if fetch fails
-            setUser({
-              user_id: 0,
-              email: '',
-              name: '',
-              is_authenticated: true,
-              is_admin: false,
-              is_omniadmin: false
-            });
-          }
+            is_omniadmin: false,
+            platform_role: 'viewer',
+            is_editor: false,
+          });
         } else {
-          // No OIDC user and no token means not authenticated
-          setUser(null);
+          const resolved = await fetchUserFromBackend(null);
+          setUser(resolved);
         }
-      } catch (error) {
-        console.error('Failed to initialize user:', error);
+      } catch {
         setUser(null);
       } finally {
         setLoading(false);
       }
     };
 
-    // Wait for auth to finish loading before initializing user
     if (!oidcContext?.loading) {
       initializeUser();
     }
   }, [oidcContext?.user, oidcContext?.loading]);
 
-  // Update loading state based on OIDC loading
+  // Mirrors OIDC loading to prevent auth-flash during callback or silent-renew.
   useEffect(() => {
     if (oidcContext) {
       setLoading(oidcContext.loading);
     }
   }, [oidcContext?.loading]);
 
-  const value: UserContextType = useMemo(() => ({
-    user,
-    loading,
-    setUser,
-    logout,
-    refreshUser,
-  }), [user, loading, logout, refreshUser]);
-
-  return (
-    <UserContext.Provider value={value}>
-      {children}
-    </UserContext.Provider>
+  const value: UserContextType = useMemo(
+    () => ({
+      user,
+      loading,
+      setUser,
+      logout,
+      refreshUser,
+    }),
+    [user, loading, logout, refreshUser],
   );
-}; 
+
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+};

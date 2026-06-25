@@ -107,19 +107,60 @@ class PGVectorStore(VectorStoreInterface):
             ids: Document IDs to delete (list) or metadata filter (dict)
             embedding_service: Service used for embeddings
         """
-        vector_store = self._get_vector_store(collection_name, embedding_service)
-        
         if isinstance(ids, list):
-            # Direct deletion by IDs
+            vector_store = self._get_vector_store(collection_name, embedding_service)
             vector_store.delete(ids=ids)
         else:
-            # Deletion by metadata filter
-            # TODO: For deleting docs, embedding_service should not be needed. 
-            # In fact, if api key fails we cannot delete docs.
-            results = vector_store.similarity_search("", k=1000, filter=ids)
-            ids_array = [doc.id for doc in results]
-            vector_store.delete(ids=ids_array)
-    
+            # Native SQL delete-by-filter: single statement, no embedding model and no
+            # collection-size cap (the old similarity_search loop embedded an empty query
+            # just to enumerate ids — a dead/rotated embedding key blocked deletes).
+            if not ids:
+                logger.warning("No metadata filter provided for PGVector deletion; skipping")
+                return
+            params: Dict[str, Any] = {"name": collection_name}
+            where_extra = self._build_filter_sql(ids, params)
+            self._execute_filtered_delete(collection_name, where_extra, params)
+
+    def delete_documents_excluding(
+        self,
+        collection_name: str,
+        filter_metadata: Dict[str, Any],
+        exclude: Dict[str, Any],
+        embedding_service=None,
+    ) -> None:
+        if not filter_metadata:
+            raise ValueError("filter_metadata is required for delete_documents_excluding")
+
+        params: Dict[str, Any] = {"name": collection_name}
+        where_extra = self._build_filter_sql(filter_metadata, params)
+        # Preserve rows that match every exclude (field, value). `IS DISTINCT FROM`
+        # treats a missing field as not-matching, so legacy chunks without the marker
+        # are still deleted.
+        for i, (field, value) in enumerate(exclude.items()):
+            params[f"exf{i}"] = field
+            params[f"exv{i}"] = self._str_for_jsonb(value)
+            where_extra += f" AND (e.cmetadata ->> :exf{i}) IS DISTINCT FROM :exv{i}"
+        self._execute_filtered_delete(collection_name, where_extra, params)
+
+    def _execute_filtered_delete(
+        self, collection_name: str, where_extra: str, params: Dict[str, Any]
+    ) -> None:
+        """Run a DELETE on langchain_pg_embedding scoped to one collection + WHERE fragment."""
+        sql = text(
+            "DELETE FROM langchain_pg_embedding AS e "
+            "WHERE e.collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = :name)"
+            f"{where_extra}"
+        )
+        try:
+            with self.engine.begin() as connection:
+                result = connection.execute(sql, params)
+                logger.debug(
+                    "PGVector filtered delete on %s removed %s rows", collection_name, result.rowcount
+                )
+        except Exception as exc:
+            logger.error("PGVector delete_documents error: %s", exc)
+            raise
+
     def delete_collection(
         self, 
         collection_name: str, 
@@ -361,13 +402,13 @@ class PGVectorStore(VectorStoreInterface):
     ) -> List[str]:
         sql = text(
             """
-            SELECT DISTINCT cmetadata->>:field AS val
+            SELECT DISTINCT lpe.cmetadata->>:field AS val
             FROM langchain_pg_embedding lpe
             JOIN langchain_pg_collection lpc ON lpe.collection_id = lpc.uuid
             WHERE lpc.name = :collection_name
-              AND cmetadata->>:field IS NOT NULL
-              AND cmetadata->>:field != ''
-              AND (:prefix IS NULL OR LOWER(cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+              AND lpe.cmetadata->>:field IS NOT NULL
+              AND lpe.cmetadata->>:field != ''
+              AND (:prefix IS NULL OR LOWER(lpe.cmetadata->>:field) LIKE LOWER(:prefix_pattern))
             ORDER BY val
             LIMIT :limit
             """
@@ -411,7 +452,7 @@ class PGVectorStore(VectorStoreInterface):
             if not isinstance(spec, dict):
                 conditions.append(f"e.cmetadata ->> :k{idx} = :v{idx}")
                 params[f"k{idx}"] = key
-                params[f"v{idx}"] = str(spec)
+                params[f"v{idx}"] = PGVectorStore._str_for_jsonb(spec)
                 idx += 1
                 continue
 
@@ -424,6 +465,18 @@ class PGVectorStore(VectorStoreInterface):
         return (" AND " + " AND ".join(conditions)) if conditions else ""
 
     @staticmethod
+    def _str_for_jsonb(val: Any) -> str:
+        """Convert *val* to the JSONB string representation.
+
+        PostgreSQL's ``->>`` returns boolean literals as lowercase ``"true"`` /
+        ``"false"``.  Python's ``str(True)`` yields ``"True"`` (title-case) which
+        would never match, so booleans are explicitly lowercased here.
+        """
+        if isinstance(val, bool):
+            return str(val).lower()
+        return str(val)
+
+    @staticmethod
     def _operator_condition(
         idx: int,
         key: str,
@@ -434,17 +487,17 @@ class PGVectorStore(VectorStoreInterface):
         """Build SQL fragment(s) for one (key, op, val) triple."""
         if op == "$eq":
             params[f"k{idx}"] = key
-            params[f"v{idx}"] = str(val)
+            params[f"v{idx}"] = PGVectorStore._str_for_jsonb(val)
             return [f"e.cmetadata ->> :k{idx} = :v{idx}"]
         if op == "$ne":
             params[f"k{idx}"] = key
-            params[f"v{idx}"] = str(val)
+            params[f"v{idx}"] = PGVectorStore._str_for_jsonb(val)
             return [f"e.cmetadata ->> :k{idx} != :v{idx}"]
         if op == "$in" and isinstance(val, list):
             placeholders = ", ".join(f":in{idx}_{j}" for j in range(len(val)))
             params[f"k{idx}"] = key
             for j, v in enumerate(val):
-                params[f"in{idx}_{j}"] = str(v)
+                params[f"in{idx}_{j}"] = PGVectorStore._str_for_jsonb(v)
             return [f"e.cmetadata ->> :k{idx} IN ({placeholders})"]
         if op in _PG_NUMERIC_OPS:
             params[f"k{idx}"] = key

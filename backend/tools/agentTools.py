@@ -2,20 +2,21 @@ from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
 from models.agent import Agent
-from models.silo import Silo, SiloType
+from models.silo import Silo
 from langchain.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.dateTimeTools import get_current_date
 from tools.ai.fileTools import fetch_file_in_base64
 from tools.ai.workspaceTools import create_download_url_tool
-from typing import Any, Optional, Dict, List
-from langchain_core.tools.retriever import create_retriever_tool
+from typing import Any, Optional, Dict, List, Tuple
+import types as _types
 from services.silo_service import SiloService
+from db.database import SessionLocal
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from services.agent_cache_service import CheckpointerCacheService
-from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
+from langchain_core.tools import StructuredTool
 import json
 import asyncio
 import os
@@ -233,8 +234,13 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         tools.append(create_download_url_tool(working_dir))
 
     if agent.silo_id is not None:
-
-        retriever_tool = get_retriever_tool(agent.silo, search_params)
+        # Resolve precedence (caller > agent RAG config > system) AND build the tool
+        # off the event loop: both precedence resolution (lazy-loads
+        # silo.metadata_definition) and construction (distinct-value sampling) do
+        # synchronous DB work.
+        retriever_tool = await asyncio.to_thread(
+            _resolve_and_build_retriever_tool, agent, search_params
+        )
         if retriever_tool is not None:
             tools.append(retriever_tool)
 
@@ -294,13 +300,65 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     return agent_chain, mcp_client
 
 
+_DEFAULT_RECURSION_LIMIT = 50
+
+
+def _load_recursion_limit() -> int:
+    """Read AICT_AGENT_RECURSION_LIMIT from the environment once at module load.
+
+    Logs a WARNING and falls back to 50 when the value is absent, non-integer, or
+    below 1 (LangGraph requires recursion_limit >= 1; a value < 1 fails every turn).
+    """
+    raw = os.getenv("AICT_AGENT_RECURSION_LIMIT")
+    if raw is None:
+        return _DEFAULT_RECURSION_LIMIT
+    try:
+        value = int(raw)
+    except (ValueError, TypeError):
+        logger.warning(
+            "prepare_agent_config: AICT_AGENT_RECURSION_LIMIT=%r is not a valid integer; "
+            "using default %d",
+            raw, _DEFAULT_RECURSION_LIMIT,
+        )
+        return _DEFAULT_RECURSION_LIMIT
+    if value < 1:
+        logger.warning(
+            "prepare_agent_config: AICT_AGENT_RECURSION_LIMIT=%r is < 1 (invalid); "
+            "using default %d",
+            raw, _DEFAULT_RECURSION_LIMIT,
+        )
+        return _DEFAULT_RECURSION_LIMIT
+    return value
+
+
+AICT_AGENT_RECURSION_LIMIT: int = _load_recursion_limit()
+
+
+def _resolve_and_build_retriever_tool(agent, caller_search_params):
+    """Resolve RAG precedence then build the dynamic retriever tool for *agent*.
+
+    Runs synchronous DB work — precedence resolution lazy-loads
+    ``silo.metadata_definition`` and ``get_retriever_tool`` samples distinct values.
+    MUST be invoked via ``asyncio.to_thread`` so it never blocks the event loop.
+    """
+    from services.silo_service import resolve_search_params  # noqa: PLC0415 — avoids import cycle
+
+    resolved_sp, resolved_pinned = resolve_search_params(agent, caller_search_params)
+    return get_retriever_tool(
+        agent.silo,
+        resolved_sp,
+        getattr(agent, "rag_max_retrieval_calls", None),
+        resolved_pinned,
+    )
+
+
 def prepare_agent_config(agent):
     """Helper function to prepare agent configuration."""
     config = {
         "configurable": {
             "thread_id": f"thread_{agent.agent_id}"
         },
-        "recursion_limit": 200,
+        "recursion_limit": AICT_AGENT_RECURSION_LIMIT,
     }
     return config
 
@@ -482,9 +540,17 @@ class IACTTool(BaseTool):
         tools.append(get_current_date)
         tools.append(fetch_file_in_base64)
 
-        # Add silo retriever if configured
+        # Add silo retriever if configured. The sub-agent uses the same dynamic
+        # metadata-aware tool as the root agent, driven by its OWN RAG config
+        # (rag_k / rag_search_type / rag_score_threshold / rag_fixed_filters /
+        # rag_max_retrieval_calls). Caller search params are NOT propagated from the
+        # root agent (caller_search_params=None) — sub-agents are self-contained (FR-12).
         if agent.silo_id is not None:
-            retriever_tool = get_retriever_tool(agent.silo)
+            # Caller params NOT propagated (None) — the sub-agent uses its OWN config.
+            # Off the event loop: resolution + construction do synchronous DB work.
+            retriever_tool = await asyncio.to_thread(
+                _resolve_and_build_retriever_tool, agent, None
+            )
             if retriever_tool is not None:
                 tools.append(retriever_tool)
 
@@ -611,112 +677,339 @@ class IACTTool(BaseTool):
             logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")
             return f"Error executing agent tool: {str(e)}"
 
-def convert_search_params_to_types(search_params: dict, metadata_definition) -> dict:
+_SEARCH_ERROR_MSG = "The knowledge base search failed; try rephrasing or removing filters."
+
+
+def _format_docs_with_metadata(docs: List[Document]) -> str:
+    """Serialize retrieved documents as a text block with metadata for the LLM."""
+    parts: List[str] = []
+    for doc in docs:
+        metadata_str = json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else "{}"
+        parts.append(f"Content: {doc.page_content}\nMetadata: {metadata_str}")
+    return "\n\n---\n\n".join(parts)
+
+
+def _capture_silo_data(silo: Silo) -> dict:
+    """Extract all silo ORM data needed by the retrieval coroutine into plain values.
+
+    After this call the coroutine never accesses the ORM object or its lazy
+    relationships, avoiding DetachedInstanceError.
     """
-    Convert search parameters to their proper types based on metadata definition.
-    The search_params dictionary should have a 'filter' key containing the metadata filters.
-    
-    Args:
-        search_params: Dictionary containing search parameters with a 'filter' key
-        metadata_definition: OutputParser instance containing field definitions
-        
-    Returns:
-        Dictionary with converted parameter values
+    metadata_definition = getattr(silo, "metadata_definition", None)
+    captured_fields_list: List[dict] = []
+    if metadata_definition is not None:
+        for fspec in (metadata_definition.fields or []):
+            if isinstance(fspec, dict) and fspec.get("name"):
+                captured_fields_list.append(dict(fspec))
+
+    return {
+        "silo_id": silo.silo_id,
+        "vector_db_type": getattr(silo, "vector_db_type", None) or "PGVECTOR",
+        "captured_fields_list": captured_fields_list,
+        "captured_metadata_def": (
+            _types.SimpleNamespace(fields=captured_fields_list)
+            if captured_fields_list
+            else None
+        ),
+        "metadata_field_types": {
+            f["name"]: f.get("type", "str") for f in captured_fields_list
+        },
+    }
+
+
+def _build_pinned_filter(
+    raw_caller_filter: dict,
+    captured_metadata_def: Any,
+    vector_db_type: str,
+) -> dict:
+    """Convert the caller's flat {field: value} filter to a backend filter dict.
+
+    Skips the field whitelist (validate_clauses) so undeclared fields pass through —
+    pinned filters come from trusted caller code, not the LLM. Type coercion is applied
+    using declared field types; undeclared fields are treated as str.
     """
-    if not search_params or not metadata_definition:
-        return search_params
-        
-    # Create a copy of search_params to avoid modifying the original
-    converted_params = search_params.copy()
-    
-    # Only process the 'filter' key if it exists
-    if 'filter' in search_params and search_params['filter']:
-        field_definitions = {f['name']: f for f in metadata_definition.fields}
-        converted_filter = {}
-        
-        for key, value in search_params['filter'].items():
-            if key in field_definitions:
-                field_type = field_definitions[key]['type']
-                try:
-                    if field_type == 'int':
-                        converted_filter[key] = int(value)
-                    elif field_type == 'float':
-                        converted_filter[key] = float(value)
-                    elif field_type == 'bool':
-                        converted_filter[key] = bool(value)
-                    else:
-                        converted_filter[key] = value
-                except (ValueError, TypeError):
-                    # If conversion fails, keep original value
-                    converted_filter[key] = value
-            else:
-                converted_filter[key] = value
-                
-        converted_params['filter'] = converted_filter
-            
-    return converted_params
+    from tools.vector_stores.metadata_filters import (
+        MetadataFilterClause,
+        convert_clause_types,
+        to_backend_filter,
+    )
 
-def get_retriever_tool(silo: Silo, search_params=None):
-    
-    if silo.silo_id is not None:
-        # Convert search parameters to proper types based on metadata definition
-        if search_params:
-            search_params = convert_search_params_to_types(search_params, silo.metadata_definition)
+    clauses: List[MetadataFilterClause] = []
+    for field, value in raw_caller_filter.items():
+        try:
+            clauses.append(MetadataFilterClause(field=field, op="$eq", value=value))
+        except Exception:
+            logger.warning(
+                "get_retriever_tool: could not build pinned clause for field '%s' — skipped",
+                field,
+            )
 
-        retriever = SiloService.get_silo_retriever(silo.silo_id, search_params)
-        name = "silo_retriever"
-        description = "Use this tool to search for documents in the pgvector collection."
-        if silo.silo_type == SiloType.REPO:
-            #todo: add description to repository model to compose description
-            description = "Use this tool to search for relevant documents in the repository."
-        elif silo.silo_type == SiloType.DOMAIN:
-            description = f"Use this tool to search for documents. This tool stores information about a web site and this is its description: {silo.domain.description}"
-        else:
-            description = f"Use this tool to search for documents and information about {silo.description}"
+    if not clauses:
+        return {}
 
-        # Create a wrapper retriever that includes metadata in page_content
-        # This ensures the agent can see metadata like holiday_item_id, type, etc.
-        # We'll use a closure to capture the retriever instead of storing it as an attribute
-        original_retriever = retriever
-        
-        def format_docs_with_metadata(docs: List[Document]) -> List[Document]:
-            """Format documents to include metadata in page_content"""
-            formatted_docs = []
-            for doc in docs:
-                metadata_str = json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else "{}"
-                # Include metadata in the page_content so the agent can see it
-                formatted_content = f"Content: {doc.page_content}\nMetadata: {metadata_str}"
-                formatted_doc = Document(
-                    page_content=formatted_content,
-                    metadata=doc.metadata  # Keep original metadata for filtering
+    typed = convert_clause_types(clauses, captured_metadata_def)
+    return to_backend_filter(typed)
+
+
+def _build_llm_filter(
+    metadata_kwargs: dict,
+    metadata_field_types: dict,
+    captured_metadata_def: Any,
+    vector_db_type: str,
+    tool_name: str,
+) -> dict:
+    """Build a backend filter dict from LLM-inferred kwargs.
+
+    Applies the strict field whitelist (only declared fields pass) — LLM input
+    is untrusted.
+    """
+    from tools.vector_stores.metadata_filters import MetadataFilterClause, build_filter_dict
+
+    llm_clauses: List[MetadataFilterClause] = []
+    for field, value in metadata_kwargs.items():
+        if value is None:
+            continue
+        if field not in metadata_field_types:
+            logger.warning(
+                "get_retriever_tool[%s]: field '%s' not in metadata_definition — skipped (AC-5)",
+                tool_name,
+                field,
+            )
+            continue
+        try:
+            llm_clauses.append(MetadataFilterClause(field=field, op="$eq", value=value))
+        except Exception:
+            logger.warning(
+                "get_retriever_tool[%s]: could not build LLM clause for field '%s' — skipped",
+                tool_name,
+                field,
+            )
+
+    if not llm_clauses:
+        return {}
+    return build_filter_dict(llm_clauses, captured_metadata_def, vector_db_type)
+
+
+async def _run_retrieval(
+    silo_id: int,
+    call_search_params: Optional[dict],
+    query: str,
+) -> List[Document]:
+    """Invoke SiloService.get_silo_retriever off the event loop, then run ainvoke."""
+    retriever = await asyncio.to_thread(
+        SiloService.get_silo_retriever, silo_id, call_search_params
+    )
+    return await retriever.ainvoke(query)
+
+
+async def _build_fallback_notice(
+    silo_id: int,
+    llm_filter_fields: List[str],
+    distinct_values: dict,
+    tool_name: str,
+) -> str:
+    """Build the [notice] string for AC-8 fallback, fetching missing values via thread."""
+    from tools.vector_stores.metadata_filters import sanitize_metadata_value, MAX_EXAMPLE_VALUES
+    from services.metadata_values_cache_service import MetadataValuesCacheService
+
+    def _fetch(f: str) -> List[str]:
+        with SessionLocal() as s:
+            return MetadataValuesCacheService.get_distinct_values(
+                silo_id=silo_id, field=f, db=s
+            )
+
+    notice_parts: List[str] = []
+    for field in llm_filter_fields:
+        cached_vals = distinct_values.get(field, [])
+        if not cached_vals:
+            try:
+                cached_vals = await asyncio.to_thread(_fetch, field)
+            except Exception:
+                logger.warning(
+                    "get_retriever_tool[%s]: could not fetch distinct values for field '%s'",
+                    tool_name,
+                    field,
                 )
-                formatted_docs.append(formatted_doc)
-            return formatted_docs
-        
-        class MetadataRetrieverWrapper(BaseRetriever):
-            """Wrapper retriever that includes metadata in document content"""
-            
-            def _get_relevant_documents(self, query: str) -> List[Document]:
-                docs = original_retriever.invoke(query)
-                return format_docs_with_metadata(docs)
-            
-            async def _aget_relevant_documents(self, query: str) -> List[Document]:
-                docs = await original_retriever.ainvoke(query)
-                return format_docs_with_metadata(docs)
-        
-        # Wrap the retriever to include metadata in content
-        wrapped_retriever = MetadataRetrieverWrapper()
-        
-        # Use default document prompt since metadata is now in page_content
-        from langchain_core.prompts import PromptTemplate
-        document_prompt = PromptTemplate.from_template("{page_content}")
+                cached_vals = []
 
-        return create_retriever_tool(
-            retriever=wrapped_retriever, 
-            name=name, 
-            description=description, 
-            response_format="content_and_artifact",
-            document_prompt=document_prompt
+        sanitized = [
+            sanitize_metadata_value(str(v))
+            for v in cached_vals
+            if v is not None
+        ]
+        sanitized = [v for v in sanitized if v][:MAX_EXAMPLE_VALUES]
+        if sanitized:
+            notice_parts.append(f"{field}: {', '.join(sanitized)}")
+
+    notice = (
+        f"[notice] No results with the inferred filter {llm_filter_fields}; "
+        f"retried without it."
+    )
+    if notice_parts:
+        notice += " Existing values — " + "; ".join(notice_parts) + "."
+    return notice
+
+
+def get_retriever_tool(
+    silo: Silo,
+    search_params: Optional[dict] = None,
+    max_retrieval_calls: Optional[int] = None,
+    pinned_filter: Optional[dict] = None,
+) -> Optional[StructuredTool]:
+    """Build the dynamic retrieval tool for *silo*.
+
+    All silo ORM state is captured in plain variables at construction time.
+    The coroutine never accesses the ORM object directly, avoiding DetachedInstanceError.
+
+    Args:
+        silo: Attached Silo ORM instance.
+        search_params: Optional caller-level search parameters (tuning only — no
+            'filter' key expected when ``pinned_filter`` is provided).
+        max_retrieval_calls: Optional ceiling on tool invocations per agent turn.
+        pinned_filter: Optional pre-built backend filter dict
+            ``{field: {op: value}}``.  When provided it is used directly as the
+            pinned filter and ``_build_pinned_filter`` is skipped.  When None the
+            existing behaviour is preserved: the ``filter`` key from
+            ``search_params`` is translated via ``_build_pinned_filter``.
+
+    Returns:
+        A StructuredTool whose coroutine performs metadata-aware retrieval,
+        or None when silo.silo_id is falsy.
+    """
+    if not silo.silo_id:
+        return None
+
+    from tools.retriever_tool_builder import (
+        build_retriever_args_schema,
+        build_retriever_description,
+        build_retriever_tool_name,
+        collect_distinct_values,
+    )
+    from tools.vector_stores.metadata_filters import merge_filters_and
+
+    captured = _capture_silo_data(silo)
+    silo_id: int = captured["silo_id"]
+    vector_db_type: str = captured["vector_db_type"]
+    captured_fields_list: List[dict] = captured["captured_fields_list"]
+    captured_metadata_def = captured["captured_metadata_def"]
+    metadata_field_types: dict[str, str] = captured["metadata_field_types"]
+
+    with SessionLocal() as db_session:
+        distinct_values: dict[str, List[str]] = collect_distinct_values(silo, db=db_session)
+
+    effective_search_params: Optional[dict] = search_params
+
+    if pinned_filter is not None:
+        # Pre-built filter supplied by resolve_search_params — use directly.
+        _pinned_filter: dict[str, Any] = pinned_filter
+        if _pinned_filter:
+            effective_search_params = {**(search_params or {}), "filter": _pinned_filter}
+    else:
+        # Legacy path: translate search_params["filter"] flat dict.
+        _pinned_filter = {}
+        if search_params and search_params.get("filter"):
+            _pinned_filter = _build_pinned_filter(
+                search_params["filter"], captured_metadata_def, vector_db_type
+            )
+            if _pinned_filter:
+                effective_search_params = {**search_params, "filter": _pinned_filter}
+
+    # Alias for closure capture
+    resolved_pinned = _pinned_filter
+
+    tool_name: str = build_retriever_tool_name(silo)
+    tool_description: str = build_retriever_description(silo, distinct_values)
+    args_schema = build_retriever_args_schema(silo, distinct_values)
+
+    # Not async-safe under parallel tool calls; safe with LangGraph's serialized model.
+    _call_count: List[int] = [0]
+
+    async def _search(query: str, **metadata_kwargs: Any) -> Tuple[str, List[Document]]:
+        if max_retrieval_calls is not None and _call_count[0] >= max_retrieval_calls:
+            logger.info(
+                "get_retriever_tool[%s]: retrieval ceiling reached (%d/%d)",
+                tool_name, _call_count[0], max_retrieval_calls,
+            )
+            return (
+                "Search limit reached — answer with the information you already have "
+                "or state what is missing.",
+                [],
+            )
+        _call_count[0] += 1
+
+        llm_filter = _build_llm_filter(
+            metadata_kwargs, metadata_field_types, captured_metadata_def,
+            vector_db_type, tool_name,
         )
-    return None
+        merged_filter = merge_filters_and(resolved_pinned, llm_filter)
+
+        if merged_filter:
+            base = dict(effective_search_params) if effective_search_params else {}
+            call_search_params: Optional[dict] = {**base, "filter": merged_filter}
+        else:
+            call_search_params = effective_search_params
+
+        applied_fields = list(merged_filter.keys()) if merged_filter else []
+        logger.info(
+            "get_retriever_tool[%s]: call #%d — applied filter fields=%s",
+            tool_name, _call_count[0], applied_fields or "(none)",
+        )
+
+        try:
+            docs: List[Document] = await _run_retrieval(silo_id, call_search_params, query)
+        except Exception as exc:
+            logger.error(
+                "get_retriever_tool[%s]: vector store error",
+                tool_name, exc_info=True,
+            )
+            return (_SEARCH_ERROR_MSG, [])
+
+        if not docs and llm_filter:
+            logger.info(
+                "get_retriever_tool[%s]: 0 results with LLM filter — retrying with pinned only (AC-8)",
+                tool_name,
+            )
+            notice = await _build_fallback_notice(
+                silo_id, list(llm_filter.keys()), distinct_values, tool_name
+            )
+
+            try:
+                docs = await _run_retrieval(silo_id, effective_search_params, query)
+            except Exception as exc:
+                logger.error(
+                    "get_retriever_tool[%s]: fallback vector store error",
+                    tool_name, exc_info=True,
+                )
+                return (_SEARCH_ERROR_MSG, [])
+
+            filter_label = f"with filter {resolved_pinned}" if resolved_pinned else "(no metadata filter)"
+            content = (
+                f"{notice}\n\n"
+                f"{len(docs)} results {filter_label}\n\n"
+                f"{_format_docs_with_metadata(docs)}"
+            )
+            logger.info(
+                "get_retriever_tool[%s]: fallback retrieved %d docs for silo_id=%d",
+                tool_name, len(docs), silo_id,
+            )
+            return (content, docs)
+
+        filter_label = f"with filter {merged_filter}" if merged_filter else "(no metadata filter)"
+        content = (
+            f"{len(docs)} results {filter_label}\n\n"
+            f"{_format_docs_with_metadata(docs)}"
+        )
+        logger.info(
+            "get_retriever_tool[%s]: retrieved %d docs for silo_id=%d, filter_fields=%s",
+            tool_name, len(docs), silo_id, applied_fields or "(none)",
+        )
+        return (content, docs)
+
+    return StructuredTool.from_function(
+        coroutine=_search,
+        name=tool_name,
+        description=tool_description,
+        args_schema=args_schema,
+        response_format="content_and_artifact",
+    )
 

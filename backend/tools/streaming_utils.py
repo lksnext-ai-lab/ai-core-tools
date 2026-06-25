@@ -56,7 +56,6 @@ SSE_DONE: str = "done"
 # When i18n support is added, map the keys to the appropriate locale string
 # instead of replacing this dict.
 _THINKING_MESSAGES: dict[str, str] = {
-    "silo_retriever":           "Searching knowledge base...",
     "get_current_date":         "Getting current date...",
     "python_repl":              "Running code...",
     "code_interpreter":         "Running code...",
@@ -115,6 +114,10 @@ def get_thinking_message(tool_name: str, is_agent_tool: bool = False) -> str:
 
     if tool_name in _THINKING_MESSAGES:
         return _THINKING_MESSAGES[tool_name]
+
+    # Dynamic retrieval tools follow the pattern search_{slug}_{silo_id} (AD-8).
+    if tool_name.startswith("search_"):
+        return "Searching knowledge base..."
 
     if "mcp" in tool_name.lower():
         return "Using external tool..."

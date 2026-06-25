@@ -8,6 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech Stack**: Python 3.11+, FastAPI, SQLAlchemy, Alembic, LangChain/LangGraph, PostgreSQL + pgvector, React 18, TypeScript, Vite, Tailwind CSS.
 
+## Claude Code Agent System (`.claude/`)
+
+This repo ships a native **Claude Code** multi-agent system under [`.claude/`](.claude/README.md) — separate from and parallel to the `.github/` GitHub Copilot ecosystem (the two never modify each other). It provides spec-driven development, issue resolution, full-stack implementation experts, and a **self-correcting review board** that audits every change before it is committed.
+
+Because Claude Code subagents cannot spawn other subagents, the **main conversation orchestrates**: a slash-command spawns specialist subagents, runs auditors in parallel on the diff, loops expert ⇄ auditors until the change converges, then commits behind confirmation gates.
+
+**Entry commands:** `/spec` · `/plan` · `/implement` · `/solve-issue` · `/fix` · `/review` · `/production-audit` · `/ship` · `/new-agent`.
+**21 agents** (research · discovery/spec/plan · 7 implementation experts · 8-auditor review board incl. a `reliability-auditor` for concurrency / fault tolerance / isolation · system maintenance), **4 shared skills** (incl. a `production-standards` best-practice rubric), and **PowerShell hooks** (secret guards + frontend eslint + session context).
+
+Full roster, delegation graph, and conventions: **[`.claude/README.md`](.claude/README.md)**. Specs live (untracked) under `.claude/specs/`.
+
 ## Development Commands
 
 ### Backend
@@ -194,8 +205,11 @@ cd ../clients/<client-name> && npm install
 
 ```env
 SQLALCHEMY_DATABASE_URI=postgresql://user:pass@localhost:5432/dbname
-AICT_LOGIN=FAKE                 # FAKE (dev) | LOCAL (SaaS email+password) | OIDC (production)
-SECRET_KEY=your-secret-key
+AICT_LOGIN=OIDC                 # OIDC (Microsoft Entra, default) | LOCAL (admin-provisioned email+password)
+                                # FAKE mode is retired — the dev-login endpoint no longer exists.
+SECRET_KEY=                     # REQUIRED. No default. App fails fast if missing, too short (<32 chars),
+                                # or a known-insecure placeholder. Rotating this key invalidates ALL sessions.
+                                # Generate: python -c "import secrets; print(secrets.token_hex(32))"
 AICT_OMNIADMINS=admin@example.com
 
 OPENAI_API_KEY=sk-...
@@ -209,6 +223,24 @@ QDRANT_URL=http://localhost:6333
 ENTRA_TENANT_ID=...
 ENTRA_CLIENT_ID=...
 ENTRA_CLIENT_SECRET=...
+
+# LOCAL mode tuning (all optional — defaults shown)
+# AUTH_COOKIE_SECURE=true       # Set false ONLY for plain-HTTP local dev
+# LOCAL_ACCESS_TTL_MINUTES=15
+# LOCAL_REFRESH_TTL_DAYS=14
+# LOCAL_LOCKOUT_THRESHOLD=5
+# LOCAL_LOCKOUT_BASE_SECONDS=60
+# LOCAL_TOKEN_LEEWAY_SECONDS=30
+# LOCAL_SET_PASSWORD_TOKEN_MAX_AGE_HOURS=48
+
+# SMTP for LOCAL mode set-password emails (both vars required to enable; omitting uses NoopSender)
+# SMTP_HOST=smtp.example.com
+# SMTP_PORT=587
+# SMTP_USER=...
+# SMTP_PASSWORD=...             # Never logged
+# SMTP_TLS=true
+# SMTP_FROM=no-reply@example.com
+# SMTP_TIMEOUT_SECONDS=10
 
 # Optional
 LANGSMITH_TRACING=false

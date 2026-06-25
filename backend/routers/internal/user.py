@@ -1,8 +1,8 @@
 """
 User endpoints for getting current user information.
 """
-from typing import Annotated
-from fastapi import APIRouter, HTTPException, status, Depends
+from typing import Annotated, List, Optional
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
@@ -23,7 +23,7 @@ class CurrentUserResponse(BaseModel):
     email: str
     name: str
     is_admin: bool
-    is_omniadmin: bool
+    platform_role: str
 
 
 @router.get(
@@ -64,5 +64,37 @@ async def get_current_user(
         email=user.email,
         name=user.name or "",
         is_admin=is_omniadmin(user.email),
-        is_omniadmin=is_omniadmin(user.email),
+        platform_role=user.platform_role or 'editor',
     )
+
+
+class UserSearchResultItem(BaseModel):
+    user_id: int
+    name: str
+    email: str
+    platform_role: str
+
+
+@router.get(
+    "/users/search",
+    response_model=List[UserSearchResultItem],
+    summary="Search platform users",
+    description="Search users by name or email. Used for collaboration invitations.",
+)
+async def search_users(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    q: Annotated[str, Query(min_length=2, description="Search query (name or email)")],
+):
+    current_email = auth_context.identity.email
+    users, _ = UserService.search_users(db, q, page=1, per_page=10)
+    return [
+        UserSearchResultItem(
+            user_id=u["user_id"],
+            name=u.get("name") or "",
+            email=u["email"],
+            platform_role=u.get("platform_role") or "editor",
+        )
+        for u in users
+        if u["email"] != current_email
+    ]

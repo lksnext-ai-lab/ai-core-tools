@@ -1,147 +1,165 @@
 import { configService } from '../core/ConfigService';
 import type { User } from 'oidc-client-ts';
+import { getCsrfToken } from './cookies';
 
 class AuthService {
   private get baseURL(): string {
     return configService.getApiBaseUrl();
   }
-  private readonly TOKEN_KEY = 'auth_token';
-  private readonly EXPIRES_KEY = 'auth_expires';
 
-  // ==================== TOKEN MANAGEMENT ====================
-  
-  setToken(token: string, expiresAt?: string) {
-    localStorage.setItem(this.TOKEN_KEY, token);
-    if (expiresAt) {
-      localStorage.setItem(this.EXPIRES_KEY, expiresAt);
+  // Handles both { detail: string } (HTTPException) and Pydantic 422 array shapes.
+  private async extractErrorMessage(response: Response, fallback: string): Promise<string> {
+    const data = await response.json().catch(() => null);
+    const detail = (data as { detail?: unknown } | null)?.detail;
+
+    if (typeof detail === 'string') {
+      return detail;
     }
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as { msg?: unknown };
+      if (typeof first.msg === 'string') {
+        // Pydantic v2 prefixes ValueError messages with "Value error, "
+        return first.msg.replace(/^Value error,\s*/i, '');
+      }
+    }
+    return fallback;
   }
 
+  // In-memory OIDC ID token; api.ts reads it synchronously for the bearer header.
+  private oidcAccessToken: string | null = null;
+
+  /** Stores the ID token (not the access token) — Azure AD access tokens fail
+   *  backend audience validation (aud = api://<client_id> vs. aud = client_id). */
   setOIDCToken(user: User) {
-    if (user.access_token) {
-      const expiresAt = user.expires_at 
-        ? new Date(user.expires_at * 1000).toISOString()
-        : undefined;
-      this.setToken(user.access_token, expiresAt);
-    }
+    this.oidcAccessToken = user.id_token ?? null;
   }
 
-  getToken(): string | null {
-    const token = localStorage.getItem(this.TOKEN_KEY);
-    const expires = localStorage.getItem(this.EXPIRES_KEY);
-    
-    if (!token) return null;
-    
-    // Check if token is expired
-    if (expires) {
-      const expiryDate = new Date(expires);
-      if (expiryDate <= new Date()) {
-        // Token is expired
-        console.warn('Token expired');
-        this.clearAuth();
-        return null;
-      }
-    }
-    
-    return token;
+  getOIDCToken(): string | null {
+    return this.oidcAccessToken;
   }
 
-  async getValidToken(): Promise<string | null> {
-    // Simply return the current token from localStorage
-    // OIDC token refresh is handled by OIDCProvider
-    return this.getToken();
+  clearOIDCToken() {
+    this.oidcAccessToken = null;
   }
 
+  // Alias kept for callers being migrated off clearAuth().
   clearAuth() {
-    localStorage.removeItem(this.TOKEN_KEY);
-    localStorage.removeItem(this.EXPIRES_KEY);
+    this.clearOIDCToken();
   }
 
+  /** @deprecated Prefer UserContext.user — unreliable for LOCAL cookie sessions. */
   isAuthenticated(): boolean {
-    return this.getToken() !== null;
+    return this.oidcAccessToken !== null;
   }
 
-  // ==================== API REQUESTS ====================
-
-  private async request(endpoint: string, options: RequestInit = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    
-    const defaultHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    const token = await this.getValidToken();
-    if (token) {
-      defaultHeaders['Authorization'] = `Bearer ${token}`;
-    }
-
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    };
-
-    try {
-      const response = await fetch(url, config);
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Clear auth on 401 but don't redirect
-          // Let the calling code handle the error
-          this.clearAuth();
-        }
-        
-        const errorData = await response.json().catch(
-          () => ({ detail: 'Request failed' })
-        );
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
-    }
-  }
-
-  // ==================== AUTHENTICATION FLOW ====================
-
-  // Development mode only - fake login for testing without OIDC
-  async fakeLogin(email: string): Promise<{ access_token: string; user: any; expires_at: string }> {
-    const response = await this.request('/internal/auth/dev-login', {
+  /** Sets httpOnly access_token + refresh_token cookies and a readable csrf_token cookie. */
+  async localLogin(email: string, password: string): Promise<{ user: { user_id: number; email: string; name?: string; is_admin?: boolean; is_omniadmin?: boolean } }> {
+    const url = `${this.baseURL}/internal/auth/login`;
+    const response = await fetch(url, {
       method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-
-    // Store the token
-    if (response.access_token) {
-      this.setToken(response.access_token, response.expires_at);
-    }
-
-    return response;
-  }
-
-  // SaaS LOCAL mode - email+password login
-  async localLogin(email: string, password: string): Promise<{ access_token: string; user: any; expires_at: string }> {
-    const response = await this.request('/internal/auth/login', {
-      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
 
-    if (response.access_token) {
-      this.setToken(response.access_token, response.expires_at);
+    if (!response.ok) {
+      throw new Error(await this.extractErrorMessage(response, 'Login failed'));
     }
 
-    return response;
+    return response.json();
   }
 
-  // Get current user info (used for fake-login dev mode)
-  // In OIDC mode, user info comes from the OIDC User object
-  async getCurrentUser(): Promise<any> {
-    return this.request('/internal/me');
+  async logout(): Promise<void> {
+    const url = `${this.baseURL}/internal/auth/logout`;
+    const csrf = getCsrfToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
+
+    await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+    }).catch(() => {}); // best-effort
+  }
+
+  /** Rotates the cookie pair; used by api.ts for silent-refresh on 401. */
+  async refresh(): Promise<boolean> {
+    const url = `${this.baseURL}/internal/auth/refresh`;
+    const csrf = getCsrfToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const url = `${this.baseURL}/internal/auth/change-password`;
+    const csrf = getCsrfToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await this.extractErrorMessage(response, 'Password change failed'));
+    }
+  }
+
+  /** One-time token flow; no session created — user must log in after. */
+  async setPassword(token: string, password: string): Promise<void> {
+    const url = `${this.baseURL}/internal/auth/set-password`;
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: password }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await this.extractErrorMessage(response, 'Set password failed. The link may have expired.'));
+    }
+  }
+
+  async getCurrentUser(): Promise<{ user_id: number; email: string; name?: string; is_admin?: boolean; is_omniadmin?: boolean }> {
+    const url = `${this.baseURL}/internal/me`;
+    const headers: Record<string, string> = {};
+
+    const oidcToken = this.oidcAccessToken;
+    if (oidcToken) {
+      headers['Authorization'] = `Bearer ${oidcToken}`;
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 }
 
-export const authService = new AuthService(); 
+export const authService = new AuthService();

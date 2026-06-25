@@ -141,7 +141,7 @@ async def platform_chatbot_chat_stream(
 
     try:
         streaming_service = AgentStreamingService(db)
-        generator = streaming_service.stream_agent_chat(
+        base_generator = streaming_service.stream_agent_chat(
             agent_id=agent.agent_id,
             message=body.message,
             file_references=None,
@@ -150,8 +150,17 @@ async def platform_chatbot_chat_stream(
             conversation_id=None,
             db=db,
         )
+
+        async def generator():
+            try:
+                async for chunk in base_generator:
+                    yield chunk
+            finally:
+                # Release request session; get_db teardown is too late for streaming.
+                db.close()
+
         return StreamingResponse(
-            generator,
+            generator(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

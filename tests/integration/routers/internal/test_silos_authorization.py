@@ -59,22 +59,21 @@ def setup_cross_app_silo(db, fake_user, fake_app):
 
 
 @pytest.fixture
-def unrelated_user_headers(db, client, setup_cross_app_silo):
+def unrelated_user_headers(db, setup_cross_app_silo):
     """Auth headers for a user who has NO role on the main fake_app."""
+    from utils.local_auth_tokens import mint_access_token
+
     _, _, other_user = setup_cross_app_silo
     db.flush()
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": other_user.email},
-    )
-    assert response.status_code == 200
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(other_user.user_id, other_user.email, other_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
-def viewer_headers(db, client, fake_app, fake_user):
+def viewer_headers(db, fake_app, fake_user):
     """Auth headers for a user with VIEWER role on fake_app."""
+    from utils.local_auth_tokens import mint_access_token
+
     configure_factories(db)
     viewer_user = UserFactory(email="viewer-silo@mattin-test.com", name="Viewer User")
     collab = AppCollaborator(
@@ -88,18 +87,15 @@ def viewer_headers(db, client, fake_app, fake_user):
     )
     db.add(collab)
     db.flush()
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": viewer_user.email},
-    )
-    assert response.status_code == 200
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(viewer_user.user_id, viewer_user.email, viewer_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
-def editor_headers(db, client, fake_app, fake_user):
+def editor_headers(db, fake_app, fake_user):
     """Auth headers for a user with EDITOR role on fake_app."""
+    from utils.local_auth_tokens import mint_access_token
+
     configure_factories(db)
     editor_user = UserFactory(email="editor-silo@mattin-test.com", name="Editor User")
     collab = AppCollaborator(
@@ -113,12 +109,7 @@ def editor_headers(db, client, fake_app, fake_user):
     )
     db.add(collab)
     db.flush()
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": editor_user.email},
-    )
-    assert response.status_code == 200
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(editor_user.user_id, editor_user.email, editor_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 

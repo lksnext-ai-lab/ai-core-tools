@@ -117,7 +117,7 @@ User → Frontend → /internal/* → Session Auth → Router → Service → Re
 
 1. User interacts with frontend application
 2. Frontend sends authenticated HTTP request to `/internal/*` endpoint
-3. **Session-based authentication** validates the user (OIDC or FAKE mode)
+3. **Session-based authentication** validates the user (OIDC or LOCAL mode)
 4. Router passes request to appropriate service
 5. Service implements business logic, calling repositories for data access
 6. Service may invoke LangChain tools for AI operations
