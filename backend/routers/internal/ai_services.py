@@ -125,6 +125,7 @@ async def test_ai_service_connection_with_config(
     from utils.secret_utils import is_masked_key
     from core.export_constants import PLACEHOLDER_API_KEY
     from repositories.ai_service_repository import AIServiceRepository
+    from tools.aws_bedrock_utils import build_extra_config
 
     try:
         # If user sent a masked placeholder, fall back to the stored key.
@@ -145,7 +146,11 @@ async def test_ai_service_connection_with_config(
             "description": config.model_name,
             "api_key": api_key,
             "endpoint": config.base_url,
-            "api_version": getattr(config, 'api_version', None)
+            "api_version": getattr(config, 'api_version', None),
+            "extra_config": build_extra_config(
+                getattr(config, 'aws_access_key_id', None),
+                getattr(config, 'aws_region', None),
+            ),
         }
         result = AIServiceService.test_connection_with_config(service_config)
         

@@ -11,4 +11,10 @@ class BaseService(Base):
     endpoint = Column(String(255), nullable=True)
     api_key = Column(Text, nullable=True)
     description = Column(String(1000), nullable=True)
-    api_version = Column(String(50), nullable=True) 
+    api_version = Column(String(50), nullable=True)
+    # Provider-specific configuration that does not fit the standard
+    # columns above, stored as a JSON object. Used by providers whose
+    # access requires more than a single api_key — e.g. AWS Bedrock keeps
+    # {"aws_access_key_id": ..., "aws_region": ...} here while the secret
+    # access key reuses the masked `api_key` column.
+    extra_config = Column(Text, nullable=True)

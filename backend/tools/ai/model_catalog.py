@@ -46,6 +46,7 @@ PROVIDER_CUSTOM = "Custom"
 PROVIDER_AZURE = "Azure"
 PROVIDER_GOOGLE_CLOUD = "GoogleCloud"
 PROVIDER_OPENROUTER = "OpenRouter"
+PROVIDER_BEDROCK = "Bedrock"
 
 MANUAL_INPUT_PROVIDERS = frozenset({PROVIDER_AZURE, PROVIDER_GOOGLE_CLOUD})
 
@@ -103,6 +104,7 @@ _EMBEDDING_PATTERNS = (
     re.compile(r"^text-embedding"),
     re.compile(r"^embed"),
     re.compile(r"-embed(?:ding)?(?:-|$)"),
+    re.compile(r"\.embed"),  # Bedrock style, e.g. cohere.embed-multilingual-v3
     re.compile(r"-bge-"),
     re.compile(r"^bge-"),
     re.compile(r"^nomic-embed"),

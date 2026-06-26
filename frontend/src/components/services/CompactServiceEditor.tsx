@@ -16,6 +16,12 @@ import type {
 
 const MASKED_KEY_PREFIX = '****';
 
+/** Provider-specific label for the secret field. */
+const API_KEY_LABELS: Record<string, string> = {
+  GoogleCloud: 'Service Account JSON',
+  Bedrock: 'AWS Secret Access Key',
+};
+
 interface CompactServiceEditorProps {
   readonly isOpen: boolean;
   readonly kind: ServiceKind;
@@ -46,6 +52,8 @@ function CompactServiceEditor({
   const [apiKeyChanged, setApiKeyChanged] = useState(false);
   const [baseUrl, setBaseUrl] = useState(service.base_url || '');
   const [apiVersion, setApiVersion] = useState(service.api_version || '');
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState(service.aws_access_key_id || '');
+  const [awsRegion, setAwsRegion] = useState(service.aws_region || '');
   const [supportsVideo, setSupportsVideo] = useState(!!service.supports_video);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +66,8 @@ function CompactServiceEditor({
     setApiKeyChanged(false);
     setBaseUrl(service.base_url || '');
     setApiVersion(service.api_version || '');
+    setAwsAccessKeyId(service.aws_access_key_id || '');
+    setAwsRegion(service.aws_region || '');
     setSupportsVideo(!!service.supports_video);
     setError(null);
   }, [service.service_id]);
@@ -65,10 +75,10 @@ function CompactServiceEditor({
   const showSupportsVideo =
     kind === 'ai' && (service.provider === 'Google' || service.provider === 'GoogleCloud');
   const showApiVersion = !!descriptor?.manualFields?.includes('api_version');
+  const showAwsFields = !!descriptor?.manualFields?.includes('aws_access_key_id');
   const baseUrlLabel =
     service.provider === 'GoogleCloud' ? 'GCP Project ID' : 'Base URL';
-  const apiKeyLabel =
-    service.provider === 'GoogleCloud' ? 'Service Account JSON' : 'API Key';
+  const apiKeyLabel = API_KEY_LABELS[service.provider] ?? 'API Key';
 
   const handleApiKeyFocus = () => {
     if (!apiKeyChanged && apiKey.startsWith(MASKED_KEY_PREFIX)) {
@@ -98,6 +108,8 @@ function CompactServiceEditor({
       base_url: baseUrl,
       api_version: apiVersion || undefined,
       supports_video: supportsVideo,
+      aws_access_key_id: showAwsFields ? awsAccessKeyId.trim() || undefined : undefined,
+      aws_region: showAwsFields ? awsRegion.trim() || undefined : undefined,
     };
     try {
       await onSave(payload);
@@ -210,6 +222,27 @@ function CompactServiceEditor({
               value={apiVersion}
               onChange={(e) => setApiVersion(e.target.value)}
             />
+          )}
+
+          {showAwsFields && (
+            <>
+              <FormField
+                id="aws_access_key_id"
+                label="AWS Access Key ID"
+                value={awsAccessKeyId}
+                onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                placeholder="AKIA..."
+                required
+              />
+              <FormField
+                id="aws_region"
+                label="AWS Region"
+                value={awsRegion}
+                onChange={(e) => setAwsRegion(e.target.value)}
+                placeholder="us-east-1"
+                required
+              />
+            </>
           )}
 
           {showSupportsVideo && (

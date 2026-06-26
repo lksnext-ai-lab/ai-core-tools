@@ -80,6 +80,8 @@ function ServiceWizard({
         api_key: '',
         base_url: initialService.base_url || '',
         api_version: initialService.api_version || '',
+        aws_access_key_id: initialService.aws_access_key_id || '',
+        aws_region: initialService.aws_region || '',
       });
       setManualModelName(initialService.model_name || '');
       setSupportsVideo(!!initialService.supports_video);
@@ -117,10 +119,7 @@ function ServiceWizard({
       case 'provider':
         return !provider;
       case 'credentials':
-        if (!descriptor) return true;
-        if (descriptor.apiKey === 'required' && !credentials.api_key.trim()) return true;
-        if (descriptor.needsBaseUrl && !credentials.base_url.trim()) return true;
-        return false;
+        return isCredentialsStepDisabled(descriptor, credentials);
       case 'model':
         if (!descriptor?.supportsModelListing) return !manualModelName.trim();
         return !selectedModel;
@@ -166,6 +165,8 @@ function ServiceWizard({
       base_url: credentials.base_url,
       api_version: credentials.api_version || undefined,
       supports_video: supportsVideo,
+      aws_access_key_id: credentials.aws_access_key_id?.trim() || undefined,
+      aws_region: credentials.aws_region?.trim() || undefined,
     };
   };
 
@@ -298,6 +299,24 @@ function ensureUnique(base: string, existing: readonly string[]): string {
   let counter = 2;
   while (existing.includes(`${base} (${counter})`)) counter++;
   return `${base} (${counter})`;
+}
+
+/** Whether the credentials step is incomplete for the chosen provider. */
+function isCredentialsStepDisabled(
+  descriptor: ReturnType<typeof getProviderDescriptor>,
+  credentials: CredentialsState,
+): boolean {
+  if (!descriptor) return true;
+  if (descriptor.apiKey === 'required' && !credentials.api_key.trim()) return true;
+  if (descriptor.needsBaseUrl && !credentials.base_url.trim()) return true;
+  const manualFields = descriptor.manualFields ?? [];
+  if (manualFields.includes('aws_access_key_id') && !credentials.aws_access_key_id?.trim()) {
+    return true;
+  }
+  if (manualFields.includes('aws_region') && !credentials.aws_region?.trim()) {
+    return true;
+  }
+  return false;
 }
 
 export default ServiceWizard;

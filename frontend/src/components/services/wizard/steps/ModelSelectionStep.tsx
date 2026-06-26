@@ -61,6 +61,8 @@ function ModelSelectionStep({
         api_key: credentials.api_key,
         base_url: credentials.base_url,
         api_version: credentials.api_version || undefined,
+        aws_access_key_id: credentials.aws_access_key_id?.trim() || undefined,
+        aws_region: credentials.aws_region?.trim() || undefined,
       }
     : null;
 

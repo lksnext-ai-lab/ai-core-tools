@@ -107,6 +107,21 @@ def _build_google_cloud_embeddings(embedding_service, model_id):
     )
 
 
+def _build_bedrock_embeddings(embedding_service, model_id):
+    from langchain_aws import BedrockEmbeddings
+
+    from tools.aws_bedrock_utils import resolve_bedrock_credentials
+
+    creds = resolve_bedrock_credentials(embedding_service)
+    kwargs = {"model_id": model_id, **creds}
+
+    endpoint_raw = (embedding_service.endpoint or "").strip()
+    if endpoint_raw:
+        kwargs["endpoint_url"] = endpoint_raw
+
+    return BedrockEmbeddings(**kwargs)
+
+
 _EMBEDDING_BUILDERS = {
     EmbeddingProvider.OpenAI.value: _build_openai_embeddings,
     EmbeddingProvider.MistralAI.value: _build_mistral_embeddings,
@@ -115,6 +130,7 @@ _EMBEDDING_BUILDERS = {
     EmbeddingProvider.Azure.value: _build_azure_embeddings,
     EmbeddingProvider.Google.value: _build_google_embeddings,
     EmbeddingProvider.GoogleCloud.value: _build_google_cloud_embeddings,
+    EmbeddingProvider.Bedrock.value: _build_bedrock_embeddings,
 }
 
 

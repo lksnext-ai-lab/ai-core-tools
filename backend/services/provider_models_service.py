@@ -24,6 +24,7 @@ from tools.ai import provider_model_clients
 from tools.ai.model_catalog import (
     MANUAL_INPUT_PROVIDERS,
     PROVIDER_ANTHROPIC,
+    PROVIDER_BEDROCK,
     PROVIDER_CUSTOM,
     PROVIDER_GOOGLE,
     PROVIDER_MISTRAL,
@@ -50,6 +51,7 @@ _DISPATCH: Dict[str, str] = {
     PROVIDER_GOOGLE: "list_google_models",
     PROVIDER_OLLAMA: "list_ollama_models",
     PROVIDER_OPENROUTER: "list_openrouter_models",
+    PROVIDER_BEDROCK: "list_bedrock_models",
     # Custom is handled in-line: the AI Service runtime is ChatOllama, so
     # listing reuses the Ollama tags endpoint. Embeddings under Custom
     # use HuggingFace Inference which has no generic listing — those go
@@ -139,6 +141,10 @@ class ProviderModelsService:
         if req.provider in (PROVIDER_OLLAMA, PROVIDER_CUSTOM, PROVIDER_OPENROUTER):
             return
 
+        if req.provider == PROVIDER_BEDROCK:
+            ProviderModelsService._validate_bedrock_credentials(req)
+            return
+
         api_key = req.api_key or ""
         if not api_key or api_key == PLACEHOLDER_API_KEY:
             raise ProviderListingError(
@@ -149,6 +155,34 @@ class ProviderModelsService:
             raise ProviderListingError(
                 "invalid_request",
                 "Re-enter the API key — the masked value cannot be used to list models.",
+            )
+
+    @staticmethod
+    def _validate_bedrock_credentials(req: ListProviderModelsRequest) -> None:
+        """Bedrock needs an access key id + region alongside the secret.
+
+        The secret access key travels in ``api_key`` (so it reuses the
+        masking machinery); the access key id and region are non-secret
+        identifiers carried in dedicated fields.
+        """
+        access_key_id = (req.aws_access_key_id or "").strip()
+        region = (req.aws_region or "").strip()
+        secret = req.api_key or ""
+
+        if not access_key_id or not region:
+            raise ProviderListingError(
+                "invalid_request",
+                "AWS Access Key ID and Region are required to list Bedrock models.",
+            )
+        if not secret or secret == PLACEHOLDER_API_KEY:
+            raise ProviderListingError(
+                "invalid_request",
+                "AWS Secret Access Key is required to list Bedrock models.",
+            )
+        if is_masked_key(secret):
+            raise ProviderListingError(
+                "invalid_request",
+                "Re-enter the AWS Secret Access Key — the masked value cannot be used to list models.",
             )
 
     @staticmethod

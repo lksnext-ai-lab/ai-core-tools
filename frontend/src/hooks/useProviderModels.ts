@@ -94,6 +94,8 @@ export function useProviderModels({
     request?.api_key,
     request?.base_url,
     request?.api_version,
+    request?.aws_access_key_id,
+    request?.aws_region,
     tick,
   ]);
 

@@ -31,6 +31,9 @@ class AIServiceDetailSchema(BaseModel):
     created_at: Optional[datetime] = None
     available_providers: List[Dict[str, Any]] = []
     needs_api_key: bool = False
+    # AWS Bedrock identifiers (non-secret). Empty for other providers.
+    aws_access_key_id: Optional[str] = None
+    aws_region: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,8 +46,12 @@ class CreateUpdateAIServiceSchema(BaseModel):
     api_key: str
     base_url: Optional[str] = ""
     supports_video: bool = False
+    # AWS Bedrock identifiers (non-secret). The secret access key is sent
+    # via ``api_key``; the access key id and region travel here.
+    aws_access_key_id: Optional[str] = None
+    aws_region: Optional[str] = None
 
-    @field_validator("api_key", "base_url", mode="before")
+    @field_validator("api_key", "base_url", "aws_access_key_id", "aws_region", mode="before")
     @classmethod
     def _strip_credentials(cls, v):
         # Trim whitespace/newlines that often sneak in when pasting from

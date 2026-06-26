@@ -8,6 +8,7 @@ from schemas.ai_service_schemas import (
 )
 from core.export_constants import PLACEHOLDER_API_KEY
 from utils.secret_utils import mask_api_key, is_masked_key
+from tools.aws_bedrock_utils import build_extra_config, parse_extra_config
 from datetime import datetime
 from typing import List
 from tools.aiServiceTools import create_llm_from_service
@@ -82,6 +83,7 @@ class AIServiceService:
             not service.api_key
             or service.api_key == PLACEHOLDER_API_KEY
         )
+        extra_cfg = parse_extra_config(service.extra_config)
         return AIServiceDetailSchema(
             service_id=service.service_id,
             name=service.name,
@@ -93,6 +95,8 @@ class AIServiceService:
             created_at=service.create_date,
             available_providers=providers,
             needs_api_key=needs_api_key,
+            aws_access_key_id=extra_cfg.get("aws_access_key_id"),
+            aws_region=extra_cfg.get("aws_region"),
         )
     
     @staticmethod
@@ -126,6 +130,11 @@ class AIServiceService:
             service.api_key = service_data.api_key
         service.endpoint = service_data.base_url  # Store base_url in endpoint
         service.supports_video = service_data.supports_video
+        # Persist provider-specific identifiers (AWS Bedrock) as JSON.
+        service.extra_config = build_extra_config(
+            service_data.aws_access_key_id,
+            service_data.aws_region,
+        )
         
         # Create or update the service
         if service_id == 0:
@@ -161,6 +170,7 @@ class AIServiceService:
             api_key=service.api_key,
             endpoint=service.endpoint,
             supports_video=service.supports_video or False,
+            extra_config=service.extra_config,
             create_date=datetime.now()
         )
         
@@ -192,6 +202,7 @@ class AIServiceService:
                     self.api_key = data.get('api_key')
                     self.endpoint = data.get('endpoint')
                     self.api_version = data.get('api_version')
+                    self.extra_config = data.get('extra_config')
             
             service = MockAIService(config)
             

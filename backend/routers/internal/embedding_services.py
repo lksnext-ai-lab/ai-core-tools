@@ -129,6 +129,7 @@ async def test_embedding_service_connection_with_config(
     from utils.secret_utils import is_masked_key
     from core.export_constants import PLACEHOLDER_API_KEY
     from repositories.embedding_service_repository import EmbeddingServiceRepository
+    from tools.aws_bedrock_utils import build_extra_config
 
     try:
         api_key = config.api_key or ""
@@ -147,6 +148,10 @@ async def test_embedding_service_connection_with_config(
             "api_key": api_key,
             "endpoint": config.base_url,
             "api_version": config.api_version,
+            "extra_config": build_extra_config(
+                getattr(config, 'aws_access_key_id', None),
+                getattr(config, 'aws_region', None),
+            ),
         }
         result = EmbeddingServiceService.test_connection_with_config(service_config)
         return result

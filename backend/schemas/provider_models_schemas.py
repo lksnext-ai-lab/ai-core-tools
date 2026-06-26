@@ -72,8 +72,13 @@ class ListProviderModelsRequest(BaseModel):
     base_url: Optional[str] = ""
     api_version: Optional[str] = None
     purpose: ListPurpose = "chat"
+    # AWS Bedrock identifiers. The secret access key travels in ``api_key``
+    # (reusing the masking machinery); the access key id and region are
+    # non-secret and carried here.
+    aws_access_key_id: Optional[str] = None
+    aws_region: Optional[str] = None
 
-    @field_validator("api_key", "base_url", mode="before")
+    @field_validator("api_key", "base_url", "aws_access_key_id", "aws_region", mode="before")
     @classmethod
     def _strip_credentials(cls, v):
         return v.strip() if isinstance(v, str) else v

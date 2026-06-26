@@ -39,6 +39,10 @@ export interface ListProviderModelsRequest {
   api_key: string;
   base_url?: string;
   api_version?: string;
+  // AWS Bedrock identifiers. The secret access key travels in `api_key`;
+  // these non-secret fields carry the access key id and region.
+  aws_access_key_id?: string;
+  aws_region?: string;
   // server overrides this — sending it is a no-op but keeps the type honest
   purpose?: ListPurpose;
 }
@@ -63,6 +67,10 @@ export interface ServiceFormData {
   base_url: string;
   api_version?: string;
   supports_video?: boolean;
+  // AWS Bedrock identifiers (non-secret). The secret access key is sent
+  // via `api_key`; these carry the access key id and region.
+  aws_access_key_id?: string;
+  aws_region?: string;
 }
 
 /** Existing service shape returned by getAIService / getEmbeddingService. */
@@ -75,4 +83,6 @@ export interface ExistingService {
   readonly base_url: string;
   readonly supports_video?: boolean;
   readonly api_version?: string;
+  readonly aws_access_key_id?: string;
+  readonly aws_region?: string;
 }

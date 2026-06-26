@@ -23,6 +23,7 @@ from schemas.provider_models_schemas import (
 )
 from tools.ai.model_catalog import (
     PROVIDER_ANTHROPIC,
+    PROVIDER_BEDROCK,
     PROVIDER_GOOGLE,
     PROVIDER_MISTRAL,
     PROVIDER_OLLAMA,
@@ -544,3 +545,117 @@ def list_openrouter_models(req: ListProviderModelsRequest) -> List[ProviderModel
         models.append(enrich(PROVIDER_OPENROUTER, model_id, base=base))
 
     return models
+
+
+# ==================== AWS BEDROCK ====================
+
+
+def list_bedrock_models(req: ListProviderModelsRequest) -> List[ProviderModelInfo]:
+    """List foundation models available in an AWS Bedrock account.
+
+    Uses boto3's ``bedrock.list_foundation_models``. The result is filtered
+    to models that are ``ACTIVE`` and support ``ON_DEMAND`` invocation, so
+    the wizard only offers models that can be called directly. Note that a
+    model appearing here may still require explicit access activation in the
+    AWS console (Model access) before it can be invoked.
+    """
+    secret_access_key = req.api_key or ""
+    access_key_id = (req.aws_access_key_id or "").strip()
+    region = (req.aws_region or "").strip()
+
+    if not access_key_id or not secret_access_key or not region:
+        raise ProviderListingError(
+            "invalid_request",
+            "AWS Access Key ID, Secret Access Key and Region are required to list Bedrock models.",
+        )
+
+    try:
+        import boto3
+        from botocore.config import Config as _BotoConfig
+    except ImportError:
+        raise ProviderListingError(
+            "unsupported",
+            "AWS Bedrock support is not installed (langchain-aws / boto3 missing).",
+        )
+
+    boto_config = _BotoConfig(
+        connect_timeout=_DEFAULT_TIMEOUT_SECONDS,
+        read_timeout=_DEFAULT_TIMEOUT_SECONDS,
+        retries={"max_attempts": 1},
+    )
+
+    try:
+        client = boto3.client(
+            "bedrock",
+            region_name=region,
+            aws_access_key_id=access_key_id,
+            aws_secret_access_key=secret_access_key,
+            config=boto_config,
+        )
+        listing = client.list_foundation_models()
+    except Exception as exc:  # noqa: BLE001
+        from botocore.exceptions import (
+            ClientError,
+            EndpointConnectionError,
+            NoCredentialsError,
+        )
+
+        if isinstance(exc, NoCredentialsError):
+            code = "unauthorized"
+        elif isinstance(exc, ClientError):
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code in ("UnrecognizedClientException", "InvalidSignatureException",
+                              "AccessDeniedException", "AuthFailure"):
+                code = "unauthorized"
+            elif error_code in ("ResourceNotFoundException",):
+                code = "not_found"
+            else:
+                code = "network"
+        elif isinstance(exc, EndpointConnectionError):
+            code = "network"
+        else:
+            code = "network"
+        sanitized = _sanitize(str(exc), secret_access_key, access_key_id)
+        logger.warning("Bedrock list failed (code=%s): %s", code, sanitized)
+        raise ProviderListingError(code, sanitized or "Bedrock listing failed")
+
+    models: List[ProviderModelInfo] = []
+    for raw in listing.get("modelSummaries", []) or []:
+        model_id = raw.get("modelId")
+        if not model_id:
+            continue
+
+        lifecycle_status = (raw.get("modelLifecycle") or {}).get("status")
+        if lifecycle_status and lifecycle_status != "ACTIVE":
+            continue
+
+        inference_types = raw.get("inferenceTypesSupported") or []
+        if inference_types and "ON_DEMAND" not in inference_types:
+            continue
+
+        input_modalities = set(raw.get("inputModalities") or [])
+        output_modalities = set(raw.get("outputModalities") or [])
+
+        caps = ProviderCapabilities()
+        if "EMBEDDING" in output_modalities:
+            caps.embedding = True
+        else:
+            if "TEXT" in output_modalities or not output_modalities:
+                caps.chat = True
+            if "IMAGE" in input_modalities:
+                caps.vision = True
+
+        display_name = raw.get("modelName") or model_id
+        owned_by = raw.get("providerName")
+
+        base = ProviderModelInfo(
+            id=model_id,
+            display_name=display_name,
+            owned_by=owned_by,
+            capabilities=caps,
+            source="api",
+        )
+        models.append(enrich(PROVIDER_BEDROCK, model_id, base=base))
+
+    return models
+

@@ -4,6 +4,12 @@ import Alert from '../../../ui/Alert';
 import { getProviderDescriptor } from '../providers';
 import type { ServiceWizardMode } from '../../../../types/services';
 
+/** Provider-specific label for the secret field. */
+const API_KEY_LABELS: Record<string, string> = {
+  GoogleCloud: 'Service Account JSON',
+  Bedrock: 'AWS Secret Access Key',
+};
+
 export interface CredentialsState {
   api_key: string;
   /** For Azure: endpoint URL. For GoogleCloud: GCP project id. For
@@ -12,6 +18,10 @@ export interface CredentialsState {
   base_url: string;
   /** For Azure: API version. For GoogleCloud: region/location. */
   api_version: string;
+  /** AWS Bedrock: Access Key ID (non-secret). */
+  aws_access_key_id?: string;
+  /** AWS Bedrock: region, e.g. us-east-1. */
+  aws_region?: string;
 }
 
 interface CredentialsStepProps {
@@ -43,9 +53,10 @@ function CredentialsStep({
     onChange({ ...value, ...patch });
   const manualFields = descriptor.manualFields ?? [];
 
-  const apiKeyLabel = `${
-    descriptor.value === 'GoogleCloud' ? 'Service Account JSON' : 'API Key'
-  }${descriptor.apiKey === 'optional' ? ' (optional)' : ''}`;
+  const apiKeyBaseLabel = API_KEY_LABELS[descriptor.value] ?? 'API Key';
+  const apiKeyLabel = `${apiKeyBaseLabel}${
+    descriptor.apiKey === 'optional' ? ' (optional)' : ''
+  }`;
 
   let baseUrlLabel = 'Base URL';
   if (descriptor.value === 'GoogleCloud') baseUrlLabel = 'GCP Project ID';
@@ -120,6 +131,39 @@ function CredentialsStep({
           placeholder={
             descriptor.value === 'GoogleCloud' ? 'europe-west1' : '2024-08-01-preview'
           }
+        />
+      )}
+
+      {manualFields.includes('aws_access_key_id') && (
+        <FormField
+          label="AWS Access Key ID"
+          id="aws_access_key_id"
+          type="text"
+          value={value.aws_access_key_id ?? ''}
+          onChange={(e) => update({ aws_access_key_id: e.target.value })}
+          placeholder="AKIA..."
+          required
+        />
+      )}
+
+      {manualFields.includes('aws_region') && (
+        <FormField
+          label="AWS Region"
+          id="aws_region"
+          type="text"
+          value={value.aws_region ?? ''}
+          onChange={(e) => update({ aws_region: e.target.value })}
+          placeholder="us-east-1"
+          helpText="Region where Bedrock is enabled, e.g. us-east-1 or eu-west-1."
+          required
+        />
+      )}
+
+      {descriptor.value === 'Bedrock' && (
+        <Alert
+          type="info"
+          title="Model access may be required"
+          message="A listed model still needs to be enabled in the AWS console (Bedrock → Model access) before it can be invoked."
         />
       )}
 

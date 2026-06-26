@@ -1,4 +1,5 @@
 import base64
+import json
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
@@ -62,6 +63,7 @@ def create_llm_from_service(ai_service, temperature=0, is_vision=False):
         ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temperature),
         ProviderEnum.GoogleCloud.value: lambda: _build_google_cloud_llm(ai_service, temperature),
         ProviderEnum.OpenRouter.value: lambda: _build_openrouter_llm(ai_service, temperature),
+        ProviderEnum.Bedrock.value: lambda: _build_bedrock_llm(ai_service, temperature),
     }
 
     # Handle case where provider might be an Enum object instead of string
@@ -221,6 +223,25 @@ def _build_azure_llm(ai_service, temperature):
         endpoint=ai_service.endpoint,
         api_version=ai_service.api_version,
     )
+
+
+def _build_bedrock_llm(ai_service, temperature):
+    from langchain_aws import ChatBedrockConverse
+
+    from tools.aws_bedrock_utils import resolve_bedrock_credentials
+
+    creds = resolve_bedrock_credentials(ai_service)
+    bedrock_kwargs = {
+        "model": ai_service.description,
+        "temperature": temperature,
+        **creds,
+    }
+
+    endpoint_raw = (ai_service.endpoint or "").strip()
+    if endpoint_raw:
+        bedrock_kwargs["endpoint_url"] = endpoint_raw
+
+    return ChatBedrockConverse(**bedrock_kwargs)
 
 
 _DEFAULT_GOOGLE_HOST = "generativelanguage.googleapis.com"

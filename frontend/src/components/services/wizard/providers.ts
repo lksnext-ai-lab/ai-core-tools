@@ -22,7 +22,13 @@ export interface ProviderUIDescriptor {
   /** False for providers without a /models endpoint (Azure, GoogleCloud). */
   readonly supportsModelListing: boolean;
   /** Extra fields shown in the credentials step for manual-input providers. */
-  readonly manualFields?: readonly ('api_version' | 'project_id' | 'region')[];
+  readonly manualFields?: readonly (
+    | 'api_version'
+    | 'project_id'
+    | 'region'
+    | 'aws_access_key_id'
+    | 'aws_region'
+  )[];
   readonly apiKeyPlaceholder: string;
   readonly apiKeyHelp: string;
   /** Optional link to the provider's API key management page. Rendered
@@ -178,6 +184,24 @@ const ALL_PROVIDERS: readonly ProviderUIDescriptor[] = [
     apiKeyPlaceholder: '{"type":"service_account",...}',
     apiKeyHelp: 'Paste the full Service Account JSON key content.',
     apiKeyDocUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    supportedFor: ['ai', 'embedding'],
+  },
+  {
+    // AWS Bedrock. The api_key field carries the AWS Secret Access Key
+    // (so it reuses the masking machinery); the Access Key ID and Region
+    // are collected as dedicated non-secret fields and travel to the
+    // backend in extra_config. Listing works through boto3.
+    value: 'Bedrock',
+    label: 'AWS Bedrock',
+    description: 'Foundation models (Anthropic Claude, Amazon Titan, Cohere, Meta Llama, Mistral) via AWS Bedrock.',
+    Icon: Cloud,
+    apiKey: 'required',
+    needsBaseUrl: false,
+    supportsModelListing: true,
+    manualFields: ['aws_access_key_id', 'aws_region'],
+    apiKeyPlaceholder: 'AWS Secret Access Key',
+    apiKeyHelp: 'Your AWS Secret Access Key. Needs the bedrock:ListFoundationModels and bedrock:InvokeModel permissions.',
+    apiKeyDocUrl: 'https://console.aws.amazon.com/iam/home#/security_credentials',
     supportedFor: ['ai', 'embedding'],
   },
 ];
