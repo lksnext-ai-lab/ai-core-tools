@@ -359,6 +359,15 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     )
 
 
+def _infer_missing_type(schema: dict) -> None:
+    """Infer the missing 'type' in a JSON schema dict."""
+    if "type" not in schema:
+        if "properties" in schema:
+            schema["type"] = "object"
+        elif "items" in schema:
+            schema["type"] = "array"
+
+
 def normalize_openai_schema(schema):
     if not isinstance(schema, (dict, list)):
         return
@@ -366,18 +375,10 @@ def normalize_openai_schema(schema):
     if isinstance(schema, dict):
 
         # OpenAI exige required completo
-        if (
-            schema.get("type") == "object"
-            and "properties" in schema
-        ):
+        if schema.get("type") == "object" and "properties" in schema:
             schema["required"] = list(schema["properties"].keys())
-
-        # Inferir type si falta
-        if "type" not in schema:
-            if "properties" in schema:
-                schema["type"] = "object"
-            elif "items" in schema:
-                schema["type"] = "array"
+        
+        _infer_missing_type(schema)
 
         for value in schema.values():
             normalize_openai_schema(value)
