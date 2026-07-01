@@ -2,12 +2,11 @@ name: Backend CI
 
 on:
   push:
-    branches: [develop, main]
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-*'
+    branches: [develop]          # nightly builds
   pull_request:
-    branches: [develop, main]
+    branches: [develop, main]    # build-only validation, no push
+  release:
+    types: [published]           # stable images, tagged with the release version
   workflow_dispatch:
 
 jobs:
@@ -40,13 +39,19 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/lksnext-ai-lab/mattinai-backend
+          # nightly       → latest develop build (moving)
+          # release vX.Y.Z → X.Y.Z, X.Y, and latest (latest=auto skips pre-releases
+          #                  like vX.Y.Z-rc1). The leading 'v' is dropped, per the
+          #                  container image tag convention.
           tags: |
+            type=raw,value=nightly,enable=${{ github.ref == 'refs/heads/develop' }}
             type=ref,event=branch
             type=ref,event=pr
             type=sha,prefix=sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          flavor: |
+            latest=auto
 
       - name: Build Docker image (push on non-PR events)
         uses: docker/build-push-action@v6

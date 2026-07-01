@@ -372,7 +372,7 @@ Command: @release-manager release patch
 - ❌ Does not create database migrations
 - ❌ Does not fix bugs or implement features
 - ❌ Does not manage CI/CD pipeline configuration (that's separate from release tagging)
-- ❌ Does not build or publish Docker images (those are triggered by tags, not managed by this agent)
+- ❌ Does not build or publish Docker images (the stable image build is triggered when the GitHub Release is published in Phase 7, not managed by this agent)
 - ❌ Does not publish npm packages or PyPI packages directly (can be added if needed)
 - ❌ Does not manage Kubernetes deployments
 
