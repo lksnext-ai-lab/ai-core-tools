@@ -6,7 +6,7 @@ agents: ["react-expert", "git-github", "docs-manager", "release-manager"]
 handoffs:
   - label: "Commit with @git-github"
     agent: git-github
-    prompt: "Please commit the files that @website-maintainer just created or modified in the mattinai.github.io repository. Review the conversation above for the exact file list and suggested commit message. Remember: all commits must be GPG-signed."
+    prompt: "Please commit the files that @website-maintainer just created or modified in the mattinai.github.io repository. Review the conversation above for the exact file list and suggested commit message. Remember: commits are not GPG-signed (no signing key configured)."
     send: false
 ---
 

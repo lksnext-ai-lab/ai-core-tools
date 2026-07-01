@@ -8,8 +8,6 @@ import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 import Particles from '../components/ui/Particles';
 import AIRobot3D from '../components/ui/AIRobot3D';
 
-/* ─────────────────────── Feature cards data ─────────────────────── */
-
 const FEATURES = [
   {
     title: 'Intelligent Agents',
@@ -52,8 +50,6 @@ const FEATURES = [
     color: '#f59e0b',
   },
 ];
-
-/* ─────────────────── Robot greeting with rotating phrases ─────────────────── */
 
 const PHRASES = [
   'Hey! Ready to build something amazing?',
@@ -112,7 +108,6 @@ function RobotGreeting() {
       typePhrase(PHRASES[0]);
     }, 800);
 
-    // Schedule rotating phrases
     const rotateInterval = setInterval(() => {
       setBubbleVisible(false);
       rotateTransitionRef.current = setTimeout(() => {
@@ -121,13 +116,10 @@ function RobotGreeting() {
       }, 400);
     }, PHRASE_INTERVAL_MS);
 
-    // Pause/resume typing animation on tab visibility change
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // Tab is visible again: restart typing current phrase cleanly
         typePhrase(PHRASES[phraseIndexRef.current]);
       } else {
-        // Tab is hidden: stop all timers to avoid throttled interval buildup
         clearAllTimers();
       }
     };
@@ -144,12 +136,9 @@ function RobotGreeting() {
 
   return (
     <div className="flex items-center gap-3 animate-fade-in-up-d1">
-      {/* Robot — fixed size, never moves */}
       <div className="w-24 h-28 flex-shrink-0">
         <AIRobot3D isSpeaking={isSpeaking} disableParallax />
       </div>
-
-      {/* Speech bubble wrapper — fixed width so layout doesn't shift */}
       <div className="w-[260px] flex-shrink-0">
         <div
           key={bubbleKey}
@@ -172,11 +161,13 @@ function RobotGreeting() {
   );
 }
 
-/* ─────────────────────────── LoginPage ─────────────────────────── */
+// null = no error; 'both' = server credential rejection (avoids hinting which field was wrong)
+type LoginErrorField = 'email' | 'password' | 'both' | null;
 
 function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorField, setErrorField] = useState<LoginErrorField>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [shakeError, setShakeError] = useState(false);
@@ -186,22 +177,19 @@ function LoginPage() {
   const auth = useAuth();
   const { theme } = useTheme();
 
-  const { isSaasMode } = useDeploymentMode();
-  const runtimeConfig = (globalThis as unknown as Record<string, Record<string, string>>).__RUNTIME_CONFIG__;
-  const oidcEnabled = runtimeConfig?.VITE_OIDC_ENABLED === undefined
-    ? import.meta.env.VITE_OIDC_ENABLED === 'true'
-    : runtimeConfig.VITE_OIDC_ENABLED === 'true';
+  const { isSaasMode, isLoading: configLoading, authMode } = useDeploymentMode();
 
-  const from = location.state?.from?.pathname || '/apps';
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/apps';
 
   useEffect(() => {
-    if (user || auth.isAuthenticated) {
+    if (user !== null || auth.isAuthenticated) {
       navigate(from, { replace: true });
     }
   }, [user, auth.isAuthenticated, navigate, from]);
 
-  const triggerError = (message: string) => {
+  const triggerError = (message: string, field: LoginErrorField = null) => {
     setError(message);
+    setErrorField(field);
     setShakeError(true);
     setTimeout(() => setShakeError(false), 600);
   };
@@ -226,47 +214,22 @@ function LoginPage() {
     try {
       setLoading(true);
       setError(null);
+      setErrorField(null);
       await authService.localLogin(email, password);
-      refreshUser();
+      await refreshUser();
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      triggerError(err instanceof Error ? err.message : 'Login failed');
+      triggerError(err instanceof Error ? err.message : 'Login failed', 'both');
       setLoading(false);
     }
   };
 
-  const handleFakeLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email?.includes('@')) {
-      triggerError('Please enter a valid email address');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      await authService.fakeLogin(email);
-      refreshUser();
-      navigate(from, { replace: true });
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Login failed';
-      if (errorMessage.includes('not found')) {
-        triggerError('User not found. Please contact an administrator.');
-      } else {
-        triggerError(errorMessage);
-      }
-      setLoading(false);
-    }
-  };
-
-  if (user || auth.isAuthenticated) {
+  if (user !== null || auth.isAuthenticated) {
     return null;
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-indigo-50 via-slate-50 to-blue-50">
-      {/* Animated background blobs */}
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-indigo-50 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="animate-blob-drift-a absolute -top-32 -right-32 h-96 w-96 rounded-full opacity-[0.18] blur-3xl"
@@ -282,7 +245,6 @@ function LoginPage() {
         />
       </div>
 
-      {/* Subtle particles */}
       <div className="absolute inset-0 opacity-30">
         <Particles
           particleCount={80}
@@ -298,9 +260,7 @@ function LoginPage() {
         />
       </div>
 
-      {/* Main content */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-8 sm:px-6">
-        {/* Logo + brand — larger for brand visibility */}
+      <main className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-8 sm:px-6">
         <div className="flex items-center gap-4 mb-8 animate-fade-in-up">
           {theme.logo ? (
             <img src={theme.logo} alt={theme.name} className="h-14 w-auto" />
@@ -314,25 +274,22 @@ function LoginPage() {
               </svg>
             </div>
           )}
-          <span className="text-slate-800 text-2xl font-bold tracking-tight">
+          <span className="text-slate-800 dark:text-slate-100 text-2xl font-bold tracking-tight">
             {theme.name || 'Mattin AI'}
           </span>
         </div>
 
-        {/* Robot greeting — robot left, speech bubble right */}
         <div className="mb-6">
           <RobotGreeting />
         </div>
 
-        {/* Glass card — login form */}
         <div className="w-full max-w-sm animate-fade-in-up-d2">
-          <div className="card-login-shimmer backdrop-blur-2xl rounded-2xl shadow-xl border p-7 space-y-5 bg-white/80 border-slate-200/60 shadow-slate-200/50">
-            {/* Title */}
+          <div className="card-login-shimmer backdrop-blur-2xl rounded-2xl shadow-xl border p-7 space-y-5 bg-white/80 dark:bg-slate-800/80 border-slate-200/60 dark:border-slate-700/60 shadow-slate-200/50">
             <div className="text-center">
-              <h2 className="text-xl font-bold text-slate-900">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
                 Welcome back
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Sign in to{' '}
                 <span className="font-medium" style={{ color: 'var(--color-primary)' }}>
                   {theme.name || 'Mattin AI'}
@@ -340,107 +297,114 @@ function LoginPage() {
               </p>
             </div>
 
-            {/* Dev mode badge */}
-            {!oidcEnabled && (
-              <div className="flex justify-center">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />{' '}Dev mode
-                </span>
-              </div>
-            )}
+            {/* Always-rendered so screen readers receive the alert before the error fires */}
+            <div
+              role="alert"
+              aria-live="assertive"
+              id="login-error"
+              className={error ? `flex items-start gap-3 rounded-xl px-4 py-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 ${shakeError ? 'animate-shake' : ''}` : 'sr-only'}
+            >
+              {error && (
+                <>
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-red-800 dark:text-red-300">Login Error</p>
+                    <p className="text-sm mt-0.5 text-red-600 dark:text-red-400">{error}</p>
+                  </div>
+                </>
+              )}
+            </div>
 
-            {/* Error alert */}
-            {error && (
-              <div
-                className={`flex items-start gap-3 rounded-xl px-4 py-3 bg-red-50 border border-red-200 ${
-                  shakeError ? 'animate-shake' : ''
-                }`}
-              >
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            {configLoading && (
+              <div className="flex justify-center py-4" aria-label="Loading sign-in options" aria-busy="true">
+                <svg className="animate-spin h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <div>
-                  <p className="text-sm font-medium text-red-800">Login Error</p>
-                  <p className="text-sm mt-0.5 text-red-600">{error}</p>
-                </div>
               </div>
             )}
 
-            {/* SaaS LOCAL mode — email + password form */}
-            {!oidcEnabled && isSaasMode && (
-              <form onSubmit={handleLocalLogin} className="space-y-4">
+            {!configLoading && authMode === 'local' && (
+              <form onSubmit={handleLocalLogin} className="space-y-4" noValidate>
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-700">Email Address</label>
+                  <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                    Email Address
+                  </label>
                   <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400" aria-hidden="true">
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                       </svg>
                     </div>
-                    <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com" disabled={loading} required
-                      className="input-login w-full pl-11 pr-4 py-3 rounded-xl border bg-white border-slate-200 text-slate-900 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    <input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      disabled={loading}
+                      required
+                      autoComplete="email"
+                      aria-required="true"
+                      aria-invalid={errorField === 'email' || errorField === 'both'}
+                      aria-describedby="login-error"
+                      className="input-login w-full pl-11 pr-4 py-3 rounded-xl border bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                     />
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium mb-2 text-slate-700">Password</label>
-                  <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••" disabled={loading} required
-                    className="input-login w-full px-4 py-3 rounded-xl border bg-white border-slate-200 text-slate-900 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  <label htmlFor="password" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    disabled={loading}
+                    required
+                    autoComplete="current-password"
+                    aria-required="true"
+                    aria-invalid={errorField === 'password' || errorField === 'both'}
+                    aria-describedby="login-error"
+                    className="input-login w-full px-4 py-3 rounded-xl border bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   />
                 </div>
-                <button type="submit" disabled={loading || !email || !password}
+                <button
+                  type="submit"
+                  disabled={loading || !email || !password}
                   className="btn-login-gradient w-full flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
-                    <><svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Signing in...</>
+                    <>
+                      <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Signing in...
+                    </>
                   ) : 'Sign in'}
                 </button>
               </form>
             )}
 
-            {/* FAKE mode — email-only form (development) */}
-            {!oidcEnabled && !isSaasMode && (
-              <form onSubmit={handleFakeLogin} className="space-y-4">
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-700">Email Address</label>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-                      </svg>
-                    </div>
-                    <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com" disabled={loading} required
-                      className="input-login w-full pl-11 pr-4 py-3 rounded-xl border bg-white border-slate-200 text-slate-900 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    />
-                  </div>
-                </div>
-                <button type="submit" disabled={loading || !email}
-                  className="btn-login-gradient w-full flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <><svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Signing in...</>
-                  ) : 'Sign in with Email'}
-                </button>
-              </form>
-            )}
-
-            {/* OIDC Login Button */}
-            {oidcEnabled && (
+            {!configLoading && authMode === 'oidc' && (
               <button
+                type="button"
                 onClick={handleOIDCLogin}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl border-2 font-semibold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-[var(--color-primary)] hover:shadow-md transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl border-2 font-semibold border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 hover:border-[var(--color-primary)] hover:shadow-md transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#00A4EF" d="M0 0h11.377v11.372H0z" />
                     <path fill="#FFB900" d="M12.623 0H24v11.372H12.623z" />
                     <path fill="#7FBA00" d="M0 12.628h11.377V24H0z" />
@@ -450,46 +414,61 @@ function LoginPage() {
                 {loading ? 'Signing in...' : 'Sign in with Microsoft'}
               </button>
             )}
-          {isSaasMode && (
-            <div className="mt-4 text-center space-y-2">
-              <p className="text-sm text-slate-500">
-                Don't have an account?{' '}
-                <Link to="/register" className="font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
-                  Create one
-                </Link>
+
+            {!configLoading && isSaasMode && (
+              <div className="mt-4 text-center space-y-2">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Don&apos;t have an account?{' '}
+                  <Link
+                    to="/register"
+                    className="font-medium hover:underline"
+                    style={{ color: 'var(--color-primary)' }}
+                  >
+                    Create one
+                  </Link>
+                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  <Link
+                    to="/password-reset/request"
+                    className="hover:underline"
+                    style={{ color: 'var(--color-primary)' }}
+                  >
+                    Forgot your password?
+                  </Link>
+                </p>
+              </div>
+            )}
+
+            {/* Self-hosted LOCAL: no public reset link — admin-initiated only */}
+            {!configLoading && !isSaasMode && authMode === 'local' && (
+              <p className="text-xs text-center text-slate-400 dark:text-slate-500 mt-2">
+                Forgot your password? Contact your administrator.
               </p>
-              <p className="text-sm text-slate-500">
-                <Link to="/password-reset/request" className="hover:underline" style={{ color: 'var(--color-primary)' }}>
-                  Forgot your password?
-                </Link>
-              </p>
-            </div>
-          )}
+            )}
           </div>
         </div>
 
-        {/* Feature cards — 2x2 grid */}
         <div className="grid grid-cols-2 gap-3 mt-8 max-w-lg w-full animate-fade-in-up-d3">
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/60 border border-slate-200/60 backdrop-blur-sm"
+              className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/60 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-sm"
             >
               <div
                 className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5"
                 style={{ backgroundColor: `${f.color}15`, color: f.color }}
+                aria-hidden="true"
               >
                 {f.icon}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-700">{f.title}</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{f.title}</p>
                 <p className="text-xs text-slate-400 leading-snug">{f.desc}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Legal footer */}
         <div className="mt-8 text-center animate-fade-in-up-d3">
           <p className="text-xs text-slate-400">
             By signing in, you agree to our{' '}
@@ -502,7 +481,7 @@ function LoginPage() {
             </button>
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -6,7 +6,7 @@ Architecture:
   - db           (function-scoped): per-test session with connection-level rollback
   - client       (function-scoped): FastAPI TestClient with get_db overridden
   - fake_user / fake_app / fake_agent: convenience fixtures for common entities
-  - auth_headers : Bearer token for fake_user via /internal/auth/dev-login
+  - auth_headers : Bearer token for fake_user minted directly via mint_access_token (LOCAL issuer)
 
 Transaction isolation strategy:
   Each test gets a fresh connection with an explicit BEGIN. The Session is created
@@ -32,6 +32,21 @@ _backend_dir = str(Path(__file__).resolve().parent.parent / "backend")
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 from fastapi.testclient import TestClient
+
+# ---------------------------------------------------------------------------
+# Belt-and-suspenders env defaults
+#
+# pytest.ini is the active config file (it takes precedence over pyproject.toml),
+# so the pytest-env `env=` block lives in pytest.ini.  These setdefault calls are
+# a fallback so that running a single file directly (e.g. `python -m pytest
+# tests/unit/...`) without pytest-env loaded never aborts at collection time with
+# "SECRET_KEY not set".  An explicitly-set shell value always wins.
+# ---------------------------------------------------------------------------
+os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-minimum-ok")
+os.environ.setdefault("AICT_LOGIN", "LOCAL")
+os.environ.setdefault("AICT_OMNIADMINS", "admin@test.com")
+os.environ.setdefault("AICT_MODE", "SELF-HOSTED")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,32 +275,33 @@ def fake_api_key(db, fake_app, fake_user):
 
 
 @pytest.fixture(scope="function")
-def auth_headers(fake_user, client, db):
+def auth_headers(fake_user, db):
     """
-    Bearer token headers for fake_user obtained via /internal/auth/dev-login.
+    Bearer token headers for fake_user minted directly via mint_access_token (LOCAL issuer).
 
-    Because client uses the same test session (db) as fake_user, the endpoint
-    can find the user without it being committed to the real DB.
+    The token is signed with the LOCAL issuer/audience so get_current_user_local
+    accepts it.  Because fake_user is db.flush()-ed before this fixture runs,
+    the DB lookup in get_current_user_local will find the user.
+
+    Using a Bearer header (not a cookie) means the enforce_csrf dependency is a
+    NO-OP, so existing mutating integration tests work without CSRF headers.
     """
+    from utils.local_auth_tokens import mint_access_token
+
     db.flush()
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": fake_user.email},
-    )
-    assert response.status_code == 200, (
-        f"Dev login failed ({response.status_code}): {response.text}"
-    )
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(fake_user.user_id, fake_user.email, fake_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture(scope="function")
-def owner_headers(fake_user, fake_app, client, db):
+def owner_headers(fake_user, fake_app, db):
     """
     Auth headers for fake_user who is the owner of fake_app.
     Ensures the AppCollaborator OWNER record exists so RBAC checks pass.
+    Token is minted directly via mint_access_token (LOCAL issuer) — no HTTP round-trip.
     """
     from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
+    from utils.local_auth_tokens import mint_access_token
     from datetime import datetime
 
     collab = AppCollaborator(
@@ -299,14 +315,7 @@ def owner_headers(fake_user, fake_app, client, db):
     db.add(collab)
     db.flush()
 
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": fake_user.email},
-    )
-    assert response.status_code == 200, (
-        f"Dev login failed ({response.status_code}): {response.text}"
-    )
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(fake_user.user_id, fake_user.email, fake_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 

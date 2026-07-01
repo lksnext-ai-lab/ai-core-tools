@@ -25,11 +25,14 @@ import type { LibraryConfig } from './core/types';
 const runtimeConfig = (globalThis as unknown as { __RUNTIME_CONFIG__?: Record<string, string> }).__RUNTIME_CONFIG__;
 
 const getConfig = (key: string, fallback: string = ''): string => {
-  // Uses ?? so an explicit empty string (same-origin via reverse proxy) is respected.
-  return runtimeConfig?.[key] ?? import.meta.env[key] ?? fallback;
+  // Uses || (not ??) so an empty placeholder value falls through. The dev
+  // public/config.js ships VITE_API_BASE_URL:"" and is served as-is by Vite in
+  // local dev; with ?? that "" resolved to an empty base URL and requests hit the
+  // Vite dev server instead of the backend. Real deployments (Docker, k8s) inject
+  // an absolute, non-empty URL, so this only affects the empty-placeholder case.
+  return runtimeConfig?.[key] || import.meta.env[key] || fallback;
 };
 
-// Demo configuration for the base application
 const demoConfig: LibraryConfig = {
   name: 'Mattin AI',
   logo: '/mattin-small.png',

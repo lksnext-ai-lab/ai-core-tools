@@ -6,18 +6,16 @@ import json
 import os
 from pydantic import ValidationError
 
-# Import database
 from db.database import get_db
 
-# Import services
 from services.app_service import AppService
 from services.app_collaboration_service import AppCollaborationService
 from services.rate_limit_service import rate_limit_service
 
-# Import schemas and auth
 from schemas.apps_schemas import (
     AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema, AppUsageStatsSchema,
     LangSmithTestRequestSchema, LangSmithTestResponseSchema,
+    OwnershipOfferRequest, OwnershipOfferResponse, OwnershipAcceptResponse,
 )
 from schemas.common_schemas import MessageResponseSchema
 from schemas.export_schemas import AppExportFileSchema
@@ -30,7 +28,6 @@ from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
 from utils.secret_utils import mask_api_key, is_masked_key, normalize_credential_map
 
-# Import nested routers for app-specific resources
 from .agents import agents_router
 from .silos import silos_router
 from .ai_services import ai_services_router
@@ -45,21 +42,18 @@ from .folders import folders_router
 from .mcp_servers import mcp_servers_router
 from .skills import skills_router
 
-# Import logger
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 apps_router = APIRouter()
 
-# Default value used when an app's agent_rate_limit is not set
 DEFAULT_AGENT_RATE_LIMIT = 0
 DEFAULT_MAX_FILE_SIZE_MB = 0
 
-# Error messages
 APP_NOT_FOUND_MSG = "App not found"
 
-# ==================== STATIC ROUTES (must come before dynamic routes) ====================
+# Static routes must be declared before the /{app_id} dynamic routes.
 
 @apps_router.post(
     "/preview-import",
@@ -72,12 +66,7 @@ async def preview_import_app(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Preview full app import without importing.
-
-    Parses the export file and returns a structured preview
-    with component inventory, dependency graph, and warnings.
-    Read-only -- no database modifications.
-    """
+    """Parse the export file and return a structured preview. Read-only — no database modifications."""
     from services.full_app_import_service import (
         FullAppImportService,
     )
@@ -141,23 +130,11 @@ async def import_full_app(
         ),
     )] = None,
 ) -> FullAppImportResponseSchema:
-    """Import complete app configuration from JSON file.
-
-    Creates a new app from the exported configuration.
-    
-    Query Parameters:
-    - conflict_mode: How to handle name conflicts (fail/rename/override)
-    - new_name: Optional new name for the app (auto-generated if conflict and rename mode)
-
-    File Format: JSON matching AppExportFileSchema
-    
-    Note: Always creates a NEW app (does not override existing apps).
-    """
+    """Import complete app configuration from JSON file. Always creates a new app."""
     from services.full_app_import_service import FullAppImportService
 
     user_id = int(auth_context.identity.id)
 
-    # Read and parse file
     try:
         contents = await file.read()
         export_dict = json.loads(contents)
@@ -173,7 +150,6 @@ async def import_full_app(
             detail=f"Invalid export format: {str(e)}",
         )
 
-    # Parse optional JSON form fields
     component_selection = None
     if component_selection_json:
         try:
@@ -198,7 +174,6 @@ async def import_full_app(
         # at this boundary instead — same effect.
         api_keys = normalize_credential_map(api_keys)
 
-    # Import (always creates new app)
     service = FullAppImportService(db)
     try:
         summary = service.import_full_app(
@@ -243,10 +218,269 @@ async def import_full_app(
         )
 
 
-# ==================== INCLUDE NESTED ROUTERS (dynamic routes) ====================
+@apps_router.post(
+    "/{app_id}/ownership/offer",
+    response_model=OwnershipOfferResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Offer app ownership to another user",
+    tags=["Apps", "Ownership"],
+    responses={
+        400: {"description": "Recipient is invalid (non-existent, inactive, or already owner)"},
+        403: {"description": "Insufficient permissions — OWNER or OMNIADMIN required"},
+        404: {"description": "App not found"},
+    },
+)
+async def offer_app_ownership(
+    app_id: int,
+    body: OwnershipOfferRequest,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role(AppRole.OWNER))],
+) -> OwnershipOfferResponse:
+    """Create a pending ownership offer (idempotent). No ownership change until the recipient accepts."""
+    from services.app_ownership_service import AppOwnershipService
+    from services.app_ownership_errors import (
+        AppNotFoundError,
+        TransferRecipientInvalidError,
+    )
 
-# Include nested routers under apps/{app_id}/
-# Based on frontend API calls - all app-specific resources go here
+    actor_user_id: int = int(auth_context.identity.id)
+
+    try:
+        offer = AppOwnershipService.offer(
+            db,
+            app_id=app_id,
+            new_owner_id=body.new_owner_id,
+            actor_user_id=actor_user_id,
+        )
+    except AppNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except TransferRecipientInvalidError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "offer_app_ownership: unexpected error app_id=%s new_owner_id=%s actor=%s",
+            app_id,
+            body.new_owner_id,
+            auth_context.identity.email,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create ownership offer due to an unexpected error.",
+        )
+
+    logger.info(
+        "apps:offer_ownership app_id=%s new_owner_id=%s collab_id=%s by=%s",
+        app_id,
+        body.new_owner_id,
+        offer.id,
+        auth_context.identity.email,
+    )
+
+    return OwnershipOfferResponse(
+        collaboration_id=offer.id,
+        app_id=app_id,
+        new_owner_id=body.new_owner_id,
+        actor_user_id=actor_user_id,
+    )
+
+
+@apps_router.post(
+    "/{app_id}/ownership/accept/{collaboration_id}",
+    response_model=OwnershipAcceptResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Accept an ownership offer (recipient only)",
+    tags=["Apps", "Ownership"],
+    responses={
+        403: {"description": "Actor is not the offer recipient"},
+        404: {"description": "Pending ownership offer not found"},
+        409: {"description": "Transfer would exceed the recipient's SaaS app-count limit"},
+    },
+)
+async def accept_app_ownership_offer(
+    app_id: int,
+    collaboration_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+) -> OwnershipAcceptResponse:
+    """Accept a pending ownership offer. Previous owner is demoted to ADMINISTRATOR."""
+    from services.app_ownership_service import AppOwnershipService
+    from services.app_ownership_errors import (
+        AppNotFoundError,
+        NotOfferRecipientError,
+        OwnershipOfferNotFoundError,
+        TierLimitExceededError,
+        TransferRecipientInvalidError,
+    )
+
+    actor_user_id: int = int(auth_context.identity.id)
+
+    try:
+        app, previous_owner_id = AppOwnershipService.accept(
+            db,
+            collaboration_id=collaboration_id,
+            actor_user_id=actor_user_id,
+            app_id=app_id,
+        )
+    except OwnershipOfferNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except NotOfferRecipientError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message)
+    except (TransferRecipientInvalidError, AppNotFoundError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+    except TierLimitExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "accept_app_ownership_offer: unexpected error app_id=%s collab_id=%s actor=%s",
+            app_id,
+            collaboration_id,
+            auth_context.identity.email,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to accept ownership offer due to an unexpected error.",
+        )
+
+    logger.info(
+        "apps:accept_ownership app_id=%s collab_id=%s new_owner=%s prev_owner=%s by=%s",
+        app_id,
+        collaboration_id,
+        actor_user_id,
+        previous_owner_id,
+        auth_context.identity.email,
+    )
+
+    return OwnershipAcceptResponse(
+        app_id=app.app_id,
+        name=app.name,
+        new_owner_id=actor_user_id,
+        previous_owner_id=previous_owner_id,
+    )
+
+
+@apps_router.post(
+    "/{app_id}/ownership/decline/{collaboration_id}",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+    summary="Decline an ownership offer (recipient only)",
+    tags=["Apps", "Ownership"],
+    responses={
+        403: {"description": "Actor is not the offer recipient"},
+        404: {"description": "Pending ownership offer not found"},
+    },
+)
+async def decline_app_ownership_offer(
+    app_id: int,
+    collaboration_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+) -> MessageResponseSchema:
+    """Decline a pending ownership offer. Sets offer status to DECLINED; no ownership change."""
+    from services.app_ownership_service import AppOwnershipService
+    from services.app_ownership_errors import (
+        NotOfferRecipientError,
+        OwnershipOfferNotFoundError,
+    )
+
+    actor_user_id: int = int(auth_context.identity.id)
+
+    try:
+        AppOwnershipService.decline(
+            db,
+            collaboration_id=collaboration_id,
+            actor_user_id=actor_user_id,
+            app_id=app_id,
+        )
+    except OwnershipOfferNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except NotOfferRecipientError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "decline_app_ownership_offer: unexpected error app_id=%s collab_id=%s actor=%s",
+            app_id,
+            collaboration_id,
+            auth_context.identity.email,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decline ownership offer due to an unexpected error.",
+        )
+
+    logger.info(
+        "apps:decline_ownership app_id=%s collab_id=%s by=%s",
+        app_id,
+        collaboration_id,
+        auth_context.identity.email,
+    )
+
+    return MessageResponseSchema(message="Ownership offer declined.")
+
+
+@apps_router.delete(
+    "/{app_id}/ownership/offer",
+    response_model=MessageResponseSchema,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel pending ownership offer",
+    tags=["Apps", "Ownership"],
+    responses={
+        403: {"description": "Insufficient permissions — OWNER or OMNIADMIN required"},
+        404: {"description": "App not found or no pending offer exists"},
+    },
+)
+async def cancel_app_ownership_offer(
+    app_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role(AppRole.OWNER))],
+) -> MessageResponseSchema:
+    """Cancel the pending ownership offer for an app (owner/omniadmin only)."""
+    from services.app_ownership_service import AppOwnershipService
+    from services.app_ownership_errors import OwnershipOfferNotFoundError
+
+    actor_user_id: int = int(auth_context.identity.id)
+
+    try:
+        AppOwnershipService.cancel(
+            db,
+            app_id=app_id,
+            actor_user_id=actor_user_id,
+        )
+    except OwnershipOfferNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "cancel_app_ownership_offer: unexpected error app_id=%s actor=%s",
+            app_id,
+            auth_context.identity.email,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel ownership offer due to an unexpected error.",
+        )
+
+    logger.info(
+        "apps:cancel_ownership_offer app_id=%s by=%s",
+        app_id,
+        auth_context.identity.email,
+    )
+
+    return MessageResponseSchema(message="Ownership offer cancelled successfully.")
+
+
 apps_router.include_router(agents_router, prefix="/{app_id}/agents", tags=["Agents"])
 apps_router.include_router(silos_router, prefix="/{app_id}/silos", tags=["Silos"])
 apps_router.include_router(ai_services_router, prefix="/{app_id}/ai-services", tags=["AI Services"])
@@ -261,26 +495,17 @@ apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repos
 apps_router.include_router(mcp_servers_router, prefix="/{app_id}/mcp-servers", tags=["MCP Servers"])
 apps_router.include_router(skills_router, prefix="/{app_id}/skills", tags=["Skills"])
 
-#HELPER FUNCTIONS
-
 def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
-    """
-    Helper function to initialize and return app services.
-    """
+    """Return initialised AppService and AppCollaborationService."""
     app_service = AppService(db)
     collaboration_service = AppCollaborationService(db)
     return app_service, collaboration_service
 
 def _safe_get_count(items) -> int:
-    """
-    Safely get count from a list or collection, returning 0 if None.
-    """
     return len(items) if items else 0
 
 def _handle_savepoint_rollback(savepoint, db: Session, app_id: int):
-    """
-    Handle rolling back a savepoint with proper error handling.
-    """
+    """Roll back a savepoint, falling back to full transaction rollback on error."""
     try:
         savepoint.rollback()
     except Exception as rollback_error:
@@ -288,18 +513,12 @@ def _handle_savepoint_rollback(savepoint, db: Session, app_id: int):
         _handle_transaction_rollback(db, app_id)
 
 def _handle_transaction_rollback(db: Session, app_id: int):
-    """
-    Handle rolling back the entire transaction with error handling.
-    """
     try:
         db.rollback()
     except Exception as rollback_error:
         logger.error(f"Error rolling back transaction for app {app_id}: {str(rollback_error)}")
 
 def _get_entity_counts(app_id: int, db: Session, collaboration_service: AppCollaborationService) -> dict:
-    """
-    Fetch all entity counts for an app.
-    """
     from services.agent_service import AgentService
     from services.repository_service import RepositoryService
     from services.domain_service import DomainService
@@ -321,9 +540,6 @@ def _get_entity_counts(app_id: int, db: Session, collaboration_service: AppColla
     }
 
 def _get_empty_counts() -> dict:
-    """
-    Return a dictionary with all counts set to 0.
-    """
     return {
         'agent_count': 0,
         'repository_count': 0,
@@ -333,17 +549,7 @@ def _get_empty_counts() -> dict:
     }
 
 def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service: AppCollaborationService) -> dict:
-    """
-    Calculate entity counts for an app (agents, repositories, domains, silos, collaborators).
-    
-    Args:
-        app_id: The ID of the app
-        db: Database session
-        collaboration_service: Collaboration service instance
-        
-    Returns:
-        Dictionary with count values for each entity type
-    """
+    """Return entity counts for an app, falling back to zeros on any DB error."""
     savepoint = None
     try:
         savepoint = db.begin_nested()
@@ -364,9 +570,7 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         return _get_empty_counts()
 
 
-#APP MANAGEMENT
-
-@apps_router.get("/", 
+@apps_router.get("/",
                 summary="List user's apps",
                 tags=["Apps"],
                 response_model=List[AppListItemSchema])
@@ -374,37 +578,23 @@ async def list_apps(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    """
-    List all apps that the current user owns or collaborates on.
-    """
-    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
-    
+    user_id = int(auth_context.identity.id)
     app_service, collaboration_service = get_services(db)
-    
     apps = app_service.get_apps(user_id)
-    
-    # Convert to schema
     app_list = []
     for app in apps:
         role = collaboration_service.get_user_app_role(user_id, app.app_id) or "owner"
-        
-        # Calculate entity counts using helper function
         counts = calculate_app_entity_counts(app.app_id, db, collaboration_service)
-        
-        # Get usage statistics for speedometer
         usage_stats = rate_limit_service.get_app_usage_stats(
             app.app_id, 
             app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
         )
         usage_stats_schema = AppUsageStatsSchema(**usage_stats)
-        
-        # Get owner information
         owner_name = None
         owner_email = None
         if app.owner:
             owner_name = app.owner.name
             owner_email = app.owner.email
-        
         app_item = AppListItemSchema(
             app_id=app.app_id,
             name=app.name,
@@ -418,10 +608,9 @@ async def list_apps(
             max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
             agent_cors_origins=app.agent_cors_origins,
             usage_stats=usage_stats_schema,
-            **counts  # Unpack the counts dictionary
+            **counts
         )
         app_list.append(app_item)
-    
     return app_list
 
 
@@ -435,14 +624,8 @@ async def get_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """
-    Get detailed information about a specific app.
-    """
     user_id = int(auth_context.identity.id)
-    
     app_service, collaboration_service = get_services(db)
-    
-    # Get app and verify access
     app = app_service.get_app(app_id)
     if not app:
         raise HTTPException(
@@ -457,10 +640,7 @@ async def get_app(
         )
     
     user_role = collaboration_service.get_user_app_role(user_id, app_id)
-    
     counts = calculate_app_entity_counts(app_id, db, collaboration_service)
-    
-    # Get owner information
     owner_email = None
     owner_name = None
     if app.owner:
@@ -495,10 +675,7 @@ async def dismiss_onboarding(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
-    """
-    Mark the getting started checklist as dismissed for the app.
-    Requires editor role or above.
-    """
+    """Mark the getting-started checklist as dismissed for the app."""
     app_service, _ = get_services(db)
 
     app = app_service.get_app(app_id)
@@ -523,13 +700,8 @@ async def create_app(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    """
-    Create a new app for the current user.
-    """
-    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
-    
+    user_id = int(auth_context.identity.id)
     app_service, _ = get_services(db)
-    
     app_dict = {
         'name': app_data.name,
         'owner_id': user_id,
@@ -540,14 +712,11 @@ async def create_app(
     }
     
     app = app_service.create_or_update_app(app_dict, user_id=user_id)
-    
-    # Get owner information
     owner_email = None
     owner_name = None
     if app.owner:
         owner_email = app.owner.email
         owner_name = app.owner.name
-    
     return AppDetailSchema(
         app_id=app.app_id,
         name=app.name,
@@ -574,13 +743,8 @@ async def update_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
-    """
-    Update an existing app. Only owners can update apps.
-    """
-    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
-    
+    user_id = int(auth_context.identity.id)
     app_service, collaboration_service = get_services(db)
-    
     app = app_service.get_app(app_id)
     if not app:
         raise HTTPException(
@@ -594,7 +758,6 @@ async def update_app(
             detail="Only app owners can update apps"
         )
     
-    # Preserve existing langsmith key if user sent back a masked value
     langsmith_key = app_data.langsmith_api_key
     if is_masked_key(langsmith_key):
         langsmith_key = app.langsmith_api_key
@@ -611,22 +774,16 @@ async def update_app(
         'enable_openai_api': app_data.enable_openai_api
     }
 
-    # Update app using service
     updated_app = app_service.create_or_update_app(update_dict)
 
-    # Invalidate the cached LangSmith client so the next agent invocation
-    # picks up the new key (or the absence of it).
     if langsmith_key_rotated:
         from tools.langsmith_config import clear_client_cache
         clear_client_cache(app_id)
-    
-    # Get owner information
     owner_email = None
     owner_name = None
     if updated_app.owner:
         owner_email = updated_app.owner.email
         owner_name = updated_app.owner.name
-    
     return AppDetailSchema(
         app_id=updated_app.app_id,
         name=updated_app.name,
@@ -685,7 +842,6 @@ async def test_langsmith_connection(
     project_name: Optional[str] = app.name
 
     if not candidate_key:
-        # Fall back to env vars when neither the request nor the app provide a key
         settings = resolve_langsmith_settings(app)
         if settings is None:
             return LangSmithTestResponseSchema(
@@ -728,14 +884,8 @@ async def delete_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("owner"))],
 ):
-    """
-    Delete an app. Only owners can delete apps.
-    """
-    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
-    
+    user_id = int(auth_context.identity.id)
     app_service, collaboration_service = get_services(db)
-    
-    # Get app and verify ownership
     app = app_service.get_app(app_id)
     if not app:
         raise HTTPException(
@@ -749,7 +899,6 @@ async def delete_app(
             detail="Only app owners can delete apps"
         )
     
-    # Delete app using service
     success = app_service.delete_app(app_id)
     if not success:
         raise HTTPException(
@@ -826,14 +975,8 @@ async def leave_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """
-    Leave an app collaboration (for editors only).
-    """
-    user_id = int(auth_context.identity.id)  # Extract DB user_id from enriched context
-    
+    user_id = int(auth_context.identity.id)
     _, collaboration_service = get_services(db)
-    
-    # Check if user has access to the app
     user_role = collaboration_service.get_user_app_role(user_id, app_id)
     
     if not user_role:
@@ -842,7 +985,6 @@ async def leave_app(
             detail="App not found or access denied"
         )
     
-    # Use the new leave_app_collaboration method
     try:
         success = collaboration_service.leave_app_collaboration(app_id, user_id)
         if not success:
@@ -867,9 +1009,6 @@ async def leave_app(
         )
 
 
-# ==================== FULL APP EXPORT ====================
-
-
 @apps_router.post(
     "/{app_id}/export",
     summary="Export complete app configuration",
@@ -881,23 +1020,7 @@ async def export_full_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ) -> AppExportFileSchema:
-    """Export complete app configuration to JSON.
-
-    Includes:
-    - AI Services (API keys removed)
-    - Embedding Services (API keys removed)
-    - Output Parsers
-    - MCP Configs (secrets removed)
-    - Silos
-    - Agents (conversation history excluded)
-
-    Excludes:
-    - User accounts and permissions
-    - Conversation history
-    - Vector data
-    - Files/attachments
-    - Usage statistics
-    """
+    """Export complete app configuration to JSON (API keys and secrets stripped)."""
     from services.full_app_export_service import FullAppExportService
 
     user_id = int(auth_context.identity.id)

@@ -45,6 +45,7 @@ PROVIDER_OLLAMA = "Ollama"
 PROVIDER_CUSTOM = "Custom"
 PROVIDER_AZURE = "Azure"
 PROVIDER_GOOGLE_CLOUD = "GoogleCloud"
+PROVIDER_OPENROUTER = "OpenRouter"
 
 MANUAL_INPUT_PROVIDERS = frozenset({PROVIDER_AZURE, PROVIDER_GOOGLE_CLOUD})
 
@@ -132,6 +133,23 @@ _REASONING_PATTERNS = (
     re.compile(r"-deep-research"),
 )
 
+# Extra patterns for models only available through OpenRouter (no
+# dedicated MattinAI provider exists for Meta, DeepSeek, Qwen, etc.).
+_OPENROUTER_EXTRA_VISION = (
+    re.compile(r"^meta-llama/llama-4"),
+    re.compile(r"^meta-llama/llama-3\\.2.*vision"),
+    re.compile(r"^deepseek/deepseek-vl"),
+    re.compile(r"^qwen/qwen.*vl"),
+    re.compile(r"^qwen/qvq"),
+    re.compile(r"^mistralai/pixtral"),
+)
+
+_OPENROUTER_EXTRA_REASONING = (
+    re.compile(r"^deepseek/deepseek-r"),
+    re.compile(r"^qwen/qwq"),
+    re.compile(r"^qwen/qwen.*thinking"),
+)
+
 # Modern multimodal flagship families. These accept image input.
 _VISION_PATTERNS = (
     re.compile(r"^gpt-[5-9]"),
@@ -158,14 +176,12 @@ def _matches_any(value: str, patterns: Iterable[re.Pattern[str]]) -> bool:
     return any(p.search(value) for p in patterns)
 
 
-def heuristic_capabilities_from_id(provider: str, model_id: str) -> ProviderCapabilities:
-    """Best-effort capability inference from the model id alone.
+def _match_heuristic(lid: str) -> ProviderCapabilities:
+    """Best-effort capability inference from a lowered model id.
 
-    Order matters: we resolve the most distinctive shapes first
-    (embedding, pure audio) before falling back to vision / reasoning /
-    plain chat.
+    Extracted so OpenRouter can call it with the unprefixed id after
+    stripping the ``provider/`` portion.
     """
-    lid = (model_id or "").lower()
     caps = ProviderCapabilities()
 
     if _matches_any(lid, _EMBEDDING_PATTERNS):
@@ -192,6 +208,43 @@ def heuristic_capabilities_from_id(provider: str, model_id: str) -> ProviderCapa
     if is_reasoning:
         caps.reasoning = True
     return caps
+
+
+def _match_openrouter_extras(lid: str) -> ProviderCapabilities:
+    """Fallback patterns for models only available via OpenRouter."""
+    caps = ProviderCapabilities()
+    caps.chat = True
+    caps.function_calling = True
+    caps.tool_use = True
+    if _matches_any(lid, _OPENROUTER_EXTRA_VISION):
+        caps.vision = True
+    if _matches_any(lid, _OPENROUTER_EXTRA_REASONING):
+        caps.reasoning = True
+    return caps
+
+
+def heuristic_capabilities_from_id(provider: str, model_id: str) -> ProviderCapabilities:
+    """Best-effort capability inference from the model id alone.
+
+    For OpenRouter, the id includes a provider prefix (e.g.
+    ``openai/gpt-4o``). We strip it before matching patterns for
+    OpenRouter-hosted models that map to a known provider. Additional
+    patterns cover OpenRouter-exclusive models (Meta Llama, DeepSeek,
+    Qwen, etc.).
+    """
+    lid = (model_id or "").lower()
+
+    if provider == PROVIDER_OPENROUTER and "/" in lid:
+        _, unprefixed = lid.split("/", 1)
+        caps = _match_heuristic(unprefixed)
+        # OR-merge OpenRouter-specific extras on the full id
+        extra_caps = _match_openrouter_extras(lid)
+        for field_name in ProviderCapabilities.model_fields:
+            if getattr(extra_caps, field_name):
+                setattr(caps, field_name, True)
+        return caps
+
+    return _match_heuristic(lid)
 
 
 # ==================== MERGE / ENRICH ====================

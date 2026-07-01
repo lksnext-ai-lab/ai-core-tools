@@ -25,7 +25,7 @@ class CrawlJob(Base):
         sa.Enum(CrawlTrigger, name='crawl_trigger', create_type=False),
         nullable=False,
     )
-    triggered_by_user_id = Column(Integer, sa.ForeignKey('User.user_id'), nullable=True)
+    triggered_by_user_id = Column(Integer, sa.ForeignKey('User.user_id', ondelete='SET NULL'), nullable=True)
 
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)

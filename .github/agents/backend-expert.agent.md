@@ -1,5 +1,6 @@
 ---
 name: backend-expert
+user-invocable: false
 description: Senior Python backend developer specializing in FastAPI, SQLAlchemy 2.x, Pydantic v2, LangChain 1.x / LangGraph 1.x / LangSmith / Deep Agents, and PostgreSQL with pgvector. Generic role — project-specific conventions auto-apply via `backend-conventions.instructions.md` when editing `backend/**`. Verifies library APIs against official docs via the `langchain-docs` and `context7` MCP servers before implementing.
 model: Claude Sonnet 4.6
 tools: [read, edit, search, 'context7/*', 'docs-langchain/*']
@@ -260,6 +261,8 @@ When your task originates from a plan execution step file (`/plans/<slug>/execut
    - A summary of files changed and decisions taken
 2. Update `/plans/<slug>/execution/status.yaml` — set the step's `status:` and `completed_at:` accordingly
 3. Suggest the user invoke `@plan-executor` to continue
+
+> **Invoked by `@quick-executor` instead?** There is no step file — return the same `## Result` block (Completed by/at, Status, summary) **inline** as your response so the executor can act on it directly.
 
 ## What This Agent Does NOT Do
 

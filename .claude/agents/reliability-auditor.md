@@ -1,5 +1,6 @@
 ---
 name: reliability-auditor
+user-invocable: false
 description: SRE/reliability auditor for Mattin AI. Use proactively on concurrency-sensitive, async, external-call, and multi-tenant code, and in production sweeps. Deeply audits concurrency, fault tolerance/resilience, and isolation against best-practice standards. Read-only.
 tools: [Read, Glob, Grep, Bash]
 model: opus

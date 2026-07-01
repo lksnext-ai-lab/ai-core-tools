@@ -1,5 +1,6 @@
 ---
 name: devops-engineer
+user-invocable: false
 description: DevOps/infra engineer for Mattin AI — Docker/Compose, Caddy reverse proxy, deploy scripts, and the mattinai-infra Helm charts. Use for containerization, deployment, and environment config. Reads CI but does not modify the .github Copilot ecosystem. Does not run git.
 tools: [Read, Write, Edit, Glob, Grep, Bash]
 model: sonnet

@@ -6,6 +6,7 @@ from schemas.provider_models_schemas import ProviderCapabilities, ProviderModelI
 from tools.ai.model_catalog import (
     PROVIDER_ANTHROPIC,
     PROVIDER_OPENAI,
+    PROVIDER_OPENROUTER,
     drop_dated_snapshots_when_alias_exists,
     enrich,
     heuristic_capabilities_from_id,
@@ -272,3 +273,60 @@ class TestFilters:
             info = enrich(PROVIDER_OPENAI, mid)
             assert is_chat_model(info) is True, mid
             assert is_embedding_model(info) is False, mid
+
+
+# ==================== OPENROUTER HEURISTICS ====================
+
+
+class TestOpenRouterHeuristics:
+    """Heuristic capability inference for OpenRouter prefixed model ids."""
+
+    def test_openai_gpt4o_is_vision(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "openai/gpt-4o"
+        )
+        assert caps.vision is True
+        assert caps.chat is True
+
+    def test_anthropic_claude_sonnet4_is_vision(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "anthropic/claude-sonnet-4-20250514"
+        )
+        assert caps.vision is True
+        assert caps.chat is True
+
+    def test_google_gemini_25_pro_is_vision(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "google/gemini-2.5-pro"
+        )
+        assert caps.vision is True
+        assert caps.chat is True
+
+    def test_deepseek_r1_is_reasoning(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "deepseek/deepseek-r1"
+        )
+        assert caps.reasoning is True
+        assert caps.chat is True
+
+    def test_meta_llama4_is_vision(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "meta-llama/llama-4-maverick"
+        )
+        assert caps.vision is True
+        assert caps.chat is True
+
+    def test_qwen_qwq_is_reasoning(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "qwen/qwq-32b"
+        )
+        assert caps.reasoning is True
+        assert caps.chat is True
+
+    def test_unknown_openrouter_model_defaults_to_chat(self):
+        caps = heuristic_capabilities_from_id(
+            PROVIDER_OPENROUTER, "some-provider/unknown-model"
+        )
+        assert caps.chat is True
+        assert caps.embedding is False
+        assert caps.vision is False

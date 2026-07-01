@@ -431,8 +431,33 @@ npm run preview
 | Build fails | TypeScript errors | Check `libraryConfig` types match `LibraryConfig` interface |
 | Custom page not routing | Missing route in App.tsx | Add `<Route path="/custom" element={<CustomPage />} />` |
 
+## Authentication Mode
+
+Client projects consume the same backend as the base library and inherit whichever auth mode is configured on the server (`AICT_LOGIN`).
+
+**LOCAL mode** — set in the client frontend `.env`:
+
+```bash
+VITE_OIDC_ENABLED=false
+```
+
+No OIDC variables are needed. The login page renders an email + password form. User accounts are provisioned by an administrator via the admin panel; there is no self-registration.
+
+**OIDC mode** — set the standard OIDC variables:
+
+```bash
+VITE_OIDC_ENABLED=true
+VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/{tenant-id}/v2.0
+VITE_OIDC_CLIENT_ID=your-azure-client-id
+VITE_OIDC_REDIRECT_URI=https://your-client-domain.com/auth/success
+VITE_OIDC_SCOPE=openid profile email
+```
+
+See [Authentication Guide](authentication.md) for the full reference on both modes.
+
 ## See Also
 
 - [Plugin Development](plugin-development.md) — Creating plugins for clients
 - [Frontend Architecture](../architecture/frontend.md) — Base library structure
 - [Deployment Guide](deployment.md) — Building and deploying client apps
+- [Authentication Guide](authentication.md) — OIDC and LOCAL mode configuration

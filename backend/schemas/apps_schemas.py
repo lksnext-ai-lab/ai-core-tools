@@ -2,10 +2,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Literal, Optional, Dict, Any
 from datetime import datetime
 
-# ==================== APP SCHEMAS ====================
-
 class AppUsageStatsSchema(BaseModel):
-    """Schema for app usage statistics"""
     usage_percentage: float
     stress_level: str  # "low", "moderate", "high", "critical", "unlimited"
     current_usage: int
@@ -18,10 +15,9 @@ class AppUsageStatsSchema(BaseModel):
 
 
 class AppListItemSchema(BaseModel):
-    """Schema for app list items"""
     app_id: int
     name: str
-    role: str  # "owner", "admin", "member"
+    role: str
     created_at: Optional[datetime] = None
     langsmith_configured: bool
     owner_id: int
@@ -31,13 +27,11 @@ class AppListItemSchema(BaseModel):
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
     enable_openai_api: bool = False
-    # Entity counts for table display
     agent_count: int = 0
     repository_count: int = 0
     domain_count: int = 0
     silo_count: int = 0
     collaborator_count: int = 0
-    # Usage statistics for speedometer
     usage_stats: Optional[AppUsageStatsSchema] = None
     is_frozen: bool = False
 
@@ -45,7 +39,6 @@ class AppListItemSchema(BaseModel):
 
 
 class AppDetailSchema(BaseModel):
-    """Schema for detailed app information"""
     app_id: int
     name: str
     langsmith_api_key: str
@@ -58,8 +51,6 @@ class AppDetailSchema(BaseModel):
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
     enable_openai_api: bool = False
-    # Entity counts for dashboard display
-     
     agent_count: int = 0
     repository_count: int = 0
     domain_count: int = 0
@@ -78,7 +69,6 @@ def _strip_if_string(v):
 
 
 class CreateAppSchema(BaseModel):
-    """Schema for creating a new app"""
     name: str
     langsmith_api_key: Optional[str] = ""
     agent_rate_limit: Optional[int] = 0
@@ -92,7 +82,6 @@ class CreateAppSchema(BaseModel):
 
 
 class UpdateAppSchema(BaseModel):
-    """Schema for updating an app"""
     name: str
     langsmith_api_key: Optional[str] = ""
     agent_rate_limit: Optional[int] = 0
@@ -129,10 +118,7 @@ class LangSmithTestResponseSchema(BaseModel):
     source: Optional[Literal["app", "env", "request"]] = None
 
 
-# ==================== COLLABORATION SCHEMAS ====================
-
 class CollaboratorListItemSchema(BaseModel):
-    """Schema for collaborator list items"""
     id: int
     user_id: int
     user_name: str
@@ -148,7 +134,6 @@ class CollaboratorListItemSchema(BaseModel):
 
 
 class CollaboratorDetailSchema(BaseModel):
-    """Schema for detailed collaborator information"""
     id: int
     app_id: int
     user_id: int
@@ -164,27 +149,47 @@ class CollaboratorDetailSchema(BaseModel):
 
 
 class InviteCollaboratorSchema(BaseModel):
-    """Schema for inviting a collaborator"""
     email: str
-    role: str = "editor"  # "admin", "editor", "viewer"
+    role: str = "editor"
 
 
 class UpdateCollaboratorRoleSchema(BaseModel):
-    """Schema for updating collaborator role"""
-    role: str  # "admin", "editor", "viewer"
+    role: str
 
 
 class InvitationResponseSchema(BaseModel):
-    """Schema for responding to collaboration invitations"""
     action: str  # "accept" or "decline"
 
 
 class CollaborationResponseSchema(BaseModel):
-    """Schema for collaboration response"""
     success: bool
     message: str
     collaborator: Optional[CollaboratorDetailSchema] = None
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OwnershipOfferRequest(BaseModel):
+    new_owner_id: int
+
+
+class OwnershipOfferResponse(BaseModel):
+    collaboration_id: int
+    app_id: int
+    new_owner_id: int
+    actor_user_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OwnershipAcceptResponse(BaseModel):
+    """Returned after the recipient accepts; previous_owner_id is now an ADMINISTRATOR collaborator."""
+
+    app_id: int
+    name: Optional[str] = None
+    new_owner_id: int
+    previous_owner_id: int
+
     model_config = ConfigDict(from_attributes=True)
 
 

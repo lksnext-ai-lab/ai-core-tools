@@ -1,5 +1,6 @@
 ---
 name: backend-engineer
+user-invocable: false
 description: Senior FastAPI/Python engineer for Mattin AI. Use to implement or modify routers, services, repositories, schemas, and backend business logic following the project's layered architecture. Does not run git.
 tools: [Read, Write, Edit, Glob, Grep, Bash, mcp__claude_ai_Context7__resolve-library-id, mcp__claude_ai_Context7__query-docs]
 model: sonnet

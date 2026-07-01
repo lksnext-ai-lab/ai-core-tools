@@ -54,7 +54,7 @@ The project aims to simplify the integration and use of AI technologies within L
 - [Client Project Setup](guides/client-setup.md) — Creating and customizing client frontends
 - [Plugin Development](guides/plugin-development.md) — Building plugins for client projects
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
-- [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
+- [Authentication Guide](guides/authentication.md) — OIDC (Entra ID) and LOCAL (admin-provisioned email+password) modes, cookie transport, provisioning workflow, and FAKE-mode migration
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
 - [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
 - [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent

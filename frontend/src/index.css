@@ -40,8 +40,8 @@
   transform: scale(0.97);
 }
 
-/* Login form — input focus glow */
-.input-login:focus {
+/* Login form — input focus glow (focus-visible: keyboard only, not mouse click) */
+.input-login:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent),
               0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent);

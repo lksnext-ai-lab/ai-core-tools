@@ -39,7 +39,7 @@ jobs:
             --cov-report=xml:coverage-unit.xml \
             --no-cov-on-fail
         env:
-          AICT_LOGIN: FAKE
+          AICT_LOGIN: LOCAL
           SQLALCHEMY_DATABASE_URI: postgresql://test_user:test_pass@localhost:5433/test_db
           SECRET_KEY: ci-test-secret-key-32chars-minimum
           AICT_OMNIADMINS: admin@test.com
@@ -113,7 +113,7 @@ jobs:
             --cov-report=xml:coverage-integration.xml \
             --no-cov-on-fail
         env:
-          AICT_LOGIN: FAKE
+          AICT_LOGIN: LOCAL
           SQLALCHEMY_DATABASE_URI: postgresql://test_user:test_pass@localhost:5433/test_db
           SECRET_KEY: ci-test-secret-key-32chars-minimum
           AICT_OMNIADMINS: admin@test.com

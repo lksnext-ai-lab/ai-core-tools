@@ -13,6 +13,8 @@ interface ActionDropdownProps {
   actions: ActionItem[];
   triggerText?: string;
   triggerIcon?: React.ReactNode;
+  /** Accessible label for the trigger button (required when the button has no visible text). */
+  triggerAriaLabel?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   position?: { x: number; y: number } | null;
@@ -24,6 +26,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   actions,
   triggerText = 'Actions',
   triggerIcon = <MoreVertical className="w-4 h-4" />,
+  triggerAriaLabel,
   className = '',
   size = 'md',
   position = null,
@@ -33,6 +36,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
@@ -60,16 +64,25 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
       }
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        event.stopPropagation();
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('scroll', handleScroll, true);
-    
+    document.addEventListener('keydown', handleKeyDown);
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [setIsOpen, isOpen]);
 
-  // Calculate dropdown position to avoid going off-screen for regular dropdown
   const calculateRegularDropdownStyle = () => {
     if (!menuRef.current || !dropdownRef.current) {
       return {};
@@ -79,41 +92,32 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     const menuRect = menuRef.current.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
     
-    // Check if dropdown would go below viewport
     const spaceBelow = viewportHeight - triggerRect.bottom;
     const spaceAbove = triggerRect.top;
-    const dropdownHeight = menuRect.height || 200; // Estimate if not available
+    const dropdownHeight = menuRect.height || 200; // Estimate when not yet measured
 
-    // Check if this is likely the last row by looking at the table structure
     const tableRow = dropdownRef.current.closest('tr');
     const tableBody = dropdownRef.current.closest('tbody');
     const isLastRow = tableRow !== null && tableRow === tableBody?.lastElementChild;
 
-    // Use fixed positioning to avoid being clipped by overflow containers
+    // Fixed positioning escapes overflow:hidden/scroll ancestors.
     const style: React.CSSProperties = {
       position: 'fixed',
       zIndex: 9999,
     };
 
-    // If it's the last row or not enough space below, position above
     if (isLastRow || (spaceBelow < dropdownHeight && spaceAbove > spaceBelow)) {
-      // Position above the button
-      style.top = `${triggerRect.top - dropdownHeight - 8}px`;
+      style.top = `${triggerRect.top - dropdownHeight - 8}px`; // Position above
     } else {
-      // Position below the button
-      style.top = `${triggerRect.bottom + 8}px`;
+      style.top = `${triggerRect.bottom + 8}px`; // Position below
     }
 
-    // Check horizontal position
-    const dropdownWidth = 192; // w-48 in pixels
-    
-    // Align to the right edge of the trigger
-    style.left = `${triggerRect.right - dropdownWidth}px`;
+    const dropdownWidth = 192; // w-48
+    style.left = `${triggerRect.right - dropdownWidth}px`; // Align to trigger right edge
 
     return style;
   };
 
-  // Calculate dropdown position to avoid going off-screen
   const calculateDropdownStyle = () => {
     if (!position || !menuRef.current) {
       return {};
@@ -126,12 +130,10 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
     let left = position.x;
     let top = position.y;
 
-    // Adjust horizontal position if dropdown would go off-screen
     if (left + menuRect.width > viewportWidth) {
       left = viewportWidth - menuRect.width - 10;
     }
 
-    // Adjust vertical position if dropdown would go off-screen
     if (top + menuRect.height > viewportHeight) {
       top = position.y - menuRect.height;
     }
@@ -175,7 +177,6 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   const handleActionClick = (action: ActionItem) => {
     if (!action.disabled) {
       setIsOpen(false);
-      // Use setTimeout to ensure the dropdown closes before executing the action
       setTimeout(() => {
         action.onClick();
       }, 0);
@@ -200,10 +201,13 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
-      {/* Trigger Button - only show if no external position */}
       {!position && (
         <button
+          ref={triggerRef}
           onClick={handleTriggerClick}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-label={triggerAriaLabel}
           className={`inline-flex items-center justify-center rounded-md border border-gray-300 bg-white ${getSizeStyles()} font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
         >
           {triggerIcon && <span className="mr-1">{triggerIcon}</span>}
@@ -222,7 +226,6 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
         </button>
       )}
 
-      {/* Dropdown Menu */}
       {isOpen && (
         <div 
           ref={menuRef}

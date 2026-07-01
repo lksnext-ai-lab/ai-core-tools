@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, select
 from models.app_collaborator import AppCollaborator, CollaborationStatus, CollaborationRole
 from models.app import App
 from models.user import User
@@ -15,11 +15,9 @@ class AppCollaborationRepository:
         self.db = db
     
     def get_user_accessible_apps(self, user_id: int) -> List[App]:
-        """Get all apps that a user can access (owned + collaborated)"""
-        # Get owned apps with owner relationship loaded
+        """Return all apps a user can access: owned + accepted collaborations."""
         owned_apps = self.db.query(App).options(joinedload(App.owner)).filter(App.owner_id == user_id).all()
-        
-        # Get collaborated apps (accepted collaborations only) with owner relationship loaded
+
         collaborations = self.db.query(AppCollaborator).options(
             joinedload(AppCollaborator.app).joinedload(App.owner)
         ).filter(
@@ -28,8 +26,7 @@ class AppCollaborationRepository:
         ).all()
         
         collaborated_apps = [collab.app for collab in collaborations if collab.app]
-        
-        # Combine, remove duplicates and sort by creation date (handling None values)
+
         return sorted(
             {app.app_id: app for app in owned_apps + collaborated_apps}.values(),
             key=lambda x: x.create_date or datetime.min,
@@ -45,8 +42,7 @@ class AppCollaborationRepository:
         return app is not None
     
     def can_user_manage_collaborators(self, user_id: int, app_id: int) -> bool:
-        """Check if user can manage collaborators (owner only)"""
-        # Only the owner can manage collaborators
+        """Check if user can manage collaborators (owner only)."""
         app = self.db.query(App).filter(
             App.app_id == app_id,
             App.owner_id == user_id
@@ -55,17 +51,15 @@ class AppCollaborationRepository:
         return app is not None
     
     def can_user_administer_app(self, user_id: int, app_id: int) -> bool:
-        """Check if user can administer an app (owner or administrator)"""
-        # Check if user is owner
+        """Check if user can administer an app (owner or administrator collaborator)."""
         app = self.db.query(App).filter(
             App.app_id == app_id,
             App.owner_id == user_id
         ).first()
-        
+
         if app:
             return True
-        
-        # Check if user is an administrator collaborator
+
         collaboration = self.db.query(AppCollaborator).filter(
             AppCollaborator.app_id == app_id,
             AppCollaborator.user_id == user_id,
@@ -76,17 +70,15 @@ class AppCollaborationRepository:
         return collaboration is not None
     
     def can_user_access_app(self, user_id: int, app_id: int) -> bool:
-        """Check if user can access an app (owner or accepted collaborator)"""
-        # Check if user is owner
+        """Check if user can access an app (owner or accepted collaborator)."""
         app = self.db.query(App).filter(
             App.app_id == app_id,
             App.owner_id == user_id
         ).first()
-        
+
         if app:
             return True
-        
-        # Check if user is accepted collaborator
+
         collaboration = self.db.query(AppCollaborator).filter(
             AppCollaborator.app_id == app_id,
             AppCollaborator.user_id == user_id,
@@ -96,16 +88,13 @@ class AppCollaborationRepository:
         return collaboration is not None
     
     def get_user_app_role(self, user_id: int, app_id: int) -> Optional[str]:
-        """Get the role of a user in an app"""
         if not user_id or user_id <= 0 or not app_id or app_id <= 0:
             return None
-        
-        # Check if user is the owner
+
         app = self.db.query(App).filter(App.app_id == app_id).first()
         if app and app.owner_id == user_id:
             return "owner"
-        
-        # Check if user is a collaborator
+
         collaboration = self.db.query(AppCollaborator).filter(
             and_(
                 AppCollaborator.app_id == app_id,
@@ -181,3 +170,11 @@ class AppCollaborationRepository:
     def get_collaborations_by_app(self, app_id: int) -> List[AppCollaborator]:
         """Get all collaborations for an app (for deletion)"""
         return self.db.query(AppCollaborator).filter(AppCollaborator.app_id == app_id).all()
+
+    def get_collaborations_by_user(self, user_id: int) -> List[AppCollaborator]:
+        """Return all AppCollaborator membership rows for a user (excludes invited_by-only rows, which are nulled by DB ON DELETE SET NULL)."""
+        return list(
+            self.db.execute(
+                select(AppCollaborator).where(AppCollaborator.user_id == user_id)
+            ).scalars().all()
+        )
