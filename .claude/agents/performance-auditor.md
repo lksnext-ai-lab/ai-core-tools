@@ -1,5 +1,6 @@
 ---
 name: performance-auditor
+user-invocable: false
 description: Performance auditor for Mattin AI. Use proactively on data-access, async, and frontend-render changes. Finds N+1 queries, event-loop blocking, missing indexes, and render/bundle issues. Read-only.
 tools: [Read, Glob, Grep, Bash]
 model: sonnet

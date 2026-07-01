@@ -31,12 +31,13 @@ export const CapabilitiesProvider: React.FC<CapabilitiesProviderProps> = ({ chil
   useEffect(() => {
     const fetchCapabilities = async () => {
       try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-          setIsLoading(false);
-          return;
-        }
-        const data: Capabilities = await apiService.request('/internal/capabilities');
+        // suppressAuthRedirect prevents 401 from triggering the global refresh/redirect loop.
+        const data = await apiService.request(
+          '/internal/capabilities',
+          {},
+          false,
+          { suppressAuthRedirect: true },
+        ) as Capabilities;
         setCapabilities(data);
       } catch {
         // Leave capabilities empty — feature gating defaults to hidden

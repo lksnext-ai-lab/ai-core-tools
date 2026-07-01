@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
+
+from middleware.csrf import enforce_csrf
 from .auth_utils import require_editor_for_writes
 
-# Import internal routers
-# Note: Most routers are imported by apps router for /internal/apps/{app_id}/... structure
 from .apps import apps_router
 from .collaboration import collaboration_router
 from .admin import router as admin_router
@@ -16,12 +16,9 @@ from .config import router as config_router
 from .platform_chatbot import platform_chatbot_router
 from .capabilities import router as capabilities_router
 
-# Create the main internal router
-internal_router = APIRouter()
+# CSRF double-submit is internal-only; public/v1 and mcp/v1 use API-key auth.
+internal_router = APIRouter(dependencies=[Depends(enforce_csrf)])
 
-# Include sub-routers based on frontend expectations
-# Most routes are nested under apps: /internal/apps/{app_id}/...
-# Exceptions: collaboration, admin, version, apps_usage, conversations, auth, user (standalone)
 internal_router.include_router(
     apps_router,
     prefix="/apps",
@@ -43,10 +40,24 @@ internal_router.include_router(config_router)
 internal_router.include_router(platform_chatbot_router, prefix="/platform-chatbot")
 internal_router.include_router(capabilities_router)
 
-# SaaS-specific routers (conditionally registered based on deployment mode)
 from deployment_mode import is_saas_mode
 if is_saas_mode():
     from .saas_auth import router as saas_auth_router
     from .subscription import router as subscription_router
     internal_router.include_router(saas_auth_router, prefix="/auth")
     internal_router.include_router(subscription_router)
+
+from utils.auth_config import AuthConfig
+
+# Startup guard: LOCAL+SaaS is an unsupported combination.
+if is_saas_mode() and AuthConfig.LOGIN_MODE == "LOCAL":
+    raise RuntimeError(
+        "Unsupported configuration: AICT_DEPLOYMENT_MODE=saas and AICT_LOGIN=LOCAL "
+        "cannot be used together.  LOCAL auth is the self-hosted path; SaaS mode "
+        "requires OIDC or the built-in SaaS auth flow.  "
+        "Set AICT_LOGIN=OIDC or AICT_DEPLOYMENT_MODE=self_managed."
+    )
+
+if AuthConfig.LOGIN_MODE == "LOCAL":
+    from .local_auth import router as local_auth_router
+    internal_router.include_router(local_auth_router, prefix="/auth")

@@ -27,6 +27,7 @@ from tools.ai.model_catalog import (
     PROVIDER_MISTRAL,
     PROVIDER_OLLAMA,
     PROVIDER_OPENAI,
+    PROVIDER_OPENROUTER,
     enrich,
 )
 from tools.aiServiceTools import build_ollama_auth_headers
@@ -463,4 +464,83 @@ def list_ollama_models(req: ListProviderModelsRequest) -> List[ProviderModelInfo
             source="api",
         )
         models.append(enrich(PROVIDER_OLLAMA, model_id, base=base))
+    return models
+
+
+# ==================== OPENROUTER ====================
+
+_OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+
+def list_openrouter_models(req: ListProviderModelsRequest) -> List[ProviderModelInfo]:
+    """List models available through OpenRouter.
+
+    Uses the public ``/api/v1/models`` endpoint. The API key is optional
+    for listing — the models endpoint is public, but passing a key
+    increases rate limits.
+    """
+    headers: dict[str, str] = {}
+    if req.api_key:
+        headers["Authorization"] = f"Bearer {req.api_key}"
+
+    try:
+        response = httpx.get(
+            _OPENROUTER_MODELS_URL,
+            headers=headers,
+            timeout=_DEFAULT_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except httpx.TimeoutException:
+        raise ProviderListingError(
+            "timeout", "OpenRouter models listing timed out."
+        )
+    except httpx.HTTPStatusError as exc:
+        code = _classify_by_status(exc.response.status_code)
+        sanitized = _sanitize(str(exc), req.api_key or "")
+        logger.warning("OpenRouter list failed (code=%s): %s", code, sanitized)
+        raise ProviderListingError(
+            code, f"OpenRouter listing failed: {exc.response.status_code}"
+        )
+    except httpx.RequestError as exc:
+        sanitized = _sanitize(str(exc), req.api_key or "")
+        raise ProviderListingError("network", sanitized or "OpenRouter request failed")
+
+    models: List[ProviderModelInfo] = []
+    for raw in payload.get("data", []) or []:
+        model_id = raw.get("id")
+        if not model_id:
+            continue
+
+        name = raw.get("name") or model_id
+        created = raw.get("created")
+        context_window = raw.get("context_length")
+        description = raw.get("description")
+
+        # Build capabilities from architecture + supported_parameters
+        arch = raw.get("architecture") or {}
+        input_modalities = arch.get("input_modalities", [])
+        supported_params = set(raw.get("supported_parameters", []) or [])
+
+        caps = ProviderCapabilities(
+            chat=("text" in arch.get("output_modalities", ["text"])),
+            vision=("image" in input_modalities),
+            function_calling=("tools" in supported_params),
+            tool_use=("tools" in supported_params),
+            reasoning=("reasoning" in supported_params),
+            json_mode=("structured_outputs" in supported_params
+                       or "response_format" in supported_params),
+        )
+
+        base = ProviderModelInfo(
+            id=model_id,
+            display_name=name,
+            context_window=context_window,
+            capabilities=caps,
+            created_at=int(created) if isinstance(created, (int, float)) else None,
+            source="api",
+        )
+        # The heuristic enriches what the API didn't determine
+        models.append(enrich(PROVIDER_OPENROUTER, model_id, base=base))
+
     return models

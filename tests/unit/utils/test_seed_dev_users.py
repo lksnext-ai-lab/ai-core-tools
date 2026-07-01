@@ -22,7 +22,18 @@ class TestParseUsersSpec:
 
     def test_single_email_with_name(self):
         assert _parse_users_spec("a@x.com:Ana") == [
-            {"email": "a@x.com", "name": "Ana", "description": "Seeded dev user"}
+            {"email": "a@x.com", "name": "Ana", "description": "Seeded dev user", "password": None}
+        ]
+
+    def test_email_with_password(self):
+        assert _parse_users_spec("a@x.com:Ana:pw") == [
+            {"email": "a@x.com", "name": "Ana", "description": "Seeded dev user", "password": "pw"}
+        ]
+
+    def test_email_with_empty_password_treated_as_none(self):
+        result = _parse_users_spec("a@x.com:Ana:")
+        assert result == [
+            {"email": "a@x.com", "name": "Ana", "description": "Seeded dev user", "password": None}
         ]
 
     def test_email_without_name_falls_back_to_local_part(self):
@@ -38,6 +49,15 @@ class TestParseUsersSpec:
     def test_name_with_spaces_is_preserved(self):
         result = _parse_users_spec("a@x.com:Ana Maria")
         assert result[0]["name"] == "Ana Maria"
+
+    def test_email_is_normalised_to_lowercase(self):
+        """Finding A fix: seeded emails must be canonical lowercase to match login normalisation."""
+        result = _parse_users_spec("Bob@Acme.COM:Bob")
+        assert result[0]["email"] == "bob@acme.com"
+
+    def test_email_whitespace_and_case_normalised(self):
+        result = _parse_users_spec("  Admin@Example.ORG:Admin  ")
+        assert result[0]["email"] == "admin@example.org"
 
     def test_blank_entries_are_skipped(self):
         result = _parse_users_spec("a@x.com:Ana,,b@x.com:Bob,")
@@ -77,12 +97,12 @@ class TestLoginModeGuard:
         assert current_login_mode() == "OIDC"
         assert is_seedable_mode() is False
 
-    @pytest.mark.parametrize("value", ["FAKE", "fake", " local ", "LOCAL"])
+    @pytest.mark.parametrize("value", [" local ", "LOCAL"])
     def test_seedable_modes(self, monkeypatch, value):
         monkeypatch.setenv("AICT_LOGIN", value)
         assert is_seedable_mode() is True
 
-    @pytest.mark.parametrize("value", ["OIDC", "oidc", "bogus"])
+    @pytest.mark.parametrize("value", ["FAKE", "fake", "OIDC", "oidc", "bogus"])
     def test_non_seedable_modes(self, monkeypatch, value):
         monkeypatch.setenv("AICT_LOGIN", value)
         assert is_seedable_mode() is False

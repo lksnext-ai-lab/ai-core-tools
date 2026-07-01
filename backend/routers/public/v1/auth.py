@@ -133,7 +133,12 @@ def validate_api_key_for_app(app_id: int, api_key: str, db: Session = None) -> A
         session.close()
 
 
-def create_api_key_user_context(app_id: int, api_key: str, conversation_id: str = None) -> dict:
+def create_api_key_user_context(
+    app_id: int,
+    api_key: str,
+    conversation_id: str = None,
+    user_token: str = None,
+) -> dict:
     """
     Create user context for API key authentication.
     Uses a hash of the API key as user identifier to maintain session isolation.
@@ -142,6 +147,9 @@ def create_api_key_user_context(app_id: int, api_key: str, conversation_id: str 
         app_id: Application ID
         api_key: API key for authentication
         conversation_id: Optional conversation ID
+        user_token: Optional end-user JWT to forward to MCP servers. When set,
+                    MCPClientManager will inject it as ``Authorization: Bearer``
+                    on every MCP tool call made during this agent execution.
     """
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
     context = {
@@ -152,6 +160,8 @@ def create_api_key_user_context(app_id: int, api_key: str, conversation_id: str 
     }
     if conversation_id is not None:
         context["conversation_id"] = conversation_id
+    if user_token:
+        context["token"] = user_token
     return context
 
 

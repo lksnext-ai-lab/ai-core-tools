@@ -90,7 +90,7 @@ Example: testing that `RateLimitService` blocks after N requests is a unit test 
 
 These test **the full chain**: HTTP request → router → service → real database → response. They use a real PostgreSQL database but all data is rolled back after each test (so nothing persists).
 
-Example: testing that `POST /internal/auth/dev-login` returns a token is an integration test — it needs to actually look up a user in the DB.
+Example: testing that `POST /internal/auth/login` returns session cookies is an integration test — it needs to look up credentials and write a refresh token row in the DB.
 
 **Pros:** Catches bugs that unit tests miss (wrong SQL, missing foreign keys, auth issues).
 

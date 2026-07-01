@@ -56,7 +56,6 @@ SSE_DONE: str = "done"
 # When i18n support is added, map the keys to the appropriate locale string
 # instead of replacing this dict.
 _THINKING_MESSAGES: dict[str, str] = {
-    "get_current_date":         "Getting current date...",
     "python_repl":              "Running code...",
     "code_interpreter":         "Running code...",
     "web_search":               "Searching the web...",

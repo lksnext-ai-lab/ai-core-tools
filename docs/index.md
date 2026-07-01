@@ -44,13 +44,14 @@
 - [Client Project Setup](guides/client-setup.md) — Creating and customizing client frontends
 - [Plugin Development](guides/plugin-development.md) — Building plugins for client projects
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
-- [Authentication Guide](guides/authentication.md) — OIDC, Entra ID, FAKE mode, and session auth
+- [Authentication Guide](guides/authentication.md) — OIDC (Entra ID) and LOCAL (admin-provisioned email+password) modes, cookie transport, provisioning workflow, and FAKE-mode migration
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace
 - [Agent Marketplace](guides/marketplace.md) — Publish agents to the platform-wide marketplace, manage profiles, ratings, and quotas
 - [SaaS Mode](guides/saas-mode.md) — SaaS deployment: Stripe billing, subscription tiers, quota enforcement, and `system_defaults.yaml` configuration
 - [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent
 - [Git Workflow & Release Process](guides/git-workflow.md) — GitFlow branching model, release workflow, hotfix process, versioning convention, and commit rules
 - [SharePoint Sync](guides/sharepoint-sync.md) — Index SharePoint and OneDrive drives into silos via Microsoft Graph delta queries; Azure setup, sync behaviour, and EE plugin install/uninstall
+- [User Deletion and App Ownership Transfer](guides/user-deletion-and-app-transfer.md) — Safe user deletion (deletion taxonomy, cascade and transfer modes), admin-direct and voluntary app ownership transfer, migration `userdel001`, and operator runbook
 
 ### Copilot Agents & Tooling
 - [Copilot Agents, Skills & Instructions](guides/copilot-agents.md) — Multi-agent Copilot architecture, agent directory, skills, auto-applied instructions, and delegation graph

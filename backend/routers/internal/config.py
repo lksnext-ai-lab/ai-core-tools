@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from deployment_mode import is_saas_mode
 from repositories.tier_config_repository import TierConfigRepository
+from utils.auth_config import AuthConfig
 
 router = APIRouter(tags=["config"])
 
@@ -25,11 +26,13 @@ async def get_config(db: Session = Depends(get_db)):
     """Return runtime configuration values for the frontend.
 
     Currently exposes deployment_mode so the frontend can conditionally
-    show SaaS-specific UI (billing pages, registration, quota banner, etc.).
+    show SaaS-specific UI (billing pages, registration, quota banner, etc.),
+    and auth_mode so it can render the right login (OIDC vs local password).
     In SaaS mode also returns per-tier resource limits fetched from TierConfigRepository.
     """
     saas = is_saas_mode()
     return {
         "deployment_mode": "saas" if saas else "self_managed",
+        "auth_mode": AuthConfig.LOGIN_MODE.lower(),
         "tiers": _build_tiers(db) if saas else None,
     }

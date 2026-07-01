@@ -29,6 +29,7 @@ from tools.ai.model_catalog import (
     PROVIDER_MISTRAL,
     PROVIDER_OLLAMA,
     PROVIDER_OPENAI,
+    PROVIDER_OPENROUTER,
     drop_dated_snapshots_when_alias_exists,
     is_chat_model,
     is_embedding_model,
@@ -48,6 +49,7 @@ _DISPATCH: Dict[str, str] = {
     PROVIDER_MISTRAL: "list_mistral_models",
     PROVIDER_GOOGLE: "list_google_models",
     PROVIDER_OLLAMA: "list_ollama_models",
+    PROVIDER_OPENROUTER: "list_openrouter_models",
     # Custom is handled in-line: the AI Service runtime is ChatOllama, so
     # listing reuses the Ollama tags endpoint. Embeddings under Custom
     # use HuggingFace Inference which has no generic listing — those go
@@ -134,7 +136,7 @@ class ProviderModelsService:
         without an API key when the server has auth disabled, so the
         check is skipped for those providers.
         """
-        if req.provider in (PROVIDER_OLLAMA, PROVIDER_CUSTOM):
+        if req.provider in (PROVIDER_OLLAMA, PROVIDER_CUSTOM, PROVIDER_OPENROUTER):
             return
 
         api_key = req.api_key or ""

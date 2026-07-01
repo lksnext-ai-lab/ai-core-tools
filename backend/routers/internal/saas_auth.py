@@ -4,7 +4,7 @@ These routes are conditionally registered only when AICT_DEPLOYMENT_MODE=saas.
 NOTE: Rate limiting on these endpoints is not yet implemented and should be added
 before production use to prevent brute-force and enumeration attacks.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db.database import get_db
 from schemas.saas_auth_schemas import (
@@ -15,7 +15,7 @@ from schemas.saas_auth_schemas import (
     PasswordResetComplete,
 )
 from services.local_auth_service import LocalAuthService
-from utils.dev_auth import generate_local_auth_token
+from utils.local_auth_tokens import generate_local_auth_token
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +49,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Log in with email and password. Returns a session token."""
     user = LocalAuthService.login(db, email=request.email, password=request.password)
 
-    token_data = generate_local_auth_token(user.email, name=user.name)
+    token_data = generate_local_auth_token(user.user_id, user.email, name=user.name)
     return {
         "access_token": token_data["access_token"],
         "token_type": token_data["token_type"],

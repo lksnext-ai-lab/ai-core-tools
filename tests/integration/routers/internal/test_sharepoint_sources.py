@@ -130,12 +130,14 @@ def mock_silo_service():
 
 
 @pytest.fixture
-def editor_headers(db, client, fake_app, fake_user):
+def editor_headers(db, fake_app, fake_user):
     """Auth headers for a separate user with EDITOR role on fake_app.
 
     Uses a distinct user (not fake_user / app owner) so that RBAC correctly
     resolves the role as EDITOR rather than falling through to OWNER.
     """
+    from utils.local_auth_tokens import mint_access_token
+
     configure_factories(db)
     editor_user = UserFactory(email="editor-sp@mattin-test.com", name="SP Editor User")
     collab = AppCollaborator(
@@ -149,23 +151,19 @@ def editor_headers(db, client, fake_app, fake_user):
     )
     db.add(collab)
     db.flush()
-
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": editor_user.email},
-    )
-    assert response.status_code == 200, response.text
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(editor_user.user_id, editor_user.email, editor_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
-def viewer_headers(db, client, fake_app, fake_user):
+def viewer_headers(db, fake_app, fake_user):
     """Auth headers for a separate user with VIEWER role on fake_app.
 
     Uses a distinct user (not fake_user / app owner) so that RBAC correctly
     resolves the role as VIEWER rather than falling through to OWNER.
     """
+    from utils.local_auth_tokens import mint_access_token
+
     configure_factories(db)
     viewer_user = UserFactory(email="viewer-sp@mattin-test.com", name="SP Viewer User")
     collab = AppCollaborator(
@@ -179,13 +177,7 @@ def viewer_headers(db, client, fake_app, fake_user):
     )
     db.add(collab)
     db.flush()
-
-    response = client.post(
-        "/internal/auth/dev-login",
-        json={"email": viewer_user.email},
-    )
-    assert response.status_code == 200, response.text
-    token = response.json()["access_token"]
+    token, _ = mint_access_token(viewer_user.user_id, viewer_user.email, viewer_user.name)
     return {"Authorization": f"Bearer {token}"}
 
 

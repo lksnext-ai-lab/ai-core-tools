@@ -177,14 +177,12 @@ class TestGetApp:
         db.flush()
 
         from tests.factories import UserFactory
+        from utils.local_auth_tokens import mint_access_token
 
         another_user = UserFactory()
         db.flush()
-        # Log in as another_user via dev-login to get valid auth headers
-        login_resp = client.post(
-            "/internal/auth/dev-login", json={"email": another_user.email}
-        )
-        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+        token, _ = mint_access_token(another_user.user_id, another_user.email, another_user.name)
+        headers = {"Authorization": f"Bearer {token}"}
 
         response = client.get(f"/internal/apps/{other_app.app_id}", headers=headers)
         assert response.status_code == 403

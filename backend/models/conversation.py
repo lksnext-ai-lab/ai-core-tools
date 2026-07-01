@@ -13,44 +13,26 @@ class ConversationSource(enum.Enum):
 
 
 class Conversation(Base):
-    """
-    Model for tracking user conversations with agents.
-    
-    Each conversation represents an independent chat session between a user and an agent.
-    The conversation history is stored in PostgreSQL via LangGraph's checkpointer,
-    using thread_id = f"thread_{agent_id}_{session_id}"
-    where session_id = f"conv_{agent_id}_{conversation_id}"
-    """
+    """Chat session. History lives in LangGraph's checkpointer under thread_id = f"thread_{agent_id}_{session_id}"."""
     __tablename__ = "Conversation"
-    
-    # Primary key
+
     conversation_id = Column(Integer, primary_key=True, autoincrement=True)
-    
-    # Foreign keys
     agent_id = Column(Integer, ForeignKey('Agent.agent_id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('User.user_id'), nullable=True)  # Null for API key users
-    
-    # Conversation metadata
-    title = Column(String(255), nullable=True)  # User-defined or auto-generated title
-    session_id = Column(String(255), nullable=False, unique=True)  # Format: conv_{agent_id}_{uuid}
-    
-    # Tracking fields
+    user_id = Column(Integer, ForeignKey('User.user_id', ondelete='SET NULL'), nullable=True)
+    title = Column(String(255), nullable=True)
+    session_id = Column(String(255), nullable=False, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    last_message = Column(Text, nullable=True)  # Preview of last message
-    message_count = Column(Integer, default=0, nullable=False)  # Number of messages in conversation
-    
-    # User context (for API key users who don't have user_id)
-    api_key_hash = Column(String(64), nullable=True)  # MD5 hash of API key for tracking
+    last_message = Column(Text, nullable=True)
+    message_count = Column(Integer, default=0, nullable=False)
+    api_key_hash = Column(String(64), nullable=True)  # MD5 hash of the API key; user_id is null for API-key requests
 
-    # Source of conversation: playground, marketplace, or api
     source = Column(
         Enum(ConversationSource),
         nullable=False,
         default=ConversationSource.PLAYGROUND
     )
 
-    # Relationships
     agent = relationship("Agent", backref="conversations")
     user = relationship("User", backref="conversations", foreign_keys=[user_id])
     
@@ -58,7 +40,6 @@ class Conversation(Base):
         return f"<Conversation {self.conversation_id}: Agent={self.agent_id}, User={self.user_id}, Title='{self.title}'>"
     
     def to_dict(self):
-        """Convert conversation to dictionary"""
         return {
             "conversation_id": self.conversation_id,
             "agent_id": self.agent_id,

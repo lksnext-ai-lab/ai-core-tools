@@ -263,13 +263,16 @@ def test_repository_create_was_called(mocker):
 ```python
 import pytest
 
-@pytest.mark.parametrize("email,expected_status", [
-    ("valid@example.com", 200),
-    ("not-an-email", 422),
-    ("", 422),
+@pytest.mark.parametrize("email,password,expected_status", [
+    ("valid@example.com", "CorrectPass1!", 200),
+    ("not-an-email", "CorrectPass1!", 422),
+    ("valid@example.com", "", 422),
 ])
-def test_login_validates_email(client, email, expected_status):
-    response = client.post("/internal/auth/dev-login", json={"email": email})
+def test_login_validates_input(client, email, password, expected_status):
+    response = client.post(
+        "/internal/auth/login",
+        json={"email": email, "password": password},
+    )
     assert response.status_code == expected_status
 ```
 

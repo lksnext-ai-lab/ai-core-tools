@@ -1,5 +1,6 @@
 ---
 name: code-reviewer
+user-invocable: false
 description: Senior code reviewer for Mattin AI. Use proactively after any code change to review correctness, readability, reuse, simplification, and error handling. Read-only — reports findings, never edits.
 tools: [Read, Glob, Grep, Bash]
 model: sonnet

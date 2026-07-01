@@ -532,3 +532,122 @@ class TestOllamaAdapter:
             req = ListProviderModelsRequest(provider="Ollama", api_key="")
             result = ProviderModelsService.list_models(req)
         assert result.models == []
+
+
+# ==================== OPENROUTER ====================
+
+
+class TestOpenRouterAdapter:
+    """OpenRouter model listing and service-level dispatch."""
+
+    _OPENROUTER_RAW = [
+        {
+            "id": "openai/gpt-4o",
+            "name": "OpenAI: GPT-4o",
+            "created": 1715367049,
+            "context_length": 128000,
+            "architecture": {
+                "input_modalities": ["text", "image"],
+                "output_modalities": ["text"],
+            },
+            "supported_parameters": ["tools", "max_tokens", "temperature"],
+        },
+        {
+            "id": "anthropic/claude-sonnet-4-20250514",
+            "name": "Anthropic: Claude Sonnet 4",
+            "created": 1747000000,
+            "context_length": 200000,
+            "architecture": {
+                "input_modalities": ["text", "image"],
+                "output_modalities": ["text"],
+            },
+            "supported_parameters": ["tools", "max_tokens", "temperature", "reasoning"],
+        },
+        {
+            "id": "deepseek/deepseek-r1",
+            "name": "DeepSeek: R1",
+            "created": 1738000000,
+            "context_length": 128000,
+            "architecture": {
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
+            },
+            "supported_parameters": ["tools", "reasoning"],
+        },
+    ]
+
+    def test_openrouter_allows_empty_api_key(self):
+        """OpenRouter models listing is public — no API key required."""
+        with patch("httpx.get") as mock_get:
+            mock_get.return_value.raise_for_status = lambda: None
+            mock_get.return_value.json.return_value = {
+                "data": self._OPENROUTER_RAW,
+            }
+            req = ListProviderModelsRequest(provider="OpenRouter", api_key="")
+            result = ProviderModelsService.list_models(req)
+        assert len(result.models) == 3
+        assert result.requires_manual_input is False
+
+    def test_maps_capabilities_from_architecture(self):
+        with patch("httpx.get") as mock_get:
+            mock_get.return_value.raise_for_status = lambda: None
+            mock_get.return_value.json.return_value = {
+                "data": self._OPENROUTER_RAW,
+            }
+            req = ListProviderModelsRequest(provider="OpenRouter", api_key="")
+            result = ProviderModelsService.list_models(req)
+
+        gpt4o = next(m for m in result.models if m.id == "openai/gpt-4o")
+        assert gpt4o.capabilities.vision is True
+        assert gpt4o.capabilities.chat is True
+        assert gpt4o.capabilities.function_calling is True
+        assert gpt4o.capabilities.tool_use is True
+
+    def test_reasoning_flag_from_supported_parameters(self):
+        with patch("httpx.get") as mock_get:
+            mock_get.return_value.raise_for_status = lambda: None
+            mock_get.return_value.json.return_value = {
+                "data": self._OPENROUTER_RAW,
+            }
+            req = ListProviderModelsRequest(provider="OpenRouter", api_key="")
+            result = ProviderModelsService.list_models(req)
+
+        claude = next(
+            m for m in result.models
+            if m.id == "anthropic/claude-sonnet-4-20250514"
+        )
+        assert claude.capabilities.reasoning is True
+
+    def test_handles_timeout(self):
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = __import__("httpx").TimeoutException("timed out")
+            req = ListProviderModelsRequest(provider="OpenRouter", api_key="")
+            with pytest.raises(ProviderListingError) as exc:
+                ProviderModelsService.list_models(req)
+            assert exc.value.code == "timeout"
+
+    def test_chat_filter_includes_openrouter_models(self):
+        with patch("httpx.get") as mock_get:
+            mock_get.return_value.raise_for_status = lambda: None
+            mock_get.return_value.json.return_value = {
+                "data": self._OPENROUTER_RAW,
+            }
+            req = ListProviderModelsRequest(
+                provider="OpenRouter", api_key="", purpose="chat"
+            )
+            result = ProviderModelsService.list_models(req)
+        assert len(result.models) == 3
+        assert all(m.capabilities.chat for m in result.models)
+
+    def test_embedding_filter_excludes_openrouter_models(self):
+        """OpenRouter only offers chat models, never embeddings."""
+        with patch("httpx.get") as mock_get:
+            mock_get.return_value.raise_for_status = lambda: None
+            mock_get.return_value.json.return_value = {
+                "data": self._OPENROUTER_RAW,
+            }
+            req = ListProviderModelsRequest(
+                provider="OpenRouter", api_key="", purpose="embedding"
+            )
+            result = ProviderModelsService.list_models(req)
+        assert result.models == []

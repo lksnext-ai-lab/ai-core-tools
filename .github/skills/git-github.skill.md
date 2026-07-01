@@ -5,7 +5,7 @@ description: Comprehensive git and GitHub CLI procedures for the Mattin AI proje
 
 # Git & GitHub Skill
 
-Shared procedures for all git and GitHub CLI operations in the Mattin AI project. Follow these step-by-step recipes for each operation type. Project-specific rules (signing, remotes, naming conventions) are enforced via `.github/instructions/git-github.instructions.md`.
+Shared procedures for all git and GitHub CLI operations in the Mattin AI project. Follow these step-by-step recipes for each operation type. Project-specific rules (remotes, naming conventions) are enforced via `.github/instructions/git-github.instructions.md`.
 
 ---
 
@@ -45,17 +45,17 @@ git add <file1> <file2> ...
 git diff --staged
 ```
 
-### Commit (GPG-signed, Conventional Commits)
+### Commit (Conventional Commits)
 
 ```bash
-git commit -S -m "type(scope): description"
-git log --show-signature -1   # verify signature
+git commit -m "type(scope): description"
+git log -1   # show last commit
 ```
 
 For plan execution steps, include a body referencing the step:
 
 ```bash
-git commit -S -m "feat(backend): add visibility field to Agent model
+git commit -m "feat(backend): add visibility field to Agent model
 
 Plan: agent-marketplace
 Step: 002
@@ -66,7 +66,7 @@ FR: FR-1"
 
 ```bash
 git add <files>
-git commit -S --amend --no-edit
+git commit --amend --no-edit
 ```
 
 ---
@@ -143,6 +143,8 @@ gh pr merge <number> --rebase   # rebase and merge
 
 ### Create an issue
 
+Base the body on the matching template in `.github/ISSUE_TEMPLATE/` — `bug_report.md` for defects (title `bug:`, label `bug`) or `feature_request.md` for enhancements (title `feat:`, label `enhancement`). Read the template first and mirror its headings; fill every section. If a `@bug-analyzer` Issue body is already in the conversation, it is already template-shaped — use it as-is.
+
 Always use `--body-file` — never `--body` or heredoc.
 
 ```bash
@@ -191,7 +193,7 @@ gh issue comment <number> --body-file /tmp/comment.md
 
 ```bash
 # Tag first
-git tag -s v1.2.3 -m "Release v1.2.3"
+git tag -a v1.2.3 -m "Release v1.2.3"
 git push origin v1.2.3
 
 # Create release with notes
@@ -271,6 +273,6 @@ git fetch --all
 After any git operation, confirm:
 
 - [ ] `git status` shows a clean working tree (or expected state)
-- [ ] `git log --show-signature -1` confirms GPG signature on last commit
+- [ ] `git log -1` shows the expected last commit
 - [ ] `git log --oneline -5` shows expected commit history
 - [ ] Branch is on the correct base (`develop`, not `main`)

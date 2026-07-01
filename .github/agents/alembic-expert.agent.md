@@ -1,8 +1,9 @@
 ---
 name: alembic-expert
+user-invocable: false
 description: Expert in Alembic database migrations and PostgreSQL schema evolution for SQLAlchemy projects. Generic role — project-specific conventions (table naming, ignored tables, model registry) auto-apply via `alembic.instructions.md` when editing `alembic/**`. Verifies library APIs against official docs via the `context7` MCP server before implementing.
 model: Claude Sonnet 4.6
-tools: ['read', 'edit', 'search']
+tools: ['read', 'edit', 'search', 'context7/*']
 handoffs:
   - label: "Commit migration with @git-github"
     agent: git-github
@@ -171,6 +172,8 @@ When your task originates from a plan execution step file:
 2. Include a `## Terminal Commands Required` block (see "As a `@plan-executor` subagent" above)
 3. Update `/plans/<slug>/execution/status.yaml` — set `status:` and `completed_at:`
 4. Suggest the user invoke `@plan-executor` to continue
+
+> **Invoked by `@quick-executor` instead?** There is no step file — return the same `## Result` block **and** the `## Terminal Commands Required` block (the migration round-trip) **inline** as your response so the executor runs the commands before committing.
 
 ## What This Agent Does NOT Do
 

@@ -6,7 +6,6 @@ from models.silo import Silo
 from langchain.tools import BaseTool, tool
 from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
-from tools.ai.dateTimeTools import get_current_date
 from tools.ai.fileTools import fetch_file_in_base64
 from tools.ai.workspaceTools import create_download_url_tool
 from typing import Any, Optional, Dict, List, Tuple
@@ -22,6 +21,7 @@ import asyncio
 import os
 import base64
 import mimetypes
+from datetime import datetime
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
@@ -149,6 +149,9 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
     # Build system prompt with optional skills section and format instructions
     # In LangChain v1, system_prompt is a static string passed to create_agent
     system_prompt_content = agent.system_prompt
+    # Inject current date to avoid need for a tool call
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    system_prompt_content += f"\n\nToday's date is {current_date}."
     if hasattr(agent, 'skill_associations') and agent.skill_associations:
         skills_section = generate_skills_system_prompt_section(agent.skill_associations)
         if skills_section:
@@ -229,7 +232,6 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         tools.append(await IACTTool.create(sub_agent, user_context=user_context))
 
     # Base tools — always available for every agent
-    tools.append(get_current_date)
     if working_dir:
         tools.append(create_download_url_tool(working_dir))
 
@@ -537,7 +539,6 @@ class IACTTool(BaseTool):
             tools.append(await IACTTool.create(sub_agent, user_context=user_context))
 
         # Add base useful tools
-        tools.append(get_current_date)
         tools.append(fetch_file_in_base64)
 
         # Add silo retriever if configured. The sub-agent uses the same dynamic
@@ -576,6 +577,9 @@ class IACTTool(BaseTool):
 
         # Build system prompt with optional skills section (LangChain v1 pattern)
         tool_system_prompt = agent.system_prompt or ""
+        # Inject current date to avoid need for a tool call
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        tool_system_prompt += f"\n\nToday's date is {current_date}."
         if agent.system_prompt and hasattr(agent, 'skill_associations') and agent.skill_associations:
             skills_section = generate_skills_system_prompt_section(agent.skill_associations)
             if skills_section:

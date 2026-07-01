@@ -51,7 +51,10 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
       DATABASE_NAME: ${DATABASE_NAME:-mattin_ai}
 
-      AICT_LOGIN: ${AICT_LOGIN:-FAKE}
+      AICT_LOGIN: ${AICT_LOGIN:-LOCAL}
+      # Set AUTH_COOKIE_SECURE=false for local HTTP testing (no TLS); keep true
+      # in any HTTPS/production deployment so session cookies require a secure channel.
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
       SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set in .env}"
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-24}
@@ -100,7 +103,10 @@ services:
         VITE_API_BASE_URL: ""
     container_name: mattin-frontend
     environment:
-      VITE_API_BASE_URL: ""
+      # SPA and API are same-origin behind Caddy, so the API base is the public
+      # FRONTEND_URL. (Empty here would make ConfigService fall back to its
+      # localhost:8000 dev default, which is not published.)
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-${FRONTEND_URL:-http://localhost}}
       VITE_OIDC_ENABLED: ${VITE_OIDC_ENABLED:-false}
       VITE_OIDC_AUTHORITY: ${VITE_OIDC_AUTHORITY:-}
       VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:-}

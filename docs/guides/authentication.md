@@ -4,190 +4,206 @@
 
 ## Overview
 
-Mattin AI supports **dual authentication** systems:
+Mattin AI supports two authentication modes, controlled by the `AICT_LOGIN` environment variable:
 
-- **OIDC Mode** (production): Azure Entra ID / Google OAuth for enterprise authentication
-- **FAKE Mode** (development): Email-only login with seeded test users
+| Mode | Value | Use case |
+|------|-------|----------|
+| **OIDC** | `OIDC` | Enterprise identity provider (Azure Entra ID). Default. |
+| **LOCAL** | `LOCAL` | Self-hosted deployments with admin-provisioned email + password accounts. |
 
-Authentication is split into:
-- **Session-based auth** (internal API): Cookie sessions for frontend
-- **API key auth** (public API): Token-based for external access
+> **FAKE mode is retired.** The `dev-login` endpoint no longer exists and returns 404 in OIDC and LOCAL modes. Setting `AICT_LOGIN=FAKE` raises a `RuntimeError` at startup. Existing deployments must migrate to LOCAL or OIDC.
 
-## Authentication Modes
+Authentication is split into two independent surfaces:
 
-### OIDC Mode
+- **Session auth** (`/internal`): Cookie-based for the frontend. Mechanism differs by mode (OIDC redirect flow vs LOCAL email+password).
+- **API key auth** (`/public/v1`, `/mcp/v1`): `X-API-KEY` header. Completely unaffected by which session-auth mode is active.
+
+---
+
+## OIDC Mode
 
 **OpenID Connect** authentication via enterprise identity providers.
 
-**Supported providers**:
-- **Azure Entra ID** (formerly Azure AD) — Microsoft identity platform
-- **Google OAuth** — Google Workspace / Gmail accounts
+**Supported provider**: Azure Entra ID (Microsoft Entra).
 
-**Configuration** (`.env`):
+### Configuration
 
 ```bash
-# Set authentication mode
 AICT_LOGIN=OIDC
 
-# Azure Entra ID (preferred)
-OAUTH_PROVIDER=ENTRAID
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_CLIENT_ID=your-client-id
 ENTRA_CLIENT_SECRET=your-client-secret
-ENTRA_REDIRECT_URI=http://localhost:8000/auth/callback
-
-# OR Google OAuth
-OAUTH_PROVIDER=GOOGLE
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/auth/callback
-
-# Frontend URL (for redirects after login)
-FRONTEND_URL=http://localhost:5173
 ```
 
-**OIDC Flow**:
+### Login flow
 
 ```
-1. User clicks "Login" → Frontend redirects to /internal/auth/login
-2. Backend redirects to identity provider (Entra ID / Google)
-3. User authenticates with provider
-4. Provider redirects to /internal/auth/callback with auth code
-5. Backend exchanges code for tokens (access_token, id_token)
-6. User info extracted from id_token (email, name, sub)
-7. User record created/updated in database
-8. Session cookie set → User redirected to frontend
+1. User clicks "Login" → frontend redirects to /internal/auth/login
+2. Backend redirects to Azure Entra ID
+3. User authenticates with Entra
+4. Entra redirects to /internal/auth/callback with auth code
+5. Backend exchanges code for tokens; user info is read from the id_token
+6. User record created/updated in the database
+7. Session cookie set → user redirected to frontend
 ```
 
-**Libraries used**:
-- `lks-idprovider-fastapi`: FastAPI OIDC integration
-- `lks-idprovider-entraid`: Azure Entra ID provider
+**Libraries used**: `lks-idprovider-fastapi`, `lks-idprovider-entraid`.
 
-**Setup Azure Entra ID**:
+### Azure setup
 
-1. Register app in Azure Portal: https://portal.azure.com → Azure Active Directory → App registrations
-2. Set redirect URI: `http://localhost:8000/auth/callback`
-3. Generate client secret
-4. Copy tenant ID, client ID, client secret to `.env`
+1. Register an app in the Azure Portal: Azure Active Directory → App registrations.
+2. Add a redirect URI: `https://<your-host>/internal/auth/callback`.
+3. Generate a client secret.
+4. Copy the tenant ID, client ID, and client secret to `.env`.
 
-### FAKE Mode
-
-**Development/testing mode** with simplified authentication (no identity provider needed).
-
-**Configuration** (`.env`):
+### Frontend configuration
 
 ```bash
-AICT_LOGIN=FAKE
+VITE_OIDC_ENABLED=true
+VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/{tenant-id}/v2.0
+VITE_OIDC_CLIENT_ID=your-azure-client-id
+VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/success
+VITE_OIDC_SCOPE=openid profile email
 ```
 
-**How it works**:
-- Users login with **email only** (no password)
-- Email must exist in `seed_dev_users` or database
-- Session cookie set immediately (no OAuth flow)
+---
 
-**Seeded development users** (`backend/utils/auth_config.py`):
+## LOCAL Mode
 
-```python
-DEV_USERS = {
-    "admin@example.com": {
-        "name": "Admin User",
-        "role": "omniadmin"
-    },
-    "user@example.com": {
-        "name": "Regular User",
-        "role": "user"
-    }
-}
+**Admin-provisioned email + password** authentication for self-hosted deployments.
+
+Self-registration is disabled. An administrator creates each user account, and the user receives a one-time set-password link to activate their account.
+
+### How it works
+
+Sessions are transported as **httpOnly cookies** — no token is ever stored in `localStorage` or returned in the response body. Three cookies are set at login:
+
+| Cookie | httpOnly | Path | Purpose |
+|--------|----------|------|---------|
+| `access_token` | Yes | `/` | Signed JWT (HS256, 15-minute TTL by default) |
+| `refresh_token` | Yes | `/internal/auth` | Opaque rotation token (14-day TTL by default) |
+| `csrf_token` | No | `/` | CSRF double-submit value (JS-readable) |
+
+Mutating requests to `/internal` must include the `X-CSRF-Token` header whose value is read from the `csrf_token` cookie. The paths `/auth/login` and `/auth/set-password` are exempt (called before a session cookie exists; protected by body credentials/token instead). Bearer and `X-API-KEY` requests are also a no-op for CSRF. The `Secure` flag is enabled by default; set `AUTH_COOKIE_SECURE=false` only for plain-HTTP local development.
+
+Refresh tokens rotate on every use. Presenting an already-rotated token is treated as reuse and revokes the entire token family, forcing re-authentication.
+
+### Required environment variable
+
+```bash
+AICT_LOGIN=LOCAL
+SECRET_KEY=<random 64-char hex string>   # REQUIRED — no default
 ```
 
-**FAKE Mode endpoints**:
+`SECRET_KEY` must be present, at least 32 characters, and not a known placeholder. The app fails fast at startup if the check fails. **Rotating `SECRET_KEY` invalidates all active sessions** because it is used to sign both JWT access tokens and set-password tokens.
 
-```http
-POST /internal/auth/dev-login
-Content-Type: application/json
+Generate a safe key:
 
-{
-  "email": "admin@example.com"
-}
-
-Response:
-{
-  "message": "Login successful",
-  "user": {
-    "email": "admin@example.com",
-    "name": "Admin User",
-    "role": "omniadmin"
-  }
-}
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-**⚠️ Security Warning**: FAKE mode is **insecure** and should **NEVER** be used in production.
+### Optional tuning variables
 
-### Session-Based Auth
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTH_COOKIE_SECURE` | `true` | Set `false` for plain-HTTP local dev only — never in production |
+| `LOCAL_ACCESS_TTL_MINUTES` | `15` | Access token lifetime in minutes |
+| `LOCAL_REFRESH_TTL_DAYS` | `14` | Refresh token lifetime in days |
+| `LOCAL_LOCKOUT_THRESHOLD` | `5` | Failed attempts before account lockout |
+| `LOCAL_LOCKOUT_BASE_SECONDS` | `60` | Base lockout duration in seconds (exponential backoff) |
+| `LOCAL_TOKEN_LEEWAY_SECONDS` | `30` | Clock-skew tolerance for JWT validation |
+| `LOCAL_SET_PASSWORD_TOKEN_MAX_AGE_HOURS` | `48` | Set-password link validity window |
 
-**Cookie-based authentication** for internal API endpoints.
+### Lockout behaviour
 
-**Session configuration**:
+After `LOCAL_LOCKOUT_THRESHOLD` consecutive failed login attempts the account is locked with exponential backoff:
 
-```python
-# Backend session settings
-SECRET_KEY=your-secret-key-256-bit
-SESSION_COOKIE_NAME=mattin_session
-SESSION_MAX_AGE=86400  # 24 hours
-SESSION_COOKIE_SECURE=True  # HTTPS only (production)
-SESSION_COOKIE_HTTPONLY=True
-SESSION_COOKIE_SAMESITE=Lax
+```
+locked_until = now + base * 2^(failed_attempts - threshold)
+
+Examples (threshold=5, base=60 s):
+  5th failure:  60 s
+  6th failure: 120 s
+  7th failure: 240 s
+ 10th failure: 1920 s (~32 min)
 ```
 
-**Session lifecycle**:
+Omniadmins (set via `AICT_OMNIADMINS`) are exempt from lockout to prevent self-lockout of a sole administrator.
 
-1. **Login**: Session created, cookie set with user info
-2. **Requests**: Cookie sent automatically by browser
-3. **Validation**: `get_current_user_oauth` dependency validates session
-4. **Logout**: Session destroyed, cookie cleared
+### SMTP configuration (optional)
 
-**Frontend usage**:
+When both `SMTP_HOST` and `SMTP_FROM` are set, the app delivers set-password links by email. When either is absent the `NoopEmailSender` is used — it logs only the recipient address and subject (never the token or link value), and the token is returned only in the admin API response body.
 
-```typescript
-// Login (OIDC mode)
-window.location.href = '/internal/auth/login';
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SMTP_HOST` | — | SMTP relay hostname. Required to enable email delivery. |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | — | SMTP authentication username (optional) |
+| `SMTP_PASSWORD` | — | SMTP authentication password. Never logged. |
+| `SMTP_TLS` | `true` | Enable STARTTLS |
+| `SMTP_FROM` | — | Sender address (e.g. `no-reply@example.com`). Required to enable email delivery. |
+| `SMTP_TIMEOUT_SECONDS` | `10` | Per-connection timeout |
 
-// Login (FAKE mode)
-await fetch('/internal/auth/dev-login', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({email: 'user@example.com'}),
-  credentials: 'include'  // Important: include cookies
-});
+SMTP is entirely optional. Self-hosted deployments without an SMTP relay work normally — the administrator copies the token from the API response and forwards it to the user manually. If the token is lost, re-issue it via `POST /internal/admin/users/{id}/reset-link`.
 
-// Logout
-await fetch('/internal/auth/logout', {
-  method: 'POST',
-  credentials: 'include'
-});
+### Admin provisioning workflow
+
+Requires `OMNIADMIN` (set via `AICT_OMNIADMINS` env var) or the `admin` platform role. The app-scoped collaborator role (`ADMINISTRATOR`) does not grant access to these endpoints.
+
+1. **Create user** — `POST /internal/admin/users/local`. The response body contains `user_id`, `email`, `name`, a one-time `set_password_token`, and its `expires_at`. The token is **not** logged or emailed at this step — the admin must forward it to the user manually (or build the set-password URL: `<frontend>/set-password?token=<token>`).
+2. **User sets password** — the user POSTs to `/internal/auth/set-password` with the token and chosen password. The token is single-use and expires after `LOCAL_SET_PASSWORD_TOKEN_MAX_AGE_HOURS` (default 48 hours).
+3. **User logs in** — `POST /internal/auth/login` with `{"email": "...", "password": "..."}`. Cookies are set on success.
+
+**Re-issuing a token** (existing user only): `POST /internal/admin/users/{user_id}/reset-link`. If SMTP is configured the link is emailed; otherwise the token is returned in the response body for manual forwarding.
+
+**Emergency password reset** (admin direct): `POST /internal/admin/users/{user_id}/set-password` with `{"new_password": "..."}`. Resets lockout state and revokes all active sessions.
+
+### Omniadmin recovery
+
+If the omniadmin account has no credential or needs a password reset, use the seed utility:
+
+```bash
+# Inside a running Docker deployment
+docker compose exec -T backend \
+  python -m utils.seed_dev_users --yes \
+  --users "admin@acme.com:Admin:NewPass123!"
 ```
+
+The utility refuses to run unless `AICT_LOGIN=LOCAL` (use `--force` to override). It is idempotent — existing users are updated in-place.
+
+### Frontend configuration (LOCAL mode)
+
+```bash
+VITE_OIDC_ENABLED=false
+```
+
+No OIDC variables are needed. The login page collects email and password and POSTs to `/internal/auth/login`.
+
+---
 
 ## API Key Auth
 
-**Token-based authentication** for public API endpoints.
+**Token-based authentication** for public API endpoints (`/public/v1`) and MCP endpoints (`/mcp/v1`). Completely independent of the session-auth mode — works identically regardless of whether `AICT_LOGIN` is `OIDC` or `LOCAL`.
 
 ### Generation
 
-API keys are generated by app owners via internal API:
+API keys are created by app owners via the internal API:
 
 ```http
 POST /internal/api_keys?app_id=1
-Cookie: session=...
+Cookie: ...
 Content-Type: application/json
 
 {
   "name": "Production API Key",
-  "rate_limit": 100  // Requests per minute
+  "rate_limit": 100
 }
 
 Response:
 {
-  "key": "mattin_ABC123XYZ...",  // Only shown once!
+  "key": "mattin_ABC123XYZ...",
   "key_id": 5,
   "name": "Production API Key",
   "rate_limit": 100,
@@ -195,69 +211,38 @@ Response:
 }
 ```
 
-**⚠️ Important**: API key is **only displayed once** during creation. Save it immediately.
+The raw key is **shown once at creation only**. Save it immediately.
 
 ### Usage
-
-Include API key in `X-API-Key` header:
 
 ```http
 GET /public/v1/agents?app_id=1
 X-API-Key: mattin_ABC123XYZ...
 ```
 
-### Validation
-
-API keys are validated on each request:
-
-```python
-from routers.public.v1.auth import get_api_key_auth
-
-@router.get("/")
-async def list_agents(
-    api_key: str = Depends(get_api_key_auth),
-    db: Session = Depends(get_db)
-):
-    # api_key validated, rate limit checked
-    ...
-```
-
-**Validation checks**:
-1. Key exists in database
-2. Key status is `active` (not revoked)
-3. Rate limit not exceeded
-4. App ID matches key's app
-
 ### Revocation
-
-Revoke compromised keys:
 
 ```http
 DELETE /internal/api_keys/5?app_id=1
-Cookie: session=...
-
-Response:
-{
-  "message": "API key revoked successfully"
-}
+Cookie: ...
 ```
+
+---
 
 ## Frontend Auth
 
 ### AuthContext
-
-React context providing authentication state:
 
 ```typescript
 import { useAuth } from '@lksnext/ai-core-tools-base';
 
 function MyComponent() {
   const { user, isAuthenticated, login, logout } = useAuth();
-  
+
   if (!isAuthenticated) {
     return <button onClick={login}>Login</button>;
   }
-  
+
   return (
     <div>
       <p>Welcome, {user.name}!</p>
@@ -267,185 +252,116 @@ function MyComponent() {
 }
 ```
 
-### OIDCProvider
-
-Wraps app with OIDC context (OIDC mode only):
-
-```typescript
-import { OIDCProvider } from '@lksnext/ai-core-tools-base';
-
-function App() {
-  return (
-    <OIDCProvider>
-      <YourApp />
-    </OIDCProvider>
-  );
-}
-```
-
 ### Protected Routes
 
-Require authentication to access:
-
 ```typescript
-import { ProtectedRoute } from '@lksnext/ai-core-tools-base';
+import { ProtectedRoute, AdminRoute } from '@lksnext/ai-core-tools-base';
 
 <Routes>
   <Route path="/playground" element={
-    <ProtectedRoute>
-      <Playground />
-    </ProtectedRoute>
+    <ProtectedRoute><Playground /></ProtectedRoute>
   } />
-</Routes>
-```
-
-### Admin Routes
-
-Require admin/omniadmin role:
-
-```typescript
-import { AdminRoute } from '@lksnext/ai-core-tools-base';
-
-<Routes>
   <Route path="/admin/*" element={
-    <AdminRoute>
-      <AdminDashboard />
-    </AdminRoute>
+    <AdminRoute><AdminDashboard /></AdminRoute>
   } />
 </Routes>
 ```
 
-## Configuration
-
-### Backend Environment Variables
-
-```bash
-# Authentication mode
-AICT_LOGIN=OIDC  # or FAKE (dev) or LOCAL (SaaS email+password)
-
-# OAuth Provider (if OIDC mode)
-OAUTH_PROVIDER=ENTRAID  # or GOOGLE
-
-# Azure Entra ID (if OAUTH_PROVIDER=ENTRAID)
-ENTRA_TENANT_ID=your-tenant-id
-ENTRA_CLIENT_ID=your-client-id
-ENTRA_CLIENT_SECRET=your-client-secret
-ENTRA_REDIRECT_URI=http://localhost:8000/auth/callback
-
-# Google OAuth (if OAUTH_PROVIDER=GOOGLE)
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/auth/callback
-
-# Session configuration
-SECRET_KEY=your-secret-key-256-bit
-SESSION_COOKIE_SECURE=false  # true in production (HTTPS)
-
-# Frontend URL
-FRONTEND_URL=http://localhost:5173
-
-# Omniadmins (see below)
-AICT_OMNIADMINS=admin@example.com,superuser@example.com
-```
-
-### Frontend Environment Variables
-
-```bash
-# API URLs
-VITE_API_URL=http://localhost:8000
-VITE_INTERNAL_API_URL=http://localhost:8000/internal
-VITE_PUBLIC_API_URL=http://localhost:8000/public/v1
-
-# OIDC Configuration (if OIDC mode)
-VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/{tenant-id}/v2.0
-VITE_OIDC_CLIENT_ID=your-client-id
-VITE_OIDC_REDIRECT_URI=http://localhost:5173/callback
-VITE_OIDC_SCOPE=openid profile email
-
-# Authentication mode
-VITE_AUTH_MODE=OIDC  # or FAKE
-```
+---
 
 ## Omniadmins
 
-**Omniadmins** are superusers with unrestricted access to all apps and operations.
+Omniadmins are superusers with unrestricted access to all apps and operations.
 
 ### Configuration
-
-Set in backend `.env`:
 
 ```bash
 AICT_OMNIADMINS=admin@example.com,superuser@example.com
 ```
 
-**Comma-separated list** of email addresses.
+Comma-separated list of email addresses. Checked at runtime on each request — no restart required to add or remove entries.
 
 ### Privileges
 
-Omniadmins can:
-- Access all apps (bypass ownership/collaboration checks)
+- Access all apps (bypasses ownership/collaboration checks)
 - Perform admin operations (`/internal/admin/*` endpoints)
 - View and modify all user accounts
-- Access system-level settings
+- Exempt from the failed-login lockout (LOCAL mode)
 
-### Role Hierarchy
-
-`omniadmin` is the highest role in the hierarchy:
+### Role hierarchy
 
 ```
-omniadmin > owner > administrator > editor > viewer > user > guest
+omniadmin > owner > administrator > editor > viewer
 ```
 
-### Checking Omniadmin Status
+---
 
-```python
-from routers.controls.role_authorization import is_omniadmin
+## Migrating from FAKE Mode
 
-if is_omniadmin(user_email):
-    # Grant full access
-    ...
-```
+FAKE mode is retired. `AICT_LOGIN=FAKE` will not start the application. To migrate:
+
+1. Set `AICT_LOGIN=LOCAL` and generate a strong `SECRET_KEY`.
+2. Run migrations if needed: `alembic upgrade head`.
+3. Seed or create user accounts:
+
+   ```bash
+   docker compose exec -T backend \
+     python -m utils.seed_dev_users --yes \
+     --users "admin@acme.com:Admin:TempPass123!"
+   ```
+
+4. Distribute set-password links to each user who needs one (or set passwords directly via the seed utility's `--users email:Name:password` format).
+
+---
 
 ## Troubleshooting
 
-### OIDC Mode Issues
+### OIDC Mode
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| "Redirect URI mismatch" | Callback URL not registered in provider | Add `http://localhost:8000/auth/callback` to provider's allowed redirects |
-| "Invalid client" | Wrong client ID/secret | Verify `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` |
+| "Redirect URI mismatch" | Callback URL not registered in provider | Add the callback URL to the app registration's allowed redirect URIs |
+| "Invalid client" | Wrong client ID or secret | Verify `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` |
 | "Tenant not found" | Wrong tenant ID | Verify `ENTRA_TENANT_ID` |
-| Login redirect loop | Session cookie not set | Check `SECRET_KEY` is set, cookies enabled in browser |
+| Login redirect loop | Session cookie not set | Check `SECRET_KEY` is set; verify cookies are enabled in the browser |
 
-### FAKE Mode Issues
+### LOCAL Mode
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| "User not found" | Email not in `DEV_USERS` or database | Add email to `DEV_USERS` in `auth_config.py` |
-| Endpoint not found | FAKE mode not enabled | Set `AICT_LOGIN=FAKE` in `.env` |
+| App fails to start | `SECRET_KEY` missing, too short, or placeholder | Generate a valid key: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| "Invalid email or password" | Wrong credentials or account not yet activated | Verify credentials; issue a new set-password link if the account has no password |
+| "Account is temporarily locked" | Too many failed login attempts | Wait for lockout to expire; omniadmins are exempt |
+| Set-password link expired | Link older than `LOCAL_SET_PASSWORD_TOKEN_MAX_AGE_HOURS` | Issue a new link via `POST /internal/admin/users/{id}/reset-link` |
+| Cookies not sent | `Secure` flag set but site is HTTP | Set `AUTH_COOKIE_SECURE=false` for local HTTP dev |
+| All sessions invalidated | `SECRET_KEY` was rotated | Expected — all users must log in again after a key rotation |
 
 ### API Key Issues
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| "Invalid API key" | Wrong key or typo | Verify key is correct, generate new if lost |
-| "API key revoked" | Key was revoked | Generate new key |
-| 429 Too Many Requests | Rate limit exceeded | Wait 60 seconds or increase rate limit |
+| "Invalid API key" | Wrong key or typo | Verify the key; generate a new one if lost |
+| "API key revoked" | Key was revoked | Generate a new key |
+| 429 Too Many Requests | Rate limit exceeded | Wait for the window to reset or increase the rate limit on the key |
 
-## Security Best Practices
+---
 
-1. **Use OIDC in production**: Never use FAKE mode in production environments
-2. **HTTPS required**: Always use HTTPS in production for secure cookie transmission
-3. **Rotate secrets**: Periodically rotate `SECRET_KEY` and OAuth client secrets
-4. **Secure API keys**: Store API keys in environment variables, not code
-5. **Revoke compromised keys**: Immediately revoke keys if compromised
-6. **Limit omniadmins**: Only assign omniadmin to trusted users
-7. **Session timeout**: Configure appropriate `SESSION_MAX_AGE` (default: 24 hours)
-8. **Rate limiting**: Set reasonable rate limits on API keys
+## Security Checklist
+
+- Use OIDC or LOCAL in production — FAKE mode is gone.
+- Always use HTTPS in production (`AUTH_COOKIE_SECURE=true`, which is the default).
+- Keep `SECRET_KEY` strong and treat a rotation as a forced logout event for all users.
+- Limit `AICT_OMNIADMINS` to trusted administrators.
+- Revoke compromised API keys immediately.
+- Store API keys in environment variables, never in source code.
+
+---
 
 ## See Also
 
-- [Internal API](../api/internal-api.md) — Session-based authentication
+- [Environment Variables](../reference/environment-variables.md) — Complete variable reference including LOCAL mode tuning
+- [Internal API](../api/internal-api.md) — Session-based authentication endpoints
 - [Public API](../api/public-api.md) — API key authentication
 - [Role Authorization](../reference/role-authorization.md) — RBAC system
 - [Backend Architecture](../architecture/backend.md) — Auth router implementation
+- [User Deletion and App Ownership Transfer](user-deletion-and-app-transfer.md) — Safe user deletion and app ownership handoff

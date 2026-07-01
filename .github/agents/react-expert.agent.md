@@ -1,8 +1,9 @@
 ---
 name: react-expert
+user-invocable: false
 description: Senior React frontend engineer specializing in React 19, TypeScript strict mode, hooks, state management, Tailwind CSS, and accessibility. Generic role — project-specific conventions auto-apply via `react-conventions.instructions.md` when editing `frontend/**`. Verifies library APIs against official docs via the `context7` MCP server before implementing.
 model: Claude Sonnet 4.6
-tools: ['read', 'edit', 'search']
+tools: ['read', 'edit', 'search', 'context7/*']
 handoffs:
   - label: "Commit with @git-github"
     agent: git-github
@@ -251,6 +252,8 @@ When your task originates from a plan execution step file (`/plans/<slug>/execut
    - A summary of files changed and decisions taken
 2. Update `/plans/<slug>/execution/status.yaml` — set the step's `status:` and `completed_at:` accordingly
 3. Suggest the user invoke `@plan-executor` to continue
+
+> **Invoked by `@quick-executor` instead?** There is no step file — return the same `## Result` block (Completed by/at, Status, summary) **inline** as your response so the executor can act on it directly.
 
 ## What This Agent Does NOT Do
 

@@ -8,7 +8,8 @@ export const getProviderBadgeColor = (provider = '') => {
     'mistralai': 'bg-purple-100 text-purple-800',
     'custom': 'bg-gray-100 text-gray-800',
     'google': 'bg-yellow-100 text-yellow-800',
-    'googlecloud': 'bg-emerald-100 text-emerald-800'
+    'googlecloud': 'bg-emerald-100 text-emerald-800',
+    'openrouter': 'bg-indigo-100 text-indigo-800'
   };
   return map[normalized] || 'bg-gray-100 text-gray-800';
 };
