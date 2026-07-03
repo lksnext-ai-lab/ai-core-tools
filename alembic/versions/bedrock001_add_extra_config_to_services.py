@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'bedrock001'
-down_revision = 'merge001_userdel_platform_role'
+down_revision = 'd3adbeef1234'
 branch_labels = None
 depends_on = None
 
