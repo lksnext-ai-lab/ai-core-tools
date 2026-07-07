@@ -26,7 +26,7 @@ from models.silo import Silo
 
 
 # ---------------------------------------------------------------------------
-# Base factory — all factories inherit from this
+# Base factory - all factories inherit from this
 # ---------------------------------------------------------------------------
 
 class BaseFactory(SQLAlchemyModelFactory):
@@ -81,6 +81,7 @@ class AIServiceFactory(BaseFactory):
     provider = "OpenAI"
     api_key = "sk-test-key"  # pragma: allowlist secret
     endpoint = None
+    execution_profile = 1
     app = factory.SubFactory(AppFactory)
 
     @factory.lazy_attribute
@@ -101,6 +102,7 @@ class AgentFactory(BaseFactory):
     system_prompt = "You are a helpful test assistant."
     has_memory = False
     temperature = 0.7
+    execution_profile = None
     request_count = 0
     is_tool = False
     app = factory.SubFactory(AppFactory)

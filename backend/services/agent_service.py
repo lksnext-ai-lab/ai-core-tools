@@ -110,6 +110,7 @@ class AgentService:
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
             temperature=agent.temperature if agent.temperature is not None else DEFAULT_AGENT_TEMPERATURE,
+            execution_profile=getattr(agent, 'execution_profile', None),
             tool_ids=associations['tool_ids'],
             mcp_config_ids=associations['mcp_ids'],
             skill_ids=associations['skill_ids'],
@@ -154,7 +155,7 @@ class AgentService:
             return type('Agent', (), {
                 'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': '', 
                 'type': 'agent', 'is_tool': False, 'create_date': None, 'request_count': 0,
-                'temperature': DEFAULT_AGENT_TEMPERATURE
+                'temperature': DEFAULT_AGENT_TEMPERATURE, 'execution_profile': None
             })()
         else:
             # Existing agent - determine if it's OCR agent or regular agent

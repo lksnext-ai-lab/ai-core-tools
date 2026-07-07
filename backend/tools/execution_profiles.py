@@ -1,0 +1,580 @@
+"""
+Execution Profiles for Mattin AI.
+
+A provider-agnostic abstraction that controls model behaviour
+(primarily reasoning depth) through four profiles: FAST, BALANCED, DEEP, MAX.
+
+The rest of the application never sees provider-specific reasoning
+ parameters — the ``ExecutionProfileRegistry`` and ``RuntimeConfigBuilder``
+ handle the mapping automatically.
+"""
+
+from __future__ import annotations
+
+import re
+import enum
+import dataclasses
+from typing import Dict, List, Optional, Any
+
+from tools.ai.model_catalog import PROVIDER_OPENAI, PROVIDER_ANTHROPIC
+from tools.ai.model_catalog import (
+    PROVIDER_MISTRAL,
+    PROVIDER_GOOGLE,
+    PROVIDER_GOOGLE_CLOUD,
+    PROVIDER_AZURE,
+    PROVIDER_OPENROUTER,
+    PROVIDER_CUSTOM,
+)
+
+# ====================================================================
+# ExecutionProfile enum
+# ====================================================================
+
+
+class ExecutionProfile(enum.IntEnum):
+    """Profiles are integer levels that the **entire application** uses.
+
+    Internally each provider maps these levels to its own reasoning
+    parameters (reasoning effort, thinking tokens, etc.).  The rest of
+    Mattin AI should never see those provider-specific values — it
+    only works with ``ExecutionProfile``.
+    """
+
+    FAST = 0
+    BALANCED = 1
+    DEEP = 2
+    MAX = 3
+
+
+# ====================================================================
+# ProviderCapability
+# ====================================================================
+
+
+@dataclasses.dataclass(frozen=True)
+class ProviderCapability:
+    """Describes how a provider handles reasoning / thinking.
+
+    The registry contains one ``ProviderCapability`` instance per
+    provider.  Each provider definition states:
+
+    * Whether reasoning is supported at all.
+    * The runtime kwarg name that carries the value
+      (``reasoning_effort``, ``thinking_budget``, ``reasoning_level``,
+      or a free-form key for future mechanisms).
+    * How the four execution levels map to provider-specific values.
+    * A default execution profile for the provider.
+
+    When a new provider needs reasoning support, developers only
+    **add an entry to the registry** — no other code path changes.
+    """
+
+    supported: bool = False
+
+    # The exact model kwarg that LangChain / provider SDK expects
+    # (e.g. ``reasoning_effort``, ``thinking_budget``, ``reasoning_level``).
+    reasoning_kwarg: Optional[str] = None
+
+    # Mapping from ExecutionProfile -> the value the provider SDK understands.
+    profile_values: Dict[ExecutionProfile, Any] = dataclasses.field(default_factory=dict)
+
+    # When reasoning is enabled, which profile the provider should start
+    # with (usually FAST or BALANCED).
+    default_profile: ExecutionProfile = ExecutionProfile.BALANCED
+
+    # When True and a reasoning profile is active, the runtime builder
+    # will add the kwarg to the model kwargs sent to LangChain.
+    @property
+    def has_reasoning_config(self) -> bool:
+        return self.supported and self.reasoning_kwarg is not None
+
+
+# ====================================================================
+# ModelCapability
+# ====================================================================
+
+
+@dataclasses.dataclass(frozen=True)
+class ModelCapability:
+    """Per-model (or per-prefix) overrides for a provider's capabilities.
+
+    A ``ModelCapability`` inherits everything from its parent
+    ``ProviderCapability`` unless explicitly overridden.  Prefix
+    matching lets administrators define behaviour for an entire
+    model family with a single entry (e.g. ``gpt-4o`` covers
+    ``gpt-4o-2024-05-13``, ``gpt-4o-mini``, etc.).
+    """
+
+    # Regex prefix to match against the model id (e.g. ``o1``,
+    # ``claude-3-5``, ``gemini-2``).  If ``regex_pattern`` is empty
+    # the capability applies to a single specific model id
+    # (``model_id`` field).
+    regex_pattern: str = ""
+
+    # The provider this rule applies to (e.g. "OpenAI", "Anthropic").
+    # When ``regex_pattern`` is empty this field is ignored.
+    provider: str = ""
+
+    # When a regex_prefix is set this is ignored.
+    model_id: str = ""
+
+    # Capability overrides — only non-None values are applied.
+    supports_reasoning: Optional[bool] = None
+    # Override the provider's profiling values (e.g. make a model
+    # support DEEP but not MAX).  If ``None`` the provider defaults
+    # are inherited.
+    profile_values: Optional[Dict[ExecutionProfile, Any]] = None
+
+    # Disable temperature for this model (some reasoning models
+    # reject temperature when thinking is enabled).
+    disable_temperature: bool = False
+
+    # Other capability flags (mirrors ProviderCapabilities from
+    # schemas.provider_models_schemas for discovery consistency).
+    supports_vision: Optional[bool] = None
+    supports_json_mode: Optional[bool] = None
+
+    @classmethod
+    def for_model(cls, provider: str, model_id: str) -> ModelCapability:
+        """Find the most specific ModelCapability for *model_id*.
+
+        Walks the **global model overrides** registry (``_MODEL_OVERRIDES``)
+        and returns the first matching rule — exact match takes
+        precedence over the longest prefix match.
+        """
+        lid = model_id.lower() if model_id else ""
+
+        # 1. Exact match
+        for rule in _MODEL_OVERRIDES:
+            if rule.provider == provider and rule.model_id == model_id:
+                return rule
+
+        # 2. Longest prefix match
+        best_match: Optional[ModelCapability] = None
+        best_len = 0
+
+        for rule in _MODEL_OVERRIDES:
+            if rule.provider != provider:
+                continue
+            if not rule.regex_pattern:
+                continue
+            if re.search(rule.regex_pattern, lid):
+                pat_len = len(rule.regex_pattern)
+                if pat_len > best_len:
+                    best_len = pat_len
+                    best_match = rule
+
+        if best_match is not None:
+            return best_match
+
+        # 3. Fallback — sentinel that means "use provider defaults".
+        return ModelCapability()
+
+    def apply_provider_defaults(self, provider_cap: ProviderCapability) -> ProviderCapability:
+        """Return a new ``ProviderCapability`` with overrides applied."""
+        pc = dataclasses.replace(provider_cap)
+
+        if self.supports_reasoning is not None:
+            pc = dataclasses.replace(pc, supported=self.supports_reasoning)
+
+        if self.profile_values is not None:
+            pc = dataclasses.replace(pc, profile_values=dict(self.profile_values))
+
+        return pc
+
+    @property
+    def should_disable_temperature(self) -> bool:
+        if not self.supports_reasoning:
+            return False
+        return self.disable_temperature
+
+
+# ====================================================================
+# RuntimeConfig
+# ====================================================================
+
+
+@dataclasses.dataclass(frozen=True)
+class RuntimeConfig:
+    """Minimal, provider-agnostic config for the inference layer.
+
+    The agent LLM builder passes **only** this object to the runtime
+    kwarg generator — the caller never queries provider definitions
+    directly.
+    """
+
+    # Identity
+    provider: str
+    model_id: str
+
+    # Execution profile chosen by the user / inherited from the AIService.
+    execution_profile: ExecutionProfile
+
+    # Reasoning runtime parameter: the kwarg name and value that will
+    # be sent to the LLM client (e.g. ``("reasoning_effort", "high")``).
+    # ``None`` when reasoning is not supported for this model/profile.
+    reasoning_kwarg: Optional[str] = None
+    reasoning_value: Optional[Any] = None
+
+    # Capability flags — precomputed from provider + model override so
+    # the inference layer only looks at runtime config.
+    supports_reasoning: bool = False
+    supports_vision: bool = False
+    supports_json_mode: bool = False
+
+    # When the provider disables temperature alongside reasoning
+    # (some models reject ``temperature`` when thinking is on).
+    disable_temperature: bool = False
+
+    # Execution-profile metadata (default profile, available levels).
+    # Exposed so callers can validate overrides.
+    default_profile: ExecutionProfile = ExecutionProfile.BALANCED
+
+    # Execution profile limits — how much the model can do at each level.
+    # Provider-level defaults, possibly overridden at model level.
+    profile_values: Dict[ExecutionProfile, Any] = dataclasses.field(default_factory=dict)
+
+
+# ====================================================================
+# RuntimeConfigBuilder
+# ====================================================================
+
+
+class RuntimeConfigBuilder:
+    """Builds a :class:`RuntimeConfig` from provider, model, and profile.
+
+    Resolution order:
+
+    1. Look up the provider's ``ProviderCapability`` in the global registry.
+    2. Apply ``ModelCapability`` overrides from the global overrides.
+    3. Populate the ``RuntimeConfig`` with the resolved kwarg mapping.
+    """
+
+    @staticmethod
+    def build(
+        provider: str,
+        model_id: str,
+        execution_profile: ExecutionProfile,
+    ) -> RuntimeConfig:
+        # 1. Provider defaults
+        provider_cap = _REGISTRY.get(provider) or ProviderCapability()
+
+        # 2. Model overrides
+        model_cap = ModelCapability.for_model(provider, model_id)
+        resolved = model_cap.apply_provider_defaults(provider_cap)
+
+        # 3. Resolve specific value for the chosen profile
+        reasoning_kwarg: Optional[str] = None
+        reasoning_value: Optional[Any] = None
+
+        if resolved.has_reasoning_config:
+            profile_val = resolved.profile_values.get(execution_profile)
+            if profile_val is not None:
+                reasoning_kwarg = resolved.reasoning_kwarg
+                reasoning_value = profile_val
+
+        # 4. Compute derived capability flags
+        caps = model_cap.supports_reasoning or resolved.supported
+        disallow_temp = model_cap.should_disable_temperature and caps
+
+        return RuntimeConfig(
+            provider=provider,
+            model_id=model_id,
+            execution_profile=execution_profile,
+            reasoning_kwarg=reasoning_kwarg,
+            reasoning_value=reasoning_value,
+            supports_reasoning=caps,
+            supports_vision=model_cap.supports_vision or False,
+            supports_json_mode=model_cap.supports_json_mode or False,
+            disable_temperature=disallow_temp,
+            default_profile=resolved.default_profile,
+            profile_values=dict(resolved.profile_values),
+        )
+
+
+# ====================================================================
+# Runtime kwarg builder
+# ====================================================================
+
+
+def build_runtime_kwargs(
+    runtime_config: RuntimeConfig,
+    temperature: Optional[float] = None,
+    additional_kwargs: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Turn a :class:`RuntimeConfig` into model kwargs for the LLM client.
+
+    This is the **single generic function** the inference layer calls to
+    produce the kwargs dictionary for ``ChatOpenAI(...)``,
+    ``ChatAnthropic(...)``, etc.
+
+    Usage::
+
+        rc = RuntimeConfigBuilder.build(
+            provider="OpenAI",
+            model_id="gpt-4o",
+            execution_profile=ExecutionProfile.DEEP,
+        )
+        kwargs = build_runtime_kwargs(rc, temperature=0.7)
+        # kwargs = {"thinking_budget": 125_000, "temperature": 0.7}
+        llm = ChatAnthropic(**kwargs, api_key=...)
+
+    Adding a new provider with a new reasoning mechanism only requires
+    registering it in ``_REGISTRY`` — the kwarg builder stays unchanged.
+    """
+    kwargs: Dict[str, Any] = {}
+
+    # Temperature — may be skipped when the profile disables it.
+    if temperature is not None and not runtime_config.disable_temperature:
+        kwargs["temperature"] = temperature
+
+    # Reasoning parameter
+    if runtime_config.reasoning_kwarg is not None and runtime_config.reasoning_value is not None:
+        kwargs[runtime_config.reasoning_kwarg] = runtime_config.reasoning_value
+
+    # Additional override kwargs (retrievers, custom metadata…)
+    if additional_kwargs:
+        kwargs.update(additional_kwargs)
+
+    return kwargs
+
+
+# ====================================================================
+# Global registry — provider capabilities
+# ====================================================================
+
+_REGISTRY: Dict[str, ProviderCapability] = {}
+
+
+def register_provider_capability(capability: ProviderCapability, provider: str) -> None:
+    """Register (or update) a provider's reasoning configuration.
+
+    Call this at module-initialisation time to define how each
+    provider maps execution profiles to its own parameters.
+    """
+    _REGISTRY[provider] = capability
+
+
+def get_provider_capability(provider: str) -> ProviderCapability:
+    """Return the capability for *provider*, or a disabled sentinel."""
+    return _REGISTRY.get(provider) or ProviderCapability()
+
+
+# ====================================================================
+# Global model overrides registry
+# ====================================================================
+
+_MODEL_OVERRIDES: List[ModelCapability] = []
+
+
+def register_model_override(override: ModelCapability) -> None:
+    """Append a per-model override to the global registry."""
+    _MODEL_OVERRIDES.append(override)
+
+
+def clear_model_overrides() -> None:
+    """Clear all model overrides.  Useful for tests."""
+    _MODEL_OVERRIDES.clear()
+
+
+# ====================================================================
+# Built-in provider capabilities
+# ====================================================================
+
+
+def _register_builtin_capabilities() -> None:
+    """Wire up reasoning capabilities for every supported provider."""
+
+    # --------------------------------------------------------------
+    # OpenAI  — reasoning_effort parameter (o-series, gpt-4o+)
+    # "low" | "medium" | "high"  or None when disabled
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=True,
+            reasoning_kwarg="reasoning_effort",
+            profile_values={
+                ExecutionProfile.FAST: "low",
+                ExecutionProfile.BALANCED: "medium",
+                ExecutionProfile.DEEP: "high",
+                ExecutionProfile.MAX: "high",
+            },
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_OPENAI,
+    )
+
+    # --------------------------------------------------------------
+    # Anthropic  — thinking_budget parameter (optional)
+    # integer token budget (0-125000)
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=True,
+            reasoning_kwarg="thinking_budget",
+            profile_values={
+                ExecutionProfile.FAST: 1024,
+                ExecutionProfile.BALANCED: 5000,
+                ExecutionProfile.DEEP: 50000,
+                ExecutionProfile.MAX: 125000,
+            },
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_ANTHROPIC,
+    )
+
+    # --------------------------------------------------------------
+    # MistralAI  — no native reasoning parameter yet
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=False,
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_MISTRAL,
+    )
+
+    # --------------------------------------------------------------
+    # Google Gemini  — thinking_config / thinking_budget token budget
+    # Gemini uses thinking_budget (int) via client_options.
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=True,
+            reasoning_kwarg="thinking_budget",
+            profile_values={
+                ExecutionProfile.FAST: 1024,
+                ExecutionProfile.BALANCED: 5000,
+                ExecutionProfile.DEEP: 50000,
+                ExecutionProfile.MAX: 125000,
+            },
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_GOOGLE,
+    )
+
+    # --------------------------------------------------------------
+    # Google Cloud (Vertex AI) — same mechanism as Gemini
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=True,
+            reasoning_kwarg="thinking_budget",
+            profile_values={
+                ExecutionProfile.FAST: 1024,
+                ExecutionProfile.BALANCED: 5000,
+                ExecutionProfile.DEEP: 50000,
+                ExecutionProfile.MAX: 125000,
+            },
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_GOOGLE_CLOUD,
+    )
+
+    # --------------------------------------------------------------
+    # Azure OpenAI  — supports reasoning_effort via Azure's API
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=True,
+            reasoning_kwarg="reasoning_effort",
+            profile_values={
+                ExecutionProfile.FAST: "low",
+                ExecutionProfile.BALANCED: "medium",
+                ExecutionProfile.DEEP: "high",
+                ExecutionProfile.MAX: "high",
+            },
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_AZURE,
+    )
+
+    # --------------------------------------------------------------
+    # OpenRouter  — passes reasoning parameter through to underlying
+    # model (provider-agnostic — OpenRouter normalises reasoning_effort).
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=True,
+            reasoning_kwarg="reasoning_effort",
+            profile_values={
+                ExecutionProfile.FAST: "low",
+                ExecutionProfile.BALANCED: "medium",
+                ExecutionProfile.DEEP: "high",
+                ExecutionProfile.MAX: "high",
+            },
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_OPENROUTER,
+    )
+
+    # --------------------------------------------------------------
+    # Custom / Ollama  — may support reasoning parameters but
+    # default to disabled until the user configures it.
+    # --------------------------------------------------------------
+    register_provider_capability(
+        ProviderCapability(
+            supported=False,
+            default_profile=ExecutionProfile.BALANCED,
+        ),
+        PROVIDER_CUSTOM,
+    )
+
+
+# ====================================================================
+# Built-in model overrides
+# ====================================================================
+
+
+def _register_builtin_model_overrides() -> None:
+    """Register per-model capability overrides."""
+
+    # OpenAI o-series: reasoning is mandatory and temperature is
+    # incompatible with thinking.
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"^o\d",
+            supports_reasoning=True,
+            disable_temperature=True,
+            supports_vision=True,
+        )
+    )
+
+    # Claude models: reasoning is always enabled; disable temperature
+    # when thinking budget > 0 (Anthropic's behaviour for some models).
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_ANTHROPIC,
+            regex_pattern=r"^claude-(?:opus|sonnet|haiku)-\d",
+            supports_vision=True,
+        )
+    )
+
+    # Gemini models: multimodal, reasoning supported.
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_GOOGLE,
+            regex_pattern=r"^gemini-[2-9]",
+            supports_reasoning=True,
+            supports_vision=True,
+        )
+    )
+
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_GOOGLE,
+            regex_pattern=r"^gemini-1\.5",
+            supports_reasoning=True,
+            supports_vision=True,
+        )
+    )
+
+
+# ====================================================================
+# Module initialisation
+# ====================================================================
+
+
+_register_builtin_capabilities()
+_register_builtin_model_overrides()

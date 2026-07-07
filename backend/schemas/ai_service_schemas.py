@@ -3,7 +3,13 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
-# ==================== AI SERVICE SCHEMAS ====================
+class ExecutionProfileSchema(BaseModel):
+    """Schema for execution profile choices available to the user."""
+    profile_name: str
+    level: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
 
 class AIServiceListItemSchema(BaseModel):
     """Schema for AI service list items"""
@@ -12,6 +18,7 @@ class AIServiceListItemSchema(BaseModel):
     provider: Optional[str] = None
     model_name: str
     supports_video: bool = False
+    execution_profile: int = 1
     created_at: Optional[datetime]
     needs_api_key: bool = False
     is_system: bool = False
@@ -28,8 +35,10 @@ class AIServiceDetailSchema(BaseModel):
     api_key: str
     base_url: str
     supports_video: bool = False
+    execution_profile: int = 1
     created_at: Optional[datetime] = None
     available_providers: List[Dict[str, Any]] = []
+    execution_profiles: List[ExecutionProfileSchema] = []
     needs_api_key: bool = False
     # AWS Bedrock identifiers (non-secret). Empty for other providers.
     aws_access_key_id: Optional[str] = None
@@ -50,6 +59,7 @@ class CreateUpdateAIServiceSchema(BaseModel):
     # via ``api_key``; the access key id and region travel here.
     aws_access_key_id: Optional[str] = None
     aws_region: Optional[str] = None
+    execution_profile: Optional[int] = 1
 
     @field_validator("api_key", "base_url", "aws_access_key_id", "aws_region", mode="before")
     @classmethod
@@ -59,3 +69,10 @@ class CreateUpdateAIServiceSchema(BaseModel):
         # whitespace cause httpx to fail building the Authorization header
         # and the OpenAI SDK reports it as a misleading "Connection error".
         return v.strip() if isinstance(v, str) else v
+
+
+class ExecutionProfilesResponseSchema(BaseModel):
+    """Schema for the execution profile configuration endpoint."""
+    profiles: List[ExecutionProfileSchema]
+    default_profile: ExecutionProfileSchema
+    available_providers: List[str]

@@ -144,6 +144,7 @@ class AgentExportService(BaseExportService):
             memory_max_tokens=agent.memory_max_tokens,
             memory_summarize_threshold=agent.memory_summarize_threshold,
             temperature=agent.temperature,
+            execution_profile=agent.execution_profile,
             # OCR-specific fields
             vision_service_name=vision_service_name,
             vision_system_prompt=vision_system_prompt,

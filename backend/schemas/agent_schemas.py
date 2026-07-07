@@ -137,6 +137,7 @@ class AgentDetailSchema(BaseModel):
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: float = DEFAULT_AGENT_TEMPERATURE
+    execution_profile: Optional[int] = None
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
     skill_ids: List[int] = []
@@ -190,6 +191,7 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin):
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
+    execution_profile: Optional[int] = None
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
@@ -244,6 +246,7 @@ class PublicAgentDetailSchema(BaseModel):
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
+    execution_profile: Optional[int] = None
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
@@ -272,6 +275,7 @@ class CreateAgentRequestSchema(RagConfigFieldsMixin):
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
+    execution_profile: Optional[int] = None
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
@@ -292,6 +296,7 @@ class CreateOCRAgentRequestSchema(BaseModel):
     text_system_prompt: Optional[str] = ""
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE
+    execution_profile: Optional[int] = None
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
@@ -312,6 +317,7 @@ class UpdateAgentRequestSchema(RagConfigFieldsMixin):
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = None
+    execution_profile: Optional[int] = None
     tool_ids: Optional[List[int]] = None
     mcp_config_ids: Optional[List[int]] = None
     skill_ids: Optional[List[int]] = None
