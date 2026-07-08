@@ -103,6 +103,13 @@ class ModelCapability:
     matching lets administrators define behaviour for an entire
     model family with a single entry (e.g. ``gpt-4o`` covers
     ``gpt-4o-2024-05-13``, ``gpt-4o-mini``, etc.).
+
+    Some models use a *different* reasoning mechanism than their
+    provider's default (e.g. OpenAI o1 models use ``max_completion_tokens``
+    instead of ``reasoning_effort``).  ``model_reasoning_kwarg`` and
+    ``model_reasoning_config`` provide an escape hatch for this case
+    without scattering provider-specific logic throughout the inference
+    layer.
     """
 
     # Regex prefix to match against the model id (e.g. ``o1``,
@@ -134,8 +141,22 @@ class ModelCapability:
     supports_vision: Optional[bool] = None
     supports_json_mode: Optional[bool] = None
 
+    # Model-specific reasoning kwarg name.  When present this value
+    # overrides the provider's ``reasoning_kwarg`` — the model will
+    # receive this kwarg *instead* of the provider default.
+    #
+    # Use this when a model uses a different reasoning mechanism than
+    # its provider (e.g. o1 uses ``max_completion_tokens`` instead of
+    # ``reasoning_effort``).
+    model_reasoning_kwarg: Optional[str] = None
+
+    # Model-specific reasoning values mapping profiles to values for
+    # the *model-specific* kwarg.  Only used when ``model_reasoning_kwarg``
+    # is set.
+    model_reasoning_config: Dict[ExecutionProfile, Any] = dataclasses.field(default_factory=dict)
+
     @classmethod
-    def for_model(cls, provider: str, model_id: str) -> ModelCapability:
+    def for_model(cls, provider: str, model_id: str) -> "ModelCapability":
         """Find the most specific ModelCapability for *model_id*.
 
         Walks the **global model overrides** registry (``_MODEL_OVERRIDES``)
@@ -150,7 +171,7 @@ class ModelCapability:
                 return rule
 
         # 2. Longest prefix match
-        best_match: Optional[ModelCapability] = None
+        best_match: Optional["ModelCapability"] = None
         best_len = 0
 
         for rule in _MODEL_OVERRIDES:
@@ -211,10 +232,17 @@ class RuntimeConfig:
     execution_profile: ExecutionProfile
 
     # Reasoning runtime parameter: the kwarg name and value that will
-    # be sent to the LLM client (e.g. ``("reasoning_effort", "high")``).
+    # be sent to the LLM client (e.g. ("reasoning_effort", "high")).
     # ``None`` when reasoning is not supported for this model/profile.
     reasoning_kwarg: Optional[str] = None
     reasoning_value: Optional[Any] = None
+
+    # Model-specific reasoning kwarg/overriding the provider default.
+    # These fields are set when a model uses a different reasoning
+    # mechanism than its provider (e.g. o1 models use
+    # ``max_completion_tokens`` instead of ``reasoning_effort``).
+    model_reasoning_kwarg: Optional[str] = None
+    model_reasoning_value: Optional[Any] = None
 
     # Capability flags — precomputed from provider + model override so
     # the inference layer only looks at runtime config.
@@ -248,6 +276,11 @@ class RuntimeConfigBuilder:
     1. Look up the provider's ``ProviderCapability`` in the global registry.
     2. Apply ``ModelCapability`` overrides from the global overrides.
     3. Populate the ``RuntimeConfig`` with the resolved kwarg mapping.
+
+    **Model-specific reasoning** takes priority: when a ``ModelCapability``
+    sets ``model_reasoning_kwarg``, the runtime uses that kwarg *instead* of
+    the provider's ``reasoning_kwarg`` and looks up values from
+    ``model_reasoning_config`` rather than ``profile_values``.
     """
 
     @staticmethod
@@ -264,13 +297,22 @@ class RuntimeConfigBuilder:
         resolved = model_cap.apply_provider_defaults(provider_cap)
 
         # 3. Resolve specific value for the chosen profile
+
+        # --- Model-specific reasoning (overrides provider default) ---
         reasoning_kwarg: Optional[str] = None
         reasoning_value: Optional[Any] = None
+        model_reasoning_kwarg: Optional[str] = None
+        model_reasoning_value: Optional[Any] = None
 
-        if resolved.has_reasoning_config:
+        if model_cap.model_reasoning_kwarg:
+            # Model overrides the provider's reasoning mechanism.
+            model_reasoning_kwarg = model_cap.model_reasoning_kwarg
+            model_reasoning_value = model_cap.model_reasoning_config.get(execution_profile)
+        elif resolved.has_reasoning_config:
+            # Fall back to provider-level reasoning.
+            reasoning_kwarg = resolved.reasoning_kwarg
             profile_val = resolved.profile_values.get(execution_profile)
             if profile_val is not None:
-                reasoning_kwarg = resolved.reasoning_kwarg
                 reasoning_value = profile_val
 
         # 4. Compute derived capability flags
@@ -283,6 +325,8 @@ class RuntimeConfigBuilder:
             execution_profile=execution_profile,
             reasoning_kwarg=reasoning_kwarg,
             reasoning_value=reasoning_value,
+            model_reasoning_kwarg=model_reasoning_kwarg,
+            model_reasoning_value=model_reasoning_value,
             supports_reasoning=caps,
             supports_vision=model_cap.supports_vision or False,
             supports_json_mode=model_cap.supports_json_mode or False,
@@ -316,8 +360,8 @@ def build_runtime_kwargs(
             execution_profile=ExecutionProfile.DEEP,
         )
         kwargs = build_runtime_kwargs(rc, temperature=0.7)
-        # kwargs = {"thinking_budget": 125_000, "temperature": 0.7}
-        llm = ChatAnthropic(**kwargs, api_key=...)
+        # kwargs = {"reasoning_effort": "high", "temperature": 0.7}
+        llm = ChatOpenAI(**kwargs, api_key=...)
 
     Adding a new provider with a new reasoning mechanism only requires
     registering it in ``_REGISTRY`` — the kwarg builder stays unchanged.
@@ -328,9 +372,14 @@ def build_runtime_kwargs(
     if temperature is not None and not runtime_config.disable_temperature:
         kwargs["temperature"] = temperature
 
-    # Reasoning parameter
+    # Provider-level reasoning parameter
     if runtime_config.reasoning_kwarg is not None and runtime_config.reasoning_value is not None:
         kwargs[runtime_config.reasoning_kwarg] = runtime_config.reasoning_value
+
+    # Model-specific reasoning parameter (overrides provider default)
+    # This handles models like o1 that use a different reasoning mechanism
+    if runtime_config.model_reasoning_kwarg is not None and runtime_config.model_reasoning_value is not None:
+        kwargs[runtime_config.model_reasoning_kwarg] = runtime_config.model_reasoning_value
 
     # Additional override kwargs (retrievers, custom metadata…)
     if additional_kwargs:
@@ -385,10 +434,10 @@ def clear_model_overrides() -> None:
 def _register_builtin_capabilities() -> None:
     """Wire up reasoning capabilities for every supported provider."""
 
-    # --------------------------------------------------------------
-    # OpenAI  — reasoning_effort parameter (o-series, gpt-4o+)
-    # "low" | "medium" | "high"  or None when disabled
-    # --------------------------------------------------------------
+    # ------ OpenAI — reasoning_effort parameter (non-o-series, gpt-4o+)
+    # "low" | "medium" | "high"  or None when disabled.
+    # NOTE: o1 models deliberately do NOT use reasoning_effort — they use
+    # max_completion_tokens and are handled via model overrides.
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -404,10 +453,8 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_OPENAI,
     )
 
-    # --------------------------------------------------------------
-    # Anthropic  — thinking_budget parameter (optional)
+    # ------ Anthropic — thinking_budget parameter (optional)
     # integer token budget (0-125000)
-    # --------------------------------------------------------------
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -423,9 +470,7 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_ANTHROPIC,
     )
 
-    # --------------------------------------------------------------
-    # MistralAI  — no native reasoning parameter yet
-    # --------------------------------------------------------------
+    # ------ MistralAI — no native reasoning parameter yet
     register_provider_capability(
         ProviderCapability(
             supported=False,
@@ -434,10 +479,7 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_MISTRAL,
     )
 
-    # --------------------------------------------------------------
-    # Google Gemini  — thinking_config / thinking_budget token budget
-    # Gemini uses thinking_budget (int) via client_options.
-    # --------------------------------------------------------------
+    # ------ Google Gemini — thinking_budget token budget
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -453,9 +495,7 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_GOOGLE,
     )
 
-    # --------------------------------------------------------------
-    # Google Cloud (Vertex AI) — same mechanism as Gemini
-    # --------------------------------------------------------------
+    # ------ Google Cloud (Vertex AI) — same mechanism as Gemini
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -471,9 +511,7 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_GOOGLE_CLOUD,
     )
 
-    # --------------------------------------------------------------
-    # Azure OpenAI  — supports reasoning_effort via Azure's API
-    # --------------------------------------------------------------
+    # ------ Azure OpenAI — supports reasoning_effort via Azure's API
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -489,10 +527,8 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_AZURE,
     )
 
-    # --------------------------------------------------------------
-    # OpenRouter  — passes reasoning parameter through to underlying
+    # ------ OpenRouter — passes reasoning parameter through to underlying
     # model (provider-agnostic — OpenRouter normalises reasoning_effort).
-    # --------------------------------------------------------------
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -508,10 +544,8 @@ def _register_builtin_capabilities() -> None:
         PROVIDER_OPENROUTER,
     )
 
-    # --------------------------------------------------------------
-    # Custom / Ollama  — may support reasoning parameters but
+    # ------ Custom / Ollama — may support reasoning parameters but
     # default to disabled until the user configures it.
-    # --------------------------------------------------------------
     register_provider_capability(
         ProviderCapability(
             supported=False,
@@ -529,20 +563,39 @@ def _register_builtin_capabilities() -> None:
 def _register_builtin_model_overrides() -> None:
     """Register per-model capability overrides."""
 
-    # OpenAI o-series: reasoning is mandatory and temperature is
-    # incompatible with thinking.
+    # OpenAI o1 models: do NOT use reasoning_effort — they use
+    # max_completion_tokens for controlling reasoning depth.
+    # Temperature is disabled.
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^o\d",
+            regex_pattern=r"^o1",
+            supports_reasoning=True,
+            disable_temperature=True,
+            supports_vision=True,
+            model_reasoning_kwarg="max_completion_tokens",
+            model_reasoning_config={
+                ExecutionProfile.FAST: 128,
+                ExecutionProfile.BALANCED: 512,
+                ExecutionProfile.DEEP: 1024,
+                ExecutionProfile.MAX: 2048,
+            },
+        )
+    )
+
+    # OpenAI o3+ models: use reasoning_effort like the provider default,
+    # but are reasoning-only (no temperature).
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"^o3",
             supports_reasoning=True,
             disable_temperature=True,
             supports_vision=True,
         )
     )
 
-    # Claude models: reasoning is always enabled; disable temperature
-    # when thinking budget > 0 (Anthropic's behaviour for some models).
+    # Claude models: reasoning is always enabled; vision support.
     register_model_override(
         ModelCapability(
             provider=PROVIDER_ANTHROPIC,

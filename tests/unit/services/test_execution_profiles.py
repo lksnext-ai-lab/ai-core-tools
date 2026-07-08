@@ -264,23 +264,34 @@ def test_has_reasoning_config_logic(supported, kwarg, expected):
 
 
 def test_model_capability_exact_match_o1():
-    """Verify exact match: model 'o1' gets overrides for regex pattern '^o\d'."""
+    """Verify o1 gets overrides: reasoning enabled, temperature disabled, max_completion_tokens kwarg."""
     _restore_builtins()  # Ensure builtins are present
-    # The built-in override uses regex_pattern r"^o\d" which matches "o1"
     cap = ModelCapability.for_model(PROVIDER_OPENAI, "o1")
-    assert cap.regex_pattern == "^o\\d"
+    assert cap.regex_pattern == "^o1"
     assert cap.supports_reasoning is True
     assert cap.disable_temperature is True
+    assert cap.supports_vision is True
+    assert cap.model_reasoning_kwarg == "max_completion_tokens"
+    assert ExecutionProfile.FAST in cap.model_reasoning_config
 
 
 def test_model_capability_prefix_matching():
     """Verify prefix matching works for model families."""
     _restore_builtins()
-    # ^o\d should match o1, o3, o4, o1-2024-12-17, etc.
-    for model in ("o1", "o3", "o4", "o1-mini", "o1-2024-12-17"):
+    # o1 prefix: max_completion_tokens, no temperature
+    for model in ("o1", "o1-mini", "o1-2024-12-17"):
         cap = ModelCapability.for_model(PROVIDER_OPENAI, model)
-        assert cap.regex_pattern == "^o\\d"
+        assert cap.regex_pattern == "^o1"
         assert cap.supports_reasoning is True
+        assert cap.model_reasoning_kwarg == "max_completion_tokens"
+
+    # o3 prefix: reasoning_effort (inherits provider default), no temperature
+    for model in ("o3", "o3-mini"):
+        cap = ModelCapability.for_model(PROVIDER_OPENAI, model)
+        assert cap.regex_pattern == "^o3"
+        assert cap.supports_reasoning is True
+        assert cap.disable_temperature is True
+        # o3 uses the default reasoning_effort (no model_reasoning_kwarg)
 
     # ^gemini-[2-9] should match gemini-2, gemini-2.5, etc.
     for model in ("gemini-2.0-pro", "gemini-2.5", "gemini-3"):
@@ -393,14 +404,46 @@ class TestRuntimeConfigBuilderOpenAI:
         assert rc.reasoning_kwarg == "reasoning_effort"
         assert rc.reasoning_value == expected_value
 
-    def test_openai_o1_max_disable_temperature(self):
-        """OpenAI o1 at MAX profile should have reasoning=high and disable_temperature=True."""
+    def test_openai_o3_reasoning(self):
+        """OpenAI o3 should use provider default reasoning_effort with temperature disabled."""
         _restore_builtins()
-        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "o1", ExecutionProfile.MAX)
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "o3", ExecutionProfile.DEEP)
+        # o3 uses provider default reasoning_effort (no model_reasoning_kwarg)
+        assert rc.model_reasoning_kwarg is None
+        assert rc.model_reasoning_value is None
         assert rc.reasoning_kwarg == "reasoning_effort"
         assert rc.reasoning_value == "high"
         assert rc.disable_temperature is True
         assert rc.supports_reasoning is True
+
+    def test_openai_o1_model_specific_reasoning(self):
+        """OpenAI o1 should use max_completion_tokens instead of reasoning_effort."""
+        _restore_builtins()
+        for profile, expected_token in [
+            (ExecutionProfile.FAST, 128),
+            (ExecutionProfile.BALANCED, 512),
+            (ExecutionProfile.DEEP, 1024),
+            (ExecutionProfile.MAX, 2048),
+        ]:
+            rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "o1", profile)
+            assert rc.model_reasoning_kwarg == "max_completion_tokens"
+            assert rc.model_reasoning_value == expected_token
+            # Should NOT use provider default reasoning_effort for o1
+            assert rc.reasoning_kwarg is None
+            assert rc.reasoning_value is None
+            assert rc.disable_temperature is True
+            assert rc.supports_reasoning is True
+
+    def test_openai_o1_model_reasoning_override_prevents_provider_kwarg(self):
+        """When model_reasoning_kwarg is set, the provider's kwarg must not appear."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "o1", ExecutionProfile.MAX)
+        # The model overrides the provider's reasoning mechanism entirely
+        assert rc.reasoning_kwarg is None
+        assert rc.reasoning_value is None
+        # But the model-specific config takes effect
+        assert rc.model_reasoning_kwarg == "max_completion_tokens"
+        assert rc.model_reasoning_value == 2048
 
 
 class TestRuntimeConfigBuilderAnthropic:
@@ -668,14 +711,16 @@ class TestBuildRuntimeKwargs:
         assert kwargs["temperature"] == 0.8
         assert kwargs["top_p"] == 0.9
 
-    def test_o1_no_temperature_in_kwargs(self):
-        """o-series models should not get temperature despite being passed."""
+    def test_o1_model_reasoning_no_temperature_in_kwargs(self):
+        """o1 models use max_completion_tokens (not reasoning_effort) and have no temperature."""
         _restore_builtins()
         rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "o1", ExecutionProfile.MAX)
         kwargs = build_runtime_kwargs(rc, temperature=0.7)
-        assert "reasoning_effort" in kwargs
-        assert kwargs["reasoning_effort"] == "high"
         assert "temperature" not in kwargs
+        # o1 uses model_reasoning_kwarg, not provider reasoning_effort
+        assert "max_completion_tokens" in kwargs
+        assert kwargs["max_completion_tokens"] == 2048
+        assert "reasoning_effort" not in kwargs
 
 
 # ========================================================================
