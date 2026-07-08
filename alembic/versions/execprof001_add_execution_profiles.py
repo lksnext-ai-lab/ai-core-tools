@@ -8,7 +8,7 @@ of the LLM provider.
 - Agent.execution_profile     : SmallInteger, nullable (None = inherit)
 
 Revision ID: execprof001
-Revises: merge001_usedel_platform_role
+Revises: merge001_userdel_platform_role
 Create Date: 2026-07-07
 """
 from alembic import op
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'execprof001'
-down_revision = 'merge001_usedel_platform_role'
+down_revision = 'merge001_userdel_platform_role'
 branch_labels = None
 depends_on = None
 

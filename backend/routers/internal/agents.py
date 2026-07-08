@@ -734,6 +734,8 @@ async def chat_with_agent_stream(
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
+    override_execution_profile: Annotated[Optional[int], Form()] = None,
+    override_temperature: Annotated[Optional[float], Form()] = None,
 ):
     """
     Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)
@@ -779,6 +781,8 @@ async def chat_with_agent_stream(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            override_execution_profile=override_execution_profile,
+            override_temperature=override_temperature,
         )
 
         # Wrap so ephemeral uploads are cleaned when the consumer is done

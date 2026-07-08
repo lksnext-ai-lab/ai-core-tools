@@ -51,14 +51,21 @@ def get_output_parser(agent):
 # Legacy functions removed - now using create_agent from agentTools.py
 # This provides full tool support, MCP integration, and LangSmith tracing
 
-def _resolve_execution_profile(ai_service, agent, is_vision=False) -> "ExecutionProfile":
+def _resolve_execution_profile(ai_service, agent, is_vision=False, override_profile=None) -> "ExecutionProfile":
     """Resolve the execution profile for an LLM build.
 
     Resolution order:
-      1. Agent-level override (if set)
-      2. AI service default
-      3. Provider default
+      1. Per-request override (if provided)
+      2. Agent-level override (if set)
+      3. AI service default
+      4. Provider default
     """
+    if override_profile is not None:
+        try:
+            return ExecutionProfile(int(override_profile))
+        except ValueError:
+            pass
+
     agent_profile = getattr(agent, 'execution_profile', None) if agent is not None else None
     if agent_profile is not None:
         try:
@@ -81,6 +88,8 @@ def create_llm_from_service(
     temperature=0,
     is_vision=False,
     agent: Optional[Any] = None,
+    override_execution_profile: Optional[int] = None,
+    override_temperature: Optional[float] = None,
 ) -> Any:
     """
     Create an LLM instance from an AIService model, threaded with
@@ -91,6 +100,8 @@ def create_llm_from_service(
         temperature: float.
         is_vision: boolean (used for Mistral vision path).
         agent: optional Agent that may override the service profile.
+        override_execution_profile: optional per-request execution profile override.
+        override_temperature: optional per-request temperature override.
     """
     provider_builders = {
         ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temperature),
@@ -103,7 +114,12 @@ def create_llm_from_service(
         ProviderEnum.OpenRouter.value: lambda: _build_openrouter_llm(ai_service, temperature),
         ProviderEnum.Bedrock.value: lambda: _build_bedrock_llm(ai_service, temperature),
     }
-    execution_profile = _resolve_execution_profile(ai_service, agent, is_vision)
+    # Determine which temperature to use: per-request override > agent value
+    effective_temperature = temperature
+    if override_temperature is not None:
+        effective_temperature = override_temperature
+
+    execution_profile = _resolve_execution_profile(ai_service, agent, is_vision, override_profile=override_execution_profile)
 
     # Handle case where provider might be an Enum object instead of string
     provider = ai_service.provider
@@ -120,7 +136,12 @@ def create_llm_from_service(
     )
 
     # Determine temperature — may be disabled by the runtime config
-    temp = temperature if not runtime_config.disable_temperature else None
+    temp = effective_temperature if not runtime_config.disable_temperature else None
+
+    # If the model requires a specific temperature value (e.g. 1.0) regardless
+    # of what the agent or user configured, override here.
+    if runtime_config.force_temperature is not None:
+        temp = runtime_config.force_temperature
 
     # Dispatch to provider-specific builder with runtime kwargs
     provider_builders = {
@@ -141,12 +162,13 @@ def create_llm_from_service(
     return builder()
 
 
-def get_llm(agent, is_vision=False):
+def get_llm(agent, is_vision=False, override_temperature: Optional[float] = None):
     """
     Función base para obtener cualquier modelo LLM
     Args:
         agent: Agent object with model configuration
         is_vision: Boolean que indica si es un modelo de visión
+        override_temperature: optional per-request temperature override
     """
     if is_vision:
         ai_service = agent.vision_service_rel
@@ -158,9 +180,12 @@ def get_llm(agent, is_vision=False):
     
     # Get temperature from agent, default to DEFAULT_AGENT_TEMPERATURE if not set
     from models.agent import DEFAULT_AGENT_TEMPERATURE
-    temperature = getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE)
+    temperature = override_temperature if override_temperature is not None else getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE)
 
-    return create_llm_from_service(ai_service, temperature, is_vision, agent=agent)
+    return create_llm_from_service(
+        ai_service, temperature, is_vision, agent=agent,
+        override_temperature=override_temperature,
+    )
 
 class MistralWrapper:
     def __init__(self, client, model_name):

@@ -141,6 +141,14 @@ class ModelCapability:
     supports_vision: Optional[bool] = None
     supports_json_mode: Optional[bool] = None
 
+    # When set, the runtime will force temperature to this exact value
+    # regardless of what the user or agent specifies.  Use this when a
+    # model accepts the temperature parameter but only the default (1.0)
+    # value is valid — passing anything else produces an API error.
+    #
+    # ``None`` means "do not force temperature".
+    force_temperature: Optional[float] = None
+
     # Model-specific reasoning kwarg name.  When present this value
     # overrides the provider's ``reasoning_kwarg`` — the model will
     # receive this kwarg *instead* of the provider default.
@@ -209,6 +217,13 @@ class ModelCapability:
             return False
         return self.disable_temperature
 
+    @property
+    def effective_force_temperature(self) -> Optional[float]:
+        """Return the temperature value to force, or None if no forcing needed."""
+        if self.force_temperature is not None:
+            return self.force_temperature
+        return None
+
 
 # ====================================================================
 # RuntimeConfig
@@ -253,6 +268,10 @@ class RuntimeConfig:
     # When the provider disables temperature alongside reasoning
     # (some models reject ``temperature`` when thinking is on).
     disable_temperature: bool = False
+
+    # When the model requires temperature to be a specific value (e.g. 1.0)
+    # regardless of what the user or agent specifies.
+    force_temperature: Optional[float] = None
 
     # Execution-profile metadata (default profile, available levels).
     # Exposed so callers can validate overrides.
@@ -318,6 +337,7 @@ class RuntimeConfigBuilder:
         # 4. Compute derived capability flags
         caps = model_cap.supports_reasoning or resolved.supported
         disallow_temp = model_cap.should_disable_temperature and caps
+        force_temp = model_cap.effective_force_temperature
 
         return RuntimeConfig(
             provider=provider,
@@ -331,6 +351,7 @@ class RuntimeConfigBuilder:
             supports_vision=model_cap.supports_vision or False,
             supports_json_mode=model_cap.supports_json_mode or False,
             disable_temperature=disallow_temp,
+            force_temperature=force_temp,
             default_profile=resolved.default_profile,
             profile_values=dict(resolved.profile_values),
         )
@@ -368,8 +389,13 @@ def build_runtime_kwargs(
     """
     kwargs: Dict[str, Any] = {}
 
-    # Temperature — may be skipped when the profile disables it.
-    if temperature is not None and not runtime_config.disable_temperature:
+    # Temperature — three possible modes driven by RuntimeConfig:
+    #   1. force_temperature: send the model's required value (e.g. 1.0)
+    #   2. disable_temperature: omit temperature entirely
+    #   3. default: send the caller-supplied temperature (may be None)
+    if runtime_config.force_temperature is not None:
+        kwargs["temperature"] = runtime_config.force_temperature
+    elif temperature is not None and not runtime_config.disable_temperature:
         kwargs["temperature"] = temperature
 
     # Provider-level reasoning parameter
@@ -620,6 +646,18 @@ def _register_builtin_model_overrides() -> None:
             regex_pattern=r"^gemini-1\.5",
             supports_reasoning=True,
             supports_vision=True,
+        )
+    )
+
+    # OpenAI gpt-5.4, gpt-5.5, and similar models reject reasoning_effort
+    # when function tools are used (they expect /v1/responses instead of
+    # /v1/chat/completions).  The safest approach: disable reasoning entirely
+    # for these models in the chat completions path.
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"^gpt-5\.[4-9]",
+            supports_reasoning=False,
         )
     )
 

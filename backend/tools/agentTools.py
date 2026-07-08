@@ -218,6 +218,8 @@ async def create_agent(
     sandbox_provider: Optional[Any] = None,
     sandbox_session_key: Optional[str] = None,
     sandbox_session_service: Optional[Any] = None,
+    override_execution_profile: Optional[int] = None,
+    override_temperature: Optional[float] = None
 ):
     """Create a new agent instance with cached checkpointer if memory is enabled.
 
@@ -231,8 +233,10 @@ async def create_agent(
         sandbox_provider: Optional provider matching sandbox_handle
         sandbox_session_key: Optional key for sandbox active-use leasing
         sandbox_session_service: Optional service used for sandbox active-use leasing
+        override_execution_profile: optional per-request execution profile override
+        override_temperature: optional per-request temperature override
     """
-    llm = get_llm(agent)
+    llm = get_llm(agent, override_temperature=override_temperature)
     if llm is None:
         raise ValueError("No LLM found for agent")
 

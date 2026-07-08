@@ -1829,6 +1829,7 @@ class ApiService {
       files?: File[];
       searchParams?: unknown;
       conversationId?: number | null;
+      executionProfile?: number | null;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     }
@@ -1841,6 +1842,9 @@ class ApiService {
     }
     if (options.conversationId) {
       formData.append('conversation_id', options.conversationId.toString());
+    }
+    if (options.executionProfile !== undefined && options.executionProfile !== null) {
+      formData.append('override_execution_profile', options.executionProfile.toString());
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));

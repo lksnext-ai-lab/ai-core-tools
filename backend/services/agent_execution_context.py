@@ -44,3 +44,7 @@ class AgentExecutionContext:
     processed_files: List[Dict[str, Any]] = field(default_factory=list)
     search_params: Optional[Dict[str, Any]] = None
     user_context: Optional[Dict[str, Any]] = None
+
+    # Per-request runtime overrides (take priority over agent/service defaults)
+    override_execution_profile: Optional[int] = None
+    override_temperature: Optional[float] = None

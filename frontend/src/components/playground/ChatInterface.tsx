@@ -43,6 +43,7 @@ interface ChatInterfaceProps {
   onMessageSent?: () => void;
   metadataFields?: SearchFilterMetadataField[];
   vectorDbType?: string;
+  defaultExecutionProfile?: number | null;
 }
 
 function ChatInterface({
@@ -54,6 +55,7 @@ function ChatInterface({
   onMessageSent,
   metadataFields,
   vectorDbType,
+  defaultExecutionProfile,
 }: Readonly<ChatInterfaceProps>) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -68,6 +70,9 @@ function ChatInterface({
     undefined
   );
   const [filtersKey, setFiltersKey] = useState(0);
+  const [selectedExecutionProfile, setSelectedExecutionProfile] = useState<number | null>(
+    defaultExecutionProfile ?? null
+  );
   /** UI-only state to render the floating "scroll to bottom" button. Behaviour
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -265,6 +270,7 @@ function ChatInterface({
       const result = await sendMessage(messageText, {
         conversationId: currentConversationId,
         searchParams,
+        executionProfile: selectedExecutionProfile,
       });
 
       const rawResponse = result.response || '';
@@ -440,6 +446,91 @@ function ChatInterface({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
+      {/* Execution Profile Selector */}
+      <div className="pg-glass rounded-xl overflow-hidden">
+        <button
+          type="button"
+          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/30 dark:hover:bg-gray-700/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
+          onClick={() => setIsFilterExpanded((prev) => !prev)}
+          aria-expanded={isFilterExpanded}
+          aria-controls="execution-profile-section"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <svg
+              className="w-4 h-4 text-indigo-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+            Execution Profile
+          </span>
+          <svg
+            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+              isFilterExpanded ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </button>
+
+        <div
+          id="execution-profile-section"
+          className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 ${
+            isFilterExpanded ? '' : 'hidden'
+          }`}
+        >
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { value: 0, label: 'FAST', color: 'bg-emerald-500 text-white' },
+              { value: 1, label: 'BALANCED', color: selectedExecutionProfile === 1 ? 'bg-indigo-600 text-white' : 'bg-white/30 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300' },
+              { value: 2, label: 'DEEP', color: selectedExecutionProfile === 2 ? 'bg-indigo-600 text-white' : 'bg-white/30 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300' },
+              { value: 3, label: 'MAX', color: selectedExecutionProfile === 3 ? 'bg-indigo-600 text-white' : 'bg-white/30 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300' },
+            ].map((profile) => (
+              <button
+                key={profile.value}
+                type="button"
+                onClick={() => setSelectedExecutionProfile(profile.value)}
+                disabled={isStreaming}
+                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all ${profile.color} ${
+                  isStreaming ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'
+                }`}
+              >
+                {profile.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            {selectedExecutionProfile === null
+              ? 'Using agent default profile'
+              : selectedExecutionProfile === 0
+                ? 'FAST: Low latency, minimal reasoning'
+                : selectedExecutionProfile === 1
+                  ? 'BALANCED: Standard reasoning performance'
+                  : selectedExecutionProfile === 2
+                    ? 'DEEP: Extended reasoning and analysis'
+                    : 'MAX: Maximum reasoning and analysis'
+            }
+          </p>
+        </div>
+      </div>
+
       {/* Metadata Filters Section */}
       {metadataFields && metadataFields.length > 0 && (
         <div className="pg-glass rounded-xl overflow-hidden">
