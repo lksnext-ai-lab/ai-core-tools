@@ -2279,6 +2279,7 @@ class ApiService {
     options: {
       files?: File[];
       fileReferences?: string[];
+      executionProfile?: number | null;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     },
@@ -2288,6 +2289,9 @@ class ApiService {
 
     if (options.fileReferences && options.fileReferences.length > 0) {
       formData.append('file_references', JSON.stringify(options.fileReferences));
+    }
+    if (options.executionProfile !== undefined && options.executionProfile !== null) {
+      formData.append('override_execution_profile', options.executionProfile.toString());
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));

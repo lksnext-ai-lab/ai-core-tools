@@ -576,6 +576,18 @@ def _safe_increment_marketplace_usage(user_id: int, db: Session) -> None:
         logger.error(f"Failed to increment marketplace usage for user {user_id}: {inc_err}")
 
 
+def _parse_execution_profile(value: Optional[str]) -> Optional[int]:
+    """Parse an optional execution profile string to int, returning None for 'inherit' or empty."""
+    if not value or value.strip() == '':
+        return None
+    if value.strip().lower() == 'inherit':
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
 def _prepare_marketplace_chat(
     conversation_id: int,
     user_id: int,
@@ -611,6 +623,7 @@ async def marketplace_chat(
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
+    override_execution_profile: Annotated[Optional[str], Form()] = None,
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
@@ -648,6 +661,7 @@ async def marketplace_chat(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            override_execution_profile=_parse_execution_profile(override_execution_profile),
         )
 
         _safe_increment_marketplace_usage(user_id, db)
@@ -683,6 +697,7 @@ async def marketplace_chat_stream(
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
+    override_execution_profile: Annotated[Optional[str], Form()] = None,
 ):
     """Stream a marketplace chat turn as Server-Sent Events.
 
@@ -723,6 +738,7 @@ async def marketplace_chat_stream(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            override_execution_profile=_parse_execution_profile(override_execution_profile),
         )
 
         async def generator() -> AsyncGenerator[str, None]:

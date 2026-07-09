@@ -944,3 +944,152 @@ def test_all_profiles_produce_no_reasoning_when_not_supported(profile):
     assert rc.reasoning_kwarg is None
     assert rc.reasoning_value is None
     assert rc.supports_reasoning is False
+
+
+# ========================================================================
+# 99-101. gpt-5 temperature \u0026 reasoning handling
+# ========================================================================
+
+
+class TestGpt5TemperatureHandling:
+    """gpt-5.1/5.2/5.3 reject temperature != 1.0 — force_temperature=1.0."""
+
+    @pytest.mark.parametrize("profile", list(ExecutionProfile))
+    def test_gpt51_force_temperature_one(self, profile):
+        """gpt-5.1 should force temperature to 1.0 at every profile."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.1-chat-latest", profile)
+        assert rc.force_temperature == 1.0
+        kwargs = build_runtime_kwargs(rc, temperature=0.7)
+        assert kwargs["temperature"] == 1.0
+
+    @pytest.mark.parametrize("model_id", [
+        "gpt-5.2-chat-latest",
+        "gpt-5.3-chat-latest",
+    ])
+    @pytest.mark.parametrize("profile", list(ExecutionProfile))
+    def test_gpt52_gpt53_force_temperature_one(self, model_id, profile):
+        """gpt-5.2 and gpt-5.3 should also force temperature to 1.0."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, profile)
+        assert rc.force_temperature == 1.0
+        kwargs = build_runtime_kwargs(rc, temperature=0.0)
+        assert kwargs["temperature"] == 1.0
+
+    def test_gpt5_temperature_forcing_preserves_reasoning(self):
+        """gpt-5.1/5.2/5.3 should keep reasoning enabled (inherited)."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.1-chat-latest", ExecutionProfile.FAST)
+        assert rc.supports_reasoning is True
+        assert rc.reasoning_kwarg == "reasoning_effort"
+
+
+class TestGpt5ReasoningDisabled:
+    """gpt-5.4+ reject reasoning_effort with function tools — reasoning disabled."""
+
+    @pytest.mark.parametrize("model_id", [
+        "gpt-5.4-chat-latest",
+        "gpt-5.5-chat-latest",
+        "gpt-5.6-reasoning",
+        "gpt-5.9-pro",
+    ])
+    @pytest.mark.parametrize("profile", list(ExecutionProfile))
+    def test_gpt54_plus_no_reasoning(self, model_id, profile):
+        """gpt-5.4+ should have reasoning disabled regardless of profile."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, profile)
+        assert rc.supports_reasoning is False
+        assert rc.reasoning_kwarg is None
+        assert rc.reasoning_value is None
+        kwargs = build_runtime_kwargs(rc)
+        assert "reasoning_effort" not in kwargs
+
+    def test_gpt54_inherits_temperature(self):
+        """gpt-5.4 should NOT force temperature — it passes normal temperature through."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.4-chat-latest", ExecutionProfile.FAST)
+        # No force_temperature, no disable_temperature
+        assert rc.force_temperature is None
+        assert rc.disable_temperature is False
+        kwargs = build_runtime_kwargs(rc, temperature=0.7)
+        assert kwargs["temperature"] == 0.7
+
+
+class TestGpt5RegexScope:
+    """Verify the regex patterns match intended models and avoid false positives."""
+
+    def test_gpt5_minor_regex_matches_multi_digit(self):
+        """The gpt-5. reasoning pattern should match gpt-5.10 etc."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.10-chat-latest", ExecutionProfile.FAST)
+        # Should match gpt-5. reasoning-disabled pattern
+        assert rc.supports_reasoning is False
+
+    def test_gpt5_minor_pattern_does_not_match_gpt4(self):
+        """gpt-4 models should NOT match the gpt-5 pattern."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-4o", ExecutionProfile.DEEP)
+        assert rc.supports_reasoning is True
+        assert rc.reasoning_kwarg == "reasoning_effort"
+
+    def test_gpt51_does_not_disable_reasoning(self):
+        """gpt-5.1 should NOT disable reasoning — only force temperature."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.1-chat-latest", ExecutionProfile.DEEP)
+        assert rc.supports_reasoning is True
+        assert rc.force_temperature == 1.0
+        assert rc.reasoning_kwarg == "reasoning_effort"
+
+    def test_no_double_matching_gpt54(self):
+        """gpt-5.4 must NOT get force_temperature from gpt-5.[1-3] rule."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.4-chat-latest", ExecutionProfile.DEEP)
+        assert rc.force_temperature is None  # Must NOT be forced
+        assert rc.supports_reasoning is False
+        kwargs = build_runtime_kwargs(rc, temperature=0.7)
+        assert kwargs.get("temperature") == 0.7  # Normal temp allowed
+        assert "reasoning_effort" not in kwargs  # No reasoning
+
+    def test_no_double_matching_all_gpt5_versions(self):
+        """Verify correct behavior across the full gpt-5 family."""
+        _restore_builtins()
+        test_cases = [
+            ("gpt-5.1-chat-latest", True, 1.0, True),      # force_temp, has_reasoning
+            ("gpt-5.2-chat-latest", True, 1.0, True),
+            ("gpt-5.3-chat-latest", True, 1.0, True),
+            ("gpt-5.4-chat-latest", False, None, False),    # no force, no reasoning
+            ("gpt-5.5-reasoning", False, None, False),
+            ("gpt-5.9-pro", False, None, False),
+            ("gpt-5.10-mini", False, None, False),          # also no reasoning
+        ]
+        for model_id, has_force, force_val, should_reason in test_cases:
+            rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, ExecutionProfile.FAST)
+            if has_force:
+                assert rc.force_temperature == force_val, f"{model_id} should force temp"
+            else:
+                assert rc.force_temperature is None, f"{model_id} should NOT force temp"
+            assert rc.supports_reasoning == should_reason, f"{model_id} reasoning mismatch"
+
+    def test_o1_still_works_normal(self):
+        """Verify o1 models are unaffected by gpt-5 changes."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "o1", ExecutionProfile.BALANCED)
+        assert rc.force_temperature is None  # o1 disables temp differently
+        assert rc.disable_temperature is True  # o1 uses disable_temperature
+        assert rc.supports_reasoning is True
+
+    def test_gpt4o_still_works_normal(self):
+        """Verify gpt-4o is unaffected by gpt-5 changes."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-4o", ExecutionProfile.DEEP)
+        assert rc.force_temperature is None
+        assert rc.supports_reasoning is True
+        assert rc.reasoning_kwarg == "reasoning_effort"
+
+    def test_anthropic_claude_unaffected(self):
+        """Verify Anthropic models are unaffected."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_ANTHROPIC, "claude-sonnet-4", ExecutionProfile.MAX)
+        assert rc.force_temperature is None
+        assert rc.reasoning_kwarg == "thinking_budget"
+        assert rc.reasoning_value == 125000

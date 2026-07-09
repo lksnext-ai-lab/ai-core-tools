@@ -652,12 +652,28 @@ def _register_builtin_model_overrides() -> None:
     # OpenAI gpt-5.4, gpt-5.5, and similar models reject reasoning_effort
     # when function tools are used (they expect /v1/responses instead of
     # /v1/chat/completions).  The safest approach: disable reasoning entirely
-    # for these models in the chat completions path.
+    # for these models in the chat completions path.  The regex uses `.` to
+    # match any minor version (gpt-5.X), not just single digits, so it scales
+    # to gpt-5.10, gpt-5.99, etc.
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-5\.[4-9]",
+            regex_pattern=r"^gpt-5\.",
             supports_reasoning=False,
+        )
+    )
+
+    # gpt-5.1, gpt-5.2, gpt-5.3 — these models reject any temperature value
+    # other than the default (1.0).  The error message reads:
+    #   "Unsupported value: 'temperature' does not support 0.7 with this
+    #    model.  Only the default (1) value is supported."
+    # Force temperature to 1.0 so build_runtime_kwargs always includes the
+    # correct value regardless of what the agent or user configured.
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"^gpt-5\.[1-3](?!\d)",
+            force_temperature=1.0,
         )
     )
 
