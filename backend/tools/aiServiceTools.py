@@ -162,7 +162,7 @@ def create_llm_from_service(
     return builder()
 
 
-def get_llm(agent, is_vision=False, override_temperature: Optional[float] = None):
+def get_llm(agent, is_vision=False, override_temperature: Optional[float] = None, override_execution_profile: Optional[int] = None):
     """
     Función base para obtener cualquier modelo LLM
     Args:
@@ -185,6 +185,7 @@ def get_llm(agent, is_vision=False, override_temperature: Optional[float] = None
     return create_llm_from_service(
         ai_service, temperature, is_vision, agent=agent,
         override_temperature=override_temperature,
+        override_execution_profile=override_execution_profile,
     )
 
 class MistralWrapper:

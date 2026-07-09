@@ -236,7 +236,7 @@ async def create_agent(
         override_execution_profile: optional per-request execution profile override
         override_temperature: optional per-request temperature override
     """
-    llm = get_llm(agent, override_temperature=override_temperature)
+    llm = get_llm(agent, override_temperature=override_temperature, override_execution_profile=override_execution_profile)
     if llm is None:
         raise ValueError("No LLM found for agent")
 
