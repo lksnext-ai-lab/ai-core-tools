@@ -46,6 +46,219 @@ interface ChatInterfaceProps {
   defaultExecutionProfile?: number | null;
 }
 
+const EXECUTION_PROFILES = [
+  { value: 0, label: 'FAST', description: 'Low latency, minimal reasoning' },
+  { value: 1, label: 'BALANCED', description: 'Standard reasoning performance' },
+  { value: 2, label: 'DEEP', description: 'Extended reasoning and analysis' },
+  { value: 3, label: 'MAX', description: 'Maximum reasoning and analysis' },
+] as const;
+
+type ExecutionProfileValue = (typeof EXECUTION_PROFILES)[number]['value'];
+
+/** Resolved profile: explicit override (0-3) or 'inherit' for null. */
+type ProfileResolvable = ExecutionProfileValue | 'inherit';
+
+function resolveDescription(value: ProfileResolvable): string {
+  switch (value) {
+    case 'inherit':
+      return 'Using agent default profile';
+    case 0:
+      return 'Low latency, minimal reasoning';
+    case 1:
+      return 'Standard reasoning performance';
+    case 2:
+      return 'Extended reasoning and analysis';
+    case 3:
+      return 'Maximum reasoning and analysis';
+  }
+}
+
+function resolveLabel(value: ProfileResolvable): string {
+  if (value === 'inherit') return 'Default';
+  return EXECUTION_PROFILES.find((p) => p.value === value)?.label ?? 'Default';
+}
+
+function resolveShortLabel(value: ProfileResolvable): string {
+  if (value === 'inherit') return '';
+  return EXECUTION_PROFILES.find((p) => p.value === value)?.label ?? 'Default';
+}
+
+function resolveValue(value: ProfileResolvable): number | null {
+  if (value === 'inherit') return null;
+  return value;
+}
+
+/** Minimal Combobox — no external dependency. */
+function ExecutionProfileCombobox({
+  value,
+  onChange,
+  disabled,
+  onOpenChange,
+}: {
+  value: ProfileResolvable;
+  onChange: (v: ProfileResolvable) => void;
+  disabled: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const activeIdxRef = useRef(-1);
+
+  useEffect(() => {
+    activeIdxRef.current = open ? (value === 'inherit' ? 0 : EXECUTION_PROFILES.indexOf(EXECUTION_PROFILES.find((p) => p.value === value)!) ?? -1) + 1 : -1;
+  }, [open, value]);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdxRef.current = Math.min(activeIdxRef.current + 1, EXECUTION_PROFILES.length);
+      const opt = ref.current?.querySelector<HTMLButtonElement>(
+        `[data-option-index="${activeIdxRef.current}"]`
+      );
+      opt?.focus();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdxRef.current = Math.max(activeIdxRef.current - 1, -1);
+      const opt = ref.current?.querySelector<HTMLButtonElement>(
+        `[data-option-index="${activeIdxRef.current}"]`
+      );
+      opt?.focus();
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (activeIdxRef.current >= 0 && activeIdxRef.current <= EXECUTION_PROFILES.length) {
+        if (activeIdxRef.current === 0) {
+          onChange('inherit');
+        } else {
+          onChange(EXECUTION_PROFILES[activeIdxRef.current - 1].value);
+        }
+      }
+      setOpen(false);
+    }
+  };
+
+  const items = [
+    { value: 'inherit' as const, label: 'Default' },
+    ...EXECUTION_PROFILES.map((p) => ({ value: p.value as ProfileResolvable, label: p.label })),
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => (!disabled ? setOpen((o) => !o) : undefined)}
+        onKeyDown={handleKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        className="inline-flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-lg text-xs font-medium
+                   text-gray-500 dark:text-gray-400
+                   hover:text-indigo-600 dark:hover:text-indigo-400
+                   hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                   disabled:opacity-40 disabled:cursor-not-allowed
+                   transition-all duration-150
+                   border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800/40"
+        title={resolveDescription(value)}
+      >
+        {resolveShortLabel(value) && (
+          <svg
+            className="w-3.5 h-3.5 text-indigo-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+        )}
+        <span>{resolveLabel(value)}</span>
+        <svg
+          className={`w-3 h-3 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute bottom-full left-0 mb-1 w-48 rounded-xl overflow-hidden
+                     bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm
+                     border border-gray-200 dark:border-gray-700/50
+                     shadow-lg z-30 p-1"
+          role="listbox"
+        >
+          {items.map((item, idx) => {
+            const isSelected = item.value === value;
+            return (
+              <button
+                key={`${item.value}`}
+                data-option-index={idx}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(item.value);
+                  setOpen(false);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
+                           flex items-center justify-between
+                           ${isSelected
+                             ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                           }
+                           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {item.label}
+                {isSelected && (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChatInterface({
   appId,
   agentId,
@@ -70,8 +283,8 @@ function ChatInterface({
     undefined
   );
   const [filtersKey, setFiltersKey] = useState(0);
-  const [selectedExecutionProfile, setSelectedExecutionProfile] = useState<number | null>(
-    defaultExecutionProfile ?? null
+  const [selectedExecutionProfile, setSelectedExecutionProfile] = useState<ProfileResolvable>(
+    defaultExecutionProfile != null ? defaultExecutionProfile : 'inherit'
   );
   /** UI-only state to render the floating "scroll to bottom" button. Behaviour
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
@@ -239,7 +452,7 @@ function ChatInterface({
     }
   }, [metadataFields, filterMetadata]);
 
-  // ─── Message sending ─────────────────────────────────────────────────────────
+  // ─── Message sending ───────────────────────────────────────────────────
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && persistentFiles.length === 0) return;
@@ -270,7 +483,7 @@ function ChatInterface({
       const result = await sendMessage(messageText, {
         conversationId: currentConversationId,
         searchParams,
-        executionProfile: selectedExecutionProfile,
+        executionProfile: resolveValue(selectedExecutionProfile),
       });
 
       const rawResponse = result.response || '';
@@ -414,7 +627,7 @@ function ChatInterface({
     }
   };
 
-  // ─── Misc handlers ────────────────────────────────────────────────────────────
+  // ─── Misc handlers ─────────────────────────────────────────────────────────────
 
   const handleFilterMetadataChange = useCallback(
     (metadata: Record<string, unknown> | undefined) => {
@@ -441,6 +654,8 @@ function ChatInterface({
   }));
 
   const canSend = !isStreaming && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+
+  let isProfileMenuOpen = false;
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -847,6 +1062,14 @@ function ChatInterface({
           {/* Input area */}
           <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
             <div className="pg-glass rounded-xl px-3 py-2.5 flex items-end gap-2">
+              {/* Execution Profile Combobox */}
+              <ExecutionProfileCombobox
+                value={selectedExecutionProfile}
+                onChange={(v) => setSelectedExecutionProfile(v)}
+                disabled={isStreaming}
+                onOpenChange={(o) => { isProfileMenuOpen = o; }}
+              />
+
               {/* File attach button */}
               <div>
                 <input
@@ -893,7 +1116,7 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={`Message ${agentName}...`}
-                disabled={isStreaming}
+                disabled={isStreaming || isProfileMenuOpen}
                 className="flex-1 bg-transparent border-none outline-none resize-none
                            text-sm text-gray-800 dark:text-gray-100
                            placeholder:text-gray-400 dark:placeholder:text-gray-500

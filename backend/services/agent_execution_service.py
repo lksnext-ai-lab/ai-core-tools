@@ -360,6 +360,8 @@ class AgentExecutionService:
         user_context: Dict = None,
         conversation_id: int = None,
         db: Session = None,
+        override_execution_profile: Optional[int] = None,
+        override_temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Execute agent chat with persistent file references.
 

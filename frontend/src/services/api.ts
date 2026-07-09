@@ -1783,7 +1783,7 @@ class ApiService {
     });
   }
 
-  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null): Promise<{ response: string | Record<string, unknown>; conversation_id?: number }> {
+  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null, executionProfile?: number | null): Promise<{ response: string | Record<string, unknown>; conversation_id?: number }> {
     const formData = new FormData();
     formData.append('message', message);
     
@@ -1793,6 +1793,10 @@ class ApiService {
     
     if (conversationId) {
       formData.append('conversation_id', conversationId.toString());
+    }
+    
+    if (executionProfile != null) {
+      formData.append('override_execution_profile', executionProfile.toString());
     }
     
     if (files && files.length > 0) {
