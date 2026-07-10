@@ -213,13 +213,13 @@ def test_google_family_reasoning(provider):
 
 
 def test_google_family_profile_values():
-    """Verify Google family profile values match Anthropic (integers)."""
+    """Verify Google family profile values capped at Gemini API limit (65535 for DEEP/MAX)."""
     for provider in (PROVIDER_GOOGLE, PROVIDER_GOOGLE_CLOUD):
         cap = get_provider_capability(provider)
         assert cap.profile_values[ExecutionProfile.FAST] == 1024
         assert cap.profile_values[ExecutionProfile.BALANCED] == 5000
-        assert cap.profile_values[ExecutionProfile.DEEP] == 50000
-        assert cap.profile_values[ExecutionProfile.MAX] == 125000
+        assert cap.profile_values[ExecutionProfile.DEEP] == 65535
+        assert cap.profile_values[ExecutionProfile.MAX] == 65535
 
 
 def test_custom_provider_not_supported():
@@ -293,10 +293,14 @@ def test_model_capability_prefix_matching():
         assert cap.disable_temperature is True
         # o3 uses the default reasoning_effort (no model_reasoning_kwarg)
 
-    # ^gemini-[2-9] should match gemini-2, gemini-2.5, etc.
+    # Gemini 2.x+ regex should match gemini-2.x, gemini-3, but NOT flash variants.
     for model in ("gemini-2.0-pro", "gemini-2.5", "gemini-3"):
         cap = ModelCapability.for_model(PROVIDER_GOOGLE, model)
-        assert cap.regex_pattern == "^gemini-[2-9]"
+        assert cap.supports_reasoning is True
+    # Flash models should NOT match the reasoning-capable pattern
+    for flash_model in ("gemini-2.5-flash-lite", "gemini-2.0-flash"):
+        cap = ModelCapability.for_model(PROVIDER_GOOGLE, flash_model)
+        assert cap.regex_pattern == "", f"Flash model {flash_model} should not match any reasoning pattern, got: {cap.regex_pattern}"
 
 
 def test_model_capability_override_inheritance():
@@ -485,10 +489,10 @@ class TestRuntimeConfigBuilderGoogle:
 
     @pytest.mark.parametrize("provider", [PROVIDER_GOOGLE, PROVIDER_GOOGLE_CLOUD])
     def test_google_thinking_budget(self, provider):
-        """Google providers should use thinking_budget kwarg."""
+        """Google providers should use thinking_budget kwarg, DEEP capped at 65535."""
         rc = RuntimeConfigBuilder.build(provider, "gemini-2.0-pro", ExecutionProfile.DEEP)
         assert rc.reasoning_kwarg == "thinking_budget"
-        assert rc.reasoning_value == 50000
+        assert rc.reasoning_value == 65535
 
 
 # ========================================================================
@@ -977,11 +981,12 @@ class TestGpt5TemperatureHandling:
         assert kwargs["temperature"] == 1.0
 
     def test_gpt5_temperature_forcing_preserves_reasoning(self):
-        """gpt-5.1/5.2/5.3 should keep reasoning enabled (inherited)."""
+        """gpt-5.1/5.2/5.3 should keep reasoning enabled with value=medium."""
         _restore_builtins()
         rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-5.1-chat-latest", ExecutionProfile.FAST)
         assert rc.supports_reasoning is True
         assert rc.reasoning_kwarg == "reasoning_effort"
+        assert rc.reasoning_value == "medium"
 
 
 class TestGpt5ReasoningDisabled:
@@ -1093,3 +1098,88 @@ class TestGpt5RegexScope:
         assert rc.force_temperature is None
         assert rc.reasoning_kwarg == "thinking_budget"
         assert rc.reasoning_value == 125000
+
+
+# ========================================================================
+# 102-104. gpt-5.1/2/3 reasoning restriction & gpt-4.1 tests
+# ========================================================================
+
+
+class TestGpt5ChatLatestReasoningRestriction:
+    """gpt-5.{1,2,3}-chat-latest models only accept reasoning_effort=medium."""
+
+    @pytest.mark.parametrize("model_id", [
+        "gpt-5.1-chat-latest",
+        "gpt-5.2-chat-latest",
+        "gpt-5.3-chat-latest",
+    ])
+    @pytest.mark.parametrize("profile", list(ExecutionProfile))
+    def test_chat_latest_reasoning_always_medium(self, model_id, profile):
+        """gpt-5.{1,2,3}-chat-latest should force reasoning_effort=medium at every profile."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, profile)
+        assert rc.supports_reasoning is True
+        assert rc.reasoning_kwarg == "reasoning_effort"
+        assert rc.reasoning_value == "medium"
+        kwargs = build_runtime_kwargs(rc, temperature=0.7)
+        assert kwargs["reasoning_effort"] == "medium"
+
+    @pytest.mark.parametrize("model_id", [
+        "gpt-5.1-chat-latest",
+        "gpt-5.2-chat-latest",
+        "gpt-5.3-chat-latest",
+    ])
+    def test_chat_latest_no_false_positive_gpt54(self, model_id):
+        """gpt-5.{1,2,3}-chat-latest should NOT match the gpt-5.4+ reasoning-disabled pattern."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, ExecutionProfile.DEEP)
+        assert rc.supports_reasoning is True
+        assert rc.force_temperature == 1.0
+
+
+class TestGpt41Override:
+    """gpt-4.1 series models only accept reasoning_effort=medium and force_temperature=1.0."""
+
+    @pytest.mark.parametrize("model_id", [
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "gpt-4.1-mini-chat-latest",
+        "gpt-4.1-nano-chat-latest",
+    ])
+    @pytest.mark.parametrize("profile", list(ExecutionProfile))
+    def test_gpt41_reasoning_always_medium(self, model_id, profile):
+        """gpt-4.1 models should force reasoning_effort=medium at every profile."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, profile)
+        assert rc.supports_reasoning is True
+        assert rc.reasoning_kwarg == "reasoning_effort"
+        assert rc.reasoning_value == "medium"
+
+    @pytest.mark.parametrize("model_id", [
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+    ])
+    def test_gpt41_force_temperature(self, model_id):
+        """gpt-4.1 models should force temperature to 1.0."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, model_id, ExecutionProfile.DEEP)
+        assert rc.force_temperature == 1.0
+        kwargs = build_runtime_kwargs(rc, temperature=0.7)
+        assert kwargs["temperature"] == 1.0
+
+    def test_gpt41_does_not_match_gpt54_pattern(self):
+        """gpt-4.1 should NOT be affected by gpt-5.4+ reasoning-disabled rule."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-4.1-mini", ExecutionProfile.MAX)
+        assert rc.supports_reasoning is True
+        assert "reasoning_effort" in build_runtime_kwargs(rc)
+
+    def test_gpt4o_unaffected_by_gpt41_override(self):
+        """gpt-4o should NOT match the gpt-4.1 regex pattern."""
+        _restore_builtins()
+        rc = RuntimeConfigBuilder.build(PROVIDER_OPENAI, "gpt-4o", ExecutionProfile.DEEP)
+        assert rc.supports_reasoning is True
+        assert rc.reasoning_value == "high"
+        assert rc.force_temperature is None

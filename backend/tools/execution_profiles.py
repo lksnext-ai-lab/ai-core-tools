@@ -506,6 +506,9 @@ def _register_builtin_capabilities() -> None:
     )
 
     # ------ Google Gemini — thinking_budget token budget
+    # Gemini API rejects thinking_budget outside [-1, 65535].
+    # Cap DEEP/MAX at 65535 to keep profile range safe across all
+    # Gemini models (flash-lite, pro, etc.).
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -513,8 +516,8 @@ def _register_builtin_capabilities() -> None:
             profile_values={
                 ExecutionProfile.FAST: 1024,
                 ExecutionProfile.BALANCED: 5000,
-                ExecutionProfile.DEEP: 50000,
-                ExecutionProfile.MAX: 125000,
+                ExecutionProfile.DEEP: 65535,
+                ExecutionProfile.MAX: 65535,
             },
             default_profile=ExecutionProfile.BALANCED,
         ),
@@ -522,6 +525,7 @@ def _register_builtin_capabilities() -> None:
     )
 
     # ------ Google Cloud (Vertex AI) — same mechanism as Gemini
+    # Vertex AI also uses Gemini API, capped at 65535.
     register_provider_capability(
         ProviderCapability(
             supported=True,
@@ -529,8 +533,8 @@ def _register_builtin_capabilities() -> None:
             profile_values={
                 ExecutionProfile.FAST: 1024,
                 ExecutionProfile.BALANCED: 5000,
-                ExecutionProfile.DEEP: 50000,
-                ExecutionProfile.MAX: 125000,
+                ExecutionProfile.DEEP: 65535,
+                ExecutionProfile.MAX: 65535,
             },
             default_profile=ExecutionProfile.BALANCED,
         ),
@@ -630,11 +634,13 @@ def _register_builtin_model_overrides() -> None:
         )
     )
 
-    # Gemini models: multimodal, reasoning supported.
+    # Gemini 2.x+ models: multimodal, reasoning supported.
+    # Excludes flash-flashlite and all flash variants that don't support
+    # Gemini thinking (the API rejects thinking_config for those models).
     register_model_override(
         ModelCapability(
             provider=PROVIDER_GOOGLE,
-            regex_pattern=r"^gemini-[2-9]",
+            regex_pattern=r"^gemini-(?!\d.*flash)",
             supports_reasoning=True,
             supports_vision=True,
         )
@@ -649,30 +655,55 @@ def _register_builtin_model_overrides() -> None:
         )
     )
 
-    # OpenAI gpt-5.4, gpt-5.5, and similar models reject reasoning_effort
-    # when function tools are used (they expect /v1/responses instead of
-    # /v1/chat/completions).  The safest approach: disable reasoning entirely
-    # for these models in the chat completions path.  The regex uses `.` to
-    # match any minor version (gpt-5.X), not just single digits, so it scales
-    # to gpt-5.10, gpt-5.99, etc.
+    # OpenAI gpt-5.{1,2,3}-chat-latest — only accept reasoning_effort=medium
+    # (all other levels throw 400).  They also reject temperature != 1.0.
+    # Force both so these models work at every execution profile.
+    # Must be placed BEFORE the gpt-5.4+ rule so it takes precedence
+    # (longest/winner regex matching).
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-5\.[4-9]",
+            regex_pattern=r"^gpt-5\.(?:1|2|3)(?:-[a-z]+)*$",
+            profile_values={
+                ExecutionProfile.FAST: "medium",
+                ExecutionProfile.BALANCED: "medium",
+                ExecutionProfile.DEEP: "medium",
+                ExecutionProfile.MAX: "medium",
+            },
+            force_temperature=1.0,
+        )
+    )
+
+    # OpenAI gpt-5.{4,5,6,...}-chat-latest and similar post-5.3 models
+    # reject reasoning_effort when function tools are used (they expect
+    # /v1/responses instead of /v1/chat/completions).  The safest approach:
+    # disable reasoning entirely for these models in the chat completions
+    # path.  The regex uses `[0-9]+` to match any minor version number
+    # (gpt-5.X), including multi-digit ones like gpt-5.10, gpt-5.99, etc.
+    # [4-9] matches single digits 4-9; [1-9][0-9]+ matches only 2+ digit
+    # versions (10, 11, …) so gpt-5.1/5.2/5.3 never match this branch.
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"^gpt-5\.(?:[4-9]|[1-9][0-9]+)(?:-[a-z]+)*$",
             supports_reasoning=False,
         )
     )
 
-    # gpt-5.1, gpt-5.2, gpt-5.3 — these models reject any temperature value
-    # other than the default (1.0).  The error message reads:
-    #   "Unsupported value: 'temperature' does not support 0.7 with this
-    #    model.  Only the default (1) value is supported."
-    # Force temperature to 1.0 so build_runtime_kwargs always includes the
-    # correct value regardless of what the agent or user configured.
+    # gpt-4.1-series (`gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`) — these
+    # models reject temperature != 1.0 and only accept reasoning_effort=medium
+    # regardless of execution profile.  This covers every gpt-4.1 variant
+    # including future `-chat-latest` suffixes.
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern = r"^gpt-5\.[1-3]-chat-latest$",
+            regex_pattern=r"^gpt-4\.1",
+            profile_values={
+                ExecutionProfile.FAST: "medium",
+                ExecutionProfile.BALANCED: "medium",
+                ExecutionProfile.DEEP: "medium",
+                ExecutionProfile.MAX: "medium",
+            },
             force_temperature=1.0,
         )
     )
