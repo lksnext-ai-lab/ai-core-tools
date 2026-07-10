@@ -658,7 +658,7 @@ def _register_builtin_model_overrides() -> None:
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-5\.",
+            regex_pattern=r"^gpt-5\.[4-9]",
             supports_reasoning=False,
         )
     )
@@ -672,7 +672,7 @@ def _register_builtin_model_overrides() -> None:
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-5\.[1-3](?!\d)",
+            regex_pattern = r"^gpt-5\.[1-3]-chat-latest$",
             force_temperature=1.0,
         )
     )
