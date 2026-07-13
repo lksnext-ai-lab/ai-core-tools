@@ -61,7 +61,9 @@ Release Lifecycle:
 
 PR Integration Entry (start here to land open PRs into develop):
   @pr-triager ──► audits all open PRs (drift vs develop, conflicts, CI, reviews) → PR Health Report + order
-              └─► @pr-integrator ──► per PR: update from develop → verify CI → squash-merge (gated) → delete branch
+              └─► @pr-verifier ──► per candidate: check out merged onto develop (local) → confirm it meets its goal/AC
+              │                    → DIFFERENTIAL targeted tests (baseline develop vs PR → only NEW failures) → PASS/RISK/FAIL
+              └─► @pr-integrator ──► per PASS PR: update from develop → squash-merge (gated) → delete branch
                                      (on conflicts: opt-in assisted resolution via experts, double-gated + diff review; never merges red / unreviewed / DIRTY)
 
 AI Environment:
@@ -80,7 +82,7 @@ AI Environment:
 >
 > Before investigating it **triages** whether the report is even a code defect — if it's config/infra/data/expected/upstream/duplicate it emits a verdict with the real remedy and **stops** (no fix machinery). For genuine code bugs it also emits a ready-to-file **Issue body**; the executor files the GitHub tracking issue (gated, skippable) and the PR closes it with `Closes #N`.
 >
-> Invoke directly (`@bug-analyzer <description>`) or via the slash command `/report-bug`. It is read-only and runs on Claude Sonnet 4.6 because root-cause diagnosis is the highest-risk step — a wrong hypothesis wastes the whole downstream fix.
+> Invoke directly (`@bug-analyzer <description>`) or via the slash command `/report-bug`. It is read-only and runs on Claude Sonnet 5 because root-cause diagnosis is the highest-risk step — a wrong hypothesis wastes the whole downstream fix.
 
 > **`@quick-executor` vs `@plan-executor`**: Both auto-invoke implementer subagents and run git directly with commit/push/PR confirmation gates. The difference is the input:
 > - **`@quick-executor`** takes a task description (from an Issue Analysis or directly from you) and decides the subagent sequence on the fly. No spec file, no `/plans/` artifacts. Use for **ad-hoc tasks ≲ 5 files**.
@@ -90,7 +92,7 @@ AI Environment:
 
 > **Why `@git-github` is not used as a subagent**: it requires terminal execution (`tools: [execute]`), which is unavailable in subagent context. Agents that need git operations either run commands directly via the `git-github.skill.md` skill (`@plan-executor`, `@release-manager`) or hand off to the user with a change summary for them to invoke `@git-github` directly (`@backend-expert`, `@react-expert`, `@alembic-expert`, `@test-expert`, `@docs-manager`).
 
-> **Direct invocation by the user** (never as subagents): `@git-github`, `@issue-reader`, `@bug-analyzer`, `@pr-triager`, `@pr-integrator`.
+> **Direct invocation by the user** (never as subagents): `@git-github`, `@issue-reader`, `@bug-analyzer`, `@pr-triager`, `@pr-verifier`, `@pr-integrator`.
 
 ---
 
@@ -128,7 +130,7 @@ AI Environment:
 
 **Purpose**: Entry point for bugs reported directly in the chat (no GitHub issue). First **triages** whether the report is a code defect (vs config/infra/data/expected/upstream/duplicate) — stopping with a verdict + remedy if not. For genuine code bugs it investigates the codebase to locate the root cause, distills it into a structured **Bug Analysis** block (plus a ready-to-file Issue body), and offers two handoff buttons. The bug-driven sibling of `@issue-reader`, with an added triage + root-cause investigation phase.
 
-**Model**: `Claude Sonnet 4.6` — diagnosis is the highest-leverage, highest-risk step (a wrong root cause cascades into a wrong fix). Under token-based billing this is one bounded call, cheap versus the cost of a misdiagnosis.
+**Model**: `Claude Sonnet 5` — diagnosis is the highest-leverage, highest-risk step (a wrong root cause cascades into a wrong fix). Under token-based billing this is one bounded call, cheap versus the cost of a misdiagnosis.
 
 **Key capabilities**:
 - Takes free-text bug reports (`@bug-analyzer the playground freezes uploading a PDF > 10MB`)
@@ -577,13 +579,27 @@ clean/<description>
 
 **Purpose**: Entry point for landing open PRs into `develop`. Audits every open PR via `gh`/`git` (base, behind-count vs `origin/develop`, mergeable/conflict state, CI, reviews, age, size), classifies each by `mergeStateStatus`, and emits a prioritized **PR Health Report** + integration order. Read-only.
 
-**Model**: `GPT-5 mini` — high-volume `gh` reads, no code generation.
+**Model**: `['MAI-Code-1-Flash', 'GPT-5.4 mini', 'GPT-5 mini']` — high-volume `gh` reads, no code generation; MAI-Code-1-Flash with fallbacks.
 
 **Invocation**: `@pr-triager` (all open PRs) · `@pr-triager #168` (one) · `/integrate-prs`.
 
-**Hands off to**: `@pr-integrator` — integrate the report in order.
+**Hands off to**: `@pr-verifier` (verify the candidates, recommended) or `@pr-integrator` (skip verification).
 
 **Never does**: merge, push, update branches, or resolve conflicts — diagnosis only.
+
+---
+
+### `@pr-verifier`
+
+**Purpose**: Verification gate between triage and integration. For each integrable candidate it checks out the PR **merged onto the latest develop** (locally, never pushed), confirms it does what its goal/linked issue asks (delegating the correctness read to the area expert), and runs **differential targeted tests** — the selected tests are run on `develop` first as a baseline, then on the PR, so only **new** failures count as regressions (the repo has known always-failing tests). Emits a per-PR **PASS / RISK / FAIL** verdict and hands the PASS ones forward.
+
+**Model**: `Claude Sonnet 5` — correctness judgment + test triage; the highest-leverage gate before a merge.
+
+**Invocation**: from the `@pr-triager` handoff · `@pr-verifier #170` (one) · `@pr-verifier verify the CLEAN PRs`.
+
+**Hands off to**: `@pr-integrator` — the PASS PRs only.
+
+**Never does**: push, merge, edit code, or resolve conflicts (a DIRTY merge → `FAIL (not verifiable)`); leaves the tree clean on `develop`.
 
 ---
 
@@ -591,11 +607,11 @@ clean/<description>
 
 **Purpose**: Integrates PRs into `develop` on the team default (**squash merge**). Per PR: updates the branch from `origin/develop` (merge — never rebase a shared branch), verifies CI is green, and squash-merges **behind confirmation gates**, deleting the branch. Detects whether a **merge queue** is enabled and, if so, just adds approved+green PRs to the queue (the queue handles update-and-retest). On conflicts it offers an **opt-in assisted resolution**: classify the files, delegate to the matching expert subagent (`@backend-expert`/`@react-expert`/`@alembic-expert` by path), then a **mandatory diff-review gate** before anything is staged/pushed/merged — never applies or merges a resolution the user hasn't approved. Runs `gh`/`git` directly.
 
-**Model**: `Claude Sonnet 4.6` — judgment on merge/conflict safety.
+**Model**: `Claude Sonnet 5` — judgment on merge/conflict safety.
 
 **Confirmation gates**: update-push, merge, plus (when assisted resolution is used) conflict-resolution + resolution-review. Never merges a DIRTY / red / unreviewed / wrong-base / cross-fork PR, nor a conflict resolution the user hasn't reviewed.
 
-**Receives from**: `@pr-triager` — the PR Health Report.
+**Receives from**: `@pr-verifier` — the PASS PRs (normal path); or `@pr-triager` directly via its "skip verification" handoff.
 
 ---
 

@@ -2,7 +2,7 @@
 name: backend-expert
 user-invocable: false
 description: Senior Python backend developer specializing in FastAPI, SQLAlchemy 2.x, Pydantic v2, LangChain 1.x / LangGraph 1.x / LangSmith / Deep Agents, and PostgreSQL with pgvector. Generic role — project-specific conventions auto-apply via `backend-conventions.instructions.md` when editing `backend/**`. Verifies library APIs against official docs via the `langchain-docs` and `context7` MCP servers before implementing.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: [read, edit, search, 'context7/*', 'docs-langchain/*']
 handoffs:
   - label: "Commit with @git-github"

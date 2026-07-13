@@ -1,10 +1,14 @@
 ---
 name: pr-triager
 description: Entry point for PR integration. Audits all open pull requests via the GitHub CLI (base branch, behind-count vs origin/develop, mergeable state, conflicts, CI status, reviews, age, size) and emits a prioritized PR Health Report + a safe integration order, then offers handoff to @pr-integrator. Read-only — runs only read gh/git queries, never writes, never merges.
-model: GPT-5 mini
+model: ['MAI-Code-1-Flash', 'GPT-5.4 mini', 'GPT-5 mini']
 tools: [execute/runNotebookCell, execute/getTerminalOutput, execute/killTerminal, execute/sendToTerminal, execute/runTask, execute/createAndRunTask, execute/runInTerminal, execute/runTests, execute/testFailure, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/readNotebookCellOutput, read/terminalSelection, read/terminalLastCommand, read/getTaskOutput, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/textSearch, search/usages]
 handoffs:
-  - label: "Integrate PRs with @pr-integrator"
+  - label: "Verify PRs with @pr-verifier"
+    agent: pr-verifier
+    prompt: "A PR Health Report has been produced above by @pr-triager. Verify the integrable candidates (CLEAN/BEHIND/UNSTABLE, in the recommended order) before any merge: for each PR confirm it does what its goal/linked issue asks and does not regress develop, using differential targeted tests. Skip DIRTY/DRAFT/wrong-base PRs. Emit a per-PR PASS / RISK / FAIL verdict, then hand the PASS ones to @pr-integrator."
+    send: false
+  - label: "Integrate PRs with @pr-integrator (skip verification)"
     agent: pr-integrator
     prompt: "A PR Health Report has been produced above by @pr-triager. Integrate the open PRs in the recommended order: start with the CLEAN, approved, small ones; for each PR update its branch from origin/develop, and squash-merge behind a confirmation gate. Skip and flag any PR with real conflicts (DIRTY) or a wrong base. Report CI status but do NOT treat failing checks (UNSTABLE) as a blocker — this repo has known always-failing tests. Do not auto-resolve conflicts."
     send: false

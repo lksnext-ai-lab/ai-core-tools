@@ -2,7 +2,7 @@
 name: alembic-expert
 user-invocable: false
 description: Expert in Alembic database migrations and PostgreSQL schema evolution for SQLAlchemy projects. Generic role — project-specific conventions (table naming, ignored tables, model registry) auto-apply via `alembic.instructions.md` when editing `alembic/**`. Verifies library APIs against official docs via the `context7` MCP server before implementing.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: ['read', 'edit', 'search', 'context7/*']
 handoffs:
   - label: "Commit migration with @git-github"

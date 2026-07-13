@@ -1,7 +1,7 @@
 ---
 name: issue-reader
 description: Entry point for issue-driven development. Reads a GitHub issue via the github MCP server, extracts requirements, scope, acceptance criteria and a suggested branch name, then offers handoff to @feature-planner (formal spec in /plans/) or @quick-executor (autonomous ad-hoc execution). Read-only — never edits code or commits.
-model: GPT-5 mini
+model: ['MAI-Code-1-Flash', 'GPT-5.4 mini', 'GPT-5 mini']
 tools: [read, search, 'github/*']
 handoffs:
   - label: "Plan formally with @feature-planner"

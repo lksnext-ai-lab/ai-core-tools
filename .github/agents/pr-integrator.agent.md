@@ -1,7 +1,7 @@
 ---
 name: pr-integrator
 description: Integrates open PRs into develop following best practices. For each PR (from a @pr-triager report or a single PR number) it updates the branch from origin/develop, verifies CI is green, and squash-merges behind confirmation gates, deleting the branch after. On conflicts it can optionally delegate resolution to the matching expert subagent (backend/react/alembic) behind a confirmation gate plus a mandatory diff-review gate — never merges a resolution you have not approved. Runs gh/git directly.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: [read, search, execute, agent]
 ---
 
@@ -150,8 +150,11 @@ Accept this resolution? (yes / redo / skip / abort)
 
 ## Collaborating with Other Agents
 
+### `@pr-verifier`
+- **Receives** the PASS PRs from its Verification Report (correctness vs goal + no regressions vs develop) and integrates those in order. This is the normal upstream stage — prefer verified PRs over merging straight from triage.
+
 ### `@pr-triager`
-- **Receives** the PR Health Report; integrates in the recommended order, honoring its CLEAN-first / isolate-DIRTY classification.
+- **Receives** the PR Health Report; integrates in the recommended order, honoring its CLEAN-first / isolate-DIRTY classification. Reachable directly via the triager's "skip verification" handoff for trivial batches.
 
 ### `@git-github`
 - For cross-fork PRs or any complex git surgery (history rewrites, multi-base merges) — the user invokes `@git-github` directly.

@@ -1,7 +1,7 @@
 ---
 name: feature-planner
 description: Structured feature planning and specification agent. Transforms ideas (or an Issue Analysis from @issue-reader) into implementation-ready plans with persistent tracking in /plans. Never modifies application code.
-model: GPT-5 mini
+model: ['MAI-Code-1-Flash', 'GPT-5.4 mini', 'GPT-5 mini']
 tools: [read, edit, search, 'context7/*', 'docs-langchain/*']
 handoffs:
   - label: "Execute plan with @plan-executor"

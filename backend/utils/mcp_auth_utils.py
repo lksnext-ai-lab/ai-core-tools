@@ -45,18 +45,14 @@ def extract_auth_token(user_context: Optional[Dict[str, Any]]) -> Optional[str]:
         logger.debug("No user context provided for MCP authentication")
         return None
     
-    # Check if this is an OAuth-authenticated user with a JWT token
-    if user_context.get('oauth') and 'token' in user_context:
-        token = user_context['token']
+    # Return token if present in context, regardless of authentication mode.
+    # OAuth users: token is set by the internal endpoint from the Authorization header.
+    # API key users: a delegated user_token may be set when the caller explicitly
+    # propagates the end-user's JWT (e.g. NextPaths forwards the Keycloak token).
+    token = user_context.get('token')
+    if token:
         return token
-    
-    # For API key authentication, we don't pass the API key to MCP servers
-    # as they expect OAuth tokens. You could implement API key -> JWT conversion
-    # or use a different authentication strategy for API key users
-    if user_context.get('api_key'):
-        logger.debug("API key authentication detected - MCP servers require OAuth tokens")
-        return None
-    
+       
     logger.debug("No authentication token found in user context")
     return None
 

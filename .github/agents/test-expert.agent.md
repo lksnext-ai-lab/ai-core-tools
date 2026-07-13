@@ -2,7 +2,7 @@
 name: test-expert
 user-invocable: false
 description: Expert in pytest, async testing, transactional test isolation, mocking, and CI integration for FastAPI + SQLAlchemy projects. Generic role — project-specific conventions (fixtures map, factory-boy, test DB, savepoint isolation) auto-apply via `testing-conventions.instructions.md` when editing `tests/**`. Verifies library APIs against official docs via the `context7` MCP server before implementing.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: ['read', 'edit', 'search', 'execute', 'context7/*']
 handoffs:
   - label: "Commit with @git-github"

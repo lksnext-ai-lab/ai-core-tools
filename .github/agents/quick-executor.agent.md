@@ -1,7 +1,7 @@
 ---
 name: quick-executor
 description: Autonomous executor for small ad-hoc tasks (bugs, single-area fixes, doc updates, small refactors) that do NOT warrant a formal spec in /plans/. Creates the local feature branch, auto-invokes implementer subagents for file operations, runs git operations directly with confirmation gates before commit/push/PR. Twin of @plan-executor but without the spec-driven /plans/ workflow.
-model: GPT-5 mini
+model: ['MAI-Code-1-Flash', 'GPT-5.4 mini', 'GPT-5 mini']
 tools: ['read', 'edit', 'search', 'execute', 'agent']
 agents:
   - backend-expert

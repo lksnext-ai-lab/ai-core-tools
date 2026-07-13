@@ -31,6 +31,7 @@ class CrawlJob(Base):
     finished_at = Column(DateTime, nullable=True)
 
     discovered_count = Column(Integer, nullable=False, default=0)
+    excluded_count = Column(Integer, nullable=False, default=0)
     indexed_count = Column(Integer, nullable=False, default=0)
     skipped_count = Column(Integer, nullable=False, default=0)
     removed_count = Column(Integer, nullable=False, default=0)

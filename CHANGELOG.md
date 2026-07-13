@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Release image tagging**: The backend/frontend CI now tags `develop` builds with a moving `nightly` alias, and builds stable images when a **GitHub Release is published** — tagged `X.Y.Z`, `X.Y` and `latest` (the leading `v` is dropped; pre-releases are excluded from `latest`). Pushing to `main` no longer builds an image.
+
 ### Fixed
 
 ## [0.4.2] - 2026-05-21

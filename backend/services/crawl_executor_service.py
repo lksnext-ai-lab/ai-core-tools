@@ -125,6 +125,11 @@ class CrawlExecutorService:
                     if candidate.status == DomainUrlStatus.EXCLUDED:
                         existing.status = DomainUrlStatus.EXCLUDED
                         existing.last_error = candidate.last_error
+                        # account for excluded-by-robots URLs at the job level
+                        try:
+                            job.excluded_count += 1
+                        except Exception:
+                            pass
                     db.commit()
                 else:
                     new_url = DomainUrl(
@@ -142,6 +147,11 @@ class CrawlExecutorService:
                     db.add(new_url)
                     db.commit()
                     job.discovered_count += 1
+                    if candidate.status == DomainUrlStatus.EXCLUDED:
+                        try:
+                            job.excluded_count += 1
+                        except Exception:
+                            pass
 
         # Refresh job counts
         db.refresh(job)
@@ -282,14 +292,15 @@ class CrawlExecutorService:
         # Finalize
         db.refresh(job)
         if job.status != CrawlJobStatus.CANCELLED:
-            job.status = CrawlJobStatus.COMPLETED if (job.indexed_count + job.skipped_count + job.removed_count) > 0 else CrawlJobStatus.COMPLETED
+            job.status = CrawlJobStatus.COMPLETED
             job.finished_at = datetime.utcnow()
             db.commit()
 
         logger.info(
             f"Job {job_id} finished: indexed={job.indexed_count}, "
             f"skipped={job.skipped_count}, removed={job.removed_count}, "
-            f"failed={job.failed_count}"
+            f"failed={job.failed_count}, excluded={getattr(job, 'excluded_count', 0)}, "
+            f"discovered={getattr(job, 'discovered_count', 0)}"
         )
 
 

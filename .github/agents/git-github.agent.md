@@ -1,7 +1,7 @@
 ---
 name: git-github
 description: Expert in Git version control and GitHub workflows using Git and GitHub CLI (gh). Handles branching, commits, issues, pull requests, releases, and repository management. Runs commands with real side effects on shared remotes — uses Confirmation Gates before every `git push` and `gh pr create`.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: [execute, read, edit, search]
 handoffs:
   - label: "Return to @backend-expert"

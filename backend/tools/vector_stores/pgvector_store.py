@@ -46,6 +46,57 @@ class PGVectorStore(VectorStoreInterface):
         self.db = db
         self.engine = db.engine
         self.async_engine = getattr(db, '_async_engine', None)
+
+    def ensure_backend_ready(self) -> None:
+        """
+        Ensure the PGVector backend has created its required tables.
+
+        This is best-effort: first try to call a library-provided collection
+        creation API (if present). If that doesn't exist, fall back to
+        adding a tiny dummy document to a temporary collection which forces
+        the LangChain/pgvector library to create the underlying tables,
+        then delete that collection.
+        """
+        tmp_collection = "__aict_init__"
+        try:
+            vs = self._get_vector_store(tmp_collection)
+        except Exception as exc:
+            logger.debug("PGVector ensure_backend_ready: cannot instantiate PGVector: %s", exc)
+            return
+
+        # Prefer a library API if available
+        try:
+            create_fn = getattr(vs, "create_collection", None)
+            if callable(create_fn):
+                try:
+                    create_fn()
+                    logger.info("PGVector: created placeholder collection '%s' via create_collection()", tmp_collection)
+                    try:
+                        # cleanup
+                        delete_fn = getattr(vs, "delete_collection", None)
+                        if callable(delete_fn):
+                            delete_fn()
+                    except Exception:
+                        pass
+                    return
+                except Exception as exc:
+                    logger.debug("PGVector create_collection() failed: %s", exc)
+
+            # Fallback: add a tiny document to force table creation, then remove the collection
+            try:
+                from langchain_core.documents import Document
+
+                dummy = Document(page_content="__aict_init__", metadata={"_init": True})
+                vs.add_documents([dummy])
+                logger.info("PGVector: forced backend init by adding dummy document to '%s'", tmp_collection)
+                try:
+                    vs.delete_collection()
+                except Exception:
+                    pass
+            except Exception as exc:
+                logger.debug("PGVector fallback init failed: %s", exc)
+        except Exception as exc:
+            logger.debug("PGVector ensure_backend_ready unexpected error: %s", exc)
     
     def _get_vector_store(
         self, 

@@ -1,7 +1,7 @@
 ---
 name: bug-analyzer
 description: Entry point for chat-reported bugs (no GitHub issue needed). Investigates the codebase to locate the root cause, produces a structured Bug Analysis with file:line evidence and a proposed fix, then offers handoff to @quick-executor (small fix) or @feature-planner (large/architectural). Read-only — never edits code, never commits.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: [read, search, 'context7/*', 'docs-langchain/*']
 handoffs:
   - label: "Fix now with @quick-executor"

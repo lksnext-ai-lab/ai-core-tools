@@ -1,7 +1,7 @@
 ---
 name: plan-executor
 description: Orchestration agent that reads feature plans from /plans, decomposes the spec into sequenced step files with proper dependencies, and executes them by auto-invoking implementer subagents and running git directly. Tracks execution progress via a status.yaml manifest. Never writes production code — but DOES reason about the codebase and how to slice the work.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: ['agent', 'edit', 'search', 'read', 'execute']
 agents: ["backend-expert", "react-expert", "alembic-expert", "test-expert", "docs-manager"]
 ---

@@ -2,7 +2,7 @@
 name: react-expert
 user-invocable: false
 description: Senior React frontend engineer specializing in React 19, TypeScript strict mode, hooks, state management, Tailwind CSS, and accessibility. Generic role — project-specific conventions auto-apply via `react-conventions.instructions.md` when editing `frontend/**`. Verifies library APIs against official docs via the `context7` MCP server before implementing.
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: ['read', 'edit', 'search', 'context7/*']
 handoffs:
   - label: "Commit with @git-github"

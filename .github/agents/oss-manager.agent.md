@@ -1,7 +1,7 @@
 ---
 name: oss-manager
 user-invocable: false
-model: GPT-5 mini
+model: ['MAI-Code-1-Flash', 'GPT-5.4 mini', 'GPT-5 mini']
 description: Expert in open-source project governance, licensing compliance, community files (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG), release notes, and the AGPL-3.0 / Commercial dual-licensing model used by Mattin AI. Owns the *content* of CHANGELOG and release notes; `@release-manager` orchestrates the broader release pipeline and calls into this agent.
 tools: ['read', 'edit', 'search']
 handoffs:
