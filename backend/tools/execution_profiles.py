@@ -663,7 +663,7 @@ def _register_builtin_model_overrides() -> None:
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-5\.(?:1|2|3)(?:-[a-z]+)*$",
+            regex_pattern=r"^gpt-5\.(?:1|2|3)-chat-latest$",
             profile_values={
                 ExecutionProfile.FAST: "medium",
                 ExecutionProfile.BALANCED: "medium",
@@ -671,6 +671,14 @@ def _register_builtin_model_overrides() -> None:
                 ExecutionProfile.MAX: "medium",
             },
             force_temperature=1.0,
+        )
+    )
+
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"^gpt-5-chat-latest$",
+            supports_reasoning=False,
         )
     )
 
@@ -685,7 +693,15 @@ def _register_builtin_model_overrides() -> None:
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-5\.(?:[4-9]|[1-9][0-9]+)(?:-[a-z]+)*$",
+            regex_pattern=r"^gpt-5\.[4-9]",
+            supports_reasoning=False,
+        )
+    )
+
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_OPENAI,
+            regex_pattern=r"(^|-)search(-|$)",
             supports_reasoning=False,
         )
     )
@@ -697,14 +713,21 @@ def _register_builtin_model_overrides() -> None:
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-4\.1",
+            regex_pattern=r"^gpt-4",
+            supports_reasoning=False,
+        )
+    )
+
+    register_model_override(
+        ModelCapability(
+            provider=PROVIDER_GOOGLE,
+            regex_pattern=r"^gemini-2\.5",
             profile_values={
-                ExecutionProfile.FAST: "medium",
-                ExecutionProfile.BALANCED: "medium",
-                ExecutionProfile.DEEP: "medium",
-                ExecutionProfile.MAX: "medium",
-            },
-            force_temperature=1.0,
+                ExecutionProfile.FAST: 1024,
+                ExecutionProfile.BALANCED: 5000,
+                ExecutionProfile.DEEP: 24576,
+                ExecutionProfile.MAX: 24576,
+            }
         )
     )
 

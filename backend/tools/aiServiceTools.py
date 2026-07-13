@@ -218,6 +218,8 @@ def _build_openai_llm(ai_service, temperature, runtime_config):
     # Add runtime reasoning kwargs
     kwargs.update(build_runtime_kwargs(runtime_config))
 
+    logger.info("OpenAI LLM kwargs: %s", kwargs)
+
     return ChatOpenAI(**kwargs)
 
 
@@ -427,6 +429,8 @@ def _build_google_llm(ai_service, temperature, runtime_config):
             google_kwargs["client_options"] = client_options
 
     google_kwargs.update(build_runtime_kwargs(runtime_config))
+
+    logger.info("Google LLM kwargs: %s", google_kwargs)
 
     return ChatGoogleGenerativeAI(**google_kwargs)
 
