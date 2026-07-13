@@ -1,7 +1,7 @@
 from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
-from utils.schema_utils import sanitize_identifier
+from utils.schema_utils import sanitize_identifier, ensure_json_schema_types
 from models.agent import Agent
 from models.silo import Silo
 from langchain.tools import BaseTool, tool
@@ -261,11 +261,8 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             mcp_tools = await mcp_client.get_tools()
             logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
             for tool in mcp_tools:
-                logger.info(f"MCP tool %s schema=%s", tool.name, getattr(tool, "args_schema", None))
-
                 if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
-                    normalize_openai_schema(tool.args_schema)
-
+                    ensure_json_schema_types(tool.args_schema)
             if (mcp_tools):
                 tools.extend(mcp_tools)
     except Exception as e:
@@ -359,35 +356,6 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
         getattr(agent, "rag_max_retrieval_calls", None),
         resolved_pinned,
     )
-
-
-def _infer_missing_type(schema: dict) -> None:
-    """Infer the missing 'type' in a JSON schema dict."""
-    if "type" not in schema:
-        if "properties" in schema:
-            schema["type"] = "object"
-        elif "items" in schema:
-            schema["type"] = "array"
-
-
-def normalize_openai_schema(schema):
-    if not isinstance(schema, (dict, list)):
-        return
-
-    if isinstance(schema, dict):
-
-        # OpenAI exige required completo
-        if schema.get("type") == "object" and "properties" in schema:
-            schema["required"] = list(schema["properties"].keys())
-        
-        _infer_missing_type(schema)
-
-        for value in schema.values():
-            normalize_openai_schema(value)
-
-    else:
-        for item in schema:
-            normalize_openai_schema(item)
 
 
 def prepare_agent_config(agent):
