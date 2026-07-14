@@ -988,6 +988,14 @@ function ChatInterface({
                     thinkingMessage={thinkingMessage}
                   />
                 )}
+                {showStreaming && responseMode === 'audio' && (
+                  <StreamingMessage
+                    content={''}
+                    isStreaming={isStreaming}
+                    activeTools={activeTools}
+                    thinkingMessage={thinkingMessage}
+                  />
+                )}
               </>
             )}
             <div ref={messagesEndRef} />

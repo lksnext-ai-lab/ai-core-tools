@@ -349,6 +349,8 @@ class AgentExecutionService:
                 f"audio_{uuid4().hex}"
             )
 
+            logger.info("ESTE SE SINTETIZA agent_execution_service")
+
             AudioTranscriptionService.synthesize_audio(
                 text=parsed_response,
                 language=ctx.user_context.get("audio_language", "en"),
@@ -366,7 +368,10 @@ class AgentExecutionService:
 
         if audio_ref:
             audio_file_id = audio_ref.file_id
-            
+
+        if ctx.user_context.get("response_mode") == "audio":
+            parsed_response = AudioTranscriptionService.strip_markdown(str(parsed_response))
+        
         if ctx.conversation:
             ConversationMessageService.create(
                 db=db,

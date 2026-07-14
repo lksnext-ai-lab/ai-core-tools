@@ -14,7 +14,7 @@ Create Date: 2026-06-05
 
 # revision identifiers, used by Alembic.
 revision = 'merge001_userdel_platform_role'
-down_revision = ('userdel001',)
+down_revision = ('userdel001','platform_role002')
 branch_labels = None
 depends_on = None
 

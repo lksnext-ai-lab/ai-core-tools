@@ -1886,6 +1886,7 @@ class ApiService {
     });
   }
 
+  // Esto no se esta usando
   async synthesizeAudio(
     appId: number,
     agentId: number,
@@ -1914,6 +1915,7 @@ class ApiService {
 
     return response.blob();
   }
+  //
 
   async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null): Promise<{ files: AttachedFile[] }> {
     const url = conversationId

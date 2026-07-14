@@ -4,6 +4,8 @@ import tempfile
 import subprocess
 
 from fastapi import HTTPException
+from markdown import markdown
+from bs4 import BeautifulSoup
 
 from utils.logger import get_logger
 from tools.audioTools import extract_text_from_audio, turn_text_to_speech
@@ -69,22 +71,34 @@ class AudioTranscriptionService:
         
     @staticmethod
     def strip_markdown(text: str) -> str:
-        # negritas
-        text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+        html = markdown(text)
 
-        # cursivas
-        text = re.sub(r"\*(.*?)\*", r"\1", text)
+        soup = BeautifulSoup(html, "html.parser")
 
-        # código inline
-        text = re.sub(r"`(.*?)`", r"\1", text)
+        # Listas numeradas
+        for ol in soup.find_all("ol"):
+            lines = []
+            for i, li in enumerate(ol.find_all("li", recursive=False), start=1):
+                lines.append(li.get_text(strip=True))
+            ol.replace_with("\n".join(lines))
 
-        # títulos markdown
-        text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+        # Listas con viñetas
+        for ul in soup.find_all("ul"):
+            lines = []
+            for i, li in enumerate(ul.find_all("li", recursive=False), start=1):
+                lines.append(li.get_text(strip=True))
+            ul.replace_with("\n".join(lines))
 
-        # enlaces [texto](url) -> texto
-        text = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", text)
+        text = soup.get_text(" ")
 
-        return text
+        text = re.sub(
+            r'^\s*[*+-]\s+',
+            '',
+            text,
+            flags=re.MULTILINE
+        )
+
+        return text.strip()
     
     @staticmethod
     def synthesize_audio(text: str, language: str | None, output_path: str) -> str:

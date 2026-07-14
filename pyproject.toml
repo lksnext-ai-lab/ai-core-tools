@@ -170,6 +170,7 @@ pydub = ">=0.25.1"
 ffmpeg-python = "^0.2.0"
 pymupdf = "^1.27.2.3"
 langchain-aws = ">=1.0.0,<2.0.0"
+markdown = "^3.10.2"
 
 [tool.poetry.scripts]
 dev = "uvicorn backend.main:app --reload --port 8000"

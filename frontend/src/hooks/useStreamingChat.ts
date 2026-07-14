@@ -135,7 +135,13 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 const content = (event.data as { content?: string }).content || '';
                 contentRef.current += content;
                 scheduleFlush();
-                setThinkingMessage(null);
+
+                const isTextResponse = options?.responseMode !== 'audio';
+
+                if (isTextResponse) {
+                  setThinkingMessage(null);
+                }
+
                 break;
               }
 

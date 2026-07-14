@@ -1020,6 +1020,7 @@ async def transcribe_audio(
         raise HTTPException(status_code=500, detail="Audio transcription failed")
 
 
+# Esto no se esta usando
 @agents_router.post(
         "/{agent_id}/synthesize-audio",
         summary="Synthesize audio from text",
@@ -1041,6 +1042,8 @@ async def synthesize_audio(
         with tempfile.NamedTemporaryFile(delete=False, suffix="") as tf:
             output_base = tf.name
 
+        logger.info("ESTE SE SINTETIZA agents.py")
+
         wav_path = AudioTranscriptionService.synthesize_audio(text, language, output_base)
 
         if background_tasks:
@@ -1055,6 +1058,7 @@ async def synthesize_audio(
     except Exception as e:
         logger.error(f"Audio synthesis error: {e}")
         raise HTTPException(status_code=500, detail="Audio synthesis failed")
+#
 
 
 @agents_router.get(
