@@ -487,8 +487,10 @@ class SiloService:
                 if silo_type == SiloType.REPO:
                     silo.metadata_definition_id = 0
 
-            # Set embedding service on creation only — immutable after creation
-            if not silo_id and silo_data.get('embedding_service_id'):
+            # Assign the embedding service on creation, or when an existing silo
+            # still has none (None → value is allowed). Changing an already-set
+            # service is blocked by assert_embedding_service_immutable above.
+            if silo_data.get('embedding_service_id') and silo.embedding_service_id is None:
                 silo.embedding_service_id = silo_data['embedding_service_id']
             
             # Handle metadata definition (output parser) - explicitly handle None to clear it

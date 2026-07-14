@@ -5,6 +5,7 @@ import { getStreamingMessage } from '../i18n/streaming';
 interface StreamResult {
   response: string | Record<string, unknown>;
   conversationId: number | null;
+  sessionId: string | null;
   files: Array<{ file_id: string; filename: string; file_type: string }>;
 }
 
@@ -107,6 +108,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       abortControllerRef.current = abortController;
 
       let conversationId: number | null = options?.conversationId ?? null;
+      let sessionId: string | null = null;
       let finalResponse: string | Record<string, unknown> = '';
       let finalFiles: Array<{ file_id: string; filename: string; file_type: string }> = [];
 
@@ -150,8 +152,12 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
 
               case 'metadata': {
                 const metaConvId = (event.data as { conversation_id?: number }).conversation_id;
+                const metaSessionId = (event.data as { session_id?: string }).session_id;
                 if (metaConvId) {
                   conversationId = metaConvId;
+                }
+                if (metaSessionId) {
+                  sessionId = metaSessionId;
                 }
                 break;
               }
@@ -201,6 +207,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       return {
         response: finalResponse || contentRef.current,
         conversationId,
+        sessionId,
         files: finalFiles,
       };
     },

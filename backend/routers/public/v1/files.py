@@ -22,6 +22,7 @@ from db.database import get_db
 
 from services.file_management_service import FileManagementService, FileReference
 from services.conversation_service import ConversationService
+from services.playground_media_service import PlaygroundMediaService, VECTORIZABLE_FILE_TYPES
 from utils.security import generate_signature
 
 from utils.logger import get_logger
@@ -94,6 +95,42 @@ async def attach_file(
             user_context=user_context,
             conversation_id=effective_conversation_id,
         )
+
+        # Vectorize documents (PDF/text) into the session's temp playground silo
+        # so agent chat retrieves them via RAG. A temp silo is always created —
+        # a conversation is created here to key it when the agent has no memory
+        # and none was provided — so the public API never silently drops content.
+        if file_ref.file_type in VECTORIZABLE_FILE_TYPES and file_ref.content:
+            if not effective_conversation_id:
+                new_conversation = ConversationService.create_conversation(
+                    db=db,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    title=None,
+                )
+                effective_conversation_id = str(new_conversation.conversation_id)
+                user_context["conversation_id"] = effective_conversation_id
+                logger.info(
+                    f"Auto-created conversation {effective_conversation_id} to scope "
+                    f"vectorized file for agent {agent_id}"
+                )
+            conversation = ConversationService.get_conversation(
+                db, int(effective_conversation_id), user_context, agent_id
+            )
+            if conversation and conversation.session_id:
+                try:
+                    PlaygroundMediaService.vectorize_uploaded_file(
+                        app_id=app_id,
+                        agent_id=agent_id,
+                        session_id=conversation.session_id,
+                        file_id=file_ref.file_id,
+                        filename=file_ref.filename,
+                        file_path=file_ref.file_path,
+                        content=file_ref.content,
+                        db=db,
+                    )
+                except Exception as vec_err:
+                    logger.warning(f"File vectorization at upload failed: {vec_err}")
 
         logger.info(f"File {file.filename} attached to agent {agent_id}, conversation {effective_conversation_id} via public API")
 

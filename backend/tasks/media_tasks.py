@@ -46,7 +46,7 @@ def process_media_task_sync(media_id: int):
         if not effective_transcription_id:
             raise ValueError(
                 f"No transcription service configured on repository {media.repository_id}. "
-                f"Please configure a transcription service in the repository settings."
+                f"Please configure a transcription service on the agent's media settings."
             )
         
         logger.info(

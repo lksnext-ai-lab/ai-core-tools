@@ -118,6 +118,14 @@ class AgentService:
             vision_service_id=getattr(agent, 'vision_service_id', None),
             vision_system_prompt=getattr(agent, 'vision_system_prompt', None),
             text_system_prompt=getattr(agent, 'text_system_prompt', None),
+            # Media processing configuration
+            transcription_service_id=getattr(agent, 'transcription_service_id', None),
+            video_ai_service_id=getattr(agent, 'video_ai_service_id', None),
+            media_embedding_service_id=getattr(agent, 'media_embedding_service_id', None),
+            media_forced_language=getattr(agent, 'media_forced_language', None),
+            media_chunk_min_duration=getattr(agent, 'media_chunk_min_duration', 30) or 30,
+            media_chunk_max_duration=getattr(agent, 'media_chunk_max_duration', 120) or 120,
+            media_chunk_overlap=getattr(agent, 'media_chunk_overlap', 5) if getattr(agent, 'media_chunk_overlap', 5) is not None else 5,
             # Related information
             silo=silo_info,
             output_parser=output_parser_info,
@@ -310,6 +318,24 @@ class AgentService:
             agent.vision_system_prompt = data.get('vision_system_prompt')
             agent.text_system_prompt = data.get('text_system_prompt')
 
+        # Media processing configuration (playground media upload). Only touch
+        # each field when its key is present in the payload, so callers that
+        # build the data dict without media keys don't silently wipe the config.
+        if 'transcription_service_id' in data:
+            agent.transcription_service_id = data.get('transcription_service_id') or None
+        if 'video_ai_service_id' in data:
+            agent.video_ai_service_id = data.get('video_ai_service_id') or None
+        if 'media_embedding_service_id' in data:
+            agent.media_embedding_service_id = data.get('media_embedding_service_id') or None
+        if 'media_forced_language' in data:
+            agent.media_forced_language = data.get('media_forced_language') or None
+        if data.get('media_chunk_min_duration') is not None:
+            agent.media_chunk_min_duration = data['media_chunk_min_duration']
+        if data.get('media_chunk_max_duration') is not None:
+            agent.media_chunk_max_duration = data['media_chunk_max_duration']
+        if data.get('media_chunk_overlap') is not None:
+            agent.media_chunk_overlap = data['media_chunk_overlap']
+        
         # Handle is_tool field - can be boolean from API or 'on' from form
         is_tool_value = data.get('is_tool')
         if isinstance(is_tool_value, bool):

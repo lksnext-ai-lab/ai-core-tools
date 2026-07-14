@@ -112,7 +112,7 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None, temp_silo_ids: Optional[List[int]] = None):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
@@ -120,6 +120,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         search_params: Optional search parameters for silo-based retrieval
         session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
         user_context: Optional user context containing authentication tokens for MCP
+        temp_silo_ids: Optional list of temporary silo IDs (e.g. playground media) to include as extra retrievers
     """
     llm = get_llm(agent)
     if llm is None:
@@ -247,6 +248,99 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         )
         if retriever_tool is not None:
             tools.append(retriever_tool)
+
+    # Add temp silo retrievers (e.g. playground media/file uploads)
+    has_temp_retrievers = False
+    has_media_content = False
+    has_file_content = False
+    if temp_silo_ids:
+        def _build_temp_retrievers():
+            """Sync silo/media inspection + retriever build (own DB session).
+
+            Runs off the event loop via ``asyncio.to_thread`` so the synchronous
+            embedding/vector-store setup inside ``get_retriever_tool`` and the
+            Media lookups do not block the loop during chain construction.
+            """
+            from repositories.silo_repository import SiloRepository
+            from models.media import Media
+            from db.database import SessionLocal
+            built = []
+            media_found = False
+            temp_db = SessionLocal()
+            try:
+                for idx, temp_silo_id in enumerate(temp_silo_ids):
+                    temp_silo = SiloRepository.get_by_id(temp_silo_id, temp_db)
+                    if not temp_silo:
+                        continue
+                    temp_tool = get_retriever_tool(temp_silo, search_params)
+                    if not temp_tool:
+                        continue
+                    temp_tool.name = f"playground_content_retriever_{idx}"
+                    temp_tool.description = (
+                        "Use this tool to search for information from content uploaded "
+                        "in this conversation (documents, PDFs, text files, video/audio "
+                        "transcriptions). Always use this when the user asks about "
+                        "attached or uploaded content."
+                    )
+                    built.append(temp_tool)
+
+                    # Check if silo contains media content (for timestamp instructions)
+                    if temp_silo.repository:
+                        repo_list = temp_silo.repository if isinstance(temp_silo.repository, list) else [temp_silo.repository]
+                        for repo in repo_list:
+                            if temp_db.query(Media).filter(Media.repository_id == repo.repository_id).first():
+                                media_found = True
+                                break
+            finally:
+                temp_db.close()
+            return built, media_found
+
+        temp_tools, has_media_content = await asyncio.to_thread(_build_temp_retrievers)
+        for temp_tool in temp_tools:
+            tools.append(temp_tool)
+            has_temp_retrievers = True
+            logger.info(f"Added temp silo retriever for agent {agent.agent_id}")
+
+        # Check if files were vectorized by looking at silo content
+        if has_temp_retrievers:
+            has_file_content = True  # files are always possible when temp retrievers exist
+
+    # Inject timestamp citation instruction when media content is in the silo
+    if has_media_content:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<media_timestamp_instructions>\n"
+            + "The user has uploaded video/audio media. When answering questions about media content, "
+            + "you MUST include timestamps from the retrieved chunks metadata.\n"
+            + "Each retrieved chunk has metadata with the fields 'name' (the media filename), "
+            + "'start_time' and 'end_time' (in seconds).\n"
+            + "When you reference a specific moment, cite it using this EXACT format, including the "
+            + "media filename so the moment is unambiguously tied to its media:\n"
+            + "[<name> @ MM:SS - MM:SS]\n"
+            + "where <name> is the exact 'name' value from that chunk's metadata. Convert start_time "
+            + "and end_time from seconds to MM:SS (or HH:MM:SS when over an hour).\n"
+            + "Example: if a chunk has name=\"lesson.mp4\", start_time=125 and end_time=180, "
+            + "cite it as [lesson.mp4 @ 02:05 - 03:00].\n"
+            + "Only cite timestamps for the specific media you are actually referencing. When multiple "
+            + "media were uploaded, NEVER mix timestamps from one media into a citation for another, and "
+            + "only cite the media that genuinely answer the user's question.\n"
+            + "Always cite the relevant timestamps so the user can navigate to those moments in the media.\n"
+            + "</media_timestamp_instructions>"
+        )
+
+    # Inject file retriever instruction when files have been vectorized
+    if has_file_content:
+        system_prompt_content = (
+            system_prompt_content
+            + "\n\n<uploaded_files_instructions>\n"
+            + "The user has uploaded documents (PDFs, text files) in this conversation. "
+            + "Their content has been indexed for semantic search.\n"
+            + "When the user asks about or references attached files, you MUST use the "
+            + "uploaded-file semantic search retriever tool available in this conversation "
+            + "to search for relevant information.\n"
+            + "Always cite the source filename from the retrieved chunk metadata.\n"
+            + "</uploaded_files_instructions>"
+        )
 
     if agent.enable_code_interpreter and working_dir:
         os.makedirs(working_dir, exist_ok=True)
