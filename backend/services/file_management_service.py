@@ -100,19 +100,22 @@ class FileReference:
             return "uploaded"  # File uploaded but not fully processed
         return "ready"
     
+    # Every notice this service puts in ``content`` in place of real text starts
+    # with one of these. Matched as a prefix, not a substring: extracted document
+    # text can legitimately contain "File:" anywhere in the body, and a substring
+    # match would report a successfully-read attachment as unread.
+    PLACEHOLDER_PREFIXES = (
+        "Error processing",
+        "Image file:",
+        "Document file:",
+        "File:",
+    )
+
     def _has_extractable_content(self) -> bool:
         """Check if meaningful content was extracted"""
         if not self.content:
             return False
-        # Check for placeholder messages
-        placeholder_indicators = [
-            "not implemented",
-            "Error processing",
-            "Image file:",
-            "Document file:",
-            "File:"
-        ]
-        return not any(indicator in self.content for indicator in placeholder_indicators)
+        return not self.content.startswith(self.PLACEHOLDER_PREFIXES)
     
     def _get_content_preview(self, max_length: int = 200) -> Optional[str]:
         """Get preview of extracted content"""
@@ -318,8 +321,11 @@ class FileManagementService:
             if file_type == "pdf":
                 # Use existing PDF tools
                 return extract_text_from_pdf(file_path)
-            elif file_type in ["txt", "md", "json"]:
-                # Read text files directly
+            elif file_type == "text":
+                # Read text files directly. _get_file_type_from_path returns the
+                # category ("text"), not the extension, so matching on extensions
+                # here never fired and .txt/.md/.json/.csv fell through to the
+                # generic placeholder below.
                 with open(file_path, 'r', encoding='utf-8') as f:
                     return f.read()
             elif file_type == "document":

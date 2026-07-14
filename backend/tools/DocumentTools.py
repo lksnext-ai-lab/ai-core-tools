@@ -65,7 +65,11 @@ def extract_text_from_document(file_path: str, filename: str) -> str:
 
         return text
     except Exception as exc:
+        # The notice becomes the file's content and is shown to the user and sent
+        # to the model, so it must not carry the exception text: that leaks server
+        # paths and parser internals, and would make the UI depend on the wording
+        # of a third-party error. The detail stays in the log.
         logger.error(
             "Failed to extract text from '%s': %s", filename, exc, exc_info=True
         )
-        return f"Error processing document {filename}: {exc}"
+        return f"Error processing document {filename}: the file could not be read"

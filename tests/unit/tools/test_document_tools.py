@@ -81,3 +81,15 @@ class TestExtractTextFromDocument:
         result = extract_text_from_document(str(corrupt), "broken.docx")
 
         assert result.startswith("Error processing document")
+
+    def test_error_notice_does_not_leak_exception_detail(self, tmp_path):
+        # The notice becomes the file's content: it reaches the model and the UI,
+        # so the underlying exception (server paths, parser internals) must stay
+        # in the log and out of the returned string.
+        corrupt = tmp_path / "broken.docx"
+        corrupt.write_bytes(b"this is not a zip archive")
+
+        result = extract_text_from_document(str(corrupt), "broken.docx")
+
+        assert "zip" not in result.lower()
+        assert str(tmp_path) not in result
