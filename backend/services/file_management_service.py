@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi import UploadFile, HTTPException
 
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
+from tools.DocumentTools import extract_text_from_document
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -92,8 +93,10 @@ class FileReference:
         # No text extraction needed for images
         if self.file_type == "image":
             return "ready"
-        # Documents (.doc, .docx) don't have text extraction implemented yet
-        if "not implemented" in self.content.lower():
+        # Formats with no extractor (legacy .doc, spreadsheets, slides) carry a notice
+        # instead of text. Keyed off the placeholder check rather than one specific
+        # phrase, so a reworded notice cannot make an unread file look ready.
+        if not self._has_extractable_content():
             return "uploaded"  # File uploaded but not fully processed
         return "ready"
     
@@ -319,6 +322,8 @@ class FileManagementService:
                 # Read text files directly
                 with open(file_path, 'r', encoding='utf-8') as f:
                     return f.read()
+            elif file_type == "document":
+                return extract_text_from_document(file_path, os.path.basename(file_path))
             else:
                 # For other file types, return basic info
                 return f"File: {os.path.basename(file_path)} (type: {file_type})"
@@ -558,8 +563,7 @@ class FileManagementService:
                     return content, temp_path, file_size
                 
                 elif file_type == "document":
-                    # For documents, return basic info (in production, use document processing)
-                    content = f"Document file: {file.filename} (Document processing not implemented)"
+                    content = extract_text_from_document(temp_path, file.filename)
                     return content, temp_path, file_size
                 
                 else:
