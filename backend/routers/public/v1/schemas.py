@@ -22,6 +22,7 @@ class AgentResponseSchema(BaseModel):
     response: Union[str, Dict[str, Any]]
     conversation_id: Optional[int] = None
     usage: Optional[Dict[str, Any]] = None
+    audio_file_id: Optional[str] = None  # ID of the audio file if response_mode is 'audio'
 
 # ==================== FILE OPERATION SCHEMAS ====================
 

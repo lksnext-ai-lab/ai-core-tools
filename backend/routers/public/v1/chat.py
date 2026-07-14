@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from typing import AsyncGenerator, List, Optional, Annotated
+from typing import AsyncGenerator, List, Optional, Annotated, Literal
 
 from schemas.agent_schemas import RuntimeSearchParamsSchema
 
@@ -98,6 +98,7 @@ async def call_agent(
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters for silo-based agents")] = None,
     conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue existing conversation")] = None,    
     user_token: Annotated[Optional[str], Form(description="End-user Bearer token to forward to MCP servers. When provided, every MCP tool call in this execution will include Authorization: Bearer <token>.")] = None,
+    response_mode: Annotated[Literal["text", "audio"], Form(description="Optional response mode: 'text' or 'audio'. If 'audio', the agent's response will be synthesized to audio.")] = "text",
 ):
     """
     Call an agent for chat completion.
@@ -138,6 +139,10 @@ async def call_agent(
 
         user_context = create_api_key_user_context(app_id, api_key, user_token=user_token)
 
+        user_context["response_mode"] = response_mode
+
+        user_context["audio_language"] = language
+
         all_file_references = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,
@@ -163,6 +168,7 @@ async def call_agent(
             response=result["response"],
             conversation_id=result.get("conversation_id"),
             usage=result["metadata"],
+            audio_file_id=result.get("audio_file_id"),
         )
 
         logger.info(f"Public API chat request processed for agent {agent_id}, conversation: {result.get('conversation_id')}")
@@ -206,8 +212,8 @@ async def call_agent_stream(
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters")] = None,
     conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue")] = None,
     user_token: Annotated[Optional[str], Form(description="End-user Bearer token to forward to MCP servers.")] = None,
-
     language: Annotated[Optional[str], Form(description="Optional language code for the transcription of an audio file, e.g. 'en'")] = None,
+    response_mode: Annotated[Literal["text", "audio"], Form(description="Optional response mode: 'text' or 'audio'. If 'audio', the agent's response will be synthesized to audio.")] = "text",
 ):
     """
     Call an agent with Server-Sent Events streaming response.
@@ -233,6 +239,10 @@ async def call_agent_stream(
         parsed_file_references = _parse_json_param(file_references, "file_references")
 
         user_context = create_api_key_user_context(app_id, api_key, user_token=user_token)
+
+        user_context["response_mode"] = response_mode
+
+        user_context["audio_language"] = language
 
         fms = FileManagementService()
         all_file_references = await fms.resolve_chat_files(
