@@ -76,7 +76,7 @@ async def test_iact_tool_create_survives_mcp_load_failure():
     assert tool.react_agent is not None
     assert tool.mcp_client is None
     # Base tools are still present despite the MCP failure.
-    assert agentTools.get_current_date in mock_create.call_args.kwargs["tools"]
+    assert agentTools.fetch_file_in_base64 in mock_create.call_args.kwargs["tools"]
 
 
 @pytest.mark.asyncio
