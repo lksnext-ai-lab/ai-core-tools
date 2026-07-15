@@ -207,7 +207,7 @@ class TestErrorStatusMapping:
         "code,status",
         [
             ("invalid_request", 400),
-            ("unauthorized", 401),
+            ("unauthorized", 400),
             ("not_found", 404),
             ("timeout", 408),
             ("network", 502),

@@ -1,6 +1,7 @@
 from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
+from utils.schema_utils import sanitize_identifier, ensure_json_schema_types
 from models.agent import Agent
 from models.silo import Silo
 from langchain.tools import BaseTool, tool
@@ -8,7 +9,8 @@ from tools.outputParserTools import get_parser_model_by_id
 from tools.aiServiceTools import get_llm, get_output_parser
 from tools.ai.fileTools import fetch_file_in_base64
 from tools.ai.workspaceTools import create_download_url_tool
-from typing import Any, Optional, Dict, List, Tuple
+from typing import Any, Optional, Dict, List, Tuple, Type
+from pydantic import BaseModel, Field
 import types as _types
 from services.silo_service import SiloService
 from db.database import SessionLocal
@@ -259,6 +261,9 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         if (mcp_client):
             mcp_tools = await mcp_client.get_tools()
             logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
+            for tool in mcp_tools:
+                if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
+                    ensure_json_schema_types(tool.args_schema)
             if (mcp_tools):
                 tools.extend(mcp_tools)
     except Exception as e:
@@ -500,9 +505,23 @@ def build_human_message(
     return HumanMessage(content=content)
 
 
+class AgentToolInput(BaseModel):
+    """Input schema for an agent-as-tool.
+
+    Pinned explicitly so the provider function schema is exactly
+    ``{query: string}``. Without it, ``BaseTool`` derives the schema from the
+    ``_run(self, query, *args, **kwargs)`` signature, which emits an untyped
+    ``args`` array (``items`` with no ``type``) that OpenAI rejects with
+    ``schema must have a 'type' key``.
+    """
+
+    query: str = Field(description="The question or instruction to send to the sub-agent.")
+
+
 class IACTTool(BaseTool):
     name: str = "agent_tool"
     description: str = "Search for a repository"
+    args_schema: Type[BaseModel] = AgentToolInput
     agent: Agent
     user_context: Optional[Dict] = None
     react_agent: Any = None
@@ -514,7 +533,7 @@ class IACTTool(BaseTool):
 
         self.agent = agent
         self.user_context = user_context
-        self.name = agent.name.replace(" ", "_")
+        self.name = sanitize_identifier(agent.name)
         self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
         if self.llm is None:

@@ -181,12 +181,23 @@ class AgentStreamingService:
                 effective_db.commit()
 
             accumulated_content = ""
+            structured_response = None
 
             async for mode, chunk in agent_chain.astream(
                 {"messages": [message_payload]},
                 config=config,
                 stream_mode=["messages", "updates"],
             ):
+
+                if mode == "updates":
+                    if (
+                        isinstance(chunk, dict)
+                        and "model" in chunk
+                        and isinstance(chunk["model"], dict)
+                        and "structured_response" in chunk["model"]
+                    ):
+                        structured_response = chunk["model"]["structured_response"]
+
                 events = map_stream_event(mode, chunk)
                 if events:
                     for event in events:
@@ -197,8 +208,15 @@ class AgentStreamingService:
             # ----------------------------------------------------------------
             # 7. Post-processing phase — delegates to AgentExecutionService
             # ----------------------------------------------------------------
+
+            raw_response = (
+                structured_response
+                if structured_response is not None
+                else accumulated_content
+            )
+
             result = await self.execution_service._finalize_turn(
-                ctx, accumulated_content, effective_db
+                ctx, raw_response, effective_db
             )
 
             # ----------------------------------------------------------------
