@@ -349,8 +349,6 @@ class AgentExecutionService:
                 f"audio_{uuid4().hex}"
             )
 
-            logger.info("ESTE SE SINTETIZA agent_execution_service")
-
             AudioTranscriptionService.synthesize_audio(
                 text=parsed_response,
                 language=ctx.user_context.get("audio_language", "en"),

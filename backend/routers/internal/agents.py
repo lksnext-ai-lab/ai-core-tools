@@ -1020,47 +1020,6 @@ async def transcribe_audio(
         raise HTTPException(status_code=500, detail="Audio transcription failed")
 
 
-# Esto no se esta usando
-@agents_router.post(
-        "/{agent_id}/synthesize-audio",
-        summary="Synthesize audio from text",
-        tags=["Agents"],
-)
-async def synthesize_audio(
-    app_id: int,
-    agent_id: int,
-    text: Annotated[str, Form()],
-    language: Annotated[Optional[str], Form()] = None,
-    background_tasks: BackgroundTasks = None,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))] = None,
-    db: Annotated[Session, Depends(get_db)] = None,
-):
-    try:
-        _get_agent_or_404(db, agent_id, app_id)
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix="") as tf:
-            output_base = tf.name
-
-        logger.info("ESTE SE SINTETIZA agents.py")
-
-        wav_path = AudioTranscriptionService.synthesize_audio(text, language, output_base)
-
-        if background_tasks:
-            background_tasks.add_task(os.remove, wav_path)
-        
-        return FileResponse(
-            path=wav_path,
-            media_type="audio/wav",
-            filename="agent-response.wav",
-            background=background_tasks,
-        )
-    except Exception as e:
-        logger.error(f"Audio synthesis error: {e}")
-        raise HTTPException(status_code=500, detail="Audio synthesis failed")
-#
-
-
 @agents_router.get(
     "/{agent_id}/files",
     summary="List attached files",

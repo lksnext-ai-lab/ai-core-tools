@@ -227,6 +227,10 @@ function ChatInterface({
                         currentConversationId
                       )
                     : undefined;
+                  
+                  const shouldAutoPlay =
+                      sessionStorage.getItem("pendingAutoplayConversation") === String(currentConversationId) &&
+                      sessionStorage.getItem("pendingAutoplayAudio") === msg.audio_file_id;
 
                   return {
                     id: `history-${index}`,
@@ -235,7 +239,7 @@ function ChatInterface({
                     transcript: msg.transcript,
                     audioFileId: msg.audio_file_id,
                     audioUrl,
-                    autoPlay: false,
+                    autoPlay: shouldAutoPlay,
                     timestamp: new Date(),
                   };
                 }
@@ -248,6 +252,11 @@ function ChatInterface({
                 };
               }
             ));
+            
+            if (loadedMessages.some(m => m.autoPlay)) {
+              sessionStorage.removeItem("pendingAutoplayConversation");
+              sessionStorage.removeItem("pendingAutoplayAudio");
+            }
 
             setMessages(loadedMessages);
           } else {
@@ -377,6 +386,23 @@ function ChatInterface({
         responseMode,
         audioLanguage,
       });
+
+      if (
+        result.messageType === 'audio' &&
+        result.audioFileId &&
+        !currentConversationId &&
+        result.conversationId
+      ) {
+        sessionStorage.setItem(
+          "pendingAutoplayConversation",
+          String(result.conversationId)
+        );
+
+        sessionStorage.setItem(
+          "pendingAutoplayAudio",
+          result.audioFileId
+        );
+      }
 
       const rawResponse = result.response || '';
       const responseContent: string =
