@@ -657,7 +657,7 @@ export default function MarketplaceChatPage() {
           )}
 
           {chatFilters.length > 0 && (
-            <div className="pg-glass rounded-xl px-4 py-3 mb-3">
+            <div className="mb-3">
               <OrchestratorFilterDropdowns
                 filters={chatFilters}
                 selected={exposedFilterValues}
