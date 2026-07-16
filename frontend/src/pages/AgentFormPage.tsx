@@ -11,6 +11,7 @@ import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
 import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
 import type { RagConfigValue, RagFixedFilter, RagSearchType } from '../components/forms/RagConfigSection';
+import ExposedChatFiltersSection from '../components/forms/ExposedChatFiltersSection';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
 import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
@@ -37,6 +38,7 @@ interface Agent {
   tool_ids?: number[];
   mcp_config_ids?: number[];
   skill_ids?: number[];
+  exposed_chat_filters?: string[];
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
@@ -78,6 +80,7 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  exposed_chat_filters: string[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -214,6 +217,7 @@ function AgentFormPage() {
     tool_ids: [],
     mcp_config_ids: [],
     skill_ids: [],
+    exposed_chat_filters: [],
     rag_k: 10,
     rag_search_type: 'similarity',
     rag_score_threshold: null,
@@ -303,6 +307,7 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        exposed_chat_filters: response.exposed_chat_filters || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -497,6 +502,7 @@ function AgentFormPage() {
       tool_ids: formData.tool_ids,
       mcp_config_ids: formData.mcp_config_ids,
       skill_ids: formData.skill_ids,
+      exposed_chat_filters: formData.exposed_chat_filters,
       // OCR-specific fields
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
@@ -1251,6 +1257,18 @@ function AgentFormPage() {
                   )}
                 </div>
               )}
+
+              {/* Chat filters — designer picks which metadata fields end users can filter on.
+                  Mounted unconditionally (not gated behind silo_id): an orchestrator commonly
+                  has no own silo and delegates entirely to subagents' silos via tool_ids. */}
+              <ExposedChatFiltersSection
+                appId={Number.parseInt(appId ?? '0')}
+                agentId={Number.parseInt(agentId ?? '0')}
+                toolIds={formData.tool_ids}
+                siloId={formData.silo_id}
+                value={formData.exposed_chat_filters}
+                onChange={(fields) => handleInputChange('exposed_chat_filters', fields)}
+              />
 
               {/* MCP Configs Card - Only for regular agents */}
               {agent?.mcp_configs && formData.type !== 'ocr_agent' && (

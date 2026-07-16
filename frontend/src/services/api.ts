@@ -300,6 +300,33 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
   }
 
+  async getAvailableChatFilterFields(
+    appId: number,
+    agentId: number,
+    toolIds: number[],
+    siloId?: number | null,
+  ): Promise<{ fields: { name: string; type: string; description?: string }[] }> {
+    const params = new URLSearchParams();
+    toolIds.forEach((id) => params.append('tool_ids', String(id)));
+    if (siloId) params.append('silo_id', String(siloId));
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/available-chat-filter-fields?${params}`,
+    );
+  }
+
+  async getAgentChatFilters(
+    appId: number,
+    agentId: number,
+  ): Promise<{ filters: { field_name: string; values: string[] }[] }> {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/chat-filters`);
+  }
+
+  async getMarketplaceChatFilters(
+    conversationId: number,
+  ): Promise<{ filters: { field_name: string; values: string[] }[] }> {
+    return this.request(`/internal/marketplace/conversations/${conversationId}/chat-filters`);
+  }
+
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string) {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
       method: 'POST',
@@ -1788,6 +1815,7 @@ class ApiService {
     options: {
       files?: File[];
       fileReferences?: string[];
+      searchParams?: unknown;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     },
@@ -1797,6 +1825,9 @@ class ApiService {
 
     if (options.fileReferences && options.fileReferences.length > 0) {
       formData.append('file_references', JSON.stringify(options.fileReferences));
+    }
+    if (options.searchParams) {
+      formData.append('search_params', JSON.stringify(options.searchParams));
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));

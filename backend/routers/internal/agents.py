@@ -386,6 +386,11 @@ async def create_or_update_agent(
         'silo_id': agent_data.silo_id,
         'output_parser_id': agent_data.output_parser_id,
         'temperature': agent_data.temperature,
+        # tool_ids is included here (in addition to being used below for
+        # update_agent_tools) so that AgentService.create_or_update_agent can
+        # validate exposed_chat_filters against the in-progress subagent
+        # selection, before update_agent_tools() reconciles the actual M:N rows.
+        'tool_ids': agent_data.tool_ids or [],
         # OCR-specific fields
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
@@ -396,6 +401,8 @@ async def create_or_update_agent(
         'rag_score_threshold': agent_data.rag_score_threshold,
         'rag_max_retrieval_calls': agent_data.rag_max_retrieval_calls,
         'rag_fixed_filters': agent_data.rag_fixed_filters,
+        # Orchestrator-level chat-time dropdown filter whitelist
+        'exposed_chat_filters': agent_data.exposed_chat_filters,
     }
 
     # Avoid logging full prompt bodies / filter values at INFO; log identity + shape only.
@@ -474,6 +481,54 @@ async def get_agent_mcp_usage(
         "mcp_servers": servers,
         "used_in_mcp_servers": len(servers) > 0
     }
+
+
+@agents_router.get("/{agent_id}/available-chat-filter-fields",
+                   summary="Get available chat-time dropdown filter fields",
+                   tags=["Agents"])
+async def get_available_chat_filter_fields(
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("editor"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
+    tool_ids: Annotated[List[int], Query()] = [],
+    silo_id: Annotated[Optional[int], Query()] = None,
+):
+    """
+    Get the union of metadata filter fields available to expose as end-user
+    chat-time dropdown filters, aggregated from the given candidate subagents'
+    silos plus the given silo (typically the orchestrator's own).
+
+    agent_id is accepted for REST consistency / future permission scoping, but
+    the fields are computed purely from the tool_ids/silo_id query params — the
+    agent itself need not exist yet (e.g. this endpoint is also called while
+    still creating a new agent, using the "new agent" sentinel agent_id=0).
+    """
+    fields = agent_service.get_available_chat_filter_fields(db, tool_ids, silo_id)
+    return {"fields": fields}
+
+
+@agents_router.get("/{agent_id}/chat-filters",
+                   summary="Get chat-time dropdown filter values for an agent",
+                   tags=["Agents"])
+async def get_chat_filter_values(
+    app_id: int,
+    agent_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
+):
+    """
+    Get the distinct values for each metadata field the designer exposed via
+    ``exposed_chat_filters``, for use by the Playground's chat-time dropdown
+    filters. Any user able to chat with the agent can call this (viewer role).
+    """
+    agent = _get_agent_or_404(db, agent_id, app_id)
+    filters = agent_service.get_chat_filter_values(db, agent)
+    return {"filters": filters}
 
 
 @agents_router.post("/{agent_id}/update-prompt",

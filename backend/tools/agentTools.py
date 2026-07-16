@@ -229,9 +229,23 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         else:
             logger.warning("Server-side tool '%s' not supported by provider %s — skipped", tool_name, provider_name)
 
+    # Gate 1: orchestrator-level whitelist. Only fields the orchestrator itself
+    # declares in exposed_chat_filters may be forwarded to sub-agents — anything
+    # the caller puts in search_params["filter"] that isn't on that list is
+    # dropped right here, before it ever reaches a sub-agent (Gate 2 applies a
+    # second, silo-scoped whitelist per sub-agent in IACTTool.create).
+    exposed_fields = set(getattr(agent, "exposed_chat_filters", None) or [])
+    orchestrator_caller_filter = {
+        k: v for k, v in (search_params or {}).get("filter", {}).items() if k in exposed_fields
+    }
+
     for tool in agent.tool_associations:
         sub_agent = tool.tool
-        tools.append(await IACTTool.create(sub_agent, user_context=user_context))
+        tools.append(
+            await IACTTool.create(
+                sub_agent, user_context=user_context, caller_filter=orchestrator_caller_filter
+            )
+        )
 
     # Base tools — always available for every agent
     if working_dir:
@@ -349,6 +363,20 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     MUST be invoked via ``asyncio.to_thread`` so it never blocks the event loop.
     """
     from services.silo_service import resolve_search_params  # noqa: PLC0415 — avoids import cycle
+    from tools.vector_stores.metadata_filters import MetadataFilterClause, validate_clauses, ops_for_backend  # noqa: PLC0415
+
+    # Gate 2: silo-scoped whitelist. A caller_search_params["filter"] entry may have
+    # survived the orchestrator's own exposed_chat_filters whitelist (Gate 1, in
+    # create_agent) but this specific subagent's silo might not declare that field at
+    # all. validate_clauses discards anything this silo's metadata_definition doesn't
+    # know about, so a filter never gets applied to a nonexistent metadata key.
+    raw_filter = (caller_search_params or {}).get("filter") or {}
+    if raw_filter and agent.silo is not None:
+        backend_ops = ops_for_backend(getattr(agent.silo, "vector_db_type", None))
+        clauses = [MetadataFilterClause(field=k, op="$eq", value=v) for k, v in raw_filter.items()]
+        valid = validate_clauses(clauses, getattr(agent.silo, "metadata_definition", None), backend_ops)
+        scoped_filter = {c.field: c.value for c in valid}
+        caller_search_params = {**caller_search_params, "filter": scoped_filter} if scoped_filter else None
 
     resolved_sp, resolved_pinned = resolve_search_params(agent, caller_search_params)
     return get_retriever_tool(
@@ -542,12 +570,29 @@ class IACTTool(BaseTool):
         self.mcp_client = None
 
     @classmethod
-    async def create(cls, agent: Agent, user_context: Optional[Dict] = None) -> "IACTTool":
+    async def create(
+        cls,
+        agent: Agent,
+        user_context: Optional[Dict] = None,
+        caller_filter: Optional[Dict[str, Any]] = None,
+    ) -> "IACTTool":
         """Build an agent-as-tool, including the sub-agent's MCP tools.
 
         MCP tools are loaded with an awaited MultiServerMCPClient, which is not
         possible inside a synchronous ``__init__``; hence this async factory. It
         is the only supported way to obtain a ready-to-use ``IACTTool``.
+
+        Args:
+            caller_filter: Optional flat ``{field: value}`` filter already
+                whitelisted against the root orchestrator's own
+                ``exposed_chat_filters`` (Gate 1, in ``create_agent``). It is
+                forwarded unchanged to nested tool-agents — a nested
+                orchestrator's own sub-agents get a shot at the same
+                already-whitelisted fields, no re-derivation needed. Each
+                sub-agent's silo retriever applies its own silo-scoped
+                whitelist on top (Gate 2, in
+                ``_resolve_and_build_retriever_tool``) before merging it into
+                the existing RAG precedence resolution.
         """
         instance = cls(agent, user_context=user_context)
 
@@ -555,7 +600,9 @@ class IACTTool(BaseTool):
         # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
-            tools.append(await IACTTool.create(sub_agent, user_context=user_context))
+            tools.append(
+                await IACTTool.create(sub_agent, user_context=user_context, caller_filter=caller_filter)
+            )
 
         # Add base useful tools
         tools.append(fetch_file_in_base64)
@@ -563,13 +610,17 @@ class IACTTool(BaseTool):
         # Add silo retriever if configured. The sub-agent uses the same dynamic
         # metadata-aware tool as the root agent, driven by its OWN RAG config
         # (rag_k / rag_search_type / rag_score_threshold / rag_fixed_filters /
-        # rag_max_retrieval_calls). Caller search params are NOT propagated from the
-        # root agent (caller_search_params=None) — sub-agents are self-contained (FR-12).
+        # rag_max_retrieval_calls). Gate 1 (in create_agent) already whitelisted
+        # caller_filter by field name against the orchestrator's own
+        # exposed_chat_filters; here Gate 2 additionally scopes it down to fields
+        # THIS sub-agent's own silo declares (_resolve_and_build_retriever_tool),
+        # before it is merged into the existing RAG precedence resolution.
         if agent.silo_id is not None:
-            # Caller params NOT propagated (None) — the sub-agent uses its OWN config.
             # Off the event loop: resolution + construction do synchronous DB work.
             retriever_tool = await asyncio.to_thread(
-                _resolve_and_build_retriever_tool, agent, None
+                _resolve_and_build_retriever_tool,
+                agent,
+                {"filter": caller_filter} if caller_filter else None,
             )
             if retriever_tool is not None:
                 tools.append(retriever_tool)

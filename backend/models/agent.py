@@ -83,6 +83,7 @@ class Agent(Base):
     rag_search_type = Column(String(45), default='similarity', nullable=False, server_default='similarity')
     rag_score_threshold = Column(Float, nullable=True)  # only used when rag_search_type='similarity_score_threshold'
     rag_fixed_filters = Column(JSON, nullable=True)     # list of {field, op, value} filter clauses applied on every retrieval
+    exposed_chat_filters = Column(JSON, default=list, nullable=False, server_default='[]')  # list of metadata field names the designer exposes as end-user chat-time dropdown filters
     rag_max_retrieval_calls = Column(Integer, nullable=True)  # NULL = legacy unbounded behaviour
 
     # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
