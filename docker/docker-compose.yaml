@@ -82,6 +82,34 @@ services:
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
+
+      # Sandbox provider (IT-2)
+      SANDBOX_DEFAULT_PROVIDER: ${SANDBOX_DEFAULT_PROVIDER:-subprocess}
+      SANDBOX_ALLOWED_PROVIDERS: ${SANDBOX_ALLOWED_PROVIDERS:-subprocess,opensandbox,daytona,e2b}
+      OPENSANDBOX_DOMAIN: ${OPENSANDBOX_DOMAIN:-opensandbox:8080}
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+      OPENSANDBOX_CODE_INTERPRETER_IMAGE: ${OPENSANDBOX_CODE_INTERPRETER_IMAGE:-mattin-code-interpreter:latest}
+      DAYTONA_API_KEY: ${DAYTONA_API_KEY:-}
+      DAYTONA_API_URL: ${DAYTONA_API_URL:-}
+      DAYTONA_TARGET: ${DAYTONA_TARGET:-}
+      DAYTONA_IMAGE: ${DAYTONA_IMAGE:-}
+      DAYTONA_SNAPSHOT: ${DAYTONA_SNAPSHOT:-}
+      DAYTONA_WORKSPACE: ${DAYTONA_WORKSPACE:-workspace}
+      DAYTONA_SUPPORTED_LANGUAGES: ${DAYTONA_SUPPORTED_LANGUAGES:-python,bash}
+      DAYTONA_AUTO_STOP_INTERVAL: ${DAYTONA_AUTO_STOP_INTERVAL:-2}
+      E2B_API_KEY: ${E2B_API_KEY:-}
+      E2B_TEMPLATE: ${E2B_TEMPLATE:-}
+      E2B_WORKSPACE: ${E2B_WORKSPACE:-/home/user/workspace}
+      E2B_SUPPORTED_LANGUAGES: ${E2B_SUPPORTED_LANGUAGES:-python,javascript,bash}
+      E2B_ALLOW_INTERNET_ACCESS: ${E2B_ALLOW_INTERNET_ACCESS:-true}
+      SANDBOX_CREATE_TIMEOUT_S: ${SANDBOX_CREATE_TIMEOUT_S:-60}
+      SANDBOX_DEFAULT_TIMEOUT_S: ${SANDBOX_DEFAULT_TIMEOUT_S:-30}
+      SANDBOX_SESSION_TTL_H: ${SANDBOX_SESSION_TTL_H:-2}
+      SANDBOX_IDLE_TIMEOUT_S: ${SANDBOX_IDLE_TIMEOUT_S:-120}
+      SANDBOX_REAPER_INTERVAL_S: ${SANDBOX_REAPER_INTERVAL_S:-30}
+      SANDBOX_MAX_EXECUTIONS_PER_TURN: ${SANDBOX_MAX_EXECUTIONS_PER_TURN:-5}
+      OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE: ${OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE:-4}
+      OPENSANDBOX_SUPPORTED_LANGUAGES: ${OPENSANDBOX_SUPPORTED_LANGUAGES:-python,bash}
     volumes:
       - ../backend/data:/aict_backend/data
       - ../backend/logs:/aict_backend/logs
@@ -118,6 +146,55 @@ services:
     networks:
       - mattin-network
     restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # OpenSandbox — isolated code execution server (IT-2)
+  # Runs on the internal Docker network only; no port is exposed to the host.
+  # Enable by setting SANDBOX_DEFAULT_PROVIDER=opensandbox in .env.
+  # ---------------------------------------------------------------------------
+  opensandbox:
+    image: mattin-opensandbox-server:${OPENSANDBOX_SERVER_VERSION:-0.1.11}
+    build:
+      context: ./opensandbox
+      dockerfile: Dockerfile
+      args:
+        OPENSANDBOX_SERVER_VERSION: ${OPENSANDBOX_SERVER_VERSION:-0.1.11}
+    container_name: mattin-opensandbox
+    command: ["--config", "/etc/opensandbox/sandbox.toml"]
+    environment:
+      SANDBOX_CONFIG_PATH: /etc/opensandbox/sandbox.toml
+      DOCKER_HOST: unix:///var/run/docker.sock
+      # The OpenSandbox server has no API key in the checked-in local config.
+      # It is only reachable on the internal Compose network.
+      OPENSANDBOX_INSECURE_SERVER: ${OPENSANDBOX_INSECURE_SERVER:-YES}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./opensandbox/sandbox.toml:/etc/opensandbox/sandbox.toml:ro
+      - opensandbox-data:/var/lib/opensandbox
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - mattin-network
+    restart: unless-stopped
+    profiles:
+      - opensandbox
+
+  # ---------------------------------------------------------------------------
+  # mattin-code-interpreter — custom sandbox container image builder.
+  # Extends opensandbox/code-interpreter:v1.0.2 with a tail wrapper that
+  # starts Jupyter before execd connects, fixing the opensandbox entrypoint
+  # override bug.  This service exits immediately after the image is built;
+  # the built image is used by the opensandbox server when spawning sandboxes.
+  # ---------------------------------------------------------------------------
+  mattin-code-interpreter:
+    image: mattin-code-interpreter:latest
+    build:
+      context: ./opensandbox/code-interpreter
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/true"]
+    restart: no
+    profiles:
+      - opensandbox
 
   db_test:
     image: pgvector/pgvector:pg17
@@ -164,5 +241,6 @@ networks:
 volumes:
   postgres-data:
   qdrant-data:
+  opensandbox-data:
   caddy-data:
   caddy-config:
