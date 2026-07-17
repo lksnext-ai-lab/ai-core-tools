@@ -40,6 +40,10 @@ class App(Base):
     is_frozen = Column(Boolean, default=False, nullable=False)
     enable_openai_api = Column(Boolean, default=False, nullable=False, server_default='false')
 
+    # Sandbox configuration (IT-1)
+    # NULL means "inherit system default" (SANDBOX_DEFAULT_PROVIDER env var).
+    sandbox_provider = Column(String(50), nullable=True)
+
     def get_user_role(self, user_id):
         """Get the role of a user in this app"""
         from services.app_collaboration_service import AppCollaborationService

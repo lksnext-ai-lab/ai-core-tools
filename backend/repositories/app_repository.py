@@ -85,6 +85,8 @@ class AppRepository:
             app.agent_cors_origins = data['agent_cors_origins']
         if 'enable_openai_api' in data:
             app.enable_openai_api = data['enable_openai_api']
+        if 'sandbox_provider' in data:
+            app.sandbox_provider = data['sandbox_provider']
         if 'onboarding_dismissed' in data:
             app.onboarding_dismissed = data['onboarding_dismissed']
     

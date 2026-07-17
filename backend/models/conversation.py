@@ -33,6 +33,11 @@ class Conversation(Base):
         default=ConversationSource.PLAYGROUND
     )
 
+    # Sandbox session tracking (IT-1 / Q5): provider sandbox id for reconnect attempts after a restart.
+    sandbox_session_id = Column(String(255), nullable=True)
+    # Serialized JSON snapshot of the sandbox state (provider, session_key, sandbox_id, updated_at).
+    sandbox_state = Column(Text, nullable=True)
+
     agent = relationship("Agent", backref="conversations")
     user = relationship("User", backref="conversations", foreign_keys=[user_id])
     
