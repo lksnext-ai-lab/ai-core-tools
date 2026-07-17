@@ -12,14 +12,14 @@ def create_download_url_tool(working_dir: str):
     """
     Create a download_url_to_workspace LangChain tool bound to a specific working directory.
 
-    The tool fetches any URL and saves it to the conversation working directory so the
+    The tool fetches any URL and saves it to the conversation output directory so the
     file appears in the user's files panel and can be downloaded.  Useful for persisting
     images, PDFs, or any other artefact returned as a URL by another tool or the LLM.
     """
 
     @tool
     def download_url_to_workspace(url: str, filename: str) -> str:
-        """Download a file from a URL and save it to the working directory.
+        """Download a file from a URL and save it to output/.
 
         Use this tool whenever a tool or the model returns a URL pointing to a
         generated file (image, PDF, report, …).  The saved file will appear in
@@ -33,12 +33,16 @@ def create_download_url_tool(working_dir: str):
             A confirmation string with the saved filename and size.
         """
         try:
-            os.makedirs(working_dir, exist_ok=True)
-            dest = os.path.join(working_dir, filename)
+            safe_filename = os.path.basename((filename or "").replace("\\", "/"))
+            if not safe_filename or safe_filename.startswith("."):
+                return "[Error] Invalid filename"
+            output_dir = os.path.join(working_dir, "output")
+            os.makedirs(output_dir, exist_ok=True)
+            dest = os.path.join(output_dir, safe_filename)
             urllib.request.urlretrieve(url, dest)
             size = os.path.getsize(dest)
-            logger.info("download_url_to_workspace: saved %s (%d bytes) from %s", filename, size, url)
-            return f"Saved: {filename} ({size} bytes)"
+            logger.info("download_url_to_workspace: saved %s (%d bytes) from %s", safe_filename, size, url)
+            return f"Saved: output/{safe_filename} ({size} bytes)"
         except urllib.error.URLError as exc:
             logger.warning("download_url_to_workspace: URL error for %s: %s", url, exc)
             return f"[Error] Could not download URL: {exc}"

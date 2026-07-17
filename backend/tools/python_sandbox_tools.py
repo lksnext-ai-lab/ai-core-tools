@@ -16,24 +16,24 @@ def create_python_repl_tool(working_dir: str):
     Create a python_repl LangChain tool bound to a specific working directory.
 
     The tool executes Python code in a subprocess isolated from the backend process.
-    Code runs with the given working_dir as cwd, so agents can reference uploaded
-    files by filename only (e.g. open('report.xlsx')) without needing full paths.
+    Code runs with the given working_dir as cwd. Uploaded files are copied to
+    input/, scratch files should go to work/, and final deliverables to output/.
 
-    Output files saved to working_dir are automatically accessible for download.
+    Output files saved to output/ are automatically accessible for download.
     """
 
     @tool
     def python_repl(code: str) -> str:
-        """Execute Python code and return stdout + stderr.
+        """Execute Python or TypeScript code and return stdout + stderr.
 
         Use this tool to read, analyse, transform, and create files.
         Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.
 
-        Files uploaded by the user are in the current working directory — reference
-        them by filename only (e.g. 'report.xlsx', not a full path).
+        Files uploaded by the user are under input/ — reference them as
+        input/<filename> (e.g. 'input/report.xlsx').
 
-        Save output files to the current working directory and print the filename
-        so the user knows what to download.
+        Use work/ for temporary files. Save final deliverables to output/ and
+        print the output/<filename> path so the user knows what to download.
 
         Example:
             import pandas as pd

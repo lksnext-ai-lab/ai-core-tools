@@ -24,13 +24,109 @@ import os
 import base64
 import mimetypes
 from datetime import datetime
+from urllib.parse import parse_qsl, urlparse
 from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
-from tools.python_sandbox_tools import create_python_repl_tool
+from tools.sandbox import (
+    create_sandbox_builtin_tools,
+    create_sandbox_repl_tools,
+    resolve_provider,
+)
 
 logger = get_logger(__name__)
+
+
+_AUTH_QUERY_PARAMS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "api-key",
+    "key",
+    "tavilyapikey",
+    "token",
+}
+
+
+def _url_contains_auth_credentials(url: str) -> bool:
+    try:
+        query_params = parse_qsl(urlparse(url).query, keep_blank_values=False)
+    except ValueError:
+        return False
+    return any(name.lower() in _AUTH_QUERY_PARAMS for name, _value in query_params)
+
+
+def _merge_mcp_auth_headers(
+    server_name: str,
+    server_config: Dict[str, Any],
+    auth_headers: Dict[str, str],
+) -> None:
+    """Add Mattin auth headers without replacing MCP-specific credentials."""
+    if 'url' not in server_config:
+        return
+
+    existing_headers = server_config.setdefault('headers', {})
+    existing_header_names = {str(key).lower() for key in existing_headers}
+    applied_headers = {}
+    has_url_credentials = _url_contains_auth_credentials(str(server_config.get("url", "")))
+
+    for header_name, header_value in auth_headers.items():
+        normalized_header_name = header_name.lower()
+        if normalized_header_name in existing_header_names:
+            logger.info(
+                "Preserving configured MCP header '%s' for server: %s",
+                header_name,
+                server_name,
+            )
+            continue
+        if normalized_header_name == "authorization" and has_url_credentials:
+            logger.info(
+                "Skipping Mattin Authorization header for MCP server with URL credentials: %s",
+                server_name,
+            )
+            continue
+        applied_headers[header_name] = header_value
+
+    if applied_headers:
+        existing_headers.update(applied_headers)
+        logger.info(f"Added auth headers to MCP server: {server_name}")
+
+
+def _redact_mcp_connections(connections: Dict[str, Any]) -> Dict[str, Any]:
+    redacted = {}
+    sensitive_headers = {"authorization", "x-api-key", "api-key"}
+
+    for server_name, server_config in connections.items():
+        if not isinstance(server_config, dict):
+            redacted[server_name] = server_config
+            continue
+
+        safe_config = dict(server_config)
+        headers = safe_config.get("headers")
+        if isinstance(headers, dict):
+            safe_config["headers"] = {
+                key: "<redacted>" if str(key).lower() in sensitive_headers else value
+                for key, value in headers.items()
+            }
+        redacted[server_name] = safe_config
+
+    return redacted
+
+
+def _tool_name_for_language(language: str) -> str:
+    return "python_repl" if language == "python" else f"{language}_repl"
+
+
+def _sandbox_id_for_log(sandbox_handle: Any) -> str:
+    sandbox_id = getattr(sandbox_handle, "sandbox_id_if_created", None)
+    if sandbox_id:
+        return sandbox_id
+    is_materialized = getattr(sandbox_handle, "is_materialized", None)
+    if callable(is_materialized) and not is_materialized():
+        return "<lazy>"
+    return getattr(sandbox_handle, "sandbox_id", "<unknown>")
+
 
 class MCPClientManager:
     _instance = None
@@ -67,17 +163,13 @@ class MCPClientManager:
                             if auth_token:
                                 # Prepare headers for MCP server authentication
                                 headers = prepare_mcp_headers(auth_token)
-                                
-                                # Add headers to each connection in the config
+
+                                # Add headers to each connection in the config,
+                                # preserving provider credentials already configured.
                                 for server_name, server_config in connection_config.items():
                                     if isinstance(server_config, dict):
-                                        # If it's an SSE connection with a URL
-                                        if 'url' in server_config:
-                                            if 'headers' not in server_config:
-                                                server_config['headers'] = {}
-                                            server_config['headers'].update(headers)
-                                            logger.info(f"Added auth headers to MCP server: {server_name}")
-                        
+                                        _merge_mcp_auth_headers(server_name, server_config, headers)
+
                         connections.update(connection_config)
                 except ValueError as e:
                     logger.error(f"Error configuring MCP {mcp_config.name}: {e}")
@@ -95,7 +187,10 @@ class MCPClientManager:
                             if server_name in connections:
                                 inject_ssl_config({server_name: connections[server_name]}, ssl_verify=False)
                 
-                logger.info(f"Creating new MCP client with connections: {connections}")
+                logger.info(
+                    "Creating new MCP client with connections: %s",
+                    _redact_mcp_connections(connections),
+                )
                 # Create a new client each time - don't reuse the singleton
                 # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
                 client = MultiServerMCPClient(connections=connections)
@@ -112,14 +207,29 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
+async def create_agent(
+    agent: Agent,
+    search_params=None,
+    session_id=None,
+    user_context: Optional[Dict] = None,
+    working_dir: Optional[str] = None,
+    sandbox_handle: Optional[Any] = None,
+    sandbox_provider: Optional[Any] = None,
+    sandbox_session_key: Optional[str] = None,
+    sandbox_session_service: Optional[Any] = None,
+):
     """Create a new agent instance with cached checkpointer if memory is enabled.
-    
+
     Args:
         agent: The agent to create
         search_params: Optional search parameters for silo-based retrieval
         session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
         user_context: Optional user context containing authentication tokens for MCP
+        working_dir: Optional per-conversation working directory
+        sandbox_handle: Optional sandbox handle created during turn preparation
+        sandbox_provider: Optional provider matching sandbox_handle
+        sandbox_session_key: Optional key for sandbox active-use leasing
+        sandbox_session_service: Optional service used for sandbox active-use leasing
     """
     llm = get_llm(agent)
     if llm is None:
@@ -148,6 +258,12 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
+    ci_provider_for_prompt = None
+    ci_languages: list[str] = []
+    if agent.enable_code_interpreter and working_dir:
+        ci_provider_for_prompt = sandbox_provider or resolve_provider(agent)
+        ci_languages = ci_provider_for_prompt.get_supported_languages()
+
     # Build system prompt with optional skills section and format instructions
     # In LangChain v1, system_prompt is a static string passed to create_agent
     system_prompt_content = agent.system_prompt
@@ -164,20 +280,36 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             system_prompt_content
             + "\n\n<workspace>\n"
             + f"Working directory: {working_dir}\n"
-            + "User-uploaded files are in this directory — reference them by filename only.\n"
+            + "Workspace layout:\n"
+            + "- input/: user-provided files. Treat these as source material.\n"
+            + "- work/: scratch files, scripts, dependencies, extracted content, and intermediate data.\n"
+            + "- output/: final files intended for the user to download.\n"
+            + "User-uploaded files are available under input/; reference them as input/<filename>.\n"
             + "Use `download_url_to_workspace` to save any URL (generated image, PDF, report…) "
-            + "to this directory so the user can download it from the files panel.\n"
+            + "to output/ so the user can download it from the files panel.\n"
             + "</workspace>"
         )
 
     if agent.enable_code_interpreter and working_dir:
+        _ci_provider = sandbox_provider or ci_provider_for_prompt or resolve_provider(agent)
+        _ci_languages = ci_languages or _ci_provider.get_supported_languages()
+        _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
         system_prompt_content = (
             system_prompt_content
             + "\n\n<code_interpreter>\n"
-            + "You have access to a `python_repl` tool that executes Python code.\n"
-            + "Reference uploaded files by filename only (e.g. 'report.xlsx').\n"
-            + "Save output files to the working directory and print the filename so the user can download it.\n"
-            + "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n"
+            + f"You have access to the following code execution tools: {_tool_names}.\n"
+            + "Each tool accepts source code in the corresponding language and returns stdout + stderr.\n"
+            + (
+                "When bash is available, you also have sandbox builtin tools: "
+                "`SandboxInfo`, `PWD`, `Read`, `Write`, `Edit`, `LS`, `Glob`, `Grep`, `Stat`, `Bash`, "
+                "`BashOutput`, and `KillShell`. These operate exclusively inside the Linux sandbox. "
+                "Use `SandboxInfo` for workspace rules and limits; use `PWD` when you need "
+                "the sandbox workspace root. Use absolute sandbox paths with file editing tools.\n"
+                if "bash" in _ci_languages else ""
+            )
+            + "Read uploaded files from input/<filename>.\n"
+            + "Use work/ for temporary files, package installs, scripts, and dependencies.\n"
+            + "Save only final user-facing deliverables in output/ and print the output/<filename> path.\n"
             + "</code_interpreter>"
         )
 
@@ -231,7 +363,15 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     for tool in agent.tool_associations:
         sub_agent = tool.tool
-        tools.append(await IACTTool.create(sub_agent, user_context=user_context))
+        tools.append(await IACTTool.create(
+            sub_agent,
+            user_context=user_context,
+            working_dir=working_dir,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            sandbox_session_service=sandbox_session_service,
+        ))
 
     # Base tools — always available for every agent
     if working_dir:
@@ -250,9 +390,39 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     if agent.enable_code_interpreter and working_dir:
         os.makedirs(working_dir, exist_ok=True)
-        python_tool = create_python_repl_tool(working_dir=working_dir)
-        tools.append(python_tool)
-        logger.info(f"Python REPL tool added for agent {agent.agent_id} (working_dir={working_dir})")
+        if sandbox_provider is None:
+            sandbox_provider = resolve_provider(agent)
+        if sandbox_handle is None:
+            logger.warning(
+                "Code interpreter tool requested without prepared sandbox handle; "
+                "creating fallback sandbox during tool assembly for agent %s",
+                agent.agent_id,
+            )
+            sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
+        if sandbox_session_service is None and sandbox_session_key is not None:
+            try:
+                from services.sandbox_session_service import sandbox_session_service as _sss
+                sandbox_session_service = _sss
+            except Exception:
+                sandbox_session_service = None
+        repl_tools = create_sandbox_repl_tools(
+            sandbox_handle,
+            sandbox_provider,
+            session_key=sandbox_session_key,
+            session_service=sandbox_session_service,
+        )
+        tools.extend(repl_tools)
+        builtin_tools = create_sandbox_builtin_tools(sandbox_handle, sandbox_provider)
+        tools.extend(builtin_tools)
+        logger.info(
+            "Sandbox tools added for agent %s (repl=%s, builtins=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
+            agent.agent_id,
+            [t.name for t in repl_tools],
+            [t.name for t in builtin_tools],
+            working_dir,
+            _sandbox_id_for_log(sandbox_handle),
+            sandbox_handle.provider_name,
+        )
 
     mcp_client = None
     try:
@@ -527,12 +697,39 @@ class IACTTool(BaseTool):
     react_agent: Any = None
     mcp_client: Any = None
     llm: Any = None
+    working_dir: Optional[str] = None
+    sandbox_handle: Any = None
+    sandbox_provider: Any = None
+    sandbox_session_key: Optional[str] = None
+    sandbox_session_service: Any = None
 
-    def __init__(self, agent: Agent, user_context: Optional[Dict] = None) -> None:
-        super().__init__(agent=agent, user_context=user_context)
+    def __init__(
+        self,
+        agent: Agent,
+        user_context: Optional[Dict] = None,
+        working_dir: Optional[str] = None,
+        sandbox_handle: Optional[Any] = None,
+        sandbox_provider: Optional[Any] = None,
+        sandbox_session_key: Optional[str] = None,
+        sandbox_session_service: Optional[Any] = None,
+    ) -> None:
+        super().__init__(
+            agent=agent,
+            user_context=user_context,
+            working_dir=working_dir,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            sandbox_session_service=sandbox_session_service,
+        )
 
         self.agent = agent
         self.user_context = user_context
+        self.working_dir = working_dir
+        self.sandbox_handle = sandbox_handle
+        self.sandbox_provider = sandbox_provider
+        self.sandbox_session_key = sandbox_session_key
+        self.sandbox_session_service = sandbox_session_service
         self.name = sanitize_identifier(agent.name)
         self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
@@ -542,20 +739,45 @@ class IACTTool(BaseTool):
         self.mcp_client = None
 
     @classmethod
-    async def create(cls, agent: Agent, user_context: Optional[Dict] = None) -> "IACTTool":
+    async def create(
+        cls,
+        agent: Agent,
+        user_context: Optional[Dict] = None,
+        working_dir: Optional[str] = None,
+        sandbox_handle: Optional[Any] = None,
+        sandbox_provider: Optional[Any] = None,
+        sandbox_session_key: Optional[str] = None,
+        sandbox_session_service: Optional[Any] = None,
+    ) -> "IACTTool":
         """Build an agent-as-tool, including the sub-agent's MCP tools.
 
         MCP tools are loaded with an awaited MultiServerMCPClient, which is not
         possible inside a synchronous ``__init__``; hence this async factory. It
         is the only supported way to obtain a ready-to-use ``IACTTool``.
         """
-        instance = cls(agent, user_context=user_context)
+        instance = cls(
+            agent,
+            user_context=user_context,
+            working_dir=working_dir,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            sandbox_session_service=sandbox_session_service,
+        )
 
         tools = []
         # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
-            tools.append(await IACTTool.create(sub_agent, user_context=user_context))
+            tools.append(await IACTTool.create(
+                sub_agent,
+                user_context=user_context,
+                working_dir=working_dir,
+                sandbox_handle=sandbox_handle,
+                sandbox_provider=sandbox_provider,
+                sandbox_session_key=sandbox_session_key,
+                sandbox_session_service=sandbox_session_service,
+            ))
 
         # Add base useful tools
         tools.append(fetch_file_in_base64)
@@ -573,6 +795,27 @@ class IACTTool(BaseTool):
             )
             if retriever_tool is not None:
                 tools.append(retriever_tool)
+
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None:
+            if sandbox_provider is None:
+                sandbox_provider = resolve_provider(agent)
+                instance.sandbox_provider = sandbox_provider
+            repl_tools = create_sandbox_repl_tools(
+                sandbox_handle,
+                sandbox_provider,
+                session_key=sandbox_session_key,
+                session_service=sandbox_session_service,
+            )
+            tools.extend(repl_tools)
+            logger.info(
+                "Shared sandbox REPL tools added for sub-agent %s "
+                "(languages=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
+                agent.agent_id,
+                [t.name for t in repl_tools],
+                working_dir,
+                _sandbox_id_for_log(sandbox_handle),
+                sandbox_handle.provider_name,
+            )
 
         # Add MCP tools — mirrors create_agent. A failing MCP server degrades the
         # sub-agent but never breaks its construction.
@@ -604,6 +847,34 @@ class IACTTool(BaseTool):
             if skills_section:
                 tool_system_prompt = tool_system_prompt + "\n" + skills_section
 
+        if working_dir:
+            tool_system_prompt = (
+                tool_system_prompt
+                + "\n\n<workspace>\n"
+                + f"Working directory: {working_dir}\n"
+                + "Workspace layout:\n"
+                + "- input/: user-provided files. Treat these as source material.\n"
+                + "- work/: scratch files, scripts, dependencies, extracted content, and intermediate data.\n"
+                + "- output/: final files intended for the user to download.\n"
+                + "User-uploaded files are available under input/; reference them as input/<filename>.\n"
+                + "</workspace>"
+            )
+
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None:
+            _ci_provider = sandbox_provider or resolve_provider(agent)
+            _ci_languages = _ci_provider.get_supported_languages()
+            _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
+            tool_system_prompt = (
+                tool_system_prompt
+                + "\n\n<code_interpreter>\n"
+                + f"You have access to the following code execution tools: {_tool_names}.\n"
+                + "They run in the same sandbox used by the parent agent and sibling tools.\n"
+                + "Read uploaded files from input/<filename>.\n"
+                + "Use work/ for temporary files, package installs, scripts, and dependencies.\n"
+                + "Save only final user-facing deliverables in output/ and print the output/<filename> path.\n"
+                + "</code_interpreter>"
+            )
+
         # Create sub-agent
         instance.react_agent = create_langchain_agent(
             model=instance.llm,
@@ -619,43 +890,90 @@ class IACTTool(BaseTool):
                 "IACTTool must be built via 'await IACTTool.create(...)' before use."
             )
         try:
-            # Format the message using prompt_template if available, otherwise use query directly
-            if self.agent.prompt_template:
-                try:
-                    formatted_prompt = self.agent.prompt_template.format(question=query)
-                except KeyError:
-                    # If 'question' is not in template, try other common placeholders
-                    try:
-                        formatted_prompt = self.agent.prompt_template.format(query=query)
-                    except KeyError:
-                        # If no placeholder works, just use the query
-                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
-                        formatted_prompt = query
-            else:
-                formatted_prompt = query
-            
+            formatted_prompt = self._format_tool_query(query)
             messages = [HumanMessage(content=formatted_prompt)]
             result = self.react_agent.invoke({"messages": messages})
-            
-            # Extract the content from the last AI message
-            if isinstance(result, dict) and "messages" in result:
-                messages_list = result["messages"]
-                # Find the last AI message with content
-                for msg in reversed(messages_list):
-                    if hasattr(msg, 'content') and msg.content:
-                        return str(msg.content)
-                # Fallback: return the last message content
-                if messages_list:
-                    last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
-            
-            # If result is a string, return it directly
-            return str(result)
-            
+            return self._extract_last_message_content(result)
         except Exception as e:
             logger.error(f"Error executing agent tool {self.name}: {str(e)}")
             return f"Error executing agent tool: {str(e)}"
-    
+
+    def _format_tool_query(self, query: str) -> str:
+        """Apply the sub-agent prompt template to a tool query."""
+        if self.agent.prompt_template:
+            try:
+                return self.agent.prompt_template.format(question=query)
+            except KeyError:
+                try:
+                    return self.agent.prompt_template.format(query=query)
+                except KeyError:
+                    logger.warning(
+                        f"Could not format prompt_template for agent {self.agent.name}, using query directly"
+                    )
+        return query
+
+    @staticmethod
+    def _extract_last_message_content(result: Any) -> str:
+        """Return the last non-empty message content from a LangGraph result/state."""
+        if isinstance(result, dict) and "messages" in result:
+            messages_list = result["messages"]
+            for msg in reversed(messages_list):
+                if hasattr(msg, 'content') and msg.content:
+                    return str(msg.content)
+            if messages_list:
+                last_msg = messages_list[-1]
+                return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
+        return str(result)
+
+    def _get_stream_writer_or_none(self):
+        try:
+            from langgraph.config import get_stream_writer
+
+            return get_stream_writer()
+        except Exception:
+            return None
+
+    def _emit_subagent_stream_event(self, writer: Any, event: dict) -> None:
+        """Forward a nested sub-agent event to the parent graph custom stream."""
+        if writer is None or not isinstance(event, dict):
+            return
+
+        event_type = event.get("type")
+        data = event.get("data")
+        if not isinstance(data, dict):
+            data = {}
+
+        if event_type in {"tool_start", "tool_end", "thinking"}:
+            raw_tool_call_id = data.get("tool_call_id")
+            data = {
+                **data,
+                "parent_tool_name": self.name,
+                "subagent_name": self.agent.name,
+                "subagent_id": self.agent.agent_id,
+            }
+            if raw_tool_call_id:
+                data["raw_tool_call_id"] = raw_tool_call_id
+                data["tool_call_id"] = f"{self.name}:{self.agent.agent_id}:{raw_tool_call_id}"
+            try:
+                writer({"type": event_type, "data": data})
+            except Exception:
+                pass
+            return
+
+        if event_type == "code_output":
+            try:
+                writer({
+                    "type": "code_output",
+                    "tool_name": data.get("tool_name"),
+                    "stream": data.get("stream", "stdout"),
+                    "line": data.get("line", ""),
+                    "parent_tool_name": self.name,
+                    "subagent_name": self.agent.name,
+                    "subagent_id": self.agent.agent_id,
+                })
+            except Exception:
+                pass
+
     async def _arun(self, query: str, *args, **kwargs) -> str:
         """Asynchronous execution of the agent tool"""
         if self.react_agent is None:
@@ -663,39 +981,41 @@ class IACTTool(BaseTool):
                 "IACTTool must be built via 'await IACTTool.create(...)' before use."
             )
         try:
-            # Format the message using prompt_template if available, otherwise use query directly
-            if self.agent.prompt_template:
-                try:
-                    formatted_prompt = self.agent.prompt_template.format(question=query)
-                except KeyError:
-                    # If 'question' is not in template, try other common placeholders
-                    try:
-                        formatted_prompt = self.agent.prompt_template.format(query=query)
-                    except KeyError:
-                        # If no placeholder works, just use the query
-                        logger.warning(f"Could not format prompt_template for agent {self.agent.name}, using query directly")
-                        formatted_prompt = query
-            else:
-                formatted_prompt = query
-            
+            formatted_prompt = self._format_tool_query(query)
             messages = [HumanMessage(content=formatted_prompt)]
-            result = await self.react_agent.ainvoke({"messages": messages})
-            
-            # Extract the content from the last AI message
-            if isinstance(result, dict) and "messages" in result:
-                messages_list = result["messages"]
-                # Find the last AI message with content
-                for msg in reversed(messages_list):
-                    if hasattr(msg, 'content') and msg.content:
-                        return str(msg.content)
-                # Fallback: return the last message content
-                if messages_list:
-                    last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, 'content') else str(last_msg)
-            
-            # If result is a string, return it directly
-            return str(result)
-            
+            stream_writer = self._get_stream_writer_or_none()
+
+            if stream_writer is None:
+                result = await self.react_agent.ainvoke({"messages": messages})
+                return self._extract_last_message_content(result)
+
+            if not hasattr(self.react_agent, "astream"):
+                result = await self.react_agent.ainvoke({"messages": messages})
+                return self._extract_last_message_content(result)
+
+            from tools.streaming_utils import map_stream_event
+
+            latest_state: Any = None
+            async for mode, chunk in self.react_agent.astream(
+                {"messages": messages},
+                stream_mode=["updates", "custom"],
+            ):
+                if mode == "updates" and isinstance(chunk, dict):
+                    for state_delta in chunk.values():
+                        if isinstance(state_delta, dict) and "messages" in state_delta:
+                            latest_state = state_delta
+
+                events = map_stream_event(mode, chunk)
+                if not events:
+                    continue
+                for event in events:
+                    self._emit_subagent_stream_event(stream_writer, event)
+
+            if latest_state is not None:
+                return self._extract_last_message_content(latest_state)
+
+            return ""
+
         except Exception as e:
             logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")
             return f"Error executing agent tool: {str(e)}"

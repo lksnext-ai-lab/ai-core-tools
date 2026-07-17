@@ -124,15 +124,16 @@ async def lifespan(app: FastAPI):
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.initialize_pool()
 
-        # Ensure vector-store backend tables exist before any background workers run.
-        # Best-effort: try once and log warnings on failure; do not break startup.
-        try:
-            from db.database import db as db_obj
-            from tools.vector_store_factory import VectorStoreFactory
-            VectorStoreFactory.get_vector_store(db_obj)
-            logger.info("VectorStoreFactory: ensured backend readiness at startup")
-        except Exception as _vs_exc:
-            logger.warning("VectorStoreFactory startup readiness check failed: %s", _vs_exc)
+        # Q3 — Warn when subprocess sandbox is active in non-dev deployments.
+        # The subprocess provider is unsafe for multi-tenant / public-API setups.
+        _sandbox_default = os.getenv("SANDBOX_DEFAULT_PROVIDER", "subprocess").lower()
+        if _sandbox_default == "subprocess" and AuthConfig.LOGIN_MODE != "FAKE":
+            logger.warning(
+                "⚠️  SECURITY WARNING: SANDBOX_DEFAULT_PROVIDER=subprocess is unsafe "
+                "for multi-tenant deployments.  Set SANDBOX_DEFAULT_PROVIDER=opensandbox "
+                "in production .env files to prevent LLM-generated code from reading "
+                "backend environment variables."
+            )
 
         # Start crawl workers (job executor + scheduler)
         from services.crawl.worker import start_crawl_workers, stop_crawl_workers

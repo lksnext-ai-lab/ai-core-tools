@@ -455,6 +455,34 @@ class AgentService:
 
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
+        # Destroy all active sandboxes before deletion (IT-1)
+        try:
+            from services.sandbox_session_service import sandbox_session_service
+            sandbox_session_service.destroy_all_for_agent(agent_id)
+        except Exception as exc:
+            # Sandbox cleanup failure must not block agent deletion
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not destroy sandboxes for agent %s during deletion: %s",
+                agent_id, exc
+            )
+        # Clear sandbox DB state for all conversations belonging to this agent
+        try:
+            from models.conversation import Conversation
+            db.query(Conversation).filter(
+                Conversation.agent_id == agent_id,
+                Conversation.sandbox_session_id.isnot(None),
+            ).update(
+                {"sandbox_session_id": None, "sandbox_state": None},
+                synchronize_session=False,
+            )
+            db.commit()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not clear sandbox DB state for agent %s conversations: %s",
+                agent_id, exc
+            )
         return AgentRepository.delete_by_id(db, agent_id)
 
     def _remove_tool_references(self, db: Session, tool_id: int):
