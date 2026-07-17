@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, AlertTriangle, Tag, BarChart2, Info, Zap, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug } from 'lucide-react';
+import { Check, AlertTriangle, Tag, BarChart2, Info, Zap, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug, Shield } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 import { useAppRole } from '../../hooks/useAppRole';
@@ -26,7 +26,8 @@ function AppSettingsPage() {
     agent_rate_limit: 0,
     max_file_size_mb: 0,
     agent_cors_origins: '',
-    enable_openai_api: false
+    enable_openai_api: false,
+    sandbox_provider: '' as string,  // '' = inherit system default
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,14 +42,25 @@ function AppSettingsPage() {
   const [savingSlug, setSavingSlug] = useState(false);
   const [slugSaved, setSlugSaved] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [allowedSandboxProviders, setAllowedSandboxProviders] = useState<string[]>([]);
 
   // Load app data on mount
   useEffect(() => {
     if (appId) {
       loadAppData();
       loadSlugData();
+      loadSandboxConfig();
     }
   }, [appId]);
+
+  async function loadSandboxConfig() {
+    try {
+      const cfg = await apiService.getSandboxConfig() as { allowed_providers: string[]; default_provider: string };
+      setAllowedSandboxProviders(cfg.allowed_providers ?? []);
+    } catch (err) {
+      console.error('Error loading sandbox config:', err);
+    }
+  }
 
   async function loadAppData() {
     if (!appId) return;
@@ -64,7 +76,8 @@ function AppSettingsPage() {
         agent_rate_limit: app.agent_rate_limit || 0,
         max_file_size_mb: app.max_file_size_mb || 0,
         agent_cors_origins: app.agent_cors_origins || '',
-        enable_openai_api: app.enable_openai_api || false
+        enable_openai_api: app.enable_openai_api || false,
+        sandbox_provider: app.sandbox_provider || '',
       });
       setOriginalLangsmithKey(langsmithKey);
       setLangsmithKeyChanged(false);
@@ -121,7 +134,8 @@ function AppSettingsPage() {
         agent_rate_limit: formData.agent_rate_limit,
         max_file_size_mb: formData.max_file_size_mb,
         agent_cors_origins: formData.agent_cors_origins,
-        enable_openai_api: formData.enable_openai_api
+        enable_openai_api: formData.enable_openai_api,
+        sandbox_provider: formData.sandbox_provider || null,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -434,6 +448,33 @@ function AppSettingsPage() {
                     When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.
                   </p>
                 </div>
+
+                {/* Sandbox Provider */}
+                {allowedSandboxProviders.length > 0 && (
+                  <div>
+                    <label htmlFor="sandbox_provider" className="block text-sm font-medium text-gray-700 mb-2">
+                      Code Interpreter Sandbox
+                    </label>
+                    <select
+                      id="sandbox_provider"
+                      name="sandbox_provider"
+                      value={formData.sandbox_provider}
+                      onChange={(e) => setFormData(prev => ({ ...prev, sandbox_provider: e.target.value }))}
+                      disabled={!canEdit}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Inherit system default</option>
+                      {allowedSandboxProviders.map((p) => (
+                        <option key={p} value={p}>
+                          {p === 'subprocess' ? 'Subprocess (local, development only)' : p === 'opensandbox' ? 'OpenSandbox (isolated container)' : p === 'daytona' ? 'Daytona (managed SaaS sandbox)' : p === 'e2b' ? 'E2B (managed cloud sandbox)' : p}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Override the sandbox used when agents run Python code. Leave at "Inherit" to use the system default.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Error Display */}
@@ -572,6 +613,32 @@ function AppSettingsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Sandbox Provider Info */}
+            {allowedSandboxProviders.length > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <Shield className="w-5 h-5 text-orange-400" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-orange-800">
+                      About Sandbox Providers
+                    </h3>
+                    <div className="mt-2 text-sm text-orange-700">
+                      <p className="mb-2">
+                        The sandbox controls the isolated environment where agents execute Python code.
+                      </p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li><strong>Subprocess</strong> — runs in the backend process; suitable for development only.</li>
+                        <li><strong>OpenSandbox</strong> — runs in an isolated container; recommended for production multi-tenant deployments.</li>
+                        <li><strong>Inherit</strong> — uses the platform default configured by your system administrator.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

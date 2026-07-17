@@ -3,6 +3,7 @@ export type StreamEventType =
   | 'tool_start'
   | 'tool_end'
   | 'thinking'
+  | 'code_output'
   | 'metadata'
   | 'error'
   | 'done';
@@ -18,12 +19,20 @@ export interface TokenEventData {
 
 export interface ToolStartEventData {
   tool_name: string;
+  tool_call_id?: string;
   tool_input?: string;
+  parent_tool_name?: string;
+  subagent_name?: string;
+  subagent_id?: number;
 }
 
 export interface ToolEndEventData {
   tool_name: string;
+  tool_call_id?: string;
   tool_output?: string;
+  parent_tool_name?: string;
+  subagent_name?: string;
+  subagent_id?: number;
 }
 
 export interface ThinkingEventData {
@@ -50,8 +59,12 @@ export interface DoneEventData {
 
 export interface ActiveTool {
   name: string;
+  toolCallId?: string;
   displayName: string;
   input?: string;
+  parentToolName?: string;
+  subagentName?: string;
+  subagentId?: number;
   status: 'running' | 'complete';
   startedAt: number;
 }
