@@ -28,4 +28,4 @@ class SandboxService(BaseService):
 
     provider = Column(String(45), nullable=False)
     app_id = Column(Integer, ForeignKey('App.app_id'), nullable=True)  # NULL = system/platform-wide
-    app = relationship('App', back_populates='sandbox_services')
+    app = relationship('App', back_populates='sandbox_services', foreign_keys=[app_id])
