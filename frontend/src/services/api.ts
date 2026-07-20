@@ -601,6 +601,54 @@ class ApiService {
     return response.json();
   }
 
+  async getSandboxServices(appId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/`);
+  }
+
+  async getSandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`);
+  }
+
+  async createSandboxService(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSandboxService(appId: number, serviceId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async copySandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}/copy`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteSandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testSandboxServiceConnection(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async testSandboxServiceConnectionWithConfig(appId: number, data: any, serviceId?: number) {
+    const qs = serviceId != null ? `?service_id=${serviceId}` : '';
+    return this.request(`/internal/apps/${appId}/sandbox-services/test-connection${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getMCPConfigs(appId: number) {
     return this.request(`/internal/apps/${appId}/mcp-configs/`);
   }
@@ -2264,6 +2312,42 @@ class ApiService {
   async testSystemEmbeddingServiceConnectionWithConfig(data: any, serviceId?: number) {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/admin/system-embedding-services/test-connection${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemSandboxServices() {
+    return this.request('/internal/admin/system-sandbox-services');
+  }
+
+  async getSystemSandboxService(serviceId: number) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`);
+  }
+
+  async createSystemSandboxService(data: any) {
+    return this.request('/internal/admin/system-sandbox-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemSandboxService(serviceId: number, data: any) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemSandboxService(serviceId: number) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testSystemSandboxServiceConnectionWithConfig(data: any, serviceId?: number) {
+    const qs = serviceId != null ? `?service_id=${serviceId}` : '';
+    return this.request(`/internal/admin/system-sandbox-services/test-connection${qs}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

@@ -8,7 +8,9 @@ import { getProviderBadgeColor } from '../ui/providerBadges';
 import { getProviderDescriptor } from './wizard/providers';
 import ServiceWizard from './wizard/ServiceWizard';
 import type {
+  ExistingSandboxService,
   ExistingService,
+  SandboxServiceFormData,
   ServiceFormData,
   ServiceKind,
   ServiceScope,
@@ -27,10 +29,15 @@ interface CompactServiceEditorProps {
   readonly kind: ServiceKind;
   readonly scope: ServiceScope;
   readonly appId?: number;
-  readonly service: ExistingService;
+  readonly service: ExistingService | ExistingSandboxService;
   readonly existingNames?: readonly string[];
   readonly onClose: () => void;
-  readonly onSave: (data: ServiceFormData) => Promise<void>;
+  /**
+   * Method shorthand on purpose — see the identical note on
+   * `ServiceWizardProps.onSave` for why this keeps bivariant parameter
+   * checking so single-kind callers can keep a narrower handler type.
+   */
+  onSave(data: ServiceFormData | SandboxServiceFormData): Promise<void>;
 }
 
 function CompactServiceEditor({
@@ -43,6 +50,13 @@ function CompactServiceEditor({
   onClose,
   onSave,
 }: Readonly<CompactServiceEditorProps>) {
+  const isSandbox = kind === 'sandbox';
+  // Narrowed views of `service` — the two shapes only overlap on
+  // name/provider/api_key/base_url/service_id. Field access for the
+  // kind-specific extras goes through these instead of `service` directly.
+  const aiService = !isSandbox ? (service as ExistingService) : null;
+  const sandboxService = isSandbox ? (service as ExistingSandboxService) : null;
+
   const descriptor = useMemo(
     () => getProviderDescriptor(service.provider),
     [service.provider],
@@ -51,10 +65,13 @@ function CompactServiceEditor({
   const [apiKey, setApiKey] = useState(service.api_key || '');
   const [apiKeyChanged, setApiKeyChanged] = useState(false);
   const [baseUrl, setBaseUrl] = useState(service.base_url || '');
-  const [apiVersion, setApiVersion] = useState(service.api_version || '');
-  const [awsAccessKeyId, setAwsAccessKeyId] = useState(service.aws_access_key_id || '');
-  const [awsRegion, setAwsRegion] = useState(service.aws_region || '');
-  const [supportsVideo, setSupportsVideo] = useState(!!service.supports_video);
+  const [apiVersion, setApiVersion] = useState(aiService?.api_version || '');
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState(aiService?.aws_access_key_id || '');
+  const [awsRegion, setAwsRegion] = useState(aiService?.aws_region || '');
+  const [supportsVideo, setSupportsVideo] = useState(!!aiService?.supports_video);
+  const [image, setImage] = useState(sandboxService?.opensandbox_image || '');
+  const [target, setTarget] = useState(sandboxService?.daytona_target || '');
+  const [template, setTemplate] = useState(sandboxService?.e2b_template || '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -65,10 +82,13 @@ function CompactServiceEditor({
     setApiKey(service.api_key || '');
     setApiKeyChanged(false);
     setBaseUrl(service.base_url || '');
-    setApiVersion(service.api_version || '');
-    setAwsAccessKeyId(service.aws_access_key_id || '');
-    setAwsRegion(service.aws_region || '');
-    setSupportsVideo(!!service.supports_video);
+    setApiVersion(aiService?.api_version || '');
+    setAwsAccessKeyId(aiService?.aws_access_key_id || '');
+    setAwsRegion(aiService?.aws_region || '');
+    setSupportsVideo(!!aiService?.supports_video);
+    setImage(sandboxService?.opensandbox_image || '');
+    setTarget(sandboxService?.daytona_target || '');
+    setTemplate(sandboxService?.e2b_template || '');
     setError(null);
   }, [service.service_id]);
 
@@ -76,8 +96,13 @@ function CompactServiceEditor({
     kind === 'ai' && (service.provider === 'Google' || service.provider === 'GoogleCloud');
   const showApiVersion = !!descriptor?.manualFields?.includes('api_version');
   const showAwsFields = !!descriptor?.manualFields?.includes('aws_access_key_id');
-  const baseUrlLabel =
-    service.provider === 'GoogleCloud' ? 'GCP Project ID' : 'Base URL';
+  const showImage = !!descriptor?.manualFields?.includes('image');
+  const showTarget = !!descriptor?.manualFields?.includes('target');
+  const showTemplate = !!descriptor?.manualFields?.includes('template');
+  let baseUrlLabel = 'Base URL';
+  if (service.provider === 'GoogleCloud') baseUrlLabel = 'GCP Project ID';
+  else if (service.provider === 'opensandbox') baseUrlLabel = 'OpenSandbox server domain';
+  else if (service.provider === 'daytona') baseUrlLabel = 'Daytona API URL';
   const apiKeyLabel = API_KEY_LABELS[service.provider] ?? 'API Key';
 
   const handleApiKeyFocus = () => {
@@ -95,22 +120,32 @@ function CompactServiceEditor({
     }
     setError(null);
     setSubmitting(true);
-    const payload: ServiceFormData = {
-      name: name.trim(),
-      provider: service.provider,
-      model_name: service.model_name,
-      // If the user did not touch the field, send back the masked value so
-      // the backend keeps the existing key untouched.
-      api_key:
-        apiKeyChanged || !apiKey.startsWith(MASKED_KEY_PREFIX)
-          ? apiKey
-          : service.api_key,
-      base_url: baseUrl,
-      api_version: apiVersion || undefined,
-      supports_video: supportsVideo,
-      aws_access_key_id: showAwsFields ? awsAccessKeyId.trim() || undefined : undefined,
-      aws_region: showAwsFields ? awsRegion.trim() || undefined : undefined,
-    };
+    // If the user did not touch the field, send back the masked value so
+    // the backend keeps the existing key untouched.
+    const resolvedApiKey =
+      apiKeyChanged || !apiKey.startsWith(MASKED_KEY_PREFIX) ? apiKey : service.api_key;
+
+    const payload: ServiceFormData | SandboxServiceFormData = isSandbox
+      ? {
+          name: name.trim(),
+          provider: service.provider,
+          api_key: resolvedApiKey,
+          base_url: baseUrl,
+          opensandbox_image: showImage ? image.trim() || undefined : undefined,
+          daytona_target: showTarget ? target.trim() || undefined : undefined,
+          e2b_template: showTemplate ? template.trim() || undefined : undefined,
+        }
+      : {
+          name: name.trim(),
+          provider: service.provider,
+          model_name: aiService?.model_name || '',
+          api_key: resolvedApiKey,
+          base_url: baseUrl,
+          api_version: apiVersion || undefined,
+          supports_video: supportsVideo,
+          aws_access_key_id: showAwsFields ? awsAccessKeyId.trim() || undefined : undefined,
+          aws_region: showAwsFields ? awsRegion.trim() || undefined : undefined,
+        };
     try {
       await onSave(payload);
     } catch (err) {
@@ -120,7 +155,7 @@ function CompactServiceEditor({
     }
   };
 
-  const handleWizardSave = async (data: ServiceFormData) => {
+  const handleWizardSave = async (data: ServiceFormData | SandboxServiceFormData) => {
     // The wizard owns the full edit-model flow, so once it saves we're done.
     await onSave(data);
     setShowWizard(false);
@@ -146,20 +181,22 @@ function CompactServiceEditor({
                   {descriptor?.label || service.provider}
                 </span>
               </div>
-              <div className="text-right">
-                <p className="text-[11px] uppercase font-semibold text-gray-500 tracking-wide">
-                  Model
-                </p>
-                <p className="text-sm font-mono text-gray-800 mt-1">
-                  {service.model_name}
-                </p>
-              </div>
+              {!isSandbox && (
+                <div className="text-right">
+                  <p className="text-[11px] uppercase font-semibold text-gray-500 tracking-wide">
+                    Model
+                  </p>
+                  <p className="text-sm font-mono text-gray-800 mt-1">
+                    {aiService?.model_name}
+                  </p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setShowWizard(true)}
                 className="text-sm font-medium text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
               >
-                <Pencil className="w-3.5 h-3.5" /> Change model
+                <Pencil className="w-3.5 h-3.5" /> {isSandbox ? 'Edit configuration' : 'Change model'}
               </button>
             </div>
           </div>
@@ -243,6 +280,39 @@ function CompactServiceEditor({
                 required
               />
             </>
+          )}
+
+          {showImage && (
+            <FormField
+              id="image"
+              label="Container image"
+              value={image}
+              onChange={(e) => setImage(e.target.value)}
+              placeholder="python:3.11-slim"
+              helpText="Docker image used to create sandbox containers. Leave empty to use the server default."
+            />
+          )}
+
+          {showTarget && (
+            <FormField
+              id="target"
+              label="Target"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder="us"
+              helpText="Daytona target/region identifier. Leave empty to use the account default."
+            />
+          )}
+
+          {showTemplate && (
+            <FormField
+              id="template"
+              label="Template"
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              placeholder="base"
+              helpText="E2B sandbox template id. Leave empty to use the default template."
+            />
           )}
 
           {showSupportsVideo && (
