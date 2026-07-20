@@ -35,6 +35,7 @@ from .ai_services import ai_services_router
 from .api_keys import api_keys_router
 from .domains import domains_router
 from .embedding_services import embedding_services_router
+from .sandbox_services import sandbox_services_router
 from .mcp_configs import mcp_configs_router
 from .ocr import ocr_router
 from .output_parsers import output_parsers_router
@@ -505,6 +506,7 @@ apps_router.include_router(ai_services_router, prefix="/{app_id}/ai-services", t
 apps_router.include_router(api_keys_router, prefix="/{app_id}/api-keys", tags=["API Keys"])
 apps_router.include_router(domains_router, prefix="/{app_id}/domains", tags=["Domains"])
 apps_router.include_router(embedding_services_router, prefix="/{app_id}/embedding-services", tags=["Embedding Services"])
+apps_router.include_router(sandbox_services_router, prefix="/{app_id}/sandbox-services", tags=["Sandbox Services"])
 apps_router.include_router(mcp_configs_router, prefix="/{app_id}/mcp-configs", tags=["MCP Configs"])
 apps_router.include_router(ocr_router, prefix="/{app_id}/ocr", tags=["OCR"])
 apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parsers", tags=["Output Parsers"])
