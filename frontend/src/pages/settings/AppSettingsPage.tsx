@@ -15,6 +15,13 @@ interface LangsmithTestResult {
   readonly projectName?: string | null;
 }
 
+interface SandboxServiceOption {
+  readonly service_id: number;
+  readonly name: string;
+  readonly provider: string;
+  readonly is_system?: boolean;
+}
+
 function AppSettingsPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
@@ -27,7 +34,7 @@ function AppSettingsPage() {
     max_file_size_mb: 0,
     agent_cors_origins: '',
     enable_openai_api: false,
-    sandbox_provider: '' as string,  // '' = inherit system default
+    default_sandbox_service_id: null as number | null,  // null = inherit system default
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,23 +49,24 @@ function AppSettingsPage() {
   const [savingSlug, setSavingSlug] = useState(false);
   const [slugSaved, setSlugSaved] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
-  const [allowedSandboxProviders, setAllowedSandboxProviders] = useState<string[]>([]);
+  const [sandboxServices, setSandboxServices] = useState<SandboxServiceOption[]>([]);
 
   // Load app data on mount
   useEffect(() => {
     if (appId) {
       loadAppData();
       loadSlugData();
-      loadSandboxConfig();
+      loadSandboxServices();
     }
   }, [appId]);
 
-  async function loadSandboxConfig() {
+  async function loadSandboxServices() {
+    if (!appId) return;
     try {
-      const cfg = await apiService.getSandboxConfig() as { allowed_providers: string[]; default_provider: string };
-      setAllowedSandboxProviders(cfg.allowed_providers ?? []);
+      const services = await apiService.getSandboxServices(Number.parseInt(appId)) as SandboxServiceOption[];
+      setSandboxServices(services ?? []);
     } catch (err) {
-      console.error('Error loading sandbox config:', err);
+      console.error('Error loading sandbox services:', err);
     }
   }
 
@@ -77,7 +85,7 @@ function AppSettingsPage() {
         max_file_size_mb: app.max_file_size_mb || 0,
         agent_cors_origins: app.agent_cors_origins || '',
         enable_openai_api: app.enable_openai_api || false,
-        sandbox_provider: app.sandbox_provider || '',
+        default_sandbox_service_id: app.default_sandbox_service_id ?? null,
       });
       setOriginalLangsmithKey(langsmithKey);
       setLangsmithKeyChanged(false);
@@ -135,7 +143,7 @@ function AppSettingsPage() {
         max_file_size_mb: formData.max_file_size_mb,
         agent_cors_origins: formData.agent_cors_origins,
         enable_openai_api: formData.enable_openai_api,
-        sandbox_provider: formData.sandbox_provider || null,
+        default_sandbox_service_id: formData.default_sandbox_service_id,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -449,32 +457,35 @@ function AppSettingsPage() {
                   </p>
                 </div>
 
-                {/* Sandbox Provider */}
-                {allowedSandboxProviders.length > 0 && (
-                  <div>
-                    <label htmlFor="sandbox_provider" className="block text-sm font-medium text-gray-700 mb-2">
-                      Code Interpreter Sandbox
-                    </label>
-                    <select
-                      id="sandbox_provider"
-                      name="sandbox_provider"
-                      value={formData.sandbox_provider}
-                      onChange={(e) => setFormData(prev => ({ ...prev, sandbox_provider: e.target.value }))}
-                      disabled={!canEdit}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">Inherit system default</option>
-                      {allowedSandboxProviders.map((p) => (
-                        <option key={p} value={p}>
-                          {p === 'opensandbox' ? 'OpenSandbox (isolated container)' : p === 'daytona' ? 'Daytona (managed SaaS sandbox)' : p === 'e2b' ? 'E2B (managed cloud sandbox)' : p}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Override the sandbox used when agents run Python code. Leave at "Inherit" to use the system default.
-                    </p>
-                  </div>
-                )}
+                {/* Sandbox Service */}
+                <div>
+                  <label htmlFor="default_sandbox_service_id" className="block text-sm font-medium text-gray-700 mb-2">
+                    Code Interpreter Sandbox Service
+                  </label>
+                  <select
+                    id="default_sandbox_service_id"
+                    name="default_sandbox_service_id"
+                    value={formData.default_sandbox_service_id ?? ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      default_sandbox_service_id: e.target.value ? Number.parseInt(e.target.value) : null,
+                    }))}
+                    disabled={!canEdit}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Inherit system default</option>
+                    {sandboxServices.map((service) => (
+                      <option key={service.service_id} value={service.service_id}>
+                        {service.is_system ? `[System] ${service.name}` : service.name} ({service.provider})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Default Sandbox Service used when agents in this app run the Code Interpreter capability.
+                    Leave at "Inherit" to use the system default. Manage available services under{' '}
+                    <span className="font-medium">Settings → Sandbox Services</span>.
+                  </p>
+                </div>
               </div>
 
               {/* Error Display */}
@@ -614,31 +625,31 @@ function AppSettingsPage() {
               </div>
             </div>
 
-            {/* Sandbox Provider Info */}
-            {allowedSandboxProviders.length > 0 && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <Shield className="w-5 h-5 text-orange-400" />
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-orange-800">
-                      About Sandbox Providers
-                    </h3>
-                    <div className="mt-2 text-sm text-orange-700">
-                      <p className="mb-2">
-                        The sandbox controls the isolated environment where agents execute Python code.
-                      </p>
-                      <ul className="list-disc list-inside space-y-1">
-                        <li><strong>Subprocess</strong> — runs in the backend process; suitable for development only.</li>
-                        <li><strong>OpenSandbox</strong> — runs in an isolated container; recommended for production multi-tenant deployments.</li>
-                        <li><strong>Inherit</strong> — uses the platform default configured by your system administrator.</li>
-                      </ul>
-                    </div>
+            {/* Sandbox Service Info */}
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <Shield className="w-5 h-5 text-orange-400" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-orange-800">
+                    About Sandbox Services
+                  </h3>
+                  <div className="mt-2 text-sm text-orange-700">
+                    <p className="mb-2">
+                      A Sandbox Service controls the isolated environment where agents execute Python code
+                      when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted,
+                      container-isolated), Daytona, or E2B (managed cloud sandboxes) services under{' '}
+                      <strong>Settings → Sandbox Services</strong>.
+                    </p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li><strong>Select a service</strong> — pins this app's agents to a specific sandbox configuration.</li>
+                      <li><strong>Inherit</strong> — uses the platform default configured by your system administrator.</li>
+                    </ul>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

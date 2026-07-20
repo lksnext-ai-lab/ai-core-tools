@@ -31,6 +31,7 @@ interface Agent {
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -51,6 +52,7 @@ interface Agent {
   rag_max_retrieval_calls?: number | null;
   rag_fixed_filters?: RagFixedFilter[];
   ai_services: Array<{ service_id: number; name: string }>;
+  sandbox_services: Array<{ service_id: number; name: string }>;
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
@@ -72,6 +74,7 @@ interface AgentFormData {
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -297,6 +300,7 @@ function AgentFormPage() {
         memory_max_tokens: response.memory_max_tokens || 4000,
         memory_summarize_threshold: response.memory_summarize_threshold || DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
         service_id: response.service_id || undefined,
+        sandbox_service_id: response.sandbox_service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
         temperature: response.temperature ?? DEFAULT_AGENT_TEMPERATURE,
@@ -491,6 +495,7 @@ function AgentFormPage() {
       memory_max_tokens: formData.memory_max_tokens,
       memory_summarize_threshold: formData.memory_summarize_threshold,
       service_id: formData.service_id,
+      sandbox_service_id: formData.enable_code_interpreter ? formData.sandbox_service_id : undefined,
       silo_id: formData.silo_id,
       output_parser_id: formData.output_parser_id,
       temperature: formData.temperature,
@@ -1018,6 +1023,30 @@ function AgentFormPage() {
                           <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
                         </div>
                       </div>
+
+                      {formData.enable_code_interpreter && (
+                        <div className="md:col-span-2">
+                          <label htmlFor="sandbox_service" className="block text-sm font-medium text-gray-700 mb-2">
+                            Sandbox Service
+                          </label>
+                          <select
+                            id="sandbox_service"
+                            value={formData.sandbox_service_id || ''}
+                            onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                          >
+                            <option value="">Use app/system default</option>
+                            {agent?.sandbox_services.map((service) => (
+                              <option key={service.service_id} value={service.service_id}>
+                                {service.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Provider-side Tools */}
