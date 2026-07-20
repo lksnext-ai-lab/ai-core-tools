@@ -61,14 +61,14 @@ MCP_BASE_URL = os.getenv('MCP_BASE_URL', 'http://localhost:8000')
 # ---------------------------------------------------------------------------
 
 # System-wide default provider when an app has no explicit sandbox_provider.
-# Allowed values: 'subprocess' (dev/unsafe), 'opensandbox' (self-hosted),
-# 'daytona' (managed SaaS), 'e2b' (managed cloud).
-SANDBOX_DEFAULT_PROVIDER = os.getenv('SANDBOX_DEFAULT_PROVIDER', 'subprocess').lower()
+# Allowed values: 'opensandbox' (self-hosted), 'daytona' (managed SaaS),
+# 'e2b' (managed cloud).
+SANDBOX_DEFAULT_PROVIDER = os.getenv('SANDBOX_DEFAULT_PROVIDER', 'opensandbox').lower()
 
 # Comma-separated list of provider names apps may select in this deployment.
 SANDBOX_ALLOWED_PROVIDERS = [
     p.strip()
-    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'subprocess,opensandbox,daytona,e2b').split(',')
+    for p in os.getenv('SANDBOX_ALLOWED_PROVIDERS', 'opensandbox,daytona,e2b').split(',')
     if p.strip()
 ]
 

@@ -7,7 +7,10 @@ obtain a concrete ``SandboxProvider`` instance.
 Resolution order (IT-0 / IT-1+):
 1. ``agent.app.sandbox_provider``  — app-level override (available from IT-1)
 2. ``SANDBOX_DEFAULT_PROVIDER``    — system-wide default env var
-3. ``"subprocess"``                — hard fallback for local dev
+
+The resolved provider name must match a registered provider; if it does not,
+``SandboxProviderUnavailableError`` is raised instead of silently falling
+back to a default.
 
 The ``SANDBOX_ALLOWED_PROVIDERS`` env var (comma-separated) is checked in
 IT-2 to gate which providers app owners may select.  It is parsed here
@@ -21,7 +24,6 @@ from typing import TYPE_CHECKING
 
 from utils.logger import get_logger
 from .provider import SandboxProvider
-from .subprocess_provider import SubprocessProvider
 
 if TYPE_CHECKING:
     from models.agent import Agent
@@ -29,11 +31,13 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+class SandboxProviderUnavailableError(RuntimeError):
+    """Raised when no usable sandbox provider can be resolved."""
+
+
 def _build_registry() -> dict[str, type[SandboxProvider]]:
     """Build the provider registry, importing optional providers lazily."""
-    registry: dict[str, type[SandboxProvider]] = {
-        SubprocessProvider.PROVIDER_NAME: SubprocessProvider,
-    }
+    registry: dict[str, type[SandboxProvider]] = {}
     try:
         from .opensandbox_provider import OpenSandboxProvider  # noqa: PLC0415
         registry[OpenSandboxProvider.PROVIDER_NAME] = OpenSandboxProvider
@@ -58,7 +62,6 @@ _PROVIDER_REGISTRY: dict[str, type[SandboxProvider]] = _build_registry()
 
 _DEFAULT_PROVIDER_ENV = "SANDBOX_DEFAULT_PROVIDER"
 _ALLOWED_PROVIDERS_ENV = "SANDBOX_ALLOWED_PROVIDERS"
-_FALLBACK_PROVIDER = "subprocess"
 
 
 def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
@@ -67,13 +70,17 @@ def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
     Resolution order:
     1. ``agent.app.sandbox_provider``   — app-level override (IT-1)
     2. ``SANDBOX_DEFAULT_PROVIDER``     — system-wide default env var
-    3. ``"subprocess"``                 — hard fallback for local dev
 
     Args:
         agent: The agent requesting a sandbox.  May be ``None`` in tests.
 
     Returns:
         A ready-to-use ``SandboxProvider`` instance.
+
+    Raises:
+        SandboxProviderUnavailableError: If the resolved provider name is not
+            registered (unknown name, or the package/dependency required by
+            that provider is not installed).
     """
     # 1. App-level override (IT-1)
     app_provider: str | None = None
@@ -83,19 +90,18 @@ def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
     except Exception:
         pass  # Relationship not loaded — fall through to system default
 
-    # 2. System default / fallback
-    system_default = os.getenv(_DEFAULT_PROVIDER_ENV, _FALLBACK_PROVIDER).lower()
+    # 2. System default
+    system_default = os.getenv(_DEFAULT_PROVIDER_ENV, "opensandbox").lower()
 
     provider_name = (app_provider or system_default).lower()
 
     provider_class = _PROVIDER_REGISTRY.get(provider_name)
     if provider_class is None:
-        logger.warning(
-            "Unknown sandbox provider '%s'. Falling back to '%s'.",
-            provider_name,
-            _FALLBACK_PROVIDER,
+        available = ", ".join(sorted(_PROVIDER_REGISTRY.keys())) or "<none registered>"
+        raise SandboxProviderUnavailableError(
+            f"Sandbox provider '{provider_name}' is not available. "
+            f"Registered providers: {available}."
         )
-        provider_class = SubprocessProvider
 
     logger.debug("Resolved sandbox provider: %s (agent=%s)", provider_class.PROVIDER_NAME, agent)
     return provider_class()

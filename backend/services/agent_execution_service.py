@@ -106,7 +106,7 @@ class _LazySandboxHandle:
                     conversation=self._conversation,
                     db=self._db,
                 )
-                if self._handle.provider_name != "subprocess":
+                if self._provider.requires_file_sync:
                     self._prepare_remote_workspace(_sss)
             return self._handle
 
@@ -517,8 +517,9 @@ class AgentExecutionService:
         if os.path.isdir(output_dir):
             pre_existing_files = set(os.listdir(output_dir))
 
-        # Copy attached files into the explicit input area for local subprocess
-        # runs. Remote providers receive the same input/<filename> paths below.
+        # Copy attached files into the explicit input area for local
+        # (non-file-sync) runs. Remote providers receive the same
+        # input/<filename> paths below.
         for pf in processed_files:
             _filename = _safe_workspace_filename(pf.get("filename", ""))
             _file_path = pf.get("file_path")
@@ -700,7 +701,8 @@ class AgentExecutionService:
         files_data: List[Dict[str, Any]] = []
 
         # 0 (IT-4). Pull new files from remote sandbox into working_dir BEFORE sync.
-        # SubprocessProvider writes directly to working_dir so no pull is needed there.
+        # Providers with requires_file_sync=False write directly to working_dir,
+        # so no pull is needed there.
         output_dir = (
             _ensure_local_workspace_layout(ctx.working_dir)["output"]
             if ctx.working_dir
@@ -719,7 +721,7 @@ class AgentExecutionService:
             and ctx.sandbox_provider is not None
             and ctx.working_dir
             and output_dir
-            and sandbox_handle.provider_name != "subprocess"
+            and ctx.sandbox_provider.requires_file_sync
         ):
             try:
                 from services.sandbox_session_service import sandbox_session_service as _sss

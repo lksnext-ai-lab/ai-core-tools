@@ -1,5 +1,11 @@
 # RFC: Sandbox Provider Integration
 
+> **Superseded**: The `subprocess` provider described in this RFC was removed before this
+> branch shipped — it is not part of the final implementation. Per-app credential
+> configuration (`SandboxService`, mirroring the existing `AIService` entity) was added
+> instead of relying on process-wide env vars for provider credentials. This document is
+> kept as a historical design record; its body was not rewritten to reflect these changes.
+
 > Part of [Mattin AI Documentation](../index.md)
 > **Status**: Draft — May 1, 2026 · Architecture Analysis added May 6, 2026 · Implementation Adjustments added May 7, 2026
 > **Branch**: `exp/sandbox`

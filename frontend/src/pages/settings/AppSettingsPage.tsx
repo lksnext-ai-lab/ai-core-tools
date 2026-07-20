@@ -466,7 +466,7 @@ function AppSettingsPage() {
                       <option value="">Inherit system default</option>
                       {allowedSandboxProviders.map((p) => (
                         <option key={p} value={p}>
-                          {p === 'subprocess' ? 'Subprocess (local, development only)' : p === 'opensandbox' ? 'OpenSandbox (isolated container)' : p === 'daytona' ? 'Daytona (managed SaaS sandbox)' : p === 'e2b' ? 'E2B (managed cloud sandbox)' : p}
+                          {p === 'opensandbox' ? 'OpenSandbox (isolated container)' : p === 'daytona' ? 'Daytona (managed SaaS sandbox)' : p === 'e2b' ? 'E2B (managed cloud sandbox)' : p}
                         </option>
                       ))}
                     </select>

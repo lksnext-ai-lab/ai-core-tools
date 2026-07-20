@@ -1,7 +1,7 @@
 """
 SandboxProvider abstract base class and SandboxHandle dataclass.
 
-Every concrete provider (subprocess, opensandbox, …) must subclass
+Every concrete provider (opensandbox, daytona, e2b, …) must subclass
 SandboxProvider and implement all abstract methods.
 
 v2 changes (sandbox-v2-migration Phase 1):
@@ -68,6 +68,18 @@ class SandboxProvider(ABC):
 
     SUPPORTED_LANGUAGES: list[str] = ["python"]
 
+    requires_file_sync: bool = True
+    """Whether this provider's sandbox filesystem is remote/separate from the
+    backend's local ``working_dir`` and therefore needs explicit file push/pull
+    to stay in sync.
+
+    Declared as a class attribute so a future provider must consciously set
+    it (rather than any caller string-matching on provider names). Defaults
+    to ``True`` since every provider that manages a remote sandbox execution
+    environment needs file synchronisation; a provider whose sandbox shares
+    the backend's local filesystem directly would set this to ``False``.
+    """
+
     def get_supported_languages(self) -> list[str]:
         """Return the list of language identifiers this provider supports.
 
@@ -105,10 +117,10 @@ class SandboxProvider(ABC):
     def renew_sandbox(self, handle: SandboxHandle, duration: timedelta) -> None:
         """Extend the provider TTL by *duration*.
 
-        Default implementation is a no-op; providers without TTL support (e.g.
-        ``SubprocessProvider``) may leave this unimplemented.  Providers with
-        TTL support (e.g. ``OpenSandboxProvider``) should override this and
-        raise :exc:`SandboxExpiredError` if the remote sandbox is gone.
+        Default implementation is a no-op; providers without TTL support may
+        leave this unimplemented.  Providers with TTL support (e.g.
+        ``OpenSandboxProvider``) should override this and raise
+        :exc:`SandboxExpiredError` if the remote sandbox is gone.
         """
 
     def touch_sandbox(self, handle: SandboxHandle, idle_timeout_s: int) -> None:

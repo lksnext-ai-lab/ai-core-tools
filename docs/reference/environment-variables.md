@@ -252,8 +252,8 @@ See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SANDBOX_DEFAULT_PROVIDER` | No | `subprocess` | Default code interpreter sandbox provider: `subprocess`, `opensandbox`, `daytona`, or `e2b` |
-| `SANDBOX_ALLOWED_PROVIDERS` | No | `subprocess,opensandbox,daytona,e2b` | Comma-separated provider names apps may select |
+| `SANDBOX_DEFAULT_PROVIDER` | No | `opensandbox` | Default code interpreter sandbox provider: `opensandbox`, `daytona`, or `e2b` |
+| `SANDBOX_ALLOWED_PROVIDERS` | No | `opensandbox,daytona,e2b` | Comma-separated provider names apps may select |
 | `OPENSANDBOX_DOMAIN` | OpenSandbox | `localhost:8080` | OpenSandbox server host and port |
 | `OPENSANDBOX_API_KEY` | No | — | OpenSandbox server API key |
 | `OPENSANDBOX_CODE_INTERPRETER_IMAGE` | No | `opensandbox/code-interpreter:v1.0.2` | OpenSandbox code interpreter image |
