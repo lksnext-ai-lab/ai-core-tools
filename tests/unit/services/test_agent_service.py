@@ -265,6 +265,7 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_for_detail', return_value=agent)
         mocker.patch.object(service, '_get_form_data', return_value={
             'ai_services': [],
+            'sandbox_services': [],
             'silos': [],
             'output_parsers': [],
             'tools': [],
@@ -304,6 +305,7 @@ class TestGetAgentDetail:
         # Return dicts instead of MagicMock objects for schema validation
         form_data = {
             'ai_services': [{"service_id": 1, "name": "OpenAI GPT-4", "provider": "OpenAI"}],
+            'sandbox_services': [],
             'silos': [],
             'output_parsers': [],
             'tools': [],
