@@ -203,12 +203,23 @@ class SandboxServiceService:
         if not provider_name:
             return {"status": "error", "message": "Provider is required"}
 
+        # OpenSandbox is self-hosted and commonly run with no auth configured
+        # (OPENSANDBOX_INSECURE_SERVER) — mirrors the frontend wizard's
+        # apiKey: 'optional' for this provider. Daytona/E2B are 'required'.
         api_key = config.get("api_key") or ""
-        if (
-            not api_key
-            or api_key == PLACEHOLDER_API_KEY
-            or is_masked_key(api_key)
-        ):
+        api_key_is_placeholder = (
+            api_key == PLACEHOLDER_API_KEY or is_masked_key(api_key)
+        )
+        if api_key_is_placeholder:
+            return {
+                "status": "error",
+                "message": (
+                    "API key is required. Please configure "
+                    "a valid API key before testing the "
+                    "connection."
+                ),
+            }
+        if not api_key and provider_name != "opensandbox":
             return {
                 "status": "error",
                 "message": (

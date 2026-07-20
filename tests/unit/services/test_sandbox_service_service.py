@@ -381,10 +381,22 @@ class TestConnectionWithConfig:
         assert result["status"] == "error"
         assert "Provider is required" in result["message"]
 
-    def test_missing_api_key_returns_error(self):
-        result = SandboxServiceService.test_connection_with_config({"provider": "opensandbox", "api_key": ""})
+    def test_missing_api_key_returns_error_for_daytona(self):
+        result = SandboxServiceService.test_connection_with_config({"provider": "daytona", "api_key": ""})
         assert result["status"] == "error"
         assert "API key is required" in result["message"]
+
+    def test_missing_api_key_returns_error_for_e2b(self):
+        result = SandboxServiceService.test_connection_with_config({"provider": "e2b", "api_key": ""})
+        assert result["status"] == "error"
+        assert "API key is required" in result["message"]
+
+    def test_missing_api_key_is_allowed_for_opensandbox(self):
+        """OpenSandbox is self-hosted and commonly run with no auth configured."""
+        result = SandboxServiceService.test_connection_with_config({"provider": "opensandbox", "api_key": ""})
+        # Should NOT fail on the API-key check specifically; whatever error
+        # follows (e.g. SDK not installed, connection refused) is unrelated.
+        assert "API key is required" not in result.get("message", "")
 
     def test_masked_api_key_returns_error(self):
         masked = mask_api_key("sk-real-secret-key")
