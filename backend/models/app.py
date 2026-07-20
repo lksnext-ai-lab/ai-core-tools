@@ -34,6 +34,7 @@ class App(Base):
     silos = relationship('Silo', back_populates='app', lazy=True)
     ai_services = relationship('AIService', back_populates='app', lazy=True)
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
+    sandbox_services = relationship('SandboxService', back_populates='app', lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     sharepoint_sources = relationship('SharePointSource', back_populates='app', cascade='all, delete-orphan', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')

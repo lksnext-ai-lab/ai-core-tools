@@ -136,7 +136,12 @@ class AppRepository:
         """Get all embedding services for an app"""
         from models.embedding_service import EmbeddingService
         return self.db.query(EmbeddingService).filter(EmbeddingService.app_id == app_id).all()
-    
+
+    def get_sandbox_services_by_app_id(self, app_id: int):
+        """Get all sandbox services for an app"""
+        from models.sandbox_service import SandboxService
+        return self.db.query(SandboxService).filter(SandboxService.app_id == app_id).all()
+
     def get_urls_by_domain_id(self, domain_id: int):
         """Get all URLs for a domain"""
         from models.domain_url import DomainUrl

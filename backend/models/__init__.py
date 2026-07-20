@@ -4,6 +4,7 @@ from .app_collaborator import AppCollaborator
 from .api_key import APIKey
 from .ai_service import AIService
 from .embedding_service import EmbeddingService
+from .sandbox_service import SandboxService
 from .output_parser import OutputParser
 from .mcp_config import MCPConfig
 from .silo import Silo
@@ -50,4 +51,5 @@ __all__ = [
     'UsageRecord',
     'UserCredential',
     'RefreshToken',
+    'SandboxService',
 ]
