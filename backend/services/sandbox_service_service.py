@@ -194,14 +194,10 @@ class SandboxServiceService:
     def test_connection_with_config(config: dict) -> dict:
         """Test connection to a sandbox provider using the provided configuration.
 
-        TODO: wire real per-instance credentials once resolve_provider supports
-        it. Today, provider classes read their credentials from process-wide
-        env vars (``OPENSANDBOX_*`` / ``DAYTONA_*`` / ``E2B_*``) via their
-        zero-arg constructors, so this literally tests whatever the *process
-        env* is configured with — not the submitted form values in *config*.
-        That gap is closed by the next task, which teaches the provider
-        classes (and ``resolve_provider``) to accept a per-instance
-        credentials override sourced from ``SandboxService``.
+        Builds the same ``credentials`` dict shape ``resolve_provider`` derives
+        from a ``SandboxService`` row and passes it into the provider
+        constructor, so this exercises the actual submitted form values
+        (``api_key``/``endpoint``/``extra_config``) rather than process env vars.
         """
         provider_name = (config.get("provider") or "").strip().lower()
         if not provider_name:
@@ -240,10 +236,20 @@ class SandboxServiceService:
         handle = None
         try:
             import tempfile
+            from tools.sandbox_service_utils import parse_extra_config  # noqa: PLC0415
 
-            # TODO: pass service_data's credentials/extra_config here once
-            # provider classes accept a per-instance override (next task).
-            provider = provider_class()
+            extra = parse_extra_config(provider_name, config.get("extra_config"))
+            endpoint = config.get("endpoint") or None
+            if provider_name == "opensandbox":
+                credentials = {"domain": endpoint, "api_key": api_key, "image": extra.get("image")}
+            elif provider_name == "daytona":
+                credentials = {"api_key": api_key, "api_url": endpoint, "target": extra.get("target")}
+            elif provider_name == "e2b":
+                credentials = {"api_key": api_key, "template": extra.get("template")}
+            else:
+                credentials = {}
+
+            provider = provider_class(credentials=credentials)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 handle = provider.create_sandbox(tmp_dir)
                 result = provider.run_code(handle, "1+1", language="python", timeout=10)
