@@ -106,6 +106,7 @@ class AgentService:
             memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
             memory_summarize_threshold=getattr(agent, 'memory_summarize_threshold', DEFAULT_MEMORY_SUMMARIZE_THRESHOLD) or DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
             service_id=getattr(agent, 'service_id', None),
+            sandbox_service_id=getattr(agent, 'sandbox_service_id', None),
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
             temperature=agent.temperature if agent.temperature is not None else DEFAULT_AGENT_TEMPERATURE,
@@ -123,6 +124,7 @@ class AgentService:
             output_parser=output_parser_info,
             # Form data
             ai_services=form_data['ai_services'],
+            sandbox_services=form_data['sandbox_services'],
             silos=form_data['silos'],
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
@@ -277,6 +279,7 @@ class AgentService:
         agent.prompt_template = data.get('prompt_template')
         agent.status = data.get('status')
         agent.service_id = data.get('service_id') or None
+        agent.sandbox_service_id = data.get('sandbox_service_id') or None
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
