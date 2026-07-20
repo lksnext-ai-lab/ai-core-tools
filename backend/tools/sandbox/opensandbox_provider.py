@@ -190,8 +190,14 @@ def _workspace_path(filename: str) -> str:
     raise ValueError(f"Remote path must be inside {_SANDBOX_WORKSPACE}: {filename}")
 
 
-def _get_connection_config():
-    """Build a ``ConnectionConfigSync`` from the current environment."""
+def _get_connection_config(credentials: dict | None = None):
+    """Build a ``ConnectionConfigSync`` from *credentials*, falling back to the environment.
+
+    Args:
+        credentials: Optional per-instance override dict (e.g. sourced from a
+            ``SandboxService`` row) with keys ``domain`` / ``api_key``. Keys
+            absent or ``None`` fall back to the ``OPENSANDBOX_*`` env vars.
+    """
     try:
         from opensandbox.config.connection_sync import ConnectionConfigSync
     except ImportError as exc:
@@ -200,8 +206,8 @@ def _get_connection_config():
             "Install it with: pip install opensandbox>=0.1.7"
         ) from exc
 
-    domain = os.getenv(_ENV_DOMAIN, "localhost:8080")
-    api_key = os.getenv(_ENV_API_KEY) or None
+    domain = (credentials or {}).get("domain") or os.getenv(_ENV_DOMAIN, "localhost:8080")
+    api_key = (credentials or {}).get("api_key") or (os.getenv(_ENV_API_KEY) or None)
 
     return ConnectionConfigSync(
         domain=domain,
@@ -246,8 +252,10 @@ def _runtime_timeout_duration(timeout: int | float) -> timedelta:
     return timedelta(seconds=max(_idle_timeout_s(), int(ceil(float(timeout))) + _idle_timeout_s()))
 
 
-def _sandbox_image() -> str:
-    return os.getenv(_ENV_IMAGE, _DEFAULT_IMAGE)
+def _sandbox_image(credentials: dict | None = None) -> str:
+    """Return the sandbox container image, preferring *credentials* over the env var."""
+    image = (credentials or {}).get("image")
+    return image or os.getenv(_ENV_IMAGE, _DEFAULT_IMAGE)
 
 
 def _max_contexts_per_language() -> int:
@@ -295,12 +303,19 @@ class OpenSandboxProvider(SandboxProvider):
 
     PROVIDER_NAME = "opensandbox"
 
-    def __init__(self) -> None:
+    def __init__(self, credentials: dict | None = None) -> None:
         """Detect SDK resume/renew capability and store flags.
 
         Warnings are emitted at construction time when the installed SDK lacks
         ``SandboxSync.resume`` or ``SandboxSync.renew`` (Phase 3 step 3.1).
+
+        Args:
+            credentials: Optional per-instance override (``domain`` / ``api_key`` /
+                ``image``) sourced from a ``SandboxService`` row. When ``None``
+                (the default), configuration is read entirely from the
+                ``OPENSANDBOX_*`` environment variables — unchanged behaviour.
         """
+        self._credentials = credentials
         if SandboxSync is not None:
             self._can_resume = hasattr(SandboxSync, "resume")
             self._can_renew = hasattr(SandboxSync, "renew")
@@ -335,7 +350,7 @@ class OpenSandboxProvider(SandboxProvider):
     def _get_config(self):
         """Return (and cache) the connection config."""
         if self._connection_config is None:
-            self._connection_config = _get_connection_config()
+            self._connection_config = _get_connection_config(self._credentials)
         return self._connection_config
 
     def _setup_sandbox_handle(
@@ -578,7 +593,7 @@ class OpenSandboxProvider(SandboxProvider):
             )
 
         config = self._get_config()
-        image = _sandbox_image()
+        image = _sandbox_image(self._credentials)
         ttl = _idle_timeout_duration()
 
         sandbox = None

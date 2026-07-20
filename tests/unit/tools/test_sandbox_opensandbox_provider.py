@@ -3,13 +3,15 @@ Unit tests — IT-2 OpenSandboxProvider
 ======================================
 
 Verification criteria from the RFC:
-  1. ``resolve_provider`` returns ``OpenSandboxProvider`` when
-     ``agent.app.sandbox_provider == 'opensandbox'``.
-  2. ``OpenSandboxProvider`` methods delegate correctly to the opensandbox SDK
+  1. ``OpenSandboxProvider`` methods delegate correctly to the opensandbox SDK
      (create, run_code, write_file, read_file, list_files, destroy).
-  3. The factory gracefully degrades when the opensandbox package is absent.
-  4. ``resolve_provider`` raises ``SandboxProviderUnavailableError`` for
-     unknown/unregistered provider names instead of silently falling back.
+  2. The factory gracefully degrades when the opensandbox package is absent.
+  3. ``OpenSandboxProvider(credentials=...)`` overrides the equivalent
+     ``OPENSANDBOX_*`` environment variables.
+
+``resolve_provider`` dispatch/precedence coverage (agent-level and app-level
+``SandboxService`` resolution, env-var fallback, unknown-provider errors)
+lives in ``tests/unit/tools/test_sandbox_factory_resolution.py``.
 """
 
 from __future__ import annotations
@@ -25,74 +27,6 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# Helpers to build mock Agent objects
-# ---------------------------------------------------------------------------
-
-
-def _make_agent(sandbox_provider: str | None = None) -> SimpleNamespace:
-    app = SimpleNamespace(sandbox_provider=sandbox_provider)
-    return SimpleNamespace(
-        id=1,
-        app=app,
-    )
-
-
-# ---------------------------------------------------------------------------
-# 1. Factory — resolve_provider dispatch
-# ---------------------------------------------------------------------------
-
-
-class TestResolveProvider:
-    def test_returns_opensandbox_by_default(self, monkeypatch):
-        """Hard fallback is opensandbox with no env or app config."""
-        monkeypatch.delenv("SANDBOX_DEFAULT_PROVIDER", raising=False)
-        from tools.sandbox.factory import resolve_provider
-        from tools.sandbox.opensandbox_provider import OpenSandboxProvider
-
-        provider = resolve_provider(_make_agent(None))
-        assert isinstance(provider, OpenSandboxProvider)
-
-    def test_raises_when_agent_app_sets_removed_provider(self, monkeypatch):
-        """'subprocess' was removed — it is no longer a registered provider."""
-        monkeypatch.setenv("SANDBOX_DEFAULT_PROVIDER", "opensandbox")
-        from tools.sandbox.factory import resolve_provider, SandboxProviderUnavailableError
-
-        with pytest.raises(SandboxProviderUnavailableError):
-            resolve_provider(_make_agent("subprocess"))
-
-    def test_returns_opensandbox_from_app_config(self, monkeypatch):
-        """agent.app.sandbox_provider = 'opensandbox' → OpenSandboxProvider."""
-        monkeypatch.delenv("SANDBOX_DEFAULT_PROVIDER", raising=False)
-        from tools.sandbox.factory import resolve_provider, _PROVIDER_REGISTRY
-        from tools.sandbox.opensandbox_provider import OpenSandboxProvider
-
-        assert "opensandbox" in _PROVIDER_REGISTRY, (
-            "OpenSandboxProvider is not registered; "
-            "was 'opensandbox' package installed?"
-        )
-
-        provider = resolve_provider(_make_agent("opensandbox"))
-        assert isinstance(provider, OpenSandboxProvider)
-
-    def test_returns_opensandbox_from_env_default(self, monkeypatch):
-        monkeypatch.setenv("SANDBOX_DEFAULT_PROVIDER", "opensandbox")
-        from tools.sandbox.factory import resolve_provider
-        from tools.sandbox.opensandbox_provider import OpenSandboxProvider
-
-        provider = resolve_provider(_make_agent(None))
-        assert isinstance(provider, OpenSandboxProvider)
-
-    def test_unknown_provider_raises_unavailable_error(self, monkeypatch):
-        """Unknown provider names raise instead of silently falling back."""
-        monkeypatch.delenv("SANDBOX_DEFAULT_PROVIDER", raising=False)
-        from tools.sandbox.factory import resolve_provider, SandboxProviderUnavailableError
-
-        with pytest.raises(SandboxProviderUnavailableError) as exc_info:
-            resolve_provider(_make_agent("nonexistent-provider"))
-        assert "nonexistent-provider" in str(exc_info.value)
-
 
 # ---------------------------------------------------------------------------
 # 2. Factory — graceful degradation when opensandbox is absent
@@ -571,3 +505,62 @@ class TestOpenSandboxProviderDestroy:
 
         resumed.kill.assert_called_once()
         resumed.close.assert_called_once()
+
+
+class TestOpenSandboxProviderCredentials:
+    """Per-instance ``credentials`` override the ``OPENSANDBOX_*`` env vars."""
+
+    @staticmethod
+    def _fake_connection_config_module():
+        """Build a fake ``opensandbox.config.connection_sync`` module.
+
+        ``_get_connection_config`` performs a local ``from
+        opensandbox.config.connection_sync import ConnectionConfigSync``
+        import — injecting a fake module via ``sys.modules`` lets these tests
+        run without the real (optional, not installed in this environment)
+        ``opensandbox`` package while still exercising the real provider code.
+        """
+        module = ModuleType("opensandbox.config.connection_sync")
+        module.ConnectionConfigSync = MagicMock()
+        return module
+
+    def test_zero_arg_construction_uses_env_vars(self, monkeypatch):
+        """Unchanged behaviour: no credentials → env vars used verbatim."""
+        monkeypatch.setenv("OPENSANDBOX_DOMAIN", "env-domain:8080")
+        monkeypatch.setenv("OPENSANDBOX_API_KEY", "env-api-key")
+        from tools.sandbox.opensandbox_provider import OpenSandboxProvider
+
+        fake_module = self._fake_connection_config_module()
+        with patch.dict(sys.modules, {"opensandbox.config.connection_sync": fake_module}):
+            provider = OpenSandboxProvider()
+            provider._get_config()
+
+        _, kwargs = fake_module.ConnectionConfigSync.call_args
+        assert kwargs["domain"] == "env-domain:8080"
+        assert kwargs["api_key"] == "env-api-key"
+
+    def test_credentials_override_env_vars(self, monkeypatch):
+        """``credentials`` passed to __init__ win over env vars for domain/api_key."""
+        monkeypatch.setenv("OPENSANDBOX_DOMAIN", "env-domain:8080")
+        monkeypatch.setenv("OPENSANDBOX_API_KEY", "env-api-key")
+        from tools.sandbox.opensandbox_provider import OpenSandboxProvider
+
+        fake_module = self._fake_connection_config_module()
+        with patch.dict(sys.modules, {"opensandbox.config.connection_sync": fake_module}):
+            provider = OpenSandboxProvider(
+                credentials={"domain": "service-domain:9090", "api_key": "service-api-key"}
+            )
+            provider._get_config()
+
+        _, kwargs = fake_module.ConnectionConfigSync.call_args
+        assert kwargs["domain"] == "service-domain:9090"
+        assert kwargs["api_key"] == "service-api-key"
+
+    def test_credentials_image_overrides_env_var(self, monkeypatch):
+        """``credentials["image"]`` wins over ``OPENSANDBOX_CODE_INTERPRETER_IMAGE``."""
+        monkeypatch.setenv("OPENSANDBOX_CODE_INTERPRETER_IMAGE", "env/image:v1")
+        from tools.sandbox.opensandbox_provider import _sandbox_image
+
+        assert _sandbox_image({"image": "service/image:v2"}) == "service/image:v2"
+        assert _sandbox_image(None) == "env/image:v1"
+        assert _sandbox_image({}) == "env/image:v1"

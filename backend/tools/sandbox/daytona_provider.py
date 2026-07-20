@@ -228,8 +228,18 @@ class DaytonaProvider(SandboxProvider):
 
     PROVIDER_NAME = "daytona"
 
-    def __init__(self) -> None:
+    def __init__(self, credentials: dict | None = None) -> None:
+        """Initialise the provider.
+
+        Args:
+            credentials: Optional per-instance override (``api_key`` /
+                ``api_url`` / ``target``) sourced from a ``SandboxService``
+                row. When ``None`` (the default), configuration is read
+                entirely from the ``DAYTONA_*`` environment variables —
+                unchanged behaviour.
+        """
         self._client = None
+        self._credentials = credentials
         self._capabilities = {"resume": True, "renew": True}
 
     def get_supported_languages(self) -> list[str]:
@@ -244,10 +254,11 @@ class DaytonaProvider(SandboxProvider):
         if self._client is not None:
             return self._client
 
+        creds = self._credentials or {}
         config_kwargs = {
-            "api_key": os.getenv(_ENV_API_KEY) or None,
-            "api_url": os.getenv(_ENV_API_URL) or None,
-            "target": os.getenv(_ENV_TARGET) or None,
+            "api_key": creds.get("api_key") or (os.getenv(_ENV_API_KEY) or None),
+            "api_url": creds.get("api_url") or (os.getenv(_ENV_API_URL) or None),
+            "target": creds.get("target") or (os.getenv(_ENV_TARGET) or None),
         }
         config_kwargs = {k: v for k, v in config_kwargs.items() if v is not None}
         if DaytonaConfig is not None and config_kwargs:

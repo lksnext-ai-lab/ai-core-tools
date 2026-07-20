@@ -220,7 +220,16 @@ class E2BProvider(SandboxProvider):
 
     PROVIDER_NAME = "e2b"
 
-    def __init__(self) -> None:
+    def __init__(self, credentials: dict | None = None) -> None:
+        """Initialise the provider.
+
+        Args:
+            credentials: Optional per-instance override (``api_key`` /
+                ``template``) sourced from a ``SandboxService`` row. When
+                ``None`` (the default), configuration is read entirely from
+                the ``E2B_*`` environment variables — unchanged behaviour.
+        """
+        self._credentials = credentials
         self._capabilities = {"resume": True, "renew": True}
 
     def get_supported_languages(self) -> list[str]:
@@ -275,6 +284,7 @@ class E2BProvider(SandboxProvider):
         sandbox = None
         timeout_s = _idle_timeout_s()
         request_timeout_s = settings.SANDBOX_CREATE_TIMEOUT_S
+        api_key = (self._credentials or {}).get("api_key") or None
 
         if existing_sandbox_id:
             try:
@@ -283,6 +293,7 @@ class E2BProvider(SandboxProvider):
                     existing_sandbox_id,
                     timeout=timeout_s,
                     request_timeout=request_timeout_s,
+                    api_key=api_key,
                 )
                 logger.info("E2BProvider: resumed sandbox %s", existing_sandbox_id)
             except Exception as exc:
@@ -294,7 +305,7 @@ class E2BProvider(SandboxProvider):
                 sandbox = None
 
         if sandbox is None:
-            template = os.getenv(_ENV_TEMPLATE) or None
+            template = (self._credentials or {}).get("template") or (os.getenv(_ENV_TEMPLATE) or None)
             metadata = {"provider": self.PROVIDER_NAME}
             if session_key:
                 metadata["session_key"] = session_key
@@ -307,6 +318,7 @@ class E2BProvider(SandboxProvider):
                 secure=_bool_env(_ENV_SECURE, True),
                 allow_internet_access=_bool_env(_ENV_ALLOW_INTERNET, True),
                 request_timeout=request_timeout_s,
+                api_key=api_key,
             )
             logger.info("E2BProvider: sandbox %s created", _get_attr(sandbox, "sandbox_id", "id"))
 

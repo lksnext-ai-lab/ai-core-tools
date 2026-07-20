@@ -10,10 +10,6 @@ import pytest
 from tools.sandbox.provider import SandboxExpiredError
 
 
-def _make_agent(sandbox_provider: str | None = None) -> SimpleNamespace:
-    return SimpleNamespace(id=1, app=SimpleNamespace(sandbox_provider=sandbox_provider))
-
-
 def _make_sandbox(sandbox_id: str = "e2b-sbx") -> MagicMock:
     sandbox = MagicMock()
     sandbox.sandbox_id = sandbox_id
@@ -24,14 +20,53 @@ def _make_sandbox(sandbox_id: str = "e2b-sbx") -> MagicMock:
 
 
 class TestE2BFactory:
-    def test_returns_e2b_from_app_config(self, monkeypatch):
-        monkeypatch.delenv("SANDBOX_DEFAULT_PROVIDER", raising=False)
-
+    def test_registered_in_provider_registry(self):
+        """``resolve_provider`` dispatch/precedence lives in
+        ``test_sandbox_factory_resolution.py``; this only checks registration."""
         from tools.sandbox.e2b_provider import E2BProvider
-        from tools.sandbox.factory import _PROVIDER_REGISTRY, resolve_provider
+        from tools.sandbox.factory import _PROVIDER_REGISTRY
 
-        assert "e2b" in _PROVIDER_REGISTRY
-        assert isinstance(resolve_provider(_make_agent("e2b")), E2BProvider)
+        assert _PROVIDER_REGISTRY.get("e2b") is E2BProvider
+
+
+class TestE2BCredentials:
+    """Per-instance ``credentials`` override the ``E2B_*`` env vars."""
+
+    def test_zero_arg_construction_uses_env_vars(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("E2B_TEMPLATE", "env-template")
+        from tools.sandbox.e2b_provider import E2BProvider
+
+        sandbox = _make_sandbox()
+        mock_sdk = MagicMock()
+        mock_sdk.create.return_value = sandbox
+        monkeypatch.setattr("tools.sandbox.e2b_provider.E2BSandbox", mock_sdk)
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.setattr("config.SANDBOX_CREATE_TIMEOUT_S", 60, raising=False)
+
+        provider = E2BProvider()
+        provider.create_sandbox(str(tmp_path))
+
+        assert mock_sdk.create.call_args.kwargs["template"] == "env-template"
+        assert mock_sdk.create.call_args.kwargs["api_key"] is None
+
+    def test_credentials_override_env_vars(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("E2B_TEMPLATE", "env-template")
+        from tools.sandbox.e2b_provider import E2BProvider
+
+        sandbox = _make_sandbox()
+        mock_sdk = MagicMock()
+        mock_sdk.create.return_value = sandbox
+        monkeypatch.setattr("tools.sandbox.e2b_provider.E2BSandbox", mock_sdk)
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.setattr("config.SANDBOX_CREATE_TIMEOUT_S", 60, raising=False)
+
+        provider = E2BProvider(
+            credentials={"api_key": "service-api-key", "template": "service-template"}
+        )
+        provider.create_sandbox(str(tmp_path))
+
+        assert mock_sdk.create.call_args.kwargs["template"] == "service-template"
+        assert mock_sdk.create.call_args.kwargs["api_key"] == "service-api-key"
 
 
 @pytest.fixture()
@@ -78,7 +113,7 @@ class TestE2BLifecycle:
             session_key="conv_1_1",
         )
 
-        sdk.connect.assert_called_once_with("existing", timeout=120, request_timeout=60)
+        sdk.connect.assert_called_once_with("existing", timeout=120, request_timeout=60, api_key=None)
         sdk.create.assert_not_called()
         assert handle.sandbox_id == "e2b-sbx"
 

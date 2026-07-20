@@ -10,10 +10,6 @@ import pytest
 from tools.sandbox.provider import SandboxExpiredError
 
 
-def _make_agent(sandbox_provider: str | None = None) -> SimpleNamespace:
-    return SimpleNamespace(id=1, app=SimpleNamespace(sandbox_provider=sandbox_provider))
-
-
 def _make_sandbox(sandbox_id: str = "daytona-sbx") -> MagicMock:
     sandbox = MagicMock()
     sandbox.id = sandbox_id
@@ -24,14 +20,63 @@ def _make_sandbox(sandbox_id: str = "daytona-sbx") -> MagicMock:
 
 
 class TestDaytonaFactory:
-    def test_returns_daytona_from_app_config(self, monkeypatch):
-        monkeypatch.delenv("SANDBOX_DEFAULT_PROVIDER", raising=False)
-
+    def test_registered_in_provider_registry(self):
+        """``resolve_provider`` dispatch/precedence lives in
+        ``test_sandbox_factory_resolution.py``; this only checks registration."""
         from tools.sandbox.daytona_provider import DaytonaProvider
-        from tools.sandbox.factory import _PROVIDER_REGISTRY, resolve_provider
+        from tools.sandbox.factory import _PROVIDER_REGISTRY
 
-        assert "daytona" in _PROVIDER_REGISTRY
-        assert isinstance(resolve_provider(_make_agent("daytona")), DaytonaProvider)
+        assert _PROVIDER_REGISTRY.get("daytona") is DaytonaProvider
+
+
+class TestDaytonaCredentials:
+    """Per-instance ``credentials`` override the ``DAYTONA_*`` env vars."""
+
+    def test_zero_arg_construction_uses_env_vars(self, monkeypatch):
+        monkeypatch.setenv("DAYTONA_API_KEY", "env-api-key")
+        monkeypatch.setenv("DAYTONA_API_URL", "https://env.daytona.example/api")
+        monkeypatch.setenv("DAYTONA_TARGET", "env-target")
+        from tools.sandbox.daytona_provider import DaytonaProvider
+
+        mock_config_cls = MagicMock()
+        with monkeypatch.context() as m:
+            m.setattr("tools.sandbox.daytona_provider.DaytonaConfig", mock_config_cls)
+            m.setattr("tools.sandbox.daytona_provider.Daytona", MagicMock())
+            provider = DaytonaProvider()
+            provider._get_client()
+
+        _, kwargs = mock_config_cls.call_args
+        assert kwargs == {
+            "api_key": "env-api-key",
+            "api_url": "https://env.daytona.example/api",
+            "target": "env-target",
+        }
+
+    def test_credentials_override_env_vars(self, monkeypatch):
+        monkeypatch.setenv("DAYTONA_API_KEY", "env-api-key")
+        monkeypatch.setenv("DAYTONA_API_URL", "https://env.daytona.example/api")
+        monkeypatch.setenv("DAYTONA_TARGET", "env-target")
+        from tools.sandbox.daytona_provider import DaytonaProvider
+
+        mock_config_cls = MagicMock()
+        with monkeypatch.context() as m:
+            m.setattr("tools.sandbox.daytona_provider.DaytonaConfig", mock_config_cls)
+            m.setattr("tools.sandbox.daytona_provider.Daytona", MagicMock())
+            provider = DaytonaProvider(
+                credentials={
+                    "api_key": "service-api-key",
+                    "api_url": "https://service.daytona.example/api",
+                    "target": "service-target",
+                }
+            )
+            provider._get_client()
+
+        _, kwargs = mock_config_cls.call_args
+        assert kwargs == {
+            "api_key": "service-api-key",
+            "api_url": "https://service.daytona.example/api",
+            "target": "service-target",
+        }
 
 
 @pytest.fixture()
