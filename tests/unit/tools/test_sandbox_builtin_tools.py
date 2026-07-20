@@ -1,6 +1,42 @@
 from __future__ import annotations
 
+import subprocess
 import time
+from collections.abc import Callable
+
+
+def _local_bash_run_code(
+    handle,
+    code: str,
+    *,
+    language: str = "python",
+    timeout: int | None = None,
+    max_output_chars: int | None = None,
+    on_stdout: Callable[[str], None] | None = None,
+    on_stderr: Callable[[str], None] | None = None,
+) -> str:
+    """Stand-in for the OpenSandbox SDK boundary used by builtin-tool tests.
+
+    ``builtin_tools.py`` always invokes ``run_code`` with ``language="bash"``
+    in blocking mode (no streaming callbacks). Rather than requiring a real
+    OpenSandbox server, this fake executes the command locally against
+    ``handle.working_dir`` — mirroring exactly what the removed
+    ``SubprocessProvider`` used to do — so these tests exercise real file
+    I/O without needing real sandbox infrastructure.
+    """
+    result = subprocess.run(
+        ["bash", "-lc", code],
+        capture_output=True,
+        text=True,
+        timeout=timeout or 30,
+        cwd=handle.working_dir,
+    )
+    output = result.stdout or ""
+    if result.stderr:
+        output += f"\n[stderr]\n{result.stderr}"
+    if max_output_chars is not None and len(output) > max_output_chars:
+        output = output[:max_output_chars] + f"\n[Output truncated at {max_output_chars} characters]"
+    return output
 
 
 def _make_tools(tmp_path, monkeypatch):
@@ -8,10 +44,22 @@ def _make_tools(tmp_path, monkeypatch):
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
 
     from tools.sandbox.builtin_tools import create_sandbox_builtin_tools
-    from tools.sandbox.subprocess_provider import SubprocessProvider
+    from tools.sandbox.opensandbox_provider import OpenSandboxProvider
 
-    provider = SubprocessProvider()
-    handle = provider.create_sandbox(str(tmp_path))
+    provider = OpenSandboxProvider()
+    # Mock the SDK boundary: run_code is replaced with a local bash executor
+    # so tests don't need a real OpenSandbox server (create_sandbox is never
+    # called here — builtin tools only need a handle carrying working_dir).
+    monkeypatch.setattr(provider, "run_code", _local_bash_run_code)
+
+    from tools.sandbox.provider import SandboxHandle
+    import uuid as _uuid
+
+    handle = SandboxHandle(
+        sandbox_id=str(_uuid.uuid4()),
+        working_dir=str(tmp_path),
+        provider_name=provider.PROVIDER_NAME,
+    )
     return {
         tool.name: tool
         for tool in create_sandbox_builtin_tools(handle, provider)

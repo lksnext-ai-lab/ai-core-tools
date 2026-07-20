@@ -5,9 +5,10 @@ Unit tests — IT-4 File Round-Trip
 Verification criteria from the RFC:
   1. ``_prepare_turn`` binds a lazy sandbox handle when
      ``enable_code_interpreter`` is True, without creating the sandbox yet.
-  2. For non-subprocess providers, the first sandbox use pushes each
-     processed_file into the sandbox via ``provider.write_file``.
-  3. For SubprocessProvider (provider_name == 'subprocess'), no push/pull occurs.
+  2. For providers with ``requires_file_sync=True``, the first sandbox use
+     pushes each processed_file into the sandbox via ``provider.write_file``.
+  3. For providers with ``requires_file_sync=False``, no push/pull occurs
+     (files already live directly on the shared local ``working_dir``).
   4. ``_finalize_turn`` pulls new remote output/ files (not in
      pre_existing_remote_files) into local output/ before ``sync_output_files``.
   5. Files outside ``output/`` are never pulled.
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -25,11 +27,33 @@ import pytest
 
 from services.agent_execution_context import AgentExecutionContext
 from services.agent_execution_service import AgentExecutionService
+from tools.sandbox.provider import SandboxHandle
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+class _FakeProvider:
+    """Minimal SandboxProvider test double exposing requires_file_sync.
+
+    No remaining real provider has ``requires_file_sync=False`` (that was
+    ``SubprocessProvider``'s distinguishing trait before it was removed), so
+    this fake is used to exercise both branches of the capability-flag check
+    directly.
+    """
+
+    PROVIDER_NAME = "fake"
+
+    def __init__(self, requires_file_sync: bool = True):
+        self.requires_file_sync = requires_file_sync
+        self.create_sandbox = MagicMock()
+        self.write_file = MagicMock()
+        self.read_file = MagicMock(return_value=b"DATA")
+        self.list_files = MagicMock(return_value=[])
+        self.run_code = MagicMock(return_value="OK")
+        self.get_supported_languages = MagicMock(return_value=[])
 
 
 def _make_agent(enable_code_interpreter: bool = True, has_memory: bool = False):
@@ -84,8 +108,19 @@ def _make_service(agent, fresh_agent=None) -> AgentExecutionService:
     return svc
 
 
-def _base_ctx(working_dir, provider_name="subprocess", processed_files=None, remote_files_pre=None):
-    """Build a minimal context with sandbox fields populated."""
+def _base_ctx(
+    working_dir,
+    provider_name="opensandbox",
+    processed_files=None,
+    remote_files_pre=None,
+    provider=None,
+):
+    """Build a minimal context with sandbox fields populated.
+
+    Pass an explicit ``provider`` (e.g. a ``_FakeProvider``) to control
+    ``requires_file_sync``; otherwise a generic ``MagicMock`` is used, whose
+    truthy ``requires_file_sync`` matches the real-world remote-provider path.
+    """
     from tools.sandbox.provider import SandboxHandle
 
     handle = SandboxHandle(
@@ -94,7 +129,8 @@ def _base_ctx(working_dir, provider_name="subprocess", processed_files=None, rem
         provider_name=provider_name,
         metadata={},
     )
-    provider = MagicMock()
+    if provider is None:
+        provider = MagicMock()
     return AgentExecutionContext(
         agent_id=7,
         agent=_make_agent(),
@@ -244,20 +280,26 @@ class TestPrepareTurnFilePush:
             mock_handle, "input/data.xlsx", b"XLSX_CONTENT"
         )
 
-    def test_no_push_for_subprocess_provider(self, tmp_path):
+    def test_no_push_when_requires_file_sync_false(self, tmp_path):
+        """Providers with requires_file_sync=False skip the remote push entirely
+        (files already live directly on the shared local working_dir)."""
         agent = _make_agent(enable_code_interpreter=True)
         svc = _make_service(agent)
 
         src = tmp_path / "report.csv"
         src.write_bytes(b"CSV")
 
-        mock_handle = _make_subprocess_handle(str(tmp_path))
-        mock_provider = MagicMock()
-        mock_provider.PROVIDER_NAME = "subprocess"
-        mock_provider.create_sandbox.return_value = mock_handle
+        fake_provider = _FakeProvider(requires_file_sync=False)
+        handle = SandboxHandle(
+            sandbox_id="local-001",
+            working_dir=str(tmp_path),
+            provider_name=_FakeProvider.PROVIDER_NAME,
+            metadata={},
+        )
+        fake_provider.create_sandbox.return_value = handle
 
         mock_sss = MagicMock()
-        mock_sss.get_or_create.return_value = mock_handle
+        mock_sss.get_or_create.return_value = handle
 
         file_ref = MagicMock()
         file_ref.filename = "report.csv"
@@ -269,7 +311,7 @@ class TestPrepareTurnFilePush:
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
-            patch("tools.sandbox.factory.resolve_provider", return_value=mock_provider),
+            patch("tools.sandbox.factory.resolve_provider", return_value=fake_provider),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
@@ -282,9 +324,11 @@ class TestPrepareTurnFilePush:
                     user_context={"user_id": "u1", "app_id": "1"},
                 )
             )
+            # Materialize the lazy handle to trigger the requires_file_sync check.
+            ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
 
-        # SubprocessProvider: no write_file called (files are in working_dir already)
-        mock_provider.write_file.assert_not_called()
+        # requires_file_sync=False: no write_file called (files are in working_dir already)
+        fake_provider.write_file.assert_not_called()
         assert os.path.exists(os.path.join(ctx.working_dir, "input", "report.csv"))
 
     def test_push_error_does_not_crash_turn(self, tmp_path):
@@ -336,29 +380,30 @@ class TestPrepareTurnFilePush:
 # ---------------------------------------------------------------------------
 
 
+def _run_finalize(ctx, tmp_path):
+    svc = AgentExecutionService.__new__(AgentExecutionService)
+    svc.agent_service = MagicMock()
+    svc.session_service = MagicMock()
+    svc.session_service.touch_session = AsyncMock()
+    svc.agent_execution_repo = MagicMock()
+
+    with (
+        patch("services.agent_execution_service.FileManagementService") as MockFMS,
+        patch("tools.agentTools.parse_agent_response", return_value="OK"),
+        patch.object(svc, "_update_request_count"),
+    ):
+        mock_fms = MockFMS.return_value
+        mock_fms.sync_output_files = AsyncMock(return_value=[])
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            svc._finalize_turn(ctx, "OK", MagicMock())
+        )
+    return result
+
+
 class TestFinalizeTurnFilePull:
     """Pull new remote files into working_dir before sync_output_files."""
-
-    def _run_finalize(self, ctx, tmp_path):
-        svc = AgentExecutionService.__new__(AgentExecutionService)
-        svc.agent_service = MagicMock()
-        svc.session_service = MagicMock()
-        svc.session_service.touch_session = AsyncMock()
-        svc.agent_execution_repo = MagicMock()
-
-        with (
-            patch("services.agent_execution_service.FileManagementService") as MockFMS,
-            patch("tools.agentTools.parse_agent_response", return_value="OK"),
-            patch.object(svc, "_update_request_count"),
-        ):
-            mock_fms = MockFMS.return_value
-            mock_fms.sync_output_files = AsyncMock(return_value=[])
-
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
-                svc._finalize_turn(ctx, "OK", MagicMock())
-            )
-        return result
 
     def test_pulls_new_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
@@ -366,7 +411,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         dest = tmp_path / "output" / "report.docx"
         assert dest.exists()
@@ -378,7 +423,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         dest = tmp_path / "output" / "report.docx"
         assert dest.exists()
@@ -393,7 +438,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.read_file.return_value = b"OLD"
         ctx.pre_existing_remote_files = {"output/old.txt"}
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         assert not (tmp_path / "output" / "old.txt").exists()
 
@@ -407,7 +452,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.read_file.return_value = b"DATA"
         ctx.pre_existing_remote_files = set()
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         # Non-published (work/) resources skipped
         assert not (tmp_path / "output" / "scratch.tmp").exists()
@@ -426,7 +471,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.read_file.return_value = b"EVIL"
         ctx.pre_existing_remote_files = set()
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         # read_file should never have been called for these unsafe paths
         ctx.sandbox_provider.read_file.assert_not_called()
@@ -434,21 +479,24 @@ class TestFinalizeTurnFilePull:
         assert not (tmp_path / "output" / "passwd").exists()
         assert not (tmp_path / "output" / ".hidden").exists()
 
-    def test_no_pull_for_subprocess_provider(self, tmp_path):
-        ctx = _base_ctx(str(tmp_path), provider_name="subprocess")
-        ctx.sandbox_provider.list_files.return_value = ["report.docx"]
-        ctx.sandbox_provider.read_file.return_value = b"DATA"
+    def test_no_pull_when_requires_file_sync_false(self, tmp_path):
+        """Providers with requires_file_sync=False skip the remote pull entirely
+        (files already live directly on the shared local working_dir)."""
+        fake_provider = _FakeProvider(requires_file_sync=False)
+        fake_provider.list_files.return_value = ["report.docx"]
+        fake_provider.read_file.return_value = b"DATA"
+        ctx = _base_ctx(str(tmp_path), provider_name=_FakeProvider.PROVIDER_NAME, provider=fake_provider)
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
-        # SubprocessProvider: list_files should NOT be called for pull
-        ctx.sandbox_provider.list_files.assert_not_called()
+        # requires_file_sync=False: list_files should NOT be called for pull
+        fake_provider.list_files.assert_not_called()
 
     def test_no_pull_when_no_sandbox_handle(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
         ctx.sandbox_handle = None  # No sandbox
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         ctx.sandbox_provider.list_files.assert_not_called()
 
@@ -457,7 +505,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.list_files.side_effect = RuntimeError("connection lost")
 
         # Should not raise
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
     def test_read_file_error_skips_file_gracefully(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
@@ -470,60 +518,88 @@ class TestFinalizeTurnFilePull:
         )
         ctx.pre_existing_remote_files = set()
 
-        self._run_finalize(ctx, tmp_path)
+        _run_finalize(ctx, tmp_path)
 
         assert (tmp_path / "output" / "good.txt").exists()
         assert not (tmp_path / "output" / "bad.bin").exists()
 
 
 # ---------------------------------------------------------------------------
-# 4. SubprocessProvider — existing snapshot diff is unchanged
+# 4. requires_file_sync=True — the now-only-real-world path (push AND pull)
 # ---------------------------------------------------------------------------
 
 
-class TestSubprocessRoundTripUnchanged:
-    """Verify the existing working_dir snapshot diff still works end-to-end."""
+class TestRequiresFileSyncTruePath:
+    """Explicitly cover the requires_file_sync=True path end-to-end.
 
-    def test_pre_existing_files_snapshot_excludes_new_file(self, tmp_path):
-        """Files written to working_dir during the turn appear in sync_output_files exclusion set."""
-        svc = AgentExecutionService.__new__(AgentExecutionService)
-        svc.agent_service = MagicMock()
-        svc.session_service = MagicMock()
-        svc.session_service.touch_session = AsyncMock()
-        svc.agent_execution_repo = MagicMock()
+    Every remaining real provider (OpenSandbox, Daytona, E2B) defaults to
+    ``requires_file_sync=True``; this was previously only implicitly covered
+    by the provider-specific ("opensandbox") tests above. This test exercises
+    both the push (via ``_prepare_turn``) and pull (via ``_finalize_turn``)
+    halves of the round trip against the same fake provider instance.
+    """
 
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-        # Pre-existing published file
-        (output_dir / "old.txt").write_text("old")
-        pre_existing = {"old.txt"}
+    def test_push_and_pull_when_requires_file_sync_true(self, tmp_path):
+        agent = _make_agent(enable_code_interpreter=True)
+        svc = _make_service(agent)
 
-        # New published file written during turn
-        (output_dir / "report.docx").write_bytes(b"DOCX")
-        # Scratch file should be outside sync_output_files' scan target.
-        (tmp_path / "work").mkdir()
-        (tmp_path / "work" / "helper.js").write_text("support")
+        src = tmp_path / "data.xlsx"
+        src.write_bytes(b"XLSX_CONTENT")
 
-        ctx = _base_ctx(str(tmp_path), provider_name="subprocess")
-        ctx.pre_existing_files = pre_existing
-        ctx.sandbox_handle = None  # Subprocess: no remote handle
+        fake_provider = _FakeProvider(requires_file_sync=True)
+        handle = SandboxHandle(
+            sandbox_id="remote-001",
+            working_dir=str(tmp_path),
+            provider_name=_FakeProvider.PROVIDER_NAME,
+            metadata={},
+        )
+        fake_provider.create_sandbox.return_value = handle
+        fake_provider.list_files.return_value = []
 
-        captured_exclude = []
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = handle
 
-        async def _mock_sync(*, working_dir, agent_id, user_context, conversation_id, exclude_filenames):
-            captured_exclude.append(exclude_filenames)
-            return []
+        file_ref = MagicMock()
+        file_ref.filename = "data.xlsx"
+        file_ref.content = ""
+        file_ref.file_type = "document"
+        file_ref.file_id = "fid1"
+        file_ref.file_path = str(src)
 
         with (
-            patch("services.agent_execution_service.FileManagementService") as MockFMS,
-            patch("tools.agentTools.parse_agent_response", return_value="OK"),
-            patch.object(svc, "_update_request_count"),
+            patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
+            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
+            patch("tools.sandbox.factory.resolve_provider", return_value=fake_provider),
+            patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
-            MockFMS.return_value.sync_output_files = _mock_sync
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                svc._finalize_turn(ctx, "OK", MagicMock())
+            ctx = asyncio.get_event_loop().run_until_complete(
+                svc._prepare_turn(
+                    agent_id=7,
+                    message="analyze",
+                    file_references=[file_ref],
+                    db=MagicMock(),
+                    user_context={"user_id": "u1", "app_id": "1"},
+                )
             )
 
-        assert "old.txt" in captured_exclude[0]
-        assert "report.docx" not in captured_exclude[0]
+            fake_provider.write_file.assert_not_called()
+            # Materialize the lazy handle to trigger the requires_file_sync push.
+            ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
+
+        fake_provider.write_file.assert_called_once_with(
+            handle, "input/data.xlsx", b"XLSX_CONTENT"
+        )
+
+        # Pull half: a new remote output file should be pulled into working_dir.
+        fake_provider.list_files.return_value = ["/workspace/output/report.docx"]
+        fake_provider.read_file.return_value = b"DOCX_BYTES"
+        ctx.pre_existing_remote_files = set()
+
+        _run_finalize(ctx, tmp_path)
+
+        # Note: _prepare_turn computes its own working_dir under tmp_base
+        # (e.g. persistent/<session_key>), distinct from the fixture's tmp_path.
+        dest = Path(ctx.working_dir) / "output" / "report.docx"
+        assert dest.exists()
+        assert dest.read_bytes() == b"DOCX_BYTES"

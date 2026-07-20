@@ -1,18 +1,25 @@
 """
 Integration tests for SandboxSessionService DB persistence (Phase 2, step 2.9).
 
-Uses SubprocessProvider — no external services required.
+Uses OpenSandboxProvider with the SDK boundary mocked (per the pattern in
+``test_opensandbox_lifecycle.py``) — no real OpenSandbox server required.
+The intent (session persistence across cache eviction / backend restart)
+is provider-agnostic; OpenSandboxProvider is the only remaining provider
+that supports resume, so it is the most representative real-world stand-in
+now that ``SubprocessProvider`` has been removed.
 """
 
 from __future__ import annotations
 
+import itertools
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from services.sandbox_session_service import SandboxSessionService
-from tools.sandbox.subprocess_provider import SubprocessProvider
+from tools.sandbox.opensandbox_provider import OpenSandboxProvider, _META_SANDBOX
+from tools.sandbox.provider import SandboxHandle
 
 
 # ---------------------------------------------------------------------------
@@ -35,9 +42,46 @@ def fake_conversation(db, fake_agent):
 
 
 @pytest.fixture()
-def subprocess_provider():
-    """A fresh SubprocessProvider instance."""
-    return SubprocessProvider()
+def opensandbox_provider():
+    """OpenSandboxProvider with the SDK boundary mocked — no real server needed.
+
+    ``SandboxSync`` is replaced with a MagicMock so ``_can_resume``/``_can_renew``
+    are always True, and ``_setup_sandbox_handle`` is replaced with a lightweight
+    stand-in that skips real ``CodeInterpreterSync`` context creation while still
+    returning a fully populated ``SandboxHandle`` carrying the SDK sandbox mock.
+    """
+    with patch("tools.sandbox.opensandbox_provider.SandboxSync") as mock_sdk:
+        provider = OpenSandboxProvider()
+        provider._connection_config = {}
+
+        counter = itertools.count()
+
+        def _fake_create(*_args, **_kwargs):
+            sandbox = MagicMock()
+            sandbox.id = f"sbx_{next(counter)}"
+            return sandbox
+
+        def _fake_resume(sandbox_id, **_kwargs):
+            sandbox = MagicMock()
+            sandbox.id = sandbox_id
+            return sandbox
+
+        mock_sdk.create.side_effect = _fake_create
+        mock_sdk.resume.side_effect = _fake_resume
+
+        def _fake_setup_sandbox_handle(sandbox, working_dir, session_key):
+            return SandboxHandle(
+                sandbox_id=sandbox.id,
+                working_dir=working_dir,
+                provider_name=provider.PROVIDER_NAME,
+                session_key=session_key,
+                metadata={_META_SANDBOX: sandbox},
+            )
+
+        with patch.object(
+            provider, "_setup_sandbox_handle", side_effect=_fake_setup_sandbox_handle
+        ):
+            yield provider
 
 
 @pytest.fixture()
@@ -52,13 +96,13 @@ def sandbox_session_service():
 
 
 def test_sandbox_session_id_populated_after_create(
-    db, fake_agent, fake_conversation, subprocess_provider, sandbox_session_service
+    db, fake_agent, fake_conversation, opensandbox_provider, sandbox_session_service
 ):
     """Conversation.sandbox_session_id is set after get_or_create."""
     key = SandboxSessionService.session_key(fake_agent.agent_id, fake_conversation.conversation_id)
     handle = sandbox_session_service.get_or_create(
         session_key=key,
-        provider=subprocess_provider,
+        provider=opensandbox_provider,
         working_dir="/tmp/sandbox_test_create",
         conversation=fake_conversation,
         db=db,
@@ -70,14 +114,14 @@ def test_sandbox_session_id_populated_after_create(
 
 
 def test_sandbox_state_loaded_after_cache_eviction(
-    db, fake_agent, fake_conversation, subprocess_provider, sandbox_session_service
+    db, fake_agent, fake_conversation, opensandbox_provider, sandbox_session_service
 ):
     """After cache eviction, get_or_create loads state from DB and passes existing_sandbox_id."""
     key = SandboxSessionService.session_key(fake_agent.agent_id, fake_conversation.conversation_id)
     # First call — creates and persists
     handle_first = sandbox_session_service.get_or_create(
         session_key=key,
-        provider=subprocess_provider,
+        provider=opensandbox_provider,
         working_dir="/tmp/sandbox_test_evict",
         conversation=fake_conversation,
         db=db,
@@ -90,11 +134,11 @@ def test_sandbox_state_loaded_after_cache_eviction(
 
     # Second call — should load from DB and pass existing_sandbox_id to create_sandbox
     with patch.object(
-        subprocess_provider, "create_sandbox", wraps=subprocess_provider.create_sandbox
+        opensandbox_provider, "create_sandbox", wraps=opensandbox_provider.create_sandbox
     ) as mock_create:
         sandbox_session_service.get_or_create(
             session_key=key,
-            provider=subprocess_provider,
+            provider=opensandbox_provider,
             working_dir="/tmp/sandbox_test_evict",
             conversation=fake_conversation,
             db=db,
@@ -105,13 +149,13 @@ def test_sandbox_state_loaded_after_cache_eviction(
 
 
 def test_reset_clears_sandbox_session_id_and_state(
-    db, fake_agent, fake_conversation, subprocess_provider, sandbox_session_service
+    db, fake_agent, fake_conversation, opensandbox_provider, sandbox_session_service
 ):
     """Destroying a sandbox and clearing DB state leaves conversation clean."""
     key = SandboxSessionService.session_key(fake_agent.agent_id, fake_conversation.conversation_id)
     sandbox_session_service.get_or_create(
         session_key=key,
-        provider=subprocess_provider,
+        provider=opensandbox_provider,
         working_dir="/tmp/sandbox_test_reset",
         conversation=fake_conversation,
         db=db,
@@ -133,13 +177,13 @@ def test_reset_clears_sandbox_session_id_and_state(
 
 
 def test_destroy_all_for_agent_matches_conv_keys(
-    db, fake_agent, fake_conversation, subprocess_provider, sandbox_session_service
+    db, fake_agent, fake_conversation, opensandbox_provider, sandbox_session_service
 ):
     """destroy_all_for_agent() now destroys sessions registered under conv_... keys."""
     key = SandboxSessionService.session_key(fake_agent.agent_id, fake_conversation.conversation_id)
     sandbox_session_service.get_or_create(
         session_key=key,
-        provider=subprocess_provider,
+        provider=opensandbox_provider,
         working_dir="/tmp/sandbox_test_destroy_all",
         conversation=fake_conversation,
         db=db,
