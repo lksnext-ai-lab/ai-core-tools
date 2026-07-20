@@ -103,6 +103,7 @@ export { default as AIServicesPage } from './pages/settings/AIServicesPage';
 export { default as APIKeysPage } from './pages/settings/APIKeysPage';
 export { default as CollaborationPage } from './pages/settings/CollaborationPage';
 export { default as EmbeddingServicesPage } from './pages/settings/EmbeddingServicesPage';
+export { default as SandboxServicesPage } from './pages/settings/SandboxServicesPage';
 export { default as AppSettingsPage } from './pages/settings/AppSettingsPage';
 export { default as MCPConfigsPage } from './pages/settings/MCPConfigsPage';
 export { default as DataStructuresPage } from './pages/settings/DataStructuresPage';

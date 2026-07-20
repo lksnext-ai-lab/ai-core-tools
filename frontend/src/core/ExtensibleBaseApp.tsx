@@ -37,6 +37,7 @@ import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
+import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
@@ -57,6 +58,7 @@ import SubscriptionPage from '../pages/SubscriptionPage';
 import SaasUserListPage from '../pages/admin/SaasUserListPage';
 import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
+import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
 import { CapabilitiesProvider } from '../contexts/CapabilitiesContext';
@@ -365,6 +367,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
 
+                <Route path="/apps/:appId/settings/sandbox-services" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SettingsLayout><SandboxServicesPage /></SettingsLayout>
+                  </EditorLayoutRoute>
+                } />
+
                 <Route path="/apps/:appId/settings/mcp-configs" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><MCPConfigsPage /></SettingsLayout>
@@ -422,6 +430,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/system-embedding-services" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemEmbeddingServicesPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-sandbox-services" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSandboxServicesPage />
                   </AdminLayoutRoute>
                 } />
 
