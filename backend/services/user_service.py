@@ -86,9 +86,13 @@ class UserService:
 
     @staticmethod
     def get_all_users(db: Session, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
-        """Get all users with pagination. Returns (users_list, total_count)."""
+        """Get all users with pagination. Returns (users_list, total_count).
+
+        Omniadmins are included (marked via the is_omniadmin flag on each dict)
+        so admins can see them as protected accounts, not hidden entirely.
+        """
         user_repo = UserRepository(db)
-        users, total = user_repo.get_all_paginated(page, per_page, exclude_emails=get_omniadmins())
+        users, total = user_repo.get_all_paginated(page, per_page)
 
         users_list = [UserService._user_to_dict(user) for user in users]
 
@@ -102,13 +106,30 @@ class UserService:
 
     @staticmethod
     def search_users(db: Session, query: str, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
-        """Search users by name or email. Returns (users_list, total_count)."""
+        """Search users by name or email. Returns (users_list, total_count).
+
+        Omniadmins are included (marked via the is_omniadmin flag on each dict),
+        consistent with get_all_users, so they show up as protected accounts
+        rather than being hidden.
+        """
         user_repo = UserRepository(db)
-        users, total = user_repo.search_users(query, page, per_page, exclude_emails=get_omniadmins())
+        users, total = user_repo.search_users(query, page, per_page)
 
         users_list = [UserService._user_to_dict(user) for user in users]
 
         return users_list, total
+
+    @staticmethod
+    def get_omniadmin_accounts(db: Session) -> List[Dict]:
+        """Get platform users configured as omniadmins (only those with an existing User row).
+
+        Used to surface protected accounts in the collaboration invite UI without
+        requiring the caller to know/search their email first.
+        """
+        user_repo = UserRepository(db)
+        users = user_repo.get_by_emails(get_omniadmins())
+
+        return [UserService._user_to_dict(user) for user in users]
 
     @staticmethod
     def delete_user(

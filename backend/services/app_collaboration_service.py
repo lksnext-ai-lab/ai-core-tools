@@ -52,8 +52,8 @@ class AppCollaborationService:
     def invite_user_to_app(self, app_id: int, user_email: str, invited_by_user_id: int, role: str = "editor") -> Optional[AppCollaborator]:
         """Invite a user to collaborate on an app."""
         try:
-            if not self.repo.can_user_manage_app(invited_by_user_id, app_id):
-                raise ValueError("Only app owners can invite collaborators")
+            if not self.repo.can_user_administer_app(invited_by_user_id, app_id):
+                raise ValueError("Only app owners or administrators can invite collaborators")
 
             user = self.repo.get_user_by_email(user_email)
             if not user:

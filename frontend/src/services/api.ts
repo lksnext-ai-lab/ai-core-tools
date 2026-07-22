@@ -872,8 +872,12 @@ class ApiService {
     return response.json();
   }
 
-  async searchPlatformUsers(q: string): Promise<Array<{ user_id: number; name: string; email: string; platform_role: string }>> {
+  async searchPlatformUsers(q: string): Promise<Array<{ user_id: number; name: string; email: string; platform_role: string; is_omniadmin: boolean }>> {
     return this.request(`/internal/users/search?q=${encodeURIComponent(q)}`);
+  }
+
+  async getOmniadminAccounts(): Promise<Array<{ user_id: number; name: string; email: string; platform_role: string; is_omniadmin: boolean }>> {
+    return this.request(`/internal/users/omniadmins`);
   }
 
   async getCollaborators(appId: number) {

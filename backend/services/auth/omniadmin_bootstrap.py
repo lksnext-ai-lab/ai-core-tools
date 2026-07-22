@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from models.user import PlatformRole
 from services.auth.credential_service import CredentialService, UserAlreadyExistsError
 from utils.config import Config, get_omniadmins
 from utils.logger import get_logger
@@ -127,6 +128,18 @@ async def _provision_single_omniadmin(db: Session, email: str) -> None:
 
         _issue_and_log(db, user.user_id, email)
         return
+
+    # Promote pre-existing accounts whose email was added to AICT_OMNIADMINS
+    # after the account was originally created (platform_role otherwise stays
+    # at whatever it was, e.g. the 'viewer' default).
+    if existing.platform_role != PlatformRole.ADMIN.value:
+        existing.platform_role = PlatformRole.ADMIN.value
+        db.commit()
+        logger.info(
+            "omniadmin_bootstrap: %s (user_id=%s) promoted to platform_role='admin'",
+            email,
+            existing.user_id,
+        )
 
     cred_repo = UserCredentialRepository(db)
     cred = cred_repo.get_by_user_id(existing.user_id)

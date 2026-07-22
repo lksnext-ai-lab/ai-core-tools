@@ -21,7 +21,7 @@ from fastapi.concurrency import run_in_threadpool
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.orm import Session
 
-from models.user import User
+from models.user import User, PlatformRole
 from repositories.user_credential_repository import UserCredentialRepository
 from repositories.user_repository import UserRepository
 from schemas.local_auth_schemas import check_password_not_email
@@ -210,6 +210,12 @@ class CredentialService:
 
         cred.failed_attempts = 0
         cred.locked_until = None
+
+        # Promote to platform_role='admin' if this email was added to
+        # AICT_OMNIADMINS after the account was originally created.
+        if is_omniadmin(email) and user.platform_role != PlatformRole.ADMIN.value:
+            user.platform_role = PlatformRole.ADMIN.value
+
         db.flush()
         db.commit()
 
@@ -236,6 +242,7 @@ class CredentialService:
             auth_method="local",
             is_active=True,
             email_verified=not smtp_configured(),
+            platform_role=PlatformRole.ADMIN.value if is_omniadmin(email) else PlatformRole.VIEWER.value,
         )
         db.add(user)
         db.flush()

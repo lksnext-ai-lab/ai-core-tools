@@ -226,7 +226,7 @@ async def import_full_app(
     tags=["Apps", "Ownership"],
     responses={
         400: {"description": "Recipient is invalid (non-existent, inactive, or already owner)"},
-        403: {"description": "Insufficient permissions — OWNER or OMNIADMIN required"},
+        403: {"description": "Insufficient permissions — OWNER required"},
         404: {"description": "App not found"},
     },
 )
@@ -434,7 +434,7 @@ async def decline_app_ownership_offer(
     summary="Cancel pending ownership offer",
     tags=["Apps", "Ownership"],
     responses={
-        403: {"description": "Insufficient permissions — OWNER or OMNIADMIN required"},
+        403: {"description": "Insufficient permissions — OWNER required"},
         404: {"description": "App not found or no pending offer exists"},
     },
 )

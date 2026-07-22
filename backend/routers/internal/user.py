@@ -73,6 +73,7 @@ class UserSearchResultItem(BaseModel):
     name: str
     email: str
     platform_role: str
+    is_omniadmin: bool = False
 
 
 @router.get(
@@ -84,7 +85,7 @@ class UserSearchResultItem(BaseModel):
 async def search_users(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
-    q: Annotated[str, Query(min_length=2, description="Search query (name or email)")],
+    q: Annotated[str, Query(min_length=1, description="Search query (name or email)")],
 ):
     current_email = auth_context.identity.email
     users, _ = UserService.search_users(db, q, page=1, per_page=10)
@@ -94,6 +95,33 @@ async def search_users(
             name=u.get("name") or "",
             email=u["email"],
             platform_role=u.get("platform_role") or "editor",
+            is_omniadmin=u.get("is_omniadmin", False),
+        )
+        for u in users
+        if u["email"] != current_email
+    ]
+
+
+@router.get(
+    "/users/omniadmins",
+    response_model=List[UserSearchResultItem],
+    summary="List protected omniadmin accounts",
+    description="List platform users configured as omniadmins. Used to surface protected "
+                "accounts in the collaboration invite UI without requiring a search.",
+)
+async def list_omniadmin_accounts(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    current_email = auth_context.identity.email
+    users = UserService.get_omniadmin_accounts(db)
+    return [
+        UserSearchResultItem(
+            user_id=u["user_id"],
+            name=u.get("name") or "",
+            email=u["email"],
+            platform_role=u.get("platform_role") or "editor",
+            is_omniadmin=u.get("is_omniadmin", False),
         )
         for u in users
         if u["email"] != current_email
