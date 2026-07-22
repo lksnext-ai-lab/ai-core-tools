@@ -284,6 +284,42 @@ class AgentService:
                 continue
         return field_to_silos
 
+    def _collect_candidate_silo_ids(self, agent: Agent) -> Set[int]:
+        """Own silo_id + each direct subagent's silo_id.
+
+        Shared by :meth:`get_chat_filter_values` and
+        :meth:`get_chat_filter_field_values` so the traversal logic lives once.
+        """
+        silo_ids: Set[int] = set()
+        own_silo_id = getattr(agent, 'silo_id', None)
+        if own_silo_id:
+            silo_ids.add(own_silo_id)
+
+        for assoc in getattr(agent, 'tool_associations', None) or []:
+            tool = getattr(assoc, 'tool', None)
+            tool_silo_id = getattr(tool, 'silo_id', None) if tool else None
+            if tool_silo_id:
+                silo_ids.add(tool_silo_id)
+
+        return silo_ids
+
+    def _fetch_distinct_values(self, db: Session, silo_ids: Set[int], field_name: str) -> Set[str]:
+        """Union distinct values for *field_name* across *silo_ids*.
+
+        Never raises: a failure fetching values for one silo is logged and
+        skipped, never blowing up the aggregation for the others.
+        """
+        values: Set[str] = set()
+        for silo_id in silo_ids:
+            try:
+                values.update(MetadataValuesCacheService.get_distinct_values(silo_id, field_name, db))
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to fetch distinct values for silo {silo_id}, field {field_name!r}: {exc}"
+                )
+                continue
+        return values
+
     def get_chat_filter_values(self, db: Session, agent: Agent) -> List[Dict[str, Any]]:
         """Get the distinct values for each orchestrator-exposed chat filter field.
 
@@ -313,17 +349,7 @@ class AgentService:
         if not exposed_fields:
             return []
 
-        silo_ids: Set[int] = set()
-        own_silo_id = getattr(agent, 'silo_id', None)
-        if own_silo_id:
-            silo_ids.add(own_silo_id)
-
-        for assoc in getattr(agent, 'tool_associations', None) or []:
-            tool = getattr(assoc, 'tool', None)
-            tool_silo_id = getattr(tool, 'silo_id', None) if tool else None
-            if tool_silo_id:
-                silo_ids.add(tool_silo_id)
-
+        silo_ids = self._collect_candidate_silo_ids(agent)
         if not silo_ids:
             return []
 
@@ -335,23 +361,51 @@ class AgentService:
             if not candidate_silo_ids:
                 continue
 
-            values: Set[str] = set()
-            for silo_id in candidate_silo_ids:
-                try:
-                    silo_values = MetadataValuesCacheService.get_distinct_values(silo_id, field_name, db)
-                    values.update(silo_values)
-                except Exception as exc:
-                    logger.warning(
-                        f"Failed to fetch distinct values for silo {silo_id}, field {field_name!r}: {exc}"
-                    )
-                    continue
-
+            values = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
             if not values:
                 continue
 
             results.append({"field_name": field_name, "values": sorted(values)})
 
         return sorted(results, key=lambda r: r['field_name'])
+
+    def get_chat_filter_field_values(
+        self, db: Session, agent: Agent, field_name: str
+    ) -> Optional[List[str]]:
+        """Distinct values for ONE orchestrator-exposed chat filter field.
+
+        Returns ``None`` if *field_name* is not in ``agent.exposed_chat_filters``
+        — this is the security boundary: callers may only query fields the
+        designer explicitly exposed, never arbitrary internal metadata field
+        names (the public router maps ``None`` to a 404).
+
+        Returns ``[]`` (not ``None``) if the field is exposed but no silo
+        currently declares it / has values — that's a valid, non-error state.
+
+        Args:
+            db: Database session.
+            agent: The orchestrator agent.
+            field_name: The single filter field to look up.
+
+        Returns:
+            Sorted list of distinct values, ``[]`` if none, or ``None`` if
+            *field_name* isn't one of this agent's exposed filters.
+        """
+        exposed_fields = getattr(agent, 'exposed_chat_filters', None) or []
+        if field_name not in exposed_fields:
+            return None
+
+        silo_ids = self._collect_candidate_silo_ids(agent)
+        if not silo_ids:
+            return []
+
+        field_to_silos = self._get_silo_ids_by_metadata_field(db, silo_ids)
+        candidate_silo_ids = field_to_silos.get(field_name)
+        if not candidate_silo_ids:
+            return []
+
+        values = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
+        return sorted(values)
 
     def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str, user_id: int = None) -> int:
         """Create or update agent"""

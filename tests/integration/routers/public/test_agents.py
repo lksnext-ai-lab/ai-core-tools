@@ -220,3 +220,153 @@ class TestDeleteAgent:
             headers=api_headers(fake_api_key.key),
         )
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Chat-time filter field values
+# ---------------------------------------------------------------------------
+
+
+def _make_output_parser(db, app_id, fields):
+    from models.output_parser import OutputParser
+
+    parser = OutputParser(name="Test Metadata Parser", fields=fields, app_id=app_id)
+    db.add(parser)
+    db.flush()
+    return parser
+
+
+def _make_silo(db, app_id, metadata_definition_id, vector_db_type="PGVECTOR"):
+    from models.silo import Silo
+
+    silo = Silo(
+        name=f"Test Silo {metadata_definition_id}",
+        silo_type="REPO",
+        app_id=app_id,
+        metadata_definition_id=metadata_definition_id,
+        vector_db_type=vector_db_type,
+    )
+    db.add(silo)
+    db.flush()
+    return silo
+
+
+def _make_subagent(db, app_id, silo_id, name="SubAgent"):
+    from models.agent import Agent
+
+    agent = Agent(
+        name=name,
+        description=f"{name} description",
+        system_prompt="",
+        app_id=app_id,
+        silo_id=silo_id,
+        is_tool=True,
+    )
+    db.add(agent)
+    db.flush()
+    return agent
+
+
+def _make_orchestrator(db, app_id, exposed_chat_filters, sub_agents):
+    from models.agent import Agent, AgentTool
+
+    orchestrator = Agent(
+        name="Orchestrator",
+        description="Orchestrator description",
+        system_prompt="",
+        app_id=app_id,
+        silo_id=None,
+        has_memory=False,
+        exposed_chat_filters=exposed_chat_filters,
+    )
+    db.add(orchestrator)
+    db.flush()
+
+    for sub in sub_agents:
+        db.add(AgentTool(agent_id=orchestrator.agent_id, tool_id=sub.agent_id))
+    db.flush()
+
+    return orchestrator
+
+
+def chat_filter_url(app_id: int, agent_id: int, field_name: str) -> str:
+    return f"{agents_url(app_id, agent_id)}/chat-filters/{field_name}"
+
+
+class TestGetChatFilterFieldValues:
+    def test_returns_200_with_values(self, client, fake_app, fake_api_key, db, mocker):
+        parser = _make_output_parser(
+            db, fake_app.app_id, fields=[{"name": "machine_model", "type": "str"}]
+        )
+        silo = _make_silo(db, fake_app.app_id, parser.parser_id)
+        sub = _make_subagent(db, fake_app.app_id, silo.silo_id)
+        orchestrator = _make_orchestrator(
+            db, fake_app.app_id, exposed_chat_filters=["machine_model"], sub_agents=[sub]
+        )
+
+        mocker.patch(
+            "services.agent_service.MetadataValuesCacheService.get_distinct_values",
+            return_value=["X100", "X200"],
+        )
+
+        resp = client.get(
+            chat_filter_url(fake_app.app_id, orchestrator.agent_id, "machine_model"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"field_name": "machine_model", "values": ["X100", "X200"]}
+
+    def test_field_not_exposed_returns_404(self, client, fake_app, fake_api_key, db):
+        orchestrator = _make_orchestrator(
+            db, fake_app.app_id, exposed_chat_filters=["machine_model"], sub_agents=[]
+        )
+
+        resp = client.get(
+            chat_filter_url(fake_app.app_id, orchestrator.agent_id, "not_exposed"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 404
+
+    def test_field_exposed_but_no_declaring_silo_returns_empty_list(
+        self, client, fake_app, fake_api_key, db
+    ):
+        orchestrator = _make_orchestrator(
+            db, fake_app.app_id, exposed_chat_filters=["machine_model"], sub_agents=[]
+        )
+
+        resp = client.get(
+            chat_filter_url(fake_app.app_id, orchestrator.agent_id, "machine_model"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"field_name": "machine_model", "values": []}
+
+    def test_agent_from_other_app_returns_404(self, client, fake_app, fake_api_key, db):
+        orchestrator = _make_orchestrator(
+            db, fake_app.app_id, exposed_chat_filters=["machine_model"], sub_agents=[]
+        )
+        other_app_id = fake_app.app_id + 1000
+
+        resp = client.get(
+            chat_filter_url(other_app_id, orchestrator.agent_id, "machine_model"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code in (401, 403, 404)
+
+    def test_nonexistent_agent_returns_404(self, client, fake_app, fake_api_key, db):
+        resp = client.get(
+            chat_filter_url(fake_app.app_id, 999999, "machine_model"),
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 404
+
+    def test_no_api_key_returns_401(self, client, fake_app, fake_agent):
+        resp = client.get(chat_filter_url(fake_app.app_id, fake_agent.agent_id, "machine_model"))
+        assert resp.status_code == 401
+
+    def test_invalid_api_key_returns_401(self, client, fake_app, fake_agent):
+        resp = client.get(
+            chat_filter_url(fake_app.app_id, fake_agent.agent_id, "machine_model"),
+            headers=api_headers("totally-invalid-key"),
+        )
+        assert resp.status_code in (401, 403)

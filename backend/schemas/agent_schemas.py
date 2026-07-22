@@ -365,3 +365,9 @@ class PublicAgentsResponseSchema(BaseModel):
 class PublicAgentResponseSchema(BaseModel):
     """Single agent response for public API"""
     agent: PublicAgentDetailSchema
+
+
+class PublicChatFilterFieldSchema(BaseModel):
+    """Distinct values for one chat-time metadata filter field, public API."""
+    field_name: str
+    values: List[str]
