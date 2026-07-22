@@ -760,26 +760,82 @@ async def _execute_tool_agent_ocr(
         db.close()
 
 
+def _resolve_file(file_spec: str) -> str:
+    """Resolve *file_spec* to an absolute filesystem path.
+
+    Handles three cases:
+
+    1. **Absolute path that exists** → returned as-is
+    2. **Relative path or bare filename under ``tmp_base_folder/``** → appended
+    3. **Bare filename** → searched recursively under ephemeral & persistent
+       session directories (same layout used by :class:`FileManagementService`)
+
+    Returns the absolute path to the resolved file.
+
+    Raises ``FileNotFoundError`` when the file cannot be found.
+    """
+    import pathlib
+
+    tmp_base = get_app_config()["TMP_BASE_FOLDER"]
+    fs = pathlib.Path(file_spec)
+    abs_fs = fs.resolve()
+
+    if abs_fs.is_file():
+        return str(abs_fs)
+
+    relative = fs.relative_to(tmp_base) if str(abs_fs).startswith(str(tmp_base)) else fs
+    joined = pathlib.Path(tmp_base, relative)
+    if joined.is_file():
+        return str(joined.resolve())
+
+    # Bare filename — search the same directory tree that FileManagementService
+    # uses (ephemeral/ and persistent/ directories under tmp_base).
+    tmp_path = pathlib.Path(tmp_base).resolve()
+    name = fs.name
+    for root_dir in (tmp_path / "ephemeral", tmp_path / "persistent"):
+        if not root_dir.is_dir():
+            continue
+        for p in root_dir.rglob(name):
+            if p.is_file():
+                return str(p.resolve())
+
+    raise FileNotFoundError(f"File not found: {file_spec}")
+
+
 async def _validate_and_save_pdf(file_spec: str, tmp_dir: str) -> str:
     """Validate file_spec is a PDF and save it to tmp_dir.
 
-    * If it looks like a file path that ends with ``.pdf`` it is validated as-is.
+    * Supports **absolute paths** (read directly).
+    * Supports **relative paths** or **bare filenames** that exist under
+      ``TMP_BASE_FOLDER`` (resolved via :func:`_resolve_file`).
     * If it starts with ``base64:`` it is decoded and saved as a ``.pdf`` file.
-    * Anything else raises ValueError.
 
     Returns the path to the saved PDF.
     """
+    # Early rejection of known non-PDF extensions.
+    # Bare filenames (e.g. "image.pdf") are allowed through; they are resolved
+    # later by _resolve_file().
+    known_non_pdf_ext = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".txt",
+                         ".md", ".json", ".csv", ".html", ".htm", ".xml", ".doc",
+                         ".docx", ".xls", ".xlsx", ".zip", ".rar", ".7z"}
+    _, ext = os.path.splitext(file_spec)
+    if ext.lower() in known_non_pdf_ext:
+        raise ValueError(
+            f"Only PDF files are supported. Received: {file_spec}"
+        )
+
     if file_spec.startswith("base64:"):
         b64_data = file_spec[len("base64:"):]
         content = base64.b64decode(b64_data)
         suffix = ".pdf"
     elif file_spec.lower().endswith(".pdf"):
         content = None  # will be read directly from disk later
-        suffix = ".pdf" if file_spec.lower().endswith(".pdf") else ""
+        suffix = ".pdf"
     else:
-        raise ValueError(
-            f"Only PDF files are supported. Received: {file_spec}"
-        )
+        # Bare filename — defer resolution; _resolve_file will search
+        # ephemeral/persistent dirs.
+        content = None
+        suffix = ".pdf"
 
     import tempfile
     fd, path = tempfile.mkstemp(suffix=suffix, dir=tmp_dir)
@@ -787,8 +843,14 @@ async def _validate_and_save_pdf(file_spec: str, tmp_dir: str) -> str:
         if content is not None:
             os.write(fd, content)
         else:
-            # Read from the source path and write to the temp file
-            with open(file_spec, "rb") as src:
+            try:
+                actual_path = _resolve_file(file_spec)
+            except FileNotFoundError:
+                os.close(fd)
+                raise ValueError(
+                    f"File '{file_spec}' not found. Make sure the file has been uploaded to this conversation before referencing it in the OCR tool."
+                )
+            with open(actual_path, "rb") as src:
                 os.write(fd, src.read())
     finally:
         os.close(fd)
