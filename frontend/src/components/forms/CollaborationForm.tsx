@@ -35,6 +35,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
+  const isInputFocusedRef = useRef(false);
 
   // Load protected (omniadmin) accounts once so they're visible without searching
   useEffect(() => {
@@ -54,12 +55,15 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Debounced search
+  // Debounced search. protectedUsers is a dependency so that when the initial
+  // fetch resolves (it's always async, so it never has data on the very first
+  // run), the empty-query branch re-syncs `results` — and reopens the dropdown
+  // if the input was already focused before the fetch finished.
   useEffect(() => {
     if (selectedUser) return;
     if (query.length < 1) {
       setResults(protectedUsers);
-      setShowDropdown(false);
+      setShowDropdown(isInputFocusedRef.current && protectedUsers.length > 0);
       return;
     }
 
@@ -78,7 +82,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     }, 300);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, selectedUser]);
+  }, [query, selectedUser, protectedUsers]);
 
   // Reset keyboard highlight whenever the result set changes
   useEffect(() => {
@@ -169,7 +173,11 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                 type="text"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); if (selectedUser) setSelectedUser(null); }}
-                onFocus={() => { if (!selectedUser && query.length < 1 && protectedUsers.length > 0) setShowDropdown(true); }}
+                onFocus={() => {
+                  isInputFocusedRef.current = true;
+                  if (!selectedUser && query.length < 1 && protectedUsers.length > 0) setShowDropdown(true);
+                }}
+                onBlur={() => { isInputFocusedRef.current = false; }}
                 onKeyDown={handleInputKeyDown}
                 placeholder="Search by name or email…"
                 disabled={isSubmitting || loading}
