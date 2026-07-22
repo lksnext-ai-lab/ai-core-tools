@@ -1051,8 +1051,15 @@ class IACTOCRTool(BaseTool):
                     pdf_path=pdf_path_to_process,
                     user_context=self.user_context,
                 )
-                content = ocr_result.get("content", ocr_result)
-                if isinstance(content, dict):
+
+                if isinstance(ocr_result, dict):
+                    content = ocr_result.get("content", ocr_result)
+                elif isinstance(ocr_result, list):
+                    content = ocr_result
+                else:
+                    content = str(ocr_result)
+
+                if isinstance(content, (dict, list)):
                     import json
                     return json.dumps(content, indent=2, ensure_ascii=False)
                 return str(content)
