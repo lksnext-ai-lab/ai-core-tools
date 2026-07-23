@@ -90,6 +90,7 @@ class OutputParserImportService:
                 "name": field.name,
                 "type": field.type,
                 "description": field.description,
+                "required": field.required,
             }
             if field.parser_name:
                 ref_parser = self.get_by_name_and_app(

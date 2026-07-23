@@ -146,6 +146,7 @@ class TestOutputParserExportIntegration:
         assert "username" in field_names
         assert "age" in field_names
         assert "email" in field_names
+        assert all(field.required for field in export_data.output_parser.fields)
 
     def test_export_parser_not_found(self, db_session: Session, test_app: App):
         """Test export with non-existent parser ID."""
@@ -272,7 +273,8 @@ class TestOutputParserImportIntegration:
                     {
                         "name": "field1",
                         "type": "str",
-                        "description": "First field"
+                        "description": "First field",
+                        "required": False,
                     },
                     {
                         "name": "field2",
@@ -304,7 +306,9 @@ class TestOutputParserImportIntegration:
         assert imported_parser.description == export_data.output_parser.description
         assert len(imported_parser.fields) == 2
         assert imported_parser.fields[0]["name"] == "field1"
+        assert imported_parser.fields[0]["required"] is False
         assert imported_parser.fields[1]["type"] == "int"
+        assert imported_parser.fields[1]["required"] is True
 
         # Cleanup
         db_session.delete(imported_parser)

@@ -41,6 +41,17 @@ class TestExportOutputParserFieldSchema:
         assert field.description == "User's username"
         assert field.parser_name is None
         assert field.list_item_type is None
+        assert field.required is True
+
+    def test_optional_field_is_preserved(self):
+        field = ExportOutputParserFieldSchema(
+            name="nickname",
+            type="str",
+            description="Optional nickname",
+            required=False,
+        )
+
+        assert field.required is False
 
     def test_field_with_parser_reference(self):
         """Test field with parser reference."""
@@ -238,6 +249,7 @@ class TestOutputParserExportFileSchema:
         assert len(data['output_parser']['fields']) == 2
         assert data['output_parser']['fields'][0]['name'] == "sku"
         assert data['output_parser']['fields'][1]['type'] == "float"
+        assert data['output_parser']['fields'][0]['required'] is True
     
     def test_deserialization_from_json(self):
         """Test deserialization from JSON dict."""

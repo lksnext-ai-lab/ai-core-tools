@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Type, Dict, Any, List, get_origin, get_args
+from typing import Type, Dict, Any, List, Optional, get_origin, get_args
 from sqlalchemy.orm import Session
 from utils.schema_utils import sanitize_identifier
 from db.database import SessionLocal
@@ -29,7 +29,12 @@ def process_type(field_type):
         
     return field_type
 
-def build_fields_dict(field_names: list[str], field_types: list[type], field_descriptions: list[str]) -> Dict[str, tuple[type, str]]:
+def build_fields_dict(
+    field_names: list[str],
+    field_types: list[type],
+    field_descriptions: list[str],
+    field_required: list[bool],
+) -> Dict[str, tuple[type, str, bool]]:
     """
     Construye un diccionario de campos a partir de listas paralelas.
     
@@ -38,12 +43,14 @@ def build_fields_dict(field_names: list[str], field_types: list[type], field_des
     :param field_descriptions: Lista con las descripciones de los campos
     :return: Diccionario con la estructura requerida para crear el modelo
     """
-    if not (len(field_names) == len(field_types) == len(field_descriptions)):
+    if not (len(field_names) == len(field_types) == len(field_descriptions) == len(field_required)):
         raise ValueError("Todas las listas deben tener la misma longitud")
     
     fields_dict = {
-        field_name: (process_type(field_type), field_desc)
-        for field_name, field_type, field_desc in zip(field_names, field_types, field_descriptions)
+        field_name: (process_type(field_type), field_desc, required)
+        for field_name, field_type, field_desc, required in zip(
+            field_names, field_types, field_descriptions, field_required
+        )
     }
     print("fields_dict", fields_dict)
     return fields_dict
@@ -51,7 +58,8 @@ def build_fields_dict(field_names: list[str], field_types: list[type], field_des
 def create_dynamic_pydantic_model(model_name: str,
     field_names: list[str],
     field_types: list[type],
-    field_descriptions: list[str]
+    field_descriptions: list[str],
+    field_required: list[bool],
 ) -> Type[BaseModel]:
     """
     Crea un modelo Pydantic dinámicamente.
@@ -62,10 +70,13 @@ def create_dynamic_pydantic_model(model_name: str,
     :param field_descriptions: Lista con las descripciones de los campos
     :return: Una nueva clase que hereda de BaseModel con los campos especificados
     """
-    fields = build_fields_dict(field_names, field_types, field_descriptions)
+    fields = build_fields_dict(field_names, field_types, field_descriptions, field_required)
     model_fields = {
-        field_name: (field_type, Field(description=field_desc))
-        for field_name, (field_type, field_desc) in fields.items()
+        field_name: (
+            field_type if required else Optional[field_type],
+            Field(... if required else None, description=field_desc),
+        )
+        for field_name, (field_type, field_desc, required) in fields.items()
     }
     print("model_fields", model_fields)
     return type(model_name, (BaseModel,), {
@@ -115,6 +126,7 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
     field_names = []
     field_types = []
     field_descriptions = []
+    field_required = []
     
     for field in schema_data:
         field_names.append(field['name'])
@@ -135,6 +147,7 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
                 )
             field_types.append(tipo)
             field_descriptions.append(field['description'])
+            field_required.append(field.get('required', True))
             logging.info(f"Campo procesado: nombre='{field['name']}', tipo='{tipo}', descripción='{field['description']}'")
         except Exception as e:
             logging.error(f"Error procesando campo {field['name']}: {str(e)}")
@@ -144,7 +157,8 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
         model_name,
         field_names,
         field_types,
-        field_descriptions
+        field_descriptions,
+        field_required,
     )
     logging.info(f"Modelo Pydantic creado: {model_name}")
     
