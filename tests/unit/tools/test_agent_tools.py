@@ -156,7 +156,20 @@ async def test_iact_ocr_tool_detects_ocr_agent():
     """discover_tool should return IACTOCRTool when given an OCRAgent."""
     ocr_agent = _make_ocr_agent()
 
-    tool_instance = await agentTools.discover_tool(ocr_agent, user_context=None)
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
+        patch.object(
+            agentTools.MCPClientManager,
+            "get_client",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        tool_instance = await agentTools.discover_tool(
+            ocr_agent,
+            user_context=None,
+        )
+
     assert isinstance(tool_instance, agentTools.IACTOCRTool)
 
 
@@ -165,63 +178,147 @@ async def test_iact_ocr_tool_falls_back_to_chat_when_no_files():
     """IACTOCRTool should delegate to chat agents when no PDF file was provided."""
     ocr_agent = _make_ocr_agent()
 
-    fake_llm = object()
     fake_react = MagicMock()
-    fake_react.invoke.return_value = {"messages": [MagicMock(content="plain chat response")]}
+    fake_react.ainvoke = AsyncMock(
+        return_value={
+            "messages": [
+                MagicMock(content="plain chat response")
+            ]
+        }
+    )
 
     with (
-        patch("tools.agentTools.get_llm", return_value=fake_llm),
-        patch("tools.agentTools.create_langchain_agent", return_value=fake_react),
-        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch(
+            "tools.agentTools.create_langchain_agent",
+            return_value=fake_react,
+        ),
+        patch.object(
+            agentTools.MCPClientManager,
+            "get_client",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         tool_instance = await agentTools.IACTOCRTool.create(ocr_agent)
 
-    # Should have invoked the react agent when no file_paths given
-    assert tool_instance.react_agent is not None
-    tool_result = await tool_instance._arun(query="hello", file_paths=None)
-    assert tool_result == "plain chat response"
+    result = await tool_instance._arun(query="hello")
+
+    assert result == "plain chat response"
 
 
 @pytest.mark.asyncio
-async def test_iact_ocr_tool_rejects_non_pdf_file():
-    """IACTOCRTool should return a controlled error when receiving a non-PDF file."""
+async def test_iact_ocr_tool_uses_attached_pdf_files():
     ocr_agent = _make_ocr_agent()
 
-    fake_llm = object()
+    attached_files = [
+        {
+            "filename": "invoice.pdf",
+            "type": "pdf",
+            "file_path": "/tmp/invoice.pdf",
+        }
+    ]
 
     with (
-        patch("tools.agentTools.get_llm", return_value=fake_llm),
-        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
-        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch(
+            "tools.agentTools._execute_tool_agent_ocr",
+            new=AsyncMock(return_value={"amount": 100}),
+        ) as mock_exec,
+        patch(
+            "tools.agentTools.create_langchain_agent",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            agentTools.MCPClientManager,
+            "get_client",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("os.path.exists", return_value=True),
     ):
-        tool_instance = await agentTools.IACTOCRTool.create(ocr_agent)
+        tool = await agentTools.IACTOCRTool.create(
+            ocr_agent,
+            attached_files=attached_files,
+        )
 
-    tool_result = await tool_instance._arun(query="process", file_paths=["document.docx"])
-    assert "Only PDF files are supported" in tool_result
+        await tool._arun(query="extract")
+
+    mock_exec.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_iact_ocr_tool_validates_pdf_extension():
-    """IACTOCRTool should validate that file_paths point to PDF files."""
+async def test_iact_ocr_tool_reports_missing_pdf():
     ocr_agent = _make_ocr_agent()
 
-    fake_llm = object()
+    attached_files = [
+        {
+            "filename": "missing.pdf",
+            "type": "pdf",
+            "file_path": "/tmp/missing.pdf",
+        }
+    ]
 
     with (
-        patch("tools.agentTools.get_llm", return_value=fake_llm),
-        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
-        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch(
+            "tools.agentTools.create_langchain_agent",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            agentTools.MCPClientManager,
+            "get_client",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("os.path.exists", return_value=False),
     ):
-        tool_instance = await agentTools.IACTOCRTool.create(ocr_agent)
+        tool = await agentTools.IACTOCRTool.create(
+            ocr_agent,
+            attached_files=attached_files,
+        )
 
-    # .txt — should be rejected during PDF validation
-    result = await tool_instance._arun(query="test", file_paths=["notes.txt"])
-    assert "Only PDF files are supported" in result
+        result = await tool._arun(query="extract")
 
-    # .docx — should be rejected during PDF validation
-    result = await tool_instance._arun(query="test", file_paths=["document.docx"])
-    assert "Only PDF files are supported" in result
+    assert "PDF file not found" in result
 
-    # PDF that doesn't exist on disk — should be rejected with an error (file can't be read)
-    result = await tool_instance._arun(query="test", file_paths=["document.pdf"])
-    assert "Error" in result or "not a valid PDF" in result
+
+@pytest.mark.asyncio
+async def test_iact_ocr_tool_processes_multiple_pdfs():
+    ocr_agent = _make_ocr_agent()
+
+    attached_files = [
+        {
+            "filename": "a.pdf",
+            "type": "pdf",
+            "file_path": "/tmp/a.pdf",
+        },
+        {
+            "filename": "b.pdf",
+            "type": "pdf",
+            "file_path": "/tmp/b.pdf",
+        },
+    ]
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch(
+            "tools.agentTools._execute_tool_agent_ocr",
+            new=AsyncMock(return_value={"ok": True}),
+        ) as mock_exec,
+        patch(
+            "tools.agentTools.create_langchain_agent",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            agentTools.MCPClientManager,
+            "get_client",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("os.path.exists", return_value=True),
+    ):
+        tool = await agentTools.IACTOCRTool.create(
+            ocr_agent,
+            attached_files=attached_files,
+        )
+
+        await tool._arun(query="extract")
+
+    assert mock_exec.await_count == 2

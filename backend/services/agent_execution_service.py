@@ -112,6 +112,7 @@ class AgentExecutionService:
                 ctx.session_id_for_cache,
                 ctx.user_context,
                 ctx.image_files,
+                processed_files=ctx.processed_files,
                 working_dir=ctx.working_dir,
             )
 
@@ -975,6 +976,7 @@ class AgentExecutionService:
         session_id_for_cache: str = None,
         user_context: Dict = None,
         image_files: List[Dict] = None,
+        processed_files: List[Dict] = None,
         working_dir: Optional[str] = None
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
@@ -993,7 +995,7 @@ class AgentExecutionService:
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, mcp_client = await create_agent(
-                fresh_agent, search_params, session_id_for_cache, user_context, working_dir
+                fresh_agent, search_params, session_id_for_cache, user_context, working_dir, attached_files=processed_files
             )
 
             # Prepare configuration

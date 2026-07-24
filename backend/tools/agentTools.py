@@ -113,7 +113,7 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
-async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None):
+async def create_agent(agent: Agent, search_params=None, session_id=None, user_context: Optional[Dict] = None, working_dir: Optional[str] = None, attached_files: Optional[List[Dict]] = None):
     """Create a new agent instance with cached checkpointer if memory is enabled.
     
     Args:
@@ -121,6 +121,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         search_params: Optional search parameters for silo-based retrieval
         session_id: Optional session ID for memory-enabled agents (used to cache checkpointer)
         user_context: Optional user context containing authentication tokens for MCP
+        attached_files: Optional list of attached files to pass to the agent chain
     """
     llm = get_llm(agent)
     if llm is None:
@@ -232,7 +233,7 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
 
     for tool in agent.tool_associations:
         sub_agent = tool.tool
-        tools.append(await discover_tool(sub_agent, user_context=user_context))
+        tools.append(await discover_tool(sub_agent, user_context=user_context, attached_files=attached_files))
 
     # Base tools — always available for every agent
     if working_dir:
@@ -519,25 +520,6 @@ class AgentToolInput(BaseModel):
     query: str = Field(description="The question or instruction to send to the sub-agent.")
 
 
-class AgentOCRToolInput(BaseModel):
-    """Input schema for an OCR agent-as-tool.
-
-    Extends the standard agent tool schema with an optional ``file_paths``
-    parameter so the caller can provide one or more PDF files for
-    optical-character-recognition processing.  When no files are given the
-    OCR tool falls back to a plain-text chat response.
-    """
-
-    query: str = Field(description="The question or instruction to send to the OCR sub-agent.")
-    file_paths: Optional[List[str]] = Field(
-        default=None,
-        description=(
-            "Optional list of file paths or base64-encoded PDF binary data to process. "
-            "Only PDF files are supported. If omitted, the tool returns a text-only response."
-        ),
-    )
-
-
 class IACTTool(BaseTool):
     name: str = "agent_tool"
     description: str = "Search for a repository"
@@ -547,12 +529,14 @@ class IACTTool(BaseTool):
     react_agent: Any = None
     mcp_client: Any = None
     llm: Any = None
+    attached_files: Optional[List[Dict]] = None
 
-    def __init__(self, agent: Agent, user_context: Optional[Dict] = None) -> None:
+    def __init__(self, agent: Agent, user_context: Optional[Dict] = None, attached_files: Optional[List[Dict]] = None) -> None:
         super().__init__(agent=agent, user_context=user_context)
 
         self.agent = agent
         self.user_context = user_context
+        self.attached_files = attached_files or []
         self.name = sanitize_identifier(agent.name)
         self.description = agent.description or "Agent tool"
         self.llm = get_llm(agent)
@@ -562,20 +546,20 @@ class IACTTool(BaseTool):
         self.mcp_client = None
 
     @classmethod
-    async def create(cls, agent: Agent, user_context: Optional[Dict] = None) -> "IACTTool":
+    async def create(cls, agent: Agent, user_context: Optional[Dict] = None, attached_files: Optional[List[Dict]] = None) -> "IACTTool":
         """Build an agent-as-tool, including the sub-agent's MCP tools.
 
         MCP tools are loaded with an awaited MultiServerMCPClient, which is not
         possible inside a synchronous ``__init__``; hence this async factory. It
         is the only supported way to obtain a ready-to-use ``IACTTool``.
         """
-        instance = cls(agent, user_context=user_context)
+        instance = cls(agent, user_context=user_context, attached_files=attached_files)
 
         tools = []
         # Add nested tool agents recursively
         for t in agent.tool_associations:
             sub_agent = t.tool
-            tools.append(await discover_tool(sub_agent, user_context=user_context))
+            tools.append(await discover_tool(sub_agent, user_context=user_context, attached_files=attached_files))
 
         # Add base useful tools
         tools.append(fetch_file_in_base64)
@@ -759,129 +743,24 @@ async def _execute_tool_agent_ocr(
     finally:
         db.close()
 
-
-def _resolve_file(file_spec: str) -> str:
-    """Resolve *file_spec* to an absolute filesystem path.
-
-    Handles three cases:
-
-    1. **Absolute path that exists** → returned as-is
-    2. **Relative path or bare filename under ``tmp_base_folder/``** → appended
-    3. **Bare filename** → searched recursively under ephemeral & persistent
-       session directories (same layout used by :class:`FileManagementService`)
-
-    Returns the absolute path to the resolved file.
-
-    Raises ``FileNotFoundError`` when the file cannot be found.
-    """
-    import pathlib
-
-    tmp_base = get_app_config()["TMP_BASE_FOLDER"]
-    fs = pathlib.Path(file_spec)
-    abs_fs = fs.resolve()
-
-    if abs_fs.is_file():
-        return str(abs_fs)
-
-    relative = fs.relative_to(tmp_base) if str(abs_fs).startswith(str(tmp_base)) else fs
-    joined = pathlib.Path(tmp_base, relative)
-    if joined.is_file():
-        return str(joined.resolve())
-
-    # Bare filename — search the same directory tree that FileManagementService
-    # uses (ephemeral/ and persistent/ directories under tmp_base).
-    tmp_path = pathlib.Path(tmp_base).resolve()
-    name = fs.name
-    for root_dir in (tmp_path / "ephemeral", tmp_path / "persistent"):
-        if not root_dir.is_dir():
-            continue
-        for p in root_dir.rglob(name):
-            if p.is_file():
-                return str(p.resolve())
-
-    raise FileNotFoundError(f"File not found: {file_spec}")
-
-
-async def _validate_and_save_pdf(file_spec: str, tmp_dir: str) -> str:
-    """Validate file_spec is a PDF and save it to tmp_dir.
-
-    * Supports **absolute paths** (read directly).
-    * Supports **relative paths** or **bare filenames** that exist under
-      ``TMP_BASE_FOLDER`` (resolved via :func:`_resolve_file`).
-    * If it starts with ``base64:`` it is decoded and saved as a ``.pdf`` file.
-
-    Returns the path to the saved PDF.
-    """
-    # Early rejection of known non-PDF extensions.
-    # Bare filenames (e.g. "image.pdf") are allowed through; they are resolved
-    # later by _resolve_file().
-    known_non_pdf_ext = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".txt",
-                         ".md", ".json", ".csv", ".html", ".htm", ".xml", ".doc",
-                         ".docx", ".xls", ".xlsx", ".zip", ".rar", ".7z"}
-    _, ext = os.path.splitext(file_spec)
-    if ext.lower() in known_non_pdf_ext:
-        raise ValueError(
-            f"Only PDF files are supported. Received: {file_spec}"
-        )
-
-    if file_spec.startswith("base64:"):
-        b64_data = file_spec[len("base64:"):]
-        content = base64.b64decode(b64_data)
-        suffix = ".pdf"
-    elif file_spec.lower().endswith(".pdf"):
-        content = None  # will be read directly from disk later
-        suffix = ".pdf"
-    else:
-        # Bare filename — defer resolution; _resolve_file will search
-        # ephemeral/persistent dirs.
-        content = None
-        suffix = ".pdf"
-
-    import tempfile
-    fd, path = tempfile.mkstemp(suffix=suffix, dir=tmp_dir)
-    try:
-        if content is not None:
-            os.write(fd, content)
-        else:
-            try:
-                actual_path = _resolve_file(file_spec)
-            except FileNotFoundError:
-                os.close(fd)
-                raise ValueError(
-                    f"File '{file_spec}' not found. Make sure the file has been uploaded to this conversation before referencing it in the OCR tool."
-                )
-            with open(actual_path, "rb") as src:
-                os.write(fd, src.read())
-    finally:
-        os.close(fd)
-
-    # Final validation: check the file actually looks like a PDF
-    with open(path, "rb") as f:
-        header = f.read(5)
-    if header != b"%PDF-":
-        os.remove(path)
-        raise ValueError(
-            f"Only PDF files are supported. File '{file_spec}' is not a valid PDF."
-        )
-    return path
+        if upload is not None:
+            upload.file.close()
 
 
 class IACTOCRTool(BaseTool):
-    """Tool wrapper for an OCR agent that processes PDF files.
+    """
+    Tool wrapper for OCR agents.
 
-    Accepts a ``query`` plus an optional ``file_paths`` list. Each entry in
-    ``file_paths`` may be:
+    PDF documents are discovered automatically from
+    self.attached_files.
 
-    * A file system path ending in ``.pdf``.
-    * A base64-encoded PDF string prefixed with ``base64:``.
-
-    When no files are given the tool falls back to a plain-text chat
-    response using the agent's own LLM (non-vision path).
+    When one or more PDFs are attached, OCR processing is executed.
+    Otherwise the tool falls back to normal chat behaviour.
     """
 
     name: str = "ocr_agent_tool"
     description: str = "OCR agent tool for extracting text from PDF documents"
-    args_schema: Type[BaseModel] = AgentOCRToolInput
+    args_schema: Type[BaseModel] = AgentToolInput
     agent: Agent
     user_context: Optional[Dict] = None
     react_agent: Any = None
@@ -893,15 +772,18 @@ class IACTOCRTool(BaseTool):
     memory_summarize_threshold: int = DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
     output_parser_id: Optional[int] = None
     temperature: float = DEFAULT_AGENT_TEMPERATURE
+    attached_files: Optional[List[Dict]] = None
 
     def __init__(
         self,
         agent: Agent,
         user_context: Optional[Dict] = None,
+        attached_files: Optional[List[Dict]] = None,
     ) -> None:
         super().__init__(agent=agent, user_context=user_context)
         self.agent = agent
         self.user_context = user_context
+        self.attached_files = attached_files or []
         self.name = sanitize_identifier(agent.name)
         self.description = agent.description or "OCR agent tool"
         try:
@@ -930,6 +812,7 @@ class IACTOCRTool(BaseTool):
         cls,
         agent: Agent,
         user_context: Optional[Dict] = None,
+        attached_files: Optional[List[Dict]] = None,
     ) -> "IACTOCRTool":
         """Build an OCR agent-as-tool with MCP support.
 
@@ -937,15 +820,14 @@ class IACTOCRTool(BaseTool):
         and tools.  A failing MCP server degrades the sub-agent but never
         breaks construction.
         """
-        instance = cls(agent, user_context=user_context)
+        instance = cls(agent, user_context=user_context, attached_files=attached_files)
 
         tools: list = [fetch_file_in_base64]
 
         # Nested tool agents — only recurse into non-OCR agents, because
-        # OCR agents should not be nested inside other agents as tools.
         for t in agent.tool_associations:
             sub_agent = t.tool
-            nested = await discover_tool(sub_agent, user_context=user_context)
+            nested = await discover_tool(sub_agent, user_context=user_context, attached_files=attached_files)
             tools.append(nested)
 
         # MCP tools
@@ -983,12 +865,12 @@ class IACTOCRTool(BaseTool):
         )
         return instance
 
-    def _run(self, query: str, file_paths: Optional[List[str]] = None, **kwargs: Any) -> str:
+    def _run(self, query: str, **kwargs: Any) -> str:
         """Synchronous execution of the OCR agent tool."""
         loop = asyncio.new_event_loop()
         try:
             return loop.run_until_complete(
-                self._arun(query=query, file_paths=file_paths)
+                self._arun(query=query)
             )
         finally:
             loop.close()
@@ -996,92 +878,101 @@ class IACTOCRTool(BaseTool):
     async def _arun(
         self,
         query: str,
-        file_paths: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> str:
         """Asynchronous execution of the OCR agent tool."""
+
         if self.react_agent is None:
             raise RuntimeError(
                 "IACTOCRTool must be built via 'await IACTOCRTool.create(...)' before use."
             )
 
-        tmp_base_folder = get_app_config()["TMP_BASE_FOLDER"]
-        uploads_dir = os.path.join(tmp_base_folder, "uploads")
-        os.makedirs(uploads_dir, exist_ok=True)
+        pdf_files = [
+            f for f in self.attached_files
+            if f.get("type") == "pdf"
+        ]
 
-        processed_pdfs: List[str] = []
+        #
+        # OCR PATH
+        #
+        if pdf_files:
 
-        if file_paths:
-            for fspec in file_paths:
+            results = []
+
+            for pdf_file in pdf_files:
+
+                pdf_path = pdf_file.get("file_path")
+                filename = pdf_file.get("filename", "unknown.pdf")
+
+                if not pdf_path:
+                    results.append({
+                        "file": filename,
+                        "error": "PDF file path not found"
+                    })
+                    continue
+
+                if not os.path.isabs(pdf_path):
+                    pdf_path = os.path.join(
+                        get_app_config()["TMP_BASE_FOLDER"],
+                        pdf_path
+                    )
+
+                if not os.path.exists(pdf_path):
+                    results.append({
+                        "file": filename,
+                        "error": f"PDF file not found: {pdf_path}"
+                    })
+                    continue
+
                 try:
-                    pdf_path = await _validate_and_save_pdf(fspec, uploads_dir)
-                    processed_pdfs.append(pdf_path)
-                except ValueError as exc:
-                    return f"Error: {exc}"
+
+                    ocr_result = await _execute_tool_agent_ocr(
+                        agent_id=self.agent.agent_id,
+                        pdf_path=pdf_path,
+                        user_context=self.user_context,
+                    )
+
+                    results.append({
+                        "file": filename,
+                        "content": (
+                            ocr_result.get("content")
+                            if isinstance(ocr_result, dict)
+                            else ocr_result
+                        )
+                    })
+
                 except Exception as exc:
-                    logger.error("Error preparing PDF for OCR tool: %s", exc, exc_info=True)
-                    return f"Error processing file: {exc}"
 
-        if processed_pdfs:
-            # Combine all PDFs into a single file for the OCR pipeline
-            if len(processed_pdfs) > 1:
-                try:
-                    combined_path = os.path.join(uploads_dir, f"combined_{self.agent.agent_id}_{id(self)}.pdf")
-                    from pypdf import PdfReader, PdfWriter
-                    writer = PdfWriter()
-                    for pdf_path in processed_pdfs:
-                        reader = PdfReader(pdf_path)
-                        for page in reader.pages:
-                            writer.add_page(page)
-                    with open(combined_path, "wb") as f:
-                        writer.write(f)
-                    pdf_path_to_process = combined_path
-                except Exception as exc:
-                    logger.error("Error combining PDFs for OCR tool: %s", exc, exc_info=True)
-                    for p in processed_pdfs:
-                        if os.path.exists(p):
-                            os.remove(p)
-                    return f"Error combining PDFs: {exc}"
-            else:
-                pdf_path_to_process = processed_pdfs[0]
+                    logger.exception(
+                        "OCR failed for %s",
+                        filename
+                    )
 
-            try:
-                ocr_result = await _execute_tool_agent_ocr(
-                    agent_id=self.agent.agent_id,
-                    pdf_path=pdf_path_to_process,
-                    user_context=self.user_context,
-                )
+                    results.append({
+                        "file": filename,
+                        "error": str(exc)
+                    })
 
-                if isinstance(ocr_result, dict):
-                    content = ocr_result.get("content", ocr_result)
-                elif isinstance(ocr_result, list):
-                    content = ocr_result
-                else:
-                    content = str(ocr_result)
+            return json.dumps(
+                results,
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+            )
 
-                if isinstance(content, (dict, list)):
-                    import json
-                    return json.dumps(content, indent=2, ensure_ascii=False)
-                return str(content)
-            except Exception as exc:
-                logger.error("OCR execution failed for tool: %s", exc, exc_info=True)
-                return f"Error executing OCR: {exc}"
-            finally:
-                for p in processed_pdfs:
-                    if os.path.exists(p):
-                        os.remove(p)
-                # Remove combined file if it exists
-                if len(processed_pdfs) > 1 and "combined_path" in dir():
-                    if os.path.exists(combined_path):
-                        os.remove(combined_path)
-
-        # No PDFs — fall back to plain-text chat using the sub-agent's LLM
+        #
+        # CHAT FALLBACK PATH
+        #
         if self.agent.prompt_template:
             try:
-                formatted_prompt = self.agent.prompt_template.format(question=query)
+                formatted_prompt = self.agent.prompt_template.format(
+                    question=query
+                )
             except KeyError:
                 try:
-                    formatted_prompt = self.agent.prompt_template.format(query=query)
+                    formatted_prompt = self.agent.prompt_template.format(
+                        query=query
+                    )
                 except KeyError:
                     logger.warning(
                         "Could not format prompt_template for OCR agent %s, using query directly",
@@ -1091,28 +982,49 @@ class IACTOCRTool(BaseTool):
         else:
             formatted_prompt = query
 
-        messages = [HumanMessage(content=formatted_prompt)]
+        messages = [
+            HumanMessage(content=formatted_prompt)
+        ]
+
         try:
-            result = self.react_agent.invoke({"messages": messages})
+
+            result = await self.react_agent.ainvoke(
+                {"messages": messages}
+            )
 
             if isinstance(result, dict) and "messages" in result:
+
                 messages_list = result["messages"]
+
                 for msg in reversed(messages_list):
                     if hasattr(msg, "content") and msg.content:
                         return str(msg.content)
+
                 if messages_list:
                     last_msg = messages_list[-1]
-                    return str(last_msg.content) if hasattr(last_msg, "content") else str(last_msg)
+
+                    return (
+                        str(last_msg.content)
+                        if hasattr(last_msg, "content")
+                        else str(last_msg)
+                    )
 
             return str(result)
+
         except Exception as e:
-            logger.error("Error executing OCR chat fallback: %s", e)
+
+            logger.error(
+                "Error executing OCR chat fallback: %s",
+                e,
+            )
+
             return f"Error executing agent tool: {str(e)}"
 
 
 async def discover_tool(
     agent: Agent,
     user_context: Optional[Dict] = None,
+    attached_files: Optional[List[Dict]] = None,
 ) -> BaseTool:
     """Return the appropriate tool wrapper for *agent*.
 
@@ -1120,8 +1032,8 @@ async def discover_tool(
     (``type == 'ocr_agent'``), otherwise to :class:`IACTTool`.
     """
     if agent.type == "ocr_agent":
-        return await IACTOCRTool.create(agent, user_context=user_context)
-    return await IACTTool.create(agent, user_context=user_context)
+        return await IACTOCRTool.create(agent, user_context=user_context, attached_files=attached_files)
+    return await IACTTool.create(agent, user_context=user_context, attached_files=attached_files)
 
 
 _SEARCH_ERROR_MSG = "The knowledge base search failed; try rephrasing or removing filters."
