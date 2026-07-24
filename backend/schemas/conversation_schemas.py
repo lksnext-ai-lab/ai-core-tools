@@ -24,7 +24,7 @@ class ConversationResponse(ConversationBase):
     """Schema for conversation response"""
     conversation_id: int
     agent_id: int
-    app_id: int
+    app_id: Optional[int] = None
     user_id: Optional[int] = None
     session_id: str
     created_at: datetime
