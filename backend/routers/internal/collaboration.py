@@ -23,6 +23,7 @@ from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
 from utils.logger import get_logger
+from utils.config import is_omniadmin
 
 logger = get_logger(__name__)
 
@@ -82,10 +83,10 @@ async def list_collaborators(
     List all collaborators for a specific app.
     """
     user_id = auth_context.identity.id
-    
+
     try:
         _, collaboration_service = get_services(db)
-        
+
         # Check if user can access this app
         if not collaboration_service.can_user_access_app(user_id, app_id):
             raise HTTPException(
@@ -140,16 +141,21 @@ async def invite_collaborator(
     try:
         _, collaboration_service = get_services(db)
         
-        # Check if user can manage collaborators (owner only)
-        if not collaboration_service.can_user_manage_app(user_id, app_id):
+        # Check if user can manage collaborators (owner or administrator collaborator)
+        if not collaboration_service.can_user_administer_app(user_id, app_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only app owners can invite collaborators"
+                detail="Only app owners or administrators can invite collaborators"
             )
         
-        # Platform-role constraint: viewers can only be assigned viewer app-role
+        # Platform-role constraint: viewers can only be assigned viewer app-role.
+        # Omniadmins are exempt — new omniadmin accounts get platform_role='admin'
+        # directly, but accounts created before that default existed may still
+        # carry the old 'viewer' value, which shouldn't force a viewer-only invite.
         target_user = UserService.get_user_by_email(db, invitation_data.email)
-        if target_user and target_user.platform_role == 'viewer' and invitation_data.role != 'viewer':
+        if (target_user and target_user.platform_role == 'viewer'
+                and not is_omniadmin(target_user.email)
+                and invitation_data.role != 'viewer'):
             raise ValueError("Users with viewer platform role can only be invited as app viewers")
 
         collaboration = collaboration_service.invite_user_to_app(

@@ -7,6 +7,7 @@ interface PlatformUser {
   name: string;
   email: string;
   platform_role: string;
+  is_omniadmin: boolean;
 }
 
 interface CollaborationFormProps {
@@ -29,8 +30,19 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [protectedUsers, setProtectedUsers] = useState<PlatformUser[]>([]);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
+  const isInputFocusedRef = useRef(false);
+
+  // Load protected (omniadmin) accounts once so they're visible without searching
+  useEffect(() => {
+    apiService.getOmniadminAccounts()
+      .then(setProtectedUsers)
+      .catch(() => setProtectedUsers([]));
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -43,10 +55,17 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Debounced search
+  // Debounced search. protectedUsers is a dependency so that when the initial
+  // fetch resolves (it's always async, so it never has data on the very first
+  // run), the empty-query branch re-syncs `results` — and reopens the dropdown
+  // if the input was already focused before the fetch finished.
   useEffect(() => {
     if (selectedUser) return;
-    if (query.length < 2) { setResults([]); setShowDropdown(false); return; }
+    if (query.length < 1) {
+      setResults(protectedUsers);
+      setShowDropdown(isInputFocusedRef.current && protectedUsers.length > 0);
+      return;
+    }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
@@ -63,11 +82,25 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     }, 300);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, selectedUser]);
+  }, [query, selectedUser, protectedUsers]);
 
-  // When a viewer-platform user is selected, lock role to viewer
+  // Reset keyboard highlight whenever the result set changes
   useEffect(() => {
-    if (selectedUser?.platform_role === 'viewer') {
+    setHighlightedIndex(-1);
+  }, [results]);
+
+  // Keep the keyboard-highlighted option scrolled into view
+  useEffect(() => {
+    if (highlightedIndex < 0) return;
+    optionRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+  }, [highlightedIndex]);
+
+  // When a viewer-platform user is selected, lock role to viewer.
+  // Omniadmins are exempt: new omniadmin accounts get platform_role 'admin'
+  // directly, but accounts created before that default existed may still
+  // carry the old 'viewer' value, which shouldn't force a viewer-only invite.
+  useEffect(() => {
+    if (selectedUser?.platform_role === 'viewer' && !selectedUser?.is_omniadmin) {
       setRole('viewer');
     }
   }, [selectedUser]);
@@ -77,6 +110,27 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     setQuery(user.name ? `${user.name} (${user.email})` : user.email);
     setShowDropdown(false);
     setResults([]);
+    setHighlightedIndex(-1);
+  }
+
+  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!showDropdown || results.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1 >= results.length ? 0 : prev + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 < 0 ? results.length - 1 : prev - 1));
+    } else if (e.key === "Enter") {
+      if (highlightedIndex >= 0 && highlightedIndex < results.length) {
+        e.preventDefault();
+        selectUser(results[highlightedIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setShowDropdown(false);
+      setHighlightedIndex(-1);
+    }
   }
 
   function clearSelection() {
@@ -101,7 +155,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     }
   };
 
-  const isViewerLocked = selectedUser?.platform_role === 'viewer';
+  const isViewerLocked = selectedUser?.platform_role === 'viewer' && !selectedUser?.is_omniadmin;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -119,10 +173,20 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                 type="text"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); if (selectedUser) setSelectedUser(null); }}
+                onFocus={() => {
+                  isInputFocusedRef.current = true;
+                  if (!selectedUser && query.length < 1 && protectedUsers.length > 0) setShowDropdown(true);
+                }}
+                onBlur={() => { isInputFocusedRef.current = false; }}
+                onKeyDown={handleInputKeyDown}
                 placeholder="Search by name or email…"
                 disabled={isSubmitting || loading}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 pr-10"
                 autoComplete="off"
+                role="combobox"
+                aria-expanded={showDropdown}
+                aria-controls="collab-user-listbox"
+                aria-activedescendant={highlightedIndex >= 0 ? `collab-user-option-${results[highlightedIndex]?.user_id}` : undefined}
               />
               {searching && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -142,19 +206,33 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
             </div>
 
             {showDropdown && (
-              <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
-                {results.map((u) => (
-                  <li key={u.user_id}>
+              <ul id="collab-user-listbox" role="listbox" className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
+                {results.map((u, index) => (
+                  <li
+                    key={u.user_id}
+                    ref={(el) => { optionRefs.current[index] = el; }}
+                    id={`collab-user-option-${u.user_id}`}
+                    role="option"
+                    aria-selected={index === highlightedIndex}
+                  >
                     <button
                       type="button"
                       onClick={() => selectUser(u)}
-                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center justify-between gap-2"
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 ${
+                        index === highlightedIndex ? "bg-blue-50" : "hover:bg-blue-50"
+                      }`}
                     >
                       <div>
                         <div className="text-sm font-medium text-gray-900">{u.name || u.email}</div>
                         {u.name && <div className="text-xs text-gray-500">{u.email}</div>}
                       </div>
-                      {u.platform_role === 'viewer' && (
+                      {u.is_omniadmin && (
+                        <span className="shrink-0 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                          Protected · Admin
+                        </span>
+                      )}
+                      {!u.is_omniadmin && u.platform_role === 'viewer' && (
                         <span className="shrink-0 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                           Viewer
                         </span>
@@ -165,7 +243,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
               </ul>
             )}
 
-            {query.length >= 2 && !searching && results.length === 0 && !selectedUser && (
+            {query.length >= 1 && !searching && results.length === 0 && !selectedUser && (
               <p className="mt-1 text-sm text-gray-500">No users found matching "{query}"</p>
             )}
           </div>
@@ -187,12 +265,17 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
             {!isViewerLocked && <option value="administrator">Administrator</option>}
             <option value="viewer">Viewer</option>
           </select>
+          {selectedUser?.is_omniadmin && (
+            <p className="mt-1 text-sm text-amber-600">
+              This is a protected admin account (configured via server settings).
+            </p>
+          )}
           {isViewerLocked && (
             <p className="mt-1 text-sm text-amber-600">
               This user has a Viewer platform role and can only be invited as a Viewer.
             </p>
           )}
-          {!isViewerLocked && (
+          {!isViewerLocked && !selectedUser?.is_omniadmin && (
             <p className="mt-1 text-sm text-gray-600">{ROLE_DESCRIPTIONS[role]}</p>
           )}
         </div>

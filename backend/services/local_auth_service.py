@@ -9,11 +9,12 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from models.user import User
+from models.user import User, PlatformRole
 from repositories.user_repository import UserRepository
 from repositories.user_credential_repository import UserCredentialRepository
 from repositories.subscription_repository import SubscriptionRepository
 from models.subscription import SubscriptionTier
+from utils.config import is_omniadmin
 from utils.logger import get_logger
 from utils.secret_key import get_secret_key
 from services.auth.credential_service import _sync_hash, _sync_verify
@@ -63,7 +64,7 @@ class LocalAuthService:
             auth_method="local",
             email_verified=False,
             is_active=True,
-            platform_role="viewer",
+            platform_role=PlatformRole.ADMIN.value if is_omniadmin(email) else PlatformRole.VIEWER.value,
         )
         db.add(user)
         db.flush()

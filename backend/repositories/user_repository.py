@@ -1,9 +1,10 @@
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session, joinedload
-from models.user import User
+from models.user import User, PlatformRole
 from models.app import App
 from sqlalchemy import or_
 from datetime import datetime, timedelta, timezone
+from utils.config import is_omniadmin
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,12 +32,19 @@ class UserRepository:
     def get_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
         return self.db.query(User).filter(User.email == email).first()
+
+    def get_by_emails(self, emails: list) -> List[User]:
+        """Get all users matching a list of emails (only rows that exist)"""
+        if not emails:
+            return []
+        return self.db.query(User).filter(User.email.in_(emails)).order_by(User.user_id).all()
     
     def create(self, email: str, name: str = None) -> User:
-        """Create a new user"""
+        """Create a new user. Omniadmin emails get platform_role='admin' from the start."""
         new_user = User(
             email=email,
-            name=name
+            name=name,
+            platform_role=PlatformRole.ADMIN.value if is_omniadmin(email) else PlatformRole.VIEWER.value,
         )
         self.db.add(new_user)
         self.db.commit()
@@ -44,9 +52,16 @@ class UserRepository:
         return new_user
     
     def update(self, user: User, name: str = None) -> User:
-        """Update user information"""
+        """Update user information. Also promotes an existing account to
+        platform_role='admin' if its email has since been added to AICT_OMNIADMINS."""
+        changed = False
         if name and user.name != name:
             user.name = name
+            changed = True
+        if is_omniadmin(user.email) and user.platform_role != PlatformRole.ADMIN.value:
+            user.platform_role = PlatformRole.ADMIN.value
+            changed = True
+        if changed:
             self.db.commit()
             self.db.refresh(user)
         return user

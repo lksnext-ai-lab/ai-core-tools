@@ -192,6 +192,29 @@ class TestAuthenticateSuccess:
         cred = db.query(UserCredential).filter_by(user_id=user.user_id).first()
         assert cred.locked_until is None
 
+    @pytest.mark.asyncio
+    async def test_promotes_existing_user_to_admin_when_email_added_to_omniadmins(self, db, monkeypatch):
+        """A user created before their email was added to AICT_OMNIADMINS must
+        be promoted to platform_role='admin' on their next successful login."""
+        user = _make_user(db, email="lateomni@example.com")
+        assert user.platform_role == "viewer"
+        _make_credential(db, user, plain_password="correcthorsebatterystaple")
+
+        monkeypatch.setenv("AICT_OMNIADMINS", "lateomni@example.com")
+        await CredentialService.authenticate(db, user.email, "correcthorsebatterystaple")
+
+        assert user.platform_role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_does_not_touch_platform_role_for_non_omniadmin(self, db, monkeypatch):
+        user = _make_user(db, email="regular@example.com")
+        _make_credential(db, user, plain_password="correcthorsebatterystaple")
+
+        monkeypatch.setenv("AICT_OMNIADMINS", "someoneelse@example.com")
+        await CredentialService.authenticate(db, user.email, "correcthorsebatterystaple")
+
+        assert user.platform_role == "viewer"
+
 
 # ---------------------------------------------------------------------------
 # authenticate — wrong password → lockout
@@ -657,6 +680,22 @@ class TestAdminCreateUser:
             "admin_create_user must not create a Subscription row; "
             "subscription lifecycle belongs to the SaaS domain."
         )
+
+    @pytest.mark.asyncio
+    async def test_omniadmin_email_gets_admin_platform_role(self, db, monkeypatch):
+        monkeypatch.setenv("AICT_OMNIADMINS", "omni@example.com")
+        user = await CredentialService.admin_create_user(
+            db, "omni@example.com", "Omni Admin"
+        )
+        assert user.platform_role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_regular_email_gets_viewer_platform_role(self, db, monkeypatch):
+        monkeypatch.setenv("AICT_OMNIADMINS", "omni@example.com")
+        user = await CredentialService.admin_create_user(
+            db, "newuser2@example.com", "Regular User"
+        )
+        assert user.platform_role == "viewer"
 
     @pytest.mark.asyncio
     async def test_duplicate_email_raises_user_already_exists_error(self, db):
