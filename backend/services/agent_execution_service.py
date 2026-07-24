@@ -393,6 +393,7 @@ class AgentExecutionService:
                 ctx.session_id_for_cache,
                 ctx.user_context,
                 ctx.image_files,
+                processed_files=ctx.processed_files,
                 working_dir=ctx.working_dir,
                 sandbox_handle=ctx.sandbox_handle,
                 sandbox_provider=ctx.sandbox_provider,
@@ -1557,6 +1558,7 @@ class AgentExecutionService:
         sandbox_handle: Any = None,
         sandbox_provider: Any = None,
         sandbox_session_key: Optional[str] = None,
+        processed_files: List[Dict] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
@@ -1582,6 +1584,7 @@ class AgentExecutionService:
                 sandbox_handle=sandbox_handle,
                 sandbox_provider=sandbox_provider,
                 sandbox_session_key=sandbox_session_key,
+                attached_files=processed_files,
             )
 
             # Prepare configuration

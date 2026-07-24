@@ -144,6 +144,7 @@ class AgentStreamingService:
                     sandbox_handle=ctx.sandbox_handle,
                     sandbox_provider=ctx.sandbox_provider,
                     sandbox_session_key=ctx.sandbox_session_key,
+                    attached_files=ctx.processed_files,
                 )
                 agent_chain, mcp_client = create_agent_result[:2]
 

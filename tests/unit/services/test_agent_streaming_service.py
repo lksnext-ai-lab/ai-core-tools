@@ -36,6 +36,7 @@ async def test_streaming_agent_passes_sandbox_session_key_to_tool_builder():
         sandbox_session_key="conv_1_297",
         enhanced_message="hello",
         image_files=[],
+        processed_files=[],
     )
 
     execution_service = MagicMock()
@@ -102,6 +103,7 @@ async def test_streaming_resets_stale_tool_call_checkpoint_and_retries():
         sandbox_session_key="conv_1_297",
         enhanced_message="hello",
         image_files=[],
+        processed_files=[],
     )
 
     execution_service = MagicMock()
@@ -178,6 +180,7 @@ async def test_streaming_fails_cleanly_when_no_checkpoint_to_roll_back_to():
         sandbox_session_key="conv_1_297",
         enhanced_message="hello",
         image_files=[],
+        processed_files=[],
     )
 
     execution_service = MagicMock()
