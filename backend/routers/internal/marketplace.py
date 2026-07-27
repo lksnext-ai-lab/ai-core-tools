@@ -295,7 +295,6 @@ async def get_marketplace_conversation(
         )
         return ConversationWithHistoryResponse(
             **conversation.to_dict(),
-            app_id=conversation.agent.app_id,
             messages=history or [],
         )
     except Exception as e:
