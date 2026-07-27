@@ -6042,10 +6042,10 @@ files = [
 ]
 
 [package.dependencies]
-botocore = ">=1.37.4,<2.0a.0"
+botocore = ">=1.37.4,<2.0a0"
 
 [package.extras]
-crt = ["botocore[crt] (>=1.37.4,<2.0a.0)"]
+crt = ["botocore[crt] (>=1.37.4,<2.0a0)"]
 
 [[package]]
 name = "scalar-fastapi"
@@ -7391,4 +7391,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "30b05289732e79c242d842e14672512967124c8b0928c29ccbbac6a2b538a25b"
+content-hash = "e548a5d5fbd238ff91c02ab754e5a6f806157f0b1cab950e6ac3b29221bc82c7"

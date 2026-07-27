@@ -1,7 +1,7 @@
 """conversation_messages
 
 Revision ID: 64b3803d5888
-Revises: d3adbeef1234
+Revises: 20260717_conversation_starters
 Create Date: 2026-06-15 19:07:41.554676
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "64b3803d5888"
-down_revision = "d3adbeef1234"
+down_revision = "20260717_conversation_starters"
 branch_labels = None
 depends_on = None
 
