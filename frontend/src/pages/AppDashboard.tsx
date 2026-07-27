@@ -39,7 +39,7 @@ interface App {
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
-  onboarding_dismissed: boolean;
+  onboarding_dismissed?: boolean;
 }
 
 interface UsageStats {

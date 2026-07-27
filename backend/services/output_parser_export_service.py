@@ -79,6 +79,7 @@ class OutputParserExportService(BaseExportService):
                         name=field_data.get("name", ""),
                         type=field_data.get("type", "str"),
                         description=field_data.get("description", ""),
+                        optional=bool(field_data.get("optional", False)),
                         parser_name=parser_name,
                         list_item_type=field_data.get("list_item_type"),
                         list_item_parser_name=list_item_parser_name,

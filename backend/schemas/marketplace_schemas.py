@@ -19,6 +19,15 @@ MARKETPLACE_CATEGORIES = [
 
 # ==================== PROFILE SCHEMAS ====================
 
+class ConversationStarterSchema(BaseModel):
+    """Schema for a conversation starter."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    prompt: str
+    order: int
+
+
 class MarketplaceProfileSchema(BaseModel):
     """Response schema for marketplace profile data (visible to EDITOR+)."""
     model_config = ConfigDict(from_attributes=True)
@@ -34,6 +43,7 @@ class MarketplaceProfileSchema(BaseModel):
     cover_image_url: Optional[str] = None
     published_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    conversation_starters: List[ConversationStarterSchema] = []
 
 
 class MarketplaceProfileCreateUpdateSchema(BaseModel):
@@ -45,6 +55,7 @@ class MarketplaceProfileCreateUpdateSchema(BaseModel):
     tags: Optional[List[str]] = Field(None)
     icon_url: Optional[str] = Field(None, max_length=500)
     cover_image_url: Optional[str] = Field(None, max_length=500)
+    conversation_starters: Optional[List[str]] = Field(None)
 
     @field_validator('tags')
     @classmethod

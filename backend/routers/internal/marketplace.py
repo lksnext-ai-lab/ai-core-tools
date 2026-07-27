@@ -31,8 +31,9 @@ from schemas.marketplace_schemas import (
     AgentRatingInputSchema,
     AgentRatingResponseSchema,
     UserRatingResponseSchema,
+    ConversationStarterSchema,
 )
-from schemas.conversation_schemas import ConversationResponse, ConversationWithHistoryResponse
+from schemas.conversation_schemas import ConversationWithHistoryResponse, MarketplaceConversationResponse
 from schemas.chat_schemas import ChatResponseSchema
 from utils.logger import get_logger
 
@@ -152,6 +153,19 @@ async def marketplace_agent_detail(
     return detail
 
 
+@marketplace_router.get(
+    "/agents/{agent_id}/conversation-starters",
+    summary="Get agent conversation starters",
+    response_model=List[ConversationStarterSchema],
+)
+async def get_agent_conversation_starters(
+    agent_id: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Retrieve the conversation starters for a published marketplace agent."""
+    starters = MarketplaceService.get_agent_conversation_starters(db, agent_id)
+    return starters
+
 # ==================== RATINGS ====================
 
 
@@ -200,7 +214,7 @@ async def get_my_rating(
 @marketplace_router.post(
     "/agents/{agent_id}/conversations",
     summary="Start marketplace conversation",
-    response_model=ConversationResponse,
+    response_model=MarketplaceConversationResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def start_marketplace_conversation(
@@ -281,6 +295,7 @@ async def get_marketplace_conversation(
         )
         return ConversationWithHistoryResponse(
             **conversation.to_dict(),
+            app_id=conversation.agent.app_id,
             messages=history or [],
         )
     except Exception as e:

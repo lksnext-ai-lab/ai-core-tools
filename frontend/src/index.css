@@ -145,6 +145,16 @@
   @apply bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500;
 }
 
+.pg-input-container {
+  transition: all 0.2s ease;
+}
+
+.pg-input-container:focus-within {
+  background: rgba(255,255,255,0.9);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
 /* Login card — animated shimmer border */
 .card-login-shimmer {
   position: relative;

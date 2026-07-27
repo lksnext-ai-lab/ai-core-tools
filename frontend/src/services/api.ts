@@ -32,8 +32,433 @@ import type {
   DomainUrlListResponse,
   DomainUrlActionResponse,
 } from '../types/crawl';
+import type {
+  MCPConfig,
+  Skill,
+  MCPServer,
+  MCPServerListItem,
+  ToolAgent,
+  AgentMCPUsage,
+  AppSlugInfo,
+} from '../core/types';
+import type {
+  ImportResponse,
+  FullAppImportResponse,
+  AgentImportPreview,
+  AppImportPreview,
+} from '../types/import';
 
 type ConflictMode = 'fail' | 'rename' | 'override';
+
+/** Rate-limit usage snapshot for a single app (also the per-item shape returned by getUsageStats()). */
+export interface UsageStats {
+  usage_percentage: number;
+  stress_level: 'low' | 'moderate' | 'high' | 'critical' | 'unlimited';
+  current_usage: number;
+  limit: number;
+  remaining: number;
+  reset_in_seconds: number;
+  is_over_limit: boolean;
+}
+
+export interface AppUsageStat extends UsageStats {
+  app_id: number;
+}
+
+export interface App {
+  app_id: number;
+  name: string;
+  created_at: string;
+  owner_id: number;
+  owner_name?: string;
+  owner_email?: string;
+  role: string;
+  /** Only present on the single-app detail response (GET /internal/apps/{id}); list responses use `role` instead. */
+  user_role?: string;
+  langsmith_configured: boolean;
+  langsmith_api_key?: string;
+  agent_rate_limit: number;
+  max_file_size_mb?: number;
+  agent_cors_origins?: string;
+  enable_openai_api?: boolean;
+  agent_count: number;
+  repository_count: number;
+  domain_count: number;
+  silo_count: number;
+  collaborator_count: number;
+  onboarding_dismissed?: boolean;
+  usage_stats?: UsageStats;
+}
+
+/** RAG retrieval-time filter applied on top of an agent's fixed silo. Mirrors RagConfigSection's RagFixedFilter shape. */
+export interface AgentRagFixedFilter {
+  field: string;
+  op: '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte' | '$in';
+  value: unknown;
+  _key?: string;
+}
+
+export interface Agent {
+  agent_id: number;
+  name: string;
+  description?: string;
+  system_prompt: string;
+  prompt_template: string;
+  type: string;
+  is_tool: boolean;
+  has_memory: boolean;
+  enable_code_interpreter: boolean;
+  status?: string;
+  server_tools?: string[];
+  memory_max_messages: number;
+  memory_max_tokens: number;
+  memory_summarize_threshold: number;
+  service_id?: number;
+  silo_id?: number;
+  output_parser_id?: number;
+  temperature: number;
+  tool_ids?: number[];
+  mcp_config_ids?: number[];
+  skill_ids?: number[];
+  created_at: string;
+  request_count: number;
+  marketplace_visibility?: MarketplaceVisibility;
+  // OCR-specific fields
+  vision_service_id?: number;
+  vision_system_prompt?: string;
+  text_system_prompt?: string;
+  // RAG retrieval config
+  rag_k?: number;
+  rag_search_type?: 'similarity' | 'mmr' | 'similarity_score_threshold';
+  rag_score_threshold?: number | null;
+  rag_max_retrieval_calls?: number | null;
+  rag_fixed_filters?: AgentRagFixedFilter[];
+  ai_service?: { name: string; model_name: string; provider: string };
+  ai_services: Array<{ service_id: number; name: string }>;
+  silo?: {
+    silo_id: number;
+    name: string;
+    vector_db_type?: string;
+    metadata_definition?: { fields: Array<{ name: string; type: string; description?: string }> };
+  };
+  silos: Array<{ silo_id: number; name: string }>;
+  output_parser?: {
+    parser_id: number;
+    name: string;
+    description?: string;
+    fields: Array<{ name: string; type: string; description: string; optional?: boolean }>;
+  };
+  output_parsers: Array<{ parser_id: number; name: string }>;
+  tools: Array<{ agent_id: number; name: string }>;
+  mcp_configs: Array<{ config_id: number; name: string }>;
+  skills: Array<{ skill_id: number; name: string; description?: string }>;
+}
+
+export interface AIService {
+  service_id: number;
+  name: string;
+  provider: string;
+  model_name: string;
+  created_at: string;
+  needs_api_key?: boolean;
+  supports_video?: boolean;
+  is_system?: boolean;
+}
+
+export interface EmbeddingService {
+  service_id: number;
+  name: string;
+  provider: string;
+  model_name: string;
+  created_at: string;
+  needs_api_key?: boolean;
+  is_system?: boolean;
+}
+
+export interface VectorDbOption {
+  code: string;
+  label: string;
+}
+
+export interface Silo {
+  silo_id: number;
+  name: string;
+  description?: string;
+  type?: string;
+  created_at?: string;
+  docs_count: number;
+  vector_db_type?: string;
+  metadata_definition_id?: number;
+  embedding_service_id?: number;
+  metadata_fields?: Array<{ name: string; type: string; description?: string }>;
+  output_parsers?: Array<{ parser_id: number; name: string }>;
+  embedding_services?: Array<{ service_id: number; name: string; provider?: string; is_system?: boolean }>;
+  vector_db_options?: VectorDbOption[];
+}
+
+/** A single vector-search hit. Mirrors ResultCard's SearchResult shape. */
+export interface SearchResult {
+  page_content: string;
+  metadata: Record<string, unknown>;
+  score?: number;
+  id?: string;
+}
+
+export interface Folder {
+  folder_id: number;
+  name: string;
+  parent_folder_id?: number;
+  create_date?: string;
+  status?: string;
+  repository_id: number;
+  subfolders: Folder[];
+  resource_count: number;
+  folder_path: string;
+}
+
+export interface RepositoryListItem {
+  repository_id: number;
+  name: string;
+  created_at: string;
+  resource_count: number;
+}
+
+export interface Media {
+  media_id: number;
+  name: string;
+  source_type: string;
+  source_url: string | null;
+  duration: number | null;
+  language: string | null;
+  status: string;
+  processing_mode: string | null;
+  error_message: string | null;
+  create_date: string;
+  folder_id: number | null;
+}
+
+export interface Repository {
+  repository_id: number;
+  name: string;
+  created_at: string;
+  silo_id?: number;
+  resources: Array<{
+    resource_id: number;
+    name: string;
+    uri: string;
+    file_type: string;
+    created_at: string;
+    folder_id?: number;
+    folder_path?: string;
+  }>;
+  folders: Array<{ folder_id: number; name: string; parent_folder_id?: number }>;
+  embedding_services: Array<{ service_id: number; name: string; provider?: string; model_name?: string; is_system?: boolean }>;
+  ai_services: Array<{ service_id: number; name: string; supports_video?: boolean }>;
+  media: Media[];
+  embedding_service_id?: number;
+  vector_db_type?: string;
+  vector_db_options?: VectorDbOption[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  metadata_fields?: Array<{ name: string; type: string; description?: string }>;
+}
+
+export interface UploadResult {
+  failed_files?: Array<{ filename: string; error: string }>;
+  created_resources?: unknown[];
+}
+
+export interface DomainListItem {
+  domain_id: number;
+  name: string;
+  description: string;
+  base_url: string;
+  created_at: string;
+  url_count: number;
+  silo_id?: number;
+}
+
+export interface Domain {
+  domain_id: number;
+  name: string;
+  description: string;
+  base_url: string;
+  content_tag: string;
+  content_class: string;
+  content_id: string;
+  created_at: string;
+  url_count: number;
+  silo_id?: number;
+  embedding_service_id?: number;
+  vector_db_type?: string;
+  embedding_services: Array<{ service_id: number; name: string; is_system?: boolean }>;
+  vector_db_options?: VectorDbOption[];
+}
+
+export interface APIKey {
+  key_id: number;
+  name: string;
+  key_preview: string;
+  created_at: string;
+  last_used_at: string | null;
+  is_active: boolean;
+}
+
+export interface DataStructureField {
+  name: string;
+  type: string;
+  description: string;
+  parser_id?: number;
+  list_item_type?: string;
+  list_item_parser_id?: number;
+}
+
+export interface DataStructure {
+  parser_id: number;
+  name: string;
+  description: string;
+  field_count?: number;
+  fields?: DataStructureField[];
+  created_at: string;
+  available_parsers?: Array<{ value: number; name: string }>;
+}
+
+export interface Collaborator {
+  id: number;
+  user_id: number;
+  user_email: string;
+  user_name?: string;
+  role: string;
+  status: string;
+  invited_at: string;
+  accepted_at?: string;
+  invited_by_name?: string;
+  platform_role?: string;
+}
+
+export interface PendingInvitation {
+  id: number;
+  app_id: number;
+  app_name: string;
+  inviter_email: string;
+  inviter_name?: string;
+  role: string;
+  invited_at: string;
+}
+
+export interface Conversation {
+  conversation_id: number;
+  agent_id: number;
+  user_id?: number;
+  title: string;
+  session_id: string;
+  created_at: string;
+  updated_at: string;
+  last_message?: string;
+  message_count: number;
+}
+
+export interface AttachedFile {
+  file_id: string;
+  filename: string;
+  file_type?: string;
+  processing_status?: string;
+  file_size_display?: string;
+  has_extractable_content?: boolean;
+  content_preview?: string;
+}
+
+export interface TestConnectionResult {
+  status: 'success' | 'error';
+  message: string;
+  response?: string;
+  tools?: Array<{ name: string; description: string }>;
+}
+
+export interface SystemSetting {
+  key: string;
+  value: string | null;
+  type: string;
+  category: string;
+  description: string | null;
+  updated_at: string | null;
+  resolved_value: unknown;
+  source: 'env' | 'db' | 'default';
+}
+
+export interface SubscriptionData {
+  tier: string;
+  billing_status: string;
+  trial_end: string | null;
+  call_count: number;
+  call_limit: number;
+  pct_used: number;
+  max_apps: number;
+  agents_per_app: number;
+  silos_per_app: number;
+  skills_per_app: number;
+  mcp_servers_per_app: number;
+  collaborators_per_app: number;
+  admin_override_tier: string | null;
+}
+
+export interface UsageData {
+  call_count: number;
+  call_limit: number;
+  period_start: string | null;
+  pct_used: number;
+}
+
+export interface SaasUser {
+  user_id: number;
+  email: string;
+  name: string | null;
+  is_active: boolean;
+  tier: string | null;
+  billing_status: string | null;
+  call_count: number;
+  call_limit: number;
+  owned_apps_count: number;
+}
+
+export interface TierConfigEntry {
+  id: number;
+  tier: string;
+  resource_type: string;
+  limit_value: number;
+}
+
+export interface SystemAIService {
+  service_id: number;
+  name: string;
+  provider: string;
+  model_name: string;
+  api_key: string;
+  base_url: string;
+  is_system: boolean;
+  supports_video: boolean;
+  created_at: string;
+  available_providers: Array<{ value: string; name: string }>;
+}
+
+export interface SystemEmbeddingService {
+  service_id: number;
+  name: string;
+  provider: string;
+  model_name: string;
+  api_key: string;
+  base_url: string;
+  is_system: boolean;
+  created_at?: string;
+}
+
+export interface SystemEmbeddingServiceImpact {
+  service_id: number;
+  service_name: string;
+  affected_silos_count: number;
+  affected_apps_count: number;
+  affected_silos: Array<{ silo_id: number; silo_name: string; app_id: number; app_name: string }>;
+}
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -138,12 +563,12 @@ class ApiService {
     throw new ApiError(message, response.status);
   }
 
-  async request(
+  async request<T = unknown>(
     endpoint: string,
     options: RequestInit = {},
     _isRetryAfterRefresh = false,
     _requestOptions: { suppressAuthRedirect?: boolean } = {},
-  ): Promise<unknown> {
+  ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     const authHeaders = this.buildAuthHeaders(
       typeof options.method === 'string' ? options.method : 'GET',
@@ -188,26 +613,30 @@ class ApiService {
       await this.handleResponseError(response);
     }
 
-    if (response.status === 204) return null;
+    if (response.status === 204) return null as T;
     return response.json();
   }
 
-  async getApps() {
+  async getAgentConversationStarters(agentId: number): Promise<MarketplaceProfile['conversation_starters']> {
+    return this.request(`/internal/marketplace/agents/${agentId}/conversation-starters`);
+  }
+
+  async getApps(): Promise<App[]> {
     return this.request('/internal/apps/');
   }
 
-  async getApp(appId: number) {
+  async getApp(appId: number): Promise<App> {
     return this.request(`/internal/apps/${appId}`);
   }
 
-  async createApp(data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string }) {
+  async createApp(data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string }): Promise<App> {
     return this.request('/internal/apps/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean }) {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean }): Promise<App> {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -227,76 +656,76 @@ class ApiService {
     });
   }
 
-  async dismissOnboarding(appId: number) {
+  async dismissOnboarding(appId: number): Promise<App> {
     return this.request(`/internal/apps/${appId}/onboarding-dismissed`, {
       method: 'PATCH',
     });
   }
 
-  async deleteApp(appId: number) {
+  async deleteApp(appId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}`, {
       method: 'DELETE',
     });
   }
 
-  async leaveApp(appId: number) {
+  async leaveApp(appId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/leave`, {
       method: 'POST',
     });
   }
 
-  async getUsageStats() {
+  async getUsageStats(): Promise<AppUsageStat[]> {
     return this.request('/internal/usage-stats/');
   }
 
-  async getAppUsageStats(appId: number) {
+  async getAppUsageStats(appId: number): Promise<UsageStats> {
     return this.request(`/internal/usage-stats/${appId}`);
   }
 
-  async getPendingInvitations() {
+  async getPendingInvitations(): Promise<PendingInvitation[]> {
     return this.request('/internal/auth/pending-invitations');
   }
 
-  async respondToInvitation(invitationId: number, action: 'accept' | 'decline') {
+  async respondToInvitation(invitationId: number, action: 'accept' | 'decline'): Promise<void> {
     return this.request(`/internal/auth/invitations/${invitationId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ action }),
     });
   }
 
-  async register(email: string, password: string) {
+  async register(email: string, password: string): Promise<{ user_id: number; email: string }> {
     return this.request('/internal/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
   }
 
-  async getAgents(appId: number) {
+  async getAgents(appId: number): Promise<Agent[]> {
     return this.request(`/internal/apps/${appId}/agents/`);
   }
 
-  async getAgent(appId: number, agentId: number) {
+  async getAgent(appId: number, agentId: number): Promise<Agent> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`);
   }
 
-  async createAgent(appId: number, agentId: number, data: any) {
+  async createAgent(appId: number, agentId: number, data: any): Promise<Agent> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateAgent(appId: number, agentId: number, data: any) {
+  async updateAgent(appId: number, agentId: number, data: any): Promise<Agent> {
     return this.createAgent(appId, agentId, data);
   }
 
-  async deleteAgent(appId: number, agentId: number) {
+  async deleteAgent(appId: number, agentId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}`, {
       method: 'DELETE',
     });
   }
 
-  async getAgentMCPUsage(appId: number, agentId: number) {
+  async getAgentMCPUsage(appId: number, agentId: number): Promise<AgentMCPUsage> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
   }
 
@@ -327,7 +756,7 @@ class ApiService {
     return this.request(`/internal/marketplace/conversations/${conversationId}/chat-filters`);
   }
 
-  async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string) {
+  async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string): Promise<Agent> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
       method: 'POST',
       body: JSON.stringify({
@@ -337,13 +766,13 @@ class ApiService {
     });
   }
 
-  async resetAgentConversation(appId: number, agentId: number) {
+  async resetAgentConversation(appId: number, agentId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
       method: 'POST',
     });
   }
 
-  async getConversationHistory(appId: number, agentId: number) {
+  async getConversationHistory(appId: number, agentId: number): Promise<{ messages: Array<{ role: string; content: string }> }> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/conversation-history`, {
       method: 'GET',
     });
@@ -392,7 +821,7 @@ class ApiService {
     selectedAIServiceId?: number,
     selectedSiloId?: number,
     selectedOutputParserId?: number
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -426,47 +855,47 @@ class ApiService {
     return response.json();
   }
 
-  async getAIServices(appId: number) {
+  async getAIServices(appId: number): Promise<AIService[]> {
     return this.request(`/internal/apps/${appId}/ai-services/`);
   }
 
-  async getAIService(appId: number, serviceId: number) {
+  async getAIService(appId: number, serviceId: number): Promise<AIService> {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`);
   }
 
-  async createAIService(appId: number, data: any) {
+  async createAIService(appId: number, data: any): Promise<AIService> {
     return this.request(`/internal/apps/${appId}/ai-services/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateAIService(appId: number, serviceId: number, data: any) {
+  async updateAIService(appId: number, serviceId: number, data: any): Promise<AIService> {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async copyAIService(appId: number, serviceId: number) {
+  async copyAIService(appId: number, serviceId: number): Promise<AIService> {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}/copy`, {
       method: 'POST',
     });
   }
   
-  async deleteAIService(appId: number, serviceId: number) {
+  async deleteAIService(appId: number, serviceId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
       method: 'DELETE',
     });
   }
 
-  async testAIServiceConnection(appId: number, serviceId: number) {
+  async testAIServiceConnection(appId: number, serviceId: number): Promise<TestConnectionResult> {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}/test`, {
       method: 'POST',
     });
   }
 
-  async testAIServiceConnectionWithConfig(appId: number, data: any, serviceId?: number) {
+  async testAIServiceConnectionWithConfig(appId: number, data: any, serviceId?: number): Promise<TestConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/apps/${appId}/ai-services/test-connection${qs}`, {
       method: 'POST',
@@ -508,7 +937,7 @@ class ApiService {
     file: File,
     conflictMode: ConflictMode,
     newName?: string
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -533,29 +962,29 @@ class ApiService {
     return response.json();
   }
 
-  async getEmbeddingServices(appId: number) {
+  async getEmbeddingServices(appId: number): Promise<EmbeddingService[]> {
     return this.request(`/internal/apps/${appId}/embedding-services/`);
   }
 
-  async getEmbeddingService(appId: number, serviceId: number) {
+  async getEmbeddingService(appId: number, serviceId: number): Promise<EmbeddingService> {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`);
   }
 
-  async createEmbeddingService(appId: number, data: any) {
+  async createEmbeddingService(appId: number, data: any): Promise<EmbeddingService> {
     return this.request(`/internal/apps/${appId}/embedding-services/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateEmbeddingService(appId: number, serviceId: number, data: any) {
+  async updateEmbeddingService(appId: number, serviceId: number, data: any): Promise<EmbeddingService> {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteEmbeddingService(appId: number, serviceId: number) {
+  async deleteEmbeddingService(appId: number, serviceId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/embedding-services/${serviceId}`, {
       method: 'DELETE',
     });
@@ -571,7 +1000,7 @@ class ApiService {
     });
   }
 
-  async testEmbeddingServiceConnectionWithConfig(appId: number, data: any, serviceId?: number) {
+  async testEmbeddingServiceConnectionWithConfig(appId: number, data: any, serviceId?: number): Promise<TestConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/apps/${appId}/embedding-services/test-connection${qs}`, {
       method: 'POST',
@@ -603,7 +1032,7 @@ class ApiService {
     file: File,
     conflictMode: ConflictMode,
     newName?: string
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -628,41 +1057,41 @@ class ApiService {
     return response.json();
   }
 
-  async getMCPConfigs(appId: number) {
+  async getMCPConfigs(appId: number): Promise<MCPConfig[]> {
     return this.request(`/internal/apps/${appId}/mcp-configs/`);
   }
 
-  async getMCPConfig(appId: number, configId: number) {
+  async getMCPConfig(appId: number, configId: number): Promise<MCPConfig> {
     return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`);
   }
 
-  async createMCPConfig(appId: number, data: any) {
+  async createMCPConfig(appId: number, data: any): Promise<MCPConfig> {
     return this.request(`/internal/apps/${appId}/mcp-configs/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateMCPConfig(appId: number, configId: number, data: any) {
+  async updateMCPConfig(appId: number, configId: number, data: any): Promise<MCPConfig> {
     return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteMCPConfig(appId: number, configId: number) {
+  async deleteMCPConfig(appId: number, configId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/mcp-configs/${configId}`, {
       method: 'DELETE',
     });
   }
 
-  async testMCPConnection(appId: number, configId: number) {
+  async testMCPConnection(appId: number, configId: number): Promise<TestConnectionResult> {
     return this.request(`/internal/apps/${appId}/mcp-configs/${configId}/test`, {
       method: 'POST',
     });
   }
 
-  async testMCPConnectionWithConfig(appId: number, data: any) {
+  async testMCPConnectionWithConfig(appId: number, data: any): Promise<TestConnectionResult> {
     return this.request(`/internal/apps/${appId}/mcp-configs/test-connection`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -693,7 +1122,7 @@ class ApiService {
     file: File,
     conflictMode: ConflictMode,
     newName?: string
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -717,134 +1146,134 @@ class ApiService {
 
     return response.json();
   }
-  async getSkills(appId: number) {
+  async getSkills(appId: number): Promise<Skill[]> {
     return this.request(`/internal/apps/${appId}/skills/`);
   }
 
-  async getSkill(appId: number, skillId: number) {
+  async getSkill(appId: number, skillId: number): Promise<Skill> {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`);
   }
 
-  async createSkill(appId: number, data: any) {
+  async createSkill(appId: number, data: any): Promise<Skill> {
     return this.request(`/internal/apps/${appId}/skills/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSkill(appId: number, skillId: number, data: any) {
+  async updateSkill(appId: number, skillId: number, data: any): Promise<Skill> {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteSkill(appId: number, skillId: number) {
+  async deleteSkill(appId: number, skillId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
       method: 'DELETE',
     });
   }
 
-  async getMCPServers(appId: number) {
+  async getMCPServers(appId: number): Promise<MCPServerListItem[]> {
     return this.request(`/internal/apps/${appId}/mcp-servers/`);
   }
 
-  async getMCPServer(appId: number, serverId: number) {
+  async getMCPServer(appId: number, serverId: number): Promise<MCPServer> {
     return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`);
   }
 
-  async createMCPServer(appId: number, data: any) {
+  async createMCPServer(appId: number, data: any): Promise<MCPServer> {
     return this.request(`/internal/apps/${appId}/mcp-servers/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateMCPServer(appId: number, serverId: number, data: any) {
+  async updateMCPServer(appId: number, serverId: number, data: any): Promise<MCPServer> {
     return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteMCPServer(appId: number, serverId: number) {
+  async deleteMCPServer(appId: number, serverId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/mcp-servers/${serverId}`, {
       method: 'DELETE',
     });
   }
 
-  async getMCPServerToolAgents(appId: number) {
+  async getMCPServerToolAgents(appId: number): Promise<ToolAgent[]> {
     return this.request(`/internal/apps/${appId}/mcp-servers/tool-agents`);
   }
 
-  async getAppSlugInfo(appId: number) {
+  async getAppSlugInfo(appId: number): Promise<AppSlugInfo> {
     return this.request(`/internal/apps/${appId}/mcp-servers/slug/info`);
   }
 
-  async updateAppSlug(appId: number, slug: string) {
+  async updateAppSlug(appId: number, slug: string): Promise<AppSlugInfo> {
     return this.request(`/internal/apps/${appId}/mcp-servers/slug`, {
       method: 'PUT',
       body: JSON.stringify({ slug }),
     });
   }
 
-  async getAPIKeys(appId: number) {
+  async getAPIKeys(appId: number): Promise<APIKey[]> {
     return this.request(`/internal/apps/${appId}/api-keys/`);
   }
 
-  async getAPIKey(appId: number, keyId: number) {
+  async getAPIKey(appId: number, keyId: number): Promise<APIKey> {
     return this.request(`/internal/apps/${appId}/api-keys/${keyId}`);
   }
 
-  async createAPIKey(appId: number, data: any) {
+  async createAPIKey(appId: number, data: any): Promise<APIKey & { key_value: string; message?: string }> {
     return this.request(`/internal/apps/${appId}/api-keys/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateAPIKey(appId: number, keyId: number, data: any) {
+  async updateAPIKey(appId: number, keyId: number, data: any): Promise<APIKey> {
     return this.request(`/internal/apps/${appId}/api-keys/${keyId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteAPIKey(appId: number, keyId: number) {
+  async deleteAPIKey(appId: number, keyId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/api-keys/${keyId}`, {
       method: 'DELETE',
     });
   }
 
-  async toggleAPIKey(appId: number, keyId: number) {
+  async toggleAPIKey(appId: number, keyId: number): Promise<APIKey> {
     return this.request(`/internal/apps/${appId}/api-keys/${keyId}/toggle`, {
       method: 'POST',
     });
   }
 
-  async getOutputParsers(appId: number) {
+  async getOutputParsers(appId: number): Promise<(DataStructure & { field_count: number })[]> {
     return this.request(`/internal/apps/${appId}/output-parsers/`);
   }
 
-  async getOutputParser(appId: number, parserId: number) {
+  async getOutputParser(appId: number, parserId: number): Promise<DataStructure> {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`);
   }
 
-  async createOutputParser(appId: number, data: any) {
+  async createOutputParser(appId: number, data: any): Promise<DataStructure> {
     return this.request(`/internal/apps/${appId}/output-parsers/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateOutputParser(appId: number, parserId: number, data: any) {
+  async updateOutputParser(appId: number, parserId: number, data: any): Promise<DataStructure> {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteOutputParser(appId: number, parserId: number) {
+  async deleteOutputParser(appId: number, parserId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
       method: 'DELETE',
     });
@@ -874,7 +1303,7 @@ class ApiService {
     file: File,
     conflictMode: ConflictMode,
     newName?: string
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -907,11 +1336,11 @@ class ApiService {
     return this.request(`/internal/users/omniadmins`);
   }
 
-  async getCollaborators(appId: number) {
+  async getCollaborators(appId: number): Promise<Collaborator[]> {
     return this.request(`/internal/collaboration/?app_id=${appId}`);
   }
 
-  async inviteCollaborator(appId: number, email: string, role: string = 'editor') {
+  async inviteCollaborator(appId: number, email: string, role: string = 'editor'): Promise<Collaborator> {
     return this.request(`/internal/collaboration/invite?app_id=${appId}`, {
       method: 'POST',
       body: JSON.stringify({
@@ -921,7 +1350,7 @@ class ApiService {
     });
   }
 
-  async updateCollaboratorRole(appId: number, userId: number, role: string) {
+  async updateCollaboratorRole(appId: number, userId: number, role: string): Promise<Collaborator> {
     return this.request(`/internal/collaboration/${userId}/role?app_id=${appId}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -930,17 +1359,17 @@ class ApiService {
     });
   }
 
-  async removeCollaborator(appId: number, userId: number) {
+  async removeCollaborator(appId: number, userId: number): Promise<void> {
     return this.request(`/internal/collaboration/${userId}?app_id=${appId}`, {
       method: 'DELETE',
     });
   }
 
-  async getMyInvitations() {
+  async getMyInvitations(): Promise<PendingInvitation[]> {
     return this.request(`/internal/collaboration/my-invitations`);
   }
 
-  async respondToCollaborationInvitation(collaborationId: number, action: 'accept' | 'decline') {
+  async respondToCollaborationInvitation(collaborationId: number, action: 'accept' | 'decline'): Promise<void> {
     return this.request(`/internal/collaboration/invitations/${collaborationId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ action }),
@@ -952,7 +1381,7 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }) {
+  }): Promise<UploadResult> {
     const formData = new FormData();
 
     files.forEach(file => formData.append('files', file));
@@ -977,7 +1406,7 @@ class ApiService {
     chunk_min_duration?: number;
     chunk_max_duration?: number;
     chunk_overlap?: number;
-  }) {
+  }): Promise<Media> {
     const formData = new FormData();
 
     formData.append('url', url);
@@ -995,16 +1424,16 @@ class ApiService {
     });
   }
 
-  async getMediaStatus(appId: number, repositoryId: number, mediaId: number) {
+  async getMediaStatus(appId: number, repositoryId: number, mediaId: number): Promise<Media> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}`);
   }
 
-  async listMedia(appId: number, repositoryId: number, folderId?: number) {
+  async listMedia(appId: number, repositoryId: number, folderId?: number): Promise<Media[]> {
     const params = folderId === undefined ? '' : `?folder_id=${folderId}`;
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media${params}`);
   }
 
-  async moveMedia(appId: number, repositoryId: number, mediaId: number, newFolderId?: number) {
+  async moveMedia(appId: number, repositoryId: number, mediaId: number, newFolderId?: number): Promise<Media> {
     const formData = new FormData();
     if (newFolderId !== undefined) {
       formData.append('new_folder_id', newFolderId.toString());
@@ -1016,39 +1445,39 @@ class ApiService {
     });
   }
 
-  async deleteMedia(appId: number, repositoryId: number, mediaId: number) {
+  async deleteMedia(appId: number, repositoryId: number, mediaId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}`, {
       method: 'DELETE',
     })
   }
 
-  async getSilos(appId: number) {
+  async getSilos(appId: number): Promise<Silo[]> {
     return this.request(`/internal/apps/${appId}/silos/`);
   }
 
-  async getSilo(appId: number, siloId: number) {
+  async getSilo(appId: number, siloId: number): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`);
   }
 
-  async getSiloOptions(appId: number) {
+  async getSiloOptions(appId: number): Promise<Pick<Silo, 'vector_db_options' | 'embedding_services' | 'output_parsers'>> {
     return this.request(`/internal/apps/${appId}/silos/0`);
   }
 
-  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean }) {
+  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean }): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string }) {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string }): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteSilo(appId: number, siloId: number) {
+  async deleteSilo(appId: number, siloId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'DELETE',
     });
@@ -1079,7 +1508,7 @@ class ApiService {
     conflictMode: ConflictMode,
     newName?: string,
     selectedEmbeddingServiceId?: number
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -1121,7 +1550,7 @@ class ApiService {
       minContentLength?: number;
       maxContentLength?: number;
     },
-  ) {
+  ): Promise<{ results: SearchResult[] }> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/search`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1152,7 +1581,7 @@ class ApiService {
       minContentLength?: number;
       maxContentLength?: number;
     },
-  ): Promise<{ data: unknown; serverMs: number | null }> {
+  ): Promise<{ data: { results: SearchResult[] }; serverMs: number | null }> {
     const url = `${this.baseURL}/internal/apps/${appId}/silos/${siloId}/search`;
     const body = JSON.stringify({
       query,
@@ -1176,7 +1605,7 @@ class ApiService {
     }
     const serverMsHeader = response.headers.get('x-server-time-ms');
     const serverMs = serverMsHeader !== null ? parseInt(serverMsHeader, 10) : null;
-    const data: unknown = await response.json();
+    const data: { results: SearchResult[] } = await response.json();
     return { data, serverMs };
   }
 
@@ -1185,7 +1614,7 @@ class ApiService {
     siloId: number | string,
     sourceType: string,
     sourceId: string,
-  ) {
+  ): Promise<{ chunks: SearchResult[] }> {
     return this.request(
       `/internal/apps/${appId}/silos/${siloId}/documents/neighbors?source_type=${encodeURIComponent(sourceType)}&source_id=${encodeURIComponent(sourceId)}`,
     );
@@ -1197,7 +1626,7 @@ class ApiService {
     field: string,
     prefix?: string,
     limit = 100,
-  ) {
+  ): Promise<{ values: string[] }> {
     const params = new URLSearchParams({ limit: String(limit) });
     if (prefix) params.set('prefix', prefix);
     return this.request(
@@ -1205,7 +1634,7 @@ class ApiService {
     );
   }
 
-  async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]) {
+  async deleteSiloDocuments(appId: number, siloId: number, documentIds: string[]): Promise<void> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/documents`, {
       method: 'DELETE',
       body: JSON.stringify({ document_ids: documentIds }),
@@ -1218,7 +1647,7 @@ class ApiService {
     filterMetadata?: Record<string, unknown> | null,
     minContentLength?: number | null,
     maxContentLength?: number | null,
-  ) {
+  ): Promise<{ count: number }> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}/documents/count`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1233,42 +1662,42 @@ class ApiService {
     appId: number | string,
     siloId: number | string,
     resourceId: number | string,
-  ) {
+  ): Promise<void> {
     return this.request(
       `/internal/apps/${appId}/silos/${siloId}/resources/${resourceId}/reindex`,
       { method: 'POST' },
     );
   }
 
-  async getRepositories(appId: number) {
+  async getRepositories(appId: number): Promise<RepositoryListItem[]> {
     return this.request(`/internal/apps/${appId}/repositories/`);
   }
 
-  async getRepository(appId: number, repositoryId: number) {
+  async getRepository(appId: number, repositoryId: number): Promise<Repository> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`);
   }
 
-  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }) {
+  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }): Promise<Repository> {
     return this.request(`/internal/apps/${appId}/repositories/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }) {
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }): Promise<Repository> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteRepository(appId: number, repositoryId: number) {
+  async deleteRepository(appId: number, repositoryId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
       method: 'DELETE',
     });
   }
 
-  async uploadResources(appId: number, repositoryId: number, files: File[], folderId?: number) {
+  async uploadResources(appId: number, repositoryId: number, files: File[], folderId?: number): Promise<UploadResult> {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
 
@@ -1282,13 +1711,13 @@ class ApiService {
     });
   }
 
-  async deleteResource(appId: number, repositoryId: number, resourceId: number) {
+  async deleteResource(appId: number, repositoryId: number, resourceId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}`, {
       method: 'DELETE',
     });
   }
 
-  async moveResource(appId: number, repositoryId: number, resourceId: number, newFolderId?: number) {
+  async moveResource(appId: number, repositoryId: number, resourceId: number, newFolderId?: number): Promise<void> {
     const formData = new FormData();
     if (newFolderId !== undefined) {
       formData.append('new_folder_id', newFolderId.toString());
@@ -1300,7 +1729,7 @@ class ApiService {
     });
   }
 
-  async downloadResource(appId: number, repositoryId: number, resourceId: number) {
+  async downloadResource(appId: number, repositoryId: number, resourceId: number): Promise<Blob> {
     const headers = this.buildAuthHeaders('GET', false);
 
     const response = await fetch(
@@ -1319,7 +1748,7 @@ class ApiService {
     return response.blob();
   }
 
-  async searchRepositoryDocuments(appId: number, repositoryId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>) {
+  async searchRepositoryDocuments(appId: number, repositoryId: number, query: string, limit: number = 10, filterMetadata?: Record<string, any>): Promise<{ results: SearchResult[] }> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/search`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1330,7 +1759,7 @@ class ApiService {
     });
   }
 
-  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null) {
+  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null): Promise<{ response: string | Record<string, unknown>; conversation_id?: number }> {
     const formData = new FormData();
     formData.append('message', message);
     
@@ -1433,7 +1862,7 @@ class ApiService {
     }
   }
 
-  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null) {
+  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null): Promise<{ file_id: string }> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -1447,14 +1876,14 @@ class ApiService {
     });
   }
 
-  async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null) {
+  async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null): Promise<{ files: AttachedFile[] }> {
     const url = conversationId
       ? `/internal/apps/${appId}/agents/${agentId}/files?conversation_id=${conversationId}`
       : `/internal/apps/${appId}/agents/${agentId}/files`;
     return this.request(url);
   }
 
-  async removeAttachedFile(appId: number, agentId: number, fileId: string, conversationId?: number | null) {
+  async removeAttachedFile(appId: number, agentId: number, fileId: string, conversationId?: number | null): Promise<void> {
     const url = conversationId
       ? `/internal/apps/${appId}/agents/${agentId}/files/${fileId}?conversation_id=${conversationId}`
       : `/internal/apps/${appId}/agents/${agentId}/files/${fileId}`;
@@ -1466,11 +1895,11 @@ class ApiService {
   async getFileDownloadUrl(appId: number, agentId: number, fileId: string, conversationId?: number | null): Promise<string> {
     const base = `/internal/apps/${appId}/agents/${agentId}/files/${fileId}/download`;
     const url = conversationId ? `${base}?conversation_id=${conversationId}` : base;
-    const response = await this.request(url, { method: 'GET' });
-    return response.download_url as string;
+    const response = await this.request<{ download_url: string }>(url, { method: 'GET' });
+    return response.download_url;
   }
 
-  async processOCR(appId: number, agentId: number, file: File) {
+  async processOCR(appId: number, agentId: number, file: File): Promise<{ extracted_text?: string; metadata?: unknown; result?: unknown }> {
     const formData = new FormData();
     formData.append('pdf_file', file);
 
@@ -1480,11 +1909,11 @@ class ApiService {
     });
   }
 
-  async getDomains(appId: number) {
+  async getDomains(appId: number): Promise<DomainListItem[]> {
     return this.request(`/internal/apps/${appId}/domains/`);
   }
 
-  async getDomain(appId: number, domainId: number) {
+  async getDomain(appId: number, domainId: number): Promise<Domain> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`);
   }
 
@@ -1500,7 +1929,7 @@ class ApiService {
       embedding_service_id?: number;
       vector_db_type?: string;
     }
-  ) {
+  ): Promise<Domain> {
     return this.request(`/internal/apps/${appId}/domains/`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -1518,14 +1947,14 @@ class ApiService {
       content_class?: string;
       content_id?: string;
     }
-  ) {
+  ): Promise<Domain> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteDomain(appId: number, domainId: number) {
+  async deleteDomain(appId: number, domainId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}`, {
       method: 'DELETE',
     });
@@ -1594,7 +2023,7 @@ class ApiService {
     });
   }
 
-  async getUrlContent(appId: number, domainId: number, urlId: number) {
+  async getUrlContent(appId: number, domainId: number, urlId: number): Promise<{ content: string }> {
     return this.request(`/internal/apps/${appId}/domains/${domainId}/urls/${urlId}/content`);
   }
 
@@ -1638,23 +2067,22 @@ class ApiService {
   }
 
   async getVersion(): Promise<{ name: string; version: string }> {
-    const response = await this.request('/internal/version/');
-    return response;
+    return this.request('/internal/version/');
   }
 
-  async getFolders(appId: number, repositoryId: number) {
+  async getFolders(appId: number, repositoryId: number): Promise<Folder[]> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/`);
   }
 
-  async getFolderTree(appId: number, repositoryId: number) {
+  async getFolderTree(appId: number, repositoryId: number): Promise<{ folders: Folder[] }> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/tree`);
   }
 
-  async getFolder(appId: number, repositoryId: number, folderId: number) {
+  async getFolder(appId: number, repositoryId: number, folderId: number): Promise<Folder> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`);
   }
 
-  async createFolder(appId: number, repositoryId: number, name: string, parentFolderId?: number) {
+  async createFolder(appId: number, repositoryId: number, name: string, parentFolderId?: number): Promise<Folder> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1664,20 +2092,20 @@ class ApiService {
     });
   }
 
-  async updateFolder(appId: number, repositoryId: number, folderId: number, name: string) {
+  async updateFolder(appId: number, repositoryId: number, folderId: number, name: string): Promise<Folder> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`, {
       method: 'PUT',
       body: JSON.stringify({ name }),
     });
   }
 
-  async deleteFolder(appId: number, repositoryId: number, folderId: number) {
+  async deleteFolder(appId: number, repositoryId: number, folderId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}`, {
       method: 'DELETE',
     });
   }
 
-  async moveFolder(appId: number, repositoryId: number, folderId: number, newParentFolderId?: number) {
+  async moveFolder(appId: number, repositoryId: number, folderId: number, newParentFolderId?: number): Promise<Folder> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/folders/${folderId}/move`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1686,37 +2114,37 @@ class ApiService {
     });
   }
 
-  async uploadResourcesToFolder(appId: number, repositoryId: number, folderId: number, files: File[]) {
+  async uploadResourcesToFolder(appId: number, repositoryId: number, folderId: number, files: File[]): Promise<UploadResult> {
     return this.uploadResources(appId, repositoryId, files, folderId);
   }
 
-  async createConversation(agentId: number, title?: string) {
+  async createConversation(agentId: number, title?: string): Promise<Conversation> {
     const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
     return this.request(`/internal/conversations?agent_id=${agentId}${titleParam}`, {
       method: 'POST',
     });
   }
 
-  async listConversations(agentId: number, limit = 50, offset = 0) {
+  async listConversations(agentId: number, limit = 50, offset = 0): Promise<{ conversations: Conversation[]; total: number }> {
     return this.request(`/internal/conversations?agent_id=${agentId}&limit=${limit}&offset=${offset}`);
   }
 
-  async getConversation(conversationId: number) {
+  async getConversation(conversationId: number): Promise<Conversation> {
     return this.request(`/internal/conversations/${conversationId}`);
   }
 
-  async getConversationWithHistory(conversationId: number) {
+  async getConversationWithHistory(conversationId: number): Promise<{ messages: Array<{ role: string; content: string }> }> {
     return this.request(`/internal/conversations/${conversationId}/history`);
   }
 
-  async updateConversation(conversationId: number, data: { title?: string }) {
+  async updateConversation(conversationId: number, data: { title?: string }): Promise<Conversation> {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteConversation(conversationId: number) {
+  async deleteConversation(conversationId: number): Promise<void> {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'DELETE',
     });
@@ -1896,11 +2324,11 @@ class ApiService {
   }
 
   async getMarketplaceFileDownloadUrl(conversationId: number, fileId: string): Promise<string> {
-    const response = await this.request(
+    const response = await this.request<{ download_url: string }>(
       `/internal/marketplace/conversations/${conversationId}/files/${fileId}/download`,
       { method: 'GET' },
     );
-    return response.download_url as string;
+    return response.download_url;
   }
 
   async getMarketplaceQuotaUsage(): Promise<MarketplaceQuotaUsage> {
@@ -1962,7 +2390,7 @@ class ApiService {
     file: File,
     conflictMode: ConflictMode,
     newName?: string
-  ): Promise<any> {
+  ): Promise<FullAppImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
     
@@ -1988,7 +2416,7 @@ class ApiService {
     return response.json();
   }
 
-  async previewAgentImport(appId: number, file: File) {
+  async previewAgentImport(appId: number, file: File): Promise<AgentImportPreview> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -2007,7 +2435,7 @@ class ApiService {
     return response.json();
   }
 
-  async previewAppImport(file: File) {
+  async previewAppImport(file: File): Promise<AppImportPreview> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -2038,7 +2466,7 @@ class ApiService {
       importBundledMCPConfigs?: boolean;
       importBundledAgentTools?: boolean;
     }
-  ) {
+  ): Promise<ImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -2092,7 +2520,7 @@ class ApiService {
       componentSelection?: Record<string, string[]>;
       apiKeys?: Record<string, string>;
     }
-  ) {
+  ): Promise<FullAppImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -2130,71 +2558,71 @@ class ApiService {
     return response.json();
   }
 
-  async fetchSystemSettings() {
+  async fetchSystemSettings(): Promise<SystemSetting[]> {
     return this.request('/internal/admin/settings');
   }
 
-  async updateSystemSetting(key: string, value: string) {
+  async updateSystemSetting(key: string, value: string): Promise<SystemSetting> {
     return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
     });
   }
 
-  async resetSystemSetting(key: string) {
+  async resetSystemSetting(key: string): Promise<SystemSetting> {
     return this.request(`/internal/admin/settings/${encodeURIComponent(key)}`, {
       method: 'DELETE',
     });
   }
 
-  async getSubscription() {
+  async getSubscription(): Promise<SubscriptionData> {
     return this.request('/internal/subscription');
   }
 
-  async createCheckoutSession(tier: string) {
+  async createCheckoutSession(tier: string): Promise<{ checkout_url: string }> {
     return this.request('/internal/subscription/checkout', {
       method: 'POST',
       body: JSON.stringify({ tier }),
     });
   }
 
-  async createPortalSession() {
+  async createPortalSession(): Promise<{ portal_url: string }> {
     return this.request('/internal/subscription/portal', {
       method: 'POST',
     });
   }
 
-  async getUsage() {
+  async getUsage(): Promise<UsageData> {
     return this.request('/internal/usage');
   }
 
-  async getAdminSaasUsers() {
+  async getAdminSaasUsers(): Promise<SaasUser[]> {
     return this.request('/internal/admin/saas/users');
   }
 
-  async overrideUserTier(userId: number, tier: string) {
+  async overrideUserTier(userId: number, tier: string): Promise<SaasUser> {
     return this.request(`/internal/admin/saas/users/${userId}/tier`, {
       method: 'PUT',
       body: JSON.stringify({ tier }),
     });
   }
 
-  async getTierConfig() {
+  async getTierConfig(): Promise<TierConfigEntry[]> {
     return this.request('/internal/admin/saas/tier-config');
   }
 
-  async updateTierConfig(data: { tier: string; resource_type: string; limit_value: number }) {
+  async updateTierConfig(data: { tier: string; resource_type: string; limit_value: number }): Promise<TierConfigEntry> {
     return this.request('/internal/admin/saas/tier-config', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async getSystemAIServices() {
+  async getSystemAIServices(): Promise<SystemAIService[]> {
     return this.request('/internal/admin/system-ai-services');
   }
 
-  async getSystemAIService(serviceId: number) {
+  async getSystemAIService(serviceId: number): Promise<SystemAIService> {
     return this.request(`/internal/admin/system-ai-services/${serviceId}`);
   }
 
@@ -2204,7 +2632,7 @@ class ApiService {
     model_name: string;
     api_key: string;
     base_url?: string;
-  }) {
+  }): Promise<SystemAIService> {
     return this.request('/internal/admin/system-ai-services', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -2217,20 +2645,20 @@ class ApiService {
     model_name: string;
     api_key: string;
     base_url?: string;
-  }) {
+  }): Promise<SystemAIService> {
     return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteSystemAIService(serviceId: number) {
+  async deleteSystemAIService(serviceId: number): Promise<void> {
     return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
       method: 'DELETE',
     });
   }
 
-  async getSystemEmbeddingServices() {
+  async getSystemEmbeddingServices(): Promise<SystemEmbeddingService[]> {
     return this.request('/internal/admin/system-embedding-services');
   }
 
@@ -2240,7 +2668,7 @@ class ApiService {
     model_name: string;
     api_key: string;
     base_url?: string;
-  }) {
+  }): Promise<SystemEmbeddingService> {
     return this.request('/internal/admin/system-embedding-services', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -2253,18 +2681,18 @@ class ApiService {
     model_name: string;
     api_key: string;
     base_url?: string;
-  }) {
+  }): Promise<SystemEmbeddingService> {
     return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async getSystemEmbeddingServiceImpact(serviceId: number) {
+  async getSystemEmbeddingServiceImpact(serviceId: number): Promise<SystemEmbeddingServiceImpact> {
     return this.request(`/internal/admin/system-embedding-services/${serviceId}/impact`);
   }
 
-  async deleteSystemEmbeddingService(serviceId: number) {
+  async deleteSystemEmbeddingService(serviceId: number): Promise<void> {
     return this.request(`/internal/admin/system-embedding-services/${serviceId}`, {
       method: 'DELETE',
     });
@@ -2288,7 +2716,7 @@ class ApiService {
     });
   }
 
-  async testSystemAIServiceConnectionWithConfig(data: any, serviceId?: number) {
+  async testSystemAIServiceConnectionWithConfig(data: any, serviceId?: number): Promise<TestConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/admin/system-ai-services/test-connection${qs}`, {
       method: 'POST',
@@ -2296,7 +2724,7 @@ class ApiService {
     });
   }
 
-  async testSystemEmbeddingServiceConnectionWithConfig(data: any, serviceId?: number) {
+  async testSystemEmbeddingServiceConnectionWithConfig(data: any, serviceId?: number): Promise<TestConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/admin/system-embedding-services/test-connection${qs}`, {
       method: 'POST',

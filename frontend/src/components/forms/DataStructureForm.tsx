@@ -7,6 +7,7 @@ interface FieldDefinition {
   name: string;
   type: string;
   description: string;
+  optional?: boolean;
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;

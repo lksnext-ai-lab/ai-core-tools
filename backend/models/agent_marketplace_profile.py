@@ -48,6 +48,12 @@ class AgentMarketplaceProfile(Base):
         back_populates='profile',
         cascade='all, delete-orphan'
     )
+    conversation_starters = relationship(
+        'ConversationStarter',
+        back_populates='profile',
+        cascade='all, delete-orphan',
+        order_by='ConversationStarter.order'
+    )
 
     def __repr__(self):
         return f"<AgentMarketplaceProfile(id={self.id}, agent_id={self.agent_id}, display_name='{self.display_name}')>"

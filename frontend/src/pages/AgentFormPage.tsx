@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -21,7 +21,7 @@ import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 interface Agent {
   agent_id: number;
   name: string;
-  description: string;
+  description?: string;
   system_prompt: string;
   prompt_template: string;
   type: string;
@@ -169,6 +169,8 @@ function AgentFormPage() {
   const [showMcpWarning, setShowMcpWarning] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('basic');
 
+  const starterRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   // Helper function to render the "No AI Services" warning banner
   const renderNoAIServicesWarning = (isOcrAgent: boolean) => {
     const message = isOcrAgent
@@ -239,9 +241,8 @@ function AgentFormPage() {
     tags: null,
     icon_url: null,
     cover_image_url: null,
+    conversation_starters: [],
   });
-  const [savingMarketplace, setSavingMarketplace] = useState(false);
-  const [marketplaceSuccess, setMarketplaceSuccess] = useState<string | null>(null);
 
   // Load agent data when component mounts
   useEffect(() => {
@@ -335,20 +336,22 @@ function AgentFormPage() {
           console.error('Error loading MCP usage:', usageErr);
         }
 
-        try {
-          const profile = await apiService.getAgentMarketplaceProfile(Number.parseInt(appId), Number.parseInt(agentId));
-          setMarketplaceProfile({
-            display_name: profile.display_name || null,
-            short_description: profile.short_description || null,
-            long_description: profile.long_description || null,
-            category: profile.category || null,
-            tags: profile.tags || null,
-            icon_url: profile.icon_url || null,
-            cover_image_url: profile.cover_image_url || null,
-          });
-        } catch {
-          // Profile may not exist yet — that's fine
-        }
+          try {
+            const profile = await apiService.getAgentMarketplaceProfile(Number.parseInt(appId), Number.parseInt(agentId));
+            setMarketplaceProfile({
+              display_name: profile.display_name || null,
+              short_description: profile.short_description || null,
+              long_description: profile.long_description || null,
+              category: profile.category || null,
+              tags: profile.tags || null,
+              icon_url: profile.icon_url || null,
+              cover_image_url: profile.cover_image_url || null,
+              conversation_starters: profile.conversation_starters?.map(s => s.prompt) || [],
+            });
+          } catch {
+            // Profile may not exist yet — that's fine
+          }
+
 
         // Marketplace visibility comes from agent detail
         if (response.marketplace_visibility) {
@@ -422,7 +425,6 @@ function AgentFormPage() {
   const handleMarketplaceProfileChange = useCallback(
     (field: keyof MarketplaceProfileUpdate, value: string | string[] | null) => {
       setMarketplaceProfile(prev => ({ ...prev, [field]: value }));
-      setMarketplaceSuccess(null);
     },
     [],
   );
@@ -430,14 +432,27 @@ function AgentFormPage() {
   const handleSaveMarketplaceProfile = useCallback(async () => {
     if (!appId || !agentId || Number.parseInt(agentId) === 0) return;
 
-    setSavingMarketplace(true);
-    setMarketplaceSuccess(null);
+    const profileToSave: MarketplaceProfileUpdate = {
+      display_name: marketplaceProfile.display_name,
+      short_description: marketplaceProfile.short_description,
+      long_description: marketplaceProfile.long_description,
+      category: marketplaceProfile.category,
+      tags: marketplaceProfile.tags,
+      icon_url: marketplaceProfile.icon_url,
+      cover_image_url: marketplaceProfile.cover_image_url,
+      conversation_starters: (
+        marketplaceProfile.conversation_starters ?? []
+      )
+        .map((starter) => starter.trim())
+        .filter((starter) => starter.length > 0),
+    };
+
     const saved = await mutate(
       () =>
         apiService.updateAgentMarketplaceProfile(
           Number.parseInt(appId),
           Number.parseInt(agentId),
-          marketplaceProfile,
+          profileToSave,
         ),
       {
         loading: MESSAGES.SAVING('marketplace profile'),
@@ -445,7 +460,6 @@ function AgentFormPage() {
         error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('marketplace profile')),
       },
     );
-    setSavingMarketplace(false);
 
     if (saved === undefined) return;
 
@@ -457,14 +471,16 @@ function AgentFormPage() {
       tags: saved.tags || null,
       icon_url: saved.icon_url || null,
       cover_image_url: saved.cover_image_url || null,
+      conversation_starters: saved.conversation_starters?.map(s => s.prompt) || [],
     });
-    setMarketplaceSuccess('Marketplace profile saved successfully');
   }, [appId, agentId, marketplaceProfile, mutate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!appId || !agentId) return;
+
+    handleSaveMarketplaceProfile(); // Save marketplace profile first
 
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
@@ -1220,15 +1236,13 @@ function AgentFormPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {agent.tools.map((tool) => (
-                      <button
+                      <label
                         key={tool.agent_id}
-                        type="button"
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full block ${
                           formData.tool_ids.includes(tool.agent_id)
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                         }`}
-                        onClick={() => handleToolToggle(tool.agent_id)}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center">
@@ -1238,13 +1252,19 @@ function AgentFormPage() {
                               onChange={() => handleToolToggle(tool.agent_id)}
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
-                            <span className="ml-3 text-sm font-medium text-gray-900">{tool.name}</span>
+                            <span className="ml-3 text-sm font-medium text-gray-900">
+                              {tool.name}
+                            </span>
                           </div>
-                          <div className={`w-2 h-2 rounded-full ${
-                            formData.tool_ids.includes(tool.agent_id) ? 'bg-blue-500' : 'bg-gray-300'
-                          }`} />
+                          <div 
+                            className={`w-2 h-2 rounded-full ${
+                            formData.tool_ids.includes(tool.agent_id)
+                              ? 'bg-blue-500'
+                              : 'bg-gray-300'
+                            }`}
+                          />
                         </div>
-                      </button>
+                      </label>
                     ))}
                   </div>
                   
@@ -1300,15 +1320,13 @@ function AgentFormPage() {
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agent.mcp_configs.map((mcp) => (
-                          <button
+                          <label
                             key={mcp.config_id}
-                            type="button"
                             className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
                               formData.mcp_config_ids.includes(mcp.config_id)
                                 ? 'border-purple-500 bg-purple-50'
                                 : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                             }`}
-                            onClick={() => handleMCPToggle(mcp.config_id)}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center">
@@ -1324,7 +1342,7 @@ function AgentFormPage() {
                                 formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
                               }`} />
                             </div>
-                          </button>
+                          </label>
                         ))}
                       </div>
                       
@@ -1375,15 +1393,13 @@ function AgentFormPage() {
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agent.skills.map((skill) => (
-                          <button
+                          <label
                             key={skill.skill_id}
-                            type="button"
                             className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
                               formData.skill_ids.includes(skill.skill_id)
                                 ? 'border-purple-500 bg-purple-50'
                                 : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                             }`}
-                            onClick={() => handleSkillToggle(skill.skill_id)}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center">
@@ -1402,7 +1418,7 @@ function AgentFormPage() {
                             {skill.description && (
                               <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
                             )}
-                          </button>
+                          </label>
                         ))}
                       </div>
 
@@ -1580,19 +1596,55 @@ function AgentFormPage() {
                       />
                     )}
                   </div>
-                  <div className="flex items-center gap-4 mt-4">
-                    <button
-                      type="button"
-                      onClick={handleSaveMarketplaceProfile}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      disabled={savingMarketplace}
-                    >
-                      {savingMarketplace ? 'Saving...' : 'Save Marketplace Profile'}
-                    </button>
-                    {marketplaceSuccess && (
-                      <span className="text-sm text-green-600">{marketplaceSuccess}</span>
-                    )}
-                  </div>
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-3">Conversation Starters</label>
+                     <p className="text-xs text-gray-500 mb-4">
+                       Suggested opening messages for users. These only appear at the start of a new conversation.
+                     </p>
+                     <div className="space-y-3">
+                       {marketplaceProfile.conversation_starters?.map((starter, idx) => (
+                         <div key={idx} className="flex items-center gap-2">
+                           <input
+                             ref={(el) => {
+                               starterRefs.current[idx] = el;
+                             }}
+                             type="text"
+                             value={starter}
+                             onChange={(e) => {
+                               const newStarters = [...(marketplaceProfile.conversation_starters || [])];
+                               newStarters[idx] = e.target.value;
+                               handleMarketplaceProfileChange('conversation_starters', newStarters);
+                             }}
+                             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all"
+                             placeholder="Enter a starter prompt..."
+                           />
+                           <button
+                             type="button"
+                             onClick={() => {
+                               const newStarters = marketplaceProfile.conversation_starters?.filter((_, i) => i !== idx) || [];
+                               handleMarketplaceProfileChange('conversation_starters', newStarters);
+                             }}
+                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                           >
+                             <span className="text-xs font-bold">✕</span>
+                           </button>
+                         </div>
+                       ))}
+                       <button
+                         type="button"
+                         onClick={() => {
+                           const newStarters = [...(marketplaceProfile.conversation_starters || []), ''];
+                           handleMarketplaceProfileChange('conversation_starters', newStarters);
+                           requestAnimationFrame(() => {
+                             starterRefs.current[newStarters.length - 1]?.focus();
+                           });
+                         }}
+                         className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                       >
+                         <Plus className="w-4 h-4 mr-1" /> Add Starter
+                       </button>
+                     </div>
+                   </div>
                 </div>
               )}
               </>

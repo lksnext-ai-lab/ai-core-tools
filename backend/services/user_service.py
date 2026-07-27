@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from models.user import User, PlatformRole
 from models.api_key import APIKey
 from models.app import App
@@ -54,7 +55,14 @@ class UserService:
 
     @staticmethod
     def get_or_create_user(db: Session, email: str, name: str = None) -> Tuple[User, bool]:
-        """Get existing user or create one. Returns (user, created)."""
+        """Get existing user or create one. Returns (user, created).
+
+        Race-safe against concurrent first-login requests (e.g. parallel OIDC-protected
+        calls firing on initial login): if two calls both miss the SELECT and race to
+        INSERT, the `uq_user_email` unique constraint rejects the loser's INSERT with an
+        IntegrityError. That loser rolls back and re-fetches the winner's row instead of
+        propagating the error, so callers never see a spurious 500 or duplicate user.
+        """
         user_repo = UserRepository(db)
 
         user = user_repo.get_by_email(email)
@@ -63,8 +71,15 @@ class UserService:
             user = user_repo.update(user, name)
             return user, False
 
-        new_user = user_repo.create(email, name)
-        return new_user, True
+        try:
+            new_user = user_repo.create(email, name)
+            return new_user, True
+        except IntegrityError:
+            db.rollback()
+            user = user_repo.get_by_email(email)
+            if user:
+                return user_repo.update(user, name), False
+            raise
 
     @staticmethod
     def get_user_by_id(db: Session, user_id: int) -> User:

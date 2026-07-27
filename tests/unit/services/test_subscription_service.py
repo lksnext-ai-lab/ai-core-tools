@@ -25,8 +25,16 @@ from models.subscription import SubscriptionTier, BillingStatus
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _patch_saas_mode():
-    """Patch is_self_managed() to return False for all tests in this module."""
+def _patch_saas_mode(monkeypatch):
+    """Patch is_self_managed() to return False for all tests in this module.
+
+    Also force the Stripe price-id env vars via monkeypatch (not the module-level
+    os.environ.setdefault above) so _tier_from_stripe_sub's os.getenv() calls see
+    these fake values deterministically, regardless of which module happens to
+    import first and call load_dotenv() with a real .env in the process.
+    """
+    monkeypatch.setenv("STRIPE_PRICE_ID_STARTER", "price_starter_fake")
+    monkeypatch.setenv("STRIPE_PRICE_ID_PRO", "price_pro_fake")
     with patch("services.subscription_service.is_self_managed", return_value=False):
         yield
 
