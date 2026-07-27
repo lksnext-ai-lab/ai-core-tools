@@ -146,7 +146,7 @@ export interface Agent {
     parser_id: number;
     name: string;
     description?: string;
-    fields: Array<{ name: string; type: string; description: string }>;
+    fields: Array<{ name: string; type: string; description: string; optional?: boolean }>;
   };
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;

@@ -42,6 +42,25 @@ class TestExportOutputParserFieldSchema:
         assert field.parser_name is None
         assert field.list_item_type is None
 
+    def test_field_optional_default_is_false(self):
+        """Test that optional defaults to False."""
+        field = ExportOutputParserFieldSchema(
+            name="username",
+            type="str",
+            description="User's username"
+        )
+        assert field.optional is False
+
+    def test_field_optional_true(self):
+        """Test creating field with optional=True."""
+        field = ExportOutputParserFieldSchema(
+            name="nickname",
+            type="str",
+            description="Optional nickname",
+            optional=True
+        )
+        assert field.optional is True
+
     def test_field_with_parser_reference(self):
         """Test field with parser reference."""
         field = ExportOutputParserFieldSchema(
@@ -79,6 +98,27 @@ class TestExportOutputParserFieldSchema:
         assert field.type == "list"
         assert field.list_item_type == "parser"
         assert field.list_item_parser_name == "Contact Parser"
+
+    def test_optional_field_serialized_in_export(self):
+        """Test that optional flag is included in serialized export."""
+        field = ExportOutputParserFieldSchema(
+            name="note",
+            type="str",
+            description="Optional note",
+            optional=True
+        )
+        data = field.model_dump()
+        assert data["optional"] is True
+
+    def test_required_field_serialized_in_export(self):
+        """Test that optional=False is included in serialized export."""
+        field = ExportOutputParserFieldSchema(
+            name="name",
+            type="str",
+            description="Name"
+        )
+        data = field.model_dump()
+        assert data["optional"] is False
 
 
 class TestExportOutputParserSchema:
@@ -279,6 +319,71 @@ class TestOutputParserExportFileSchema:
         assert len(export_file.output_parser.fields) == 3
         assert export_file.output_parser.fields[2].type == "list"
         assert export_file.output_parser.fields[2].list_item_type == "str"
+
+    def test_optional_flag_round_trips_in_export(self):
+        """Test that the optional flag is preserved through export serialization."""
+        metadata = ExportMetadataSchema(
+            export_version="1.0.0",
+            export_date=datetime(2026, 6, 26, 8, 0, 0),
+            exported_by="test_user",
+            source_app_id=1
+        )
+
+        parser = ExportOutputParserSchema(
+            name="Mixed Parser",
+            description="Parser with mixed required/optional fields",
+            fields=[
+                ExportOutputParserFieldSchema(
+                    name="required_field",
+                    type="str",
+                    description="Required field",
+                    optional=False
+                ),
+                ExportOutputParserFieldSchema(
+                    name="optional_field",
+                    type="str",
+                    description="Optional field",
+                    optional=True
+                )
+            ]
+        )
+
+        export_file = OutputParserExportFileSchema(
+            metadata=metadata,
+            output_parser=parser
+        )
+
+        # Serialize to dict and back
+        data = export_file.model_dump(mode='json')
+        restored = OutputParserExportFileSchema(**data)
+
+        assert restored.output_parser.fields[0].optional is False
+        assert restored.output_parser.fields[1].optional is True
+
+    def test_optional_flag_defaults_false_on_deserialization(self):
+        """Legacy exports without optional flag should deserialize with optional=False."""
+        json_data = {
+            "metadata": {
+                "export_version": "1.0.0",
+                "export_date": "2026-06-26T08:00:00",
+                "exported_by": "test_user",
+                "source_app_id": 1
+            },
+            "output_parser": {
+                "name": "Legacy Parser",
+                "fields": [
+                    {
+                        "name": "name",
+                        "type": "str",
+                        "description": "Name"
+                        # No optional key — backwards compatibility
+                    }
+                ]
+            }
+        }
+
+        export_file = OutputParserExportFileSchema(**json_data)
+        assert export_file.output_parser.fields[0].optional is False
 
 
 class TestComponentTypeEnum:

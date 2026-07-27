@@ -37,6 +37,7 @@ interface Agent {
       name: string;
       type: string;
       description: string;
+      optional?: boolean;
     }>;
   };
 }
