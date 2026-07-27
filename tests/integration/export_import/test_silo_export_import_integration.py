@@ -24,9 +24,15 @@ from repositories.silo_repository import SiloRepository
 
 @pytest.fixture
 def test_user(db_session: Session) -> User:
-    """Create test user."""
+    """Create test user.
+
+    Email must be unique per invocation: db_session.commit() is a real commit
+    against the module-session-scoped `engine` fixture (not the rolled-back
+    per-test transaction other suites use), so a hardcoded email would collide
+    across the many tests in this file once User.email has a unique constraint.
+    """
     user = User(
-        email="test_silo@example.com",
+        email=f"test_silo-{datetime.now().timestamp()}@example.com",
         name="Test Silo User",
     )
     db_session.add(user)

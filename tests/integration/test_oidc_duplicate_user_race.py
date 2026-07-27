@@ -17,11 +17,10 @@ Fix (two parts, both already landed on this branch):
 These tests require the REAL Postgres unique constraint to be present -- a pure unit test
 with a mocked session cannot trigger a genuine ``IntegrityError`` -- so they live here in
 ``tests/integration/`` against the real test DB (port 5433) rather than in ``tests/unit/``.
-The two tests that actually need the constraint to fire bring it up themselves via the
-``ensure_email_unique_constraint`` fixture (see its docstring below) rather than assuming
-it is already present -- this repo's test-DB schema is built from ORM metadata
-(``Base.metadata.create_all()``), not from the Alembic migration, so the constraint is
-NOT guaranteed to exist on a fresh/ephemeral test DB.
+``models/user.py`` declares ``uq_user_email`` via ``__table_args__`` (matching the name
+used by the ``useremail001`` migration), so this repo's test-DB schema -- built from ORM
+metadata via ``Base.metadata.create_all()`` -- already carries the real constraint; no
+test-local workaround is needed to bring it up.
 
 Concurrency strategy (deterministic -- no real threads, no flaky timing):
   Two real ``SessionLocal()`` sessions are used directly (mirroring two separate FastAPI
@@ -47,79 +46,13 @@ Concurrency strategy (deterministic -- no real threads, no flaky timing):
 
 import uuid
 
-import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from db.database import SessionLocal
 from models.user import User
 from repositories.user_repository import UserRepository
 from services.user_service import UserService
-
-_TEST_SCOPED_CONSTRAINT_NAME = "uq_user_email_test_scoped"
-
-
-@pytest.fixture
-def ensure_email_unique_constraint(test_engine):
-    """Guarantees a real UNIQUE constraint on ``User.email`` exists for the duration of
-    a single test, then removes it again immediately afterward.
-
-    Why this fixture exists (rather than relying on ambient DB state or a permanent
-    model change):
-
-    - The session-scoped ``test_engine`` fixture builds the schema via
-      ``Base.metadata.create_all()`` (ORM metadata), NOT by running the ``useremail001``
-      Alembic migration -- see ``tests/integration/test_localauth001_migration.py``'s
-      docstring for the same caveat about this repo's test-DB schema strategy. So
-      whether the real ``uq_user_email`` constraint exists here depends entirely on
-      whatever state the target Postgres database happened to be in beforehand -- it is
-      NOT guaranteed on a fresh/ephemeral test DB. This was confirmed while writing this
-      test: a from-scratch schema built purely from ``create_all()`` has no such
-      constraint, since ``models/user.py``'s ``email`` column does not declare
-      ``unique=True``.
-    - Adding ``unique=True`` directly to ``User.email`` in ``backend/models/user.py``
-      would make ``create_all()`` always include the constraint -- but this was tried
-      and reverted during development of this test: it turns the ``fake_user`` fixture's
-      shared, hardcoded email (``"testuser@mattin-test.com"``, reused by dozens of
-      unrelated tests across the suite) into a permanent, session-wide lock-contention
-      hazard. If any other test's session is ever left open (e.g. a hung fixture
-      teardown) while holding that email, every subsequent ``fake_user``-based test
-      would then block waiting on the Postgres row lock instead of harmlessly
-      coexisting in separate, never-committed transactions like they do today -- this
-      produced a full test-suite deadlock, observed firsthand while developing this fix.
-
-    Instead, this fixture adds the constraint (under its own distinct name, if not
-    already present) immediately before the single test that needs it runs, and drops
-    it again immediately after -- a window of a few milliseconds -- so it cannot collide
-    with any other test's use of the shared ``fake_user`` email.
-    """
-    inspector = inspect(test_engine)
-    already_present = any(
-        c["name"] == "uq_user_email" for c in inspector.get_unique_constraints("User")
-    )
-
-    added_here = False
-    if not already_present:
-        with test_engine.begin() as conn:
-            conn.execute(
-                text(
-                    f'ALTER TABLE "User" ADD CONSTRAINT {_TEST_SCOPED_CONSTRAINT_NAME} '
-                    "UNIQUE (email)"
-                )
-            )
-        added_here = True
-
-    try:
-        yield
-    finally:
-        if added_here:
-            with test_engine.begin() as conn:
-                conn.execute(
-                    text(
-                        f'ALTER TABLE "User" DROP CONSTRAINT IF EXISTS '
-                        f"{_TEST_SCOPED_CONSTRAINT_NAME}"
-                    )
-                )
 
 
 def _unique_email(label: str) -> str:
@@ -172,9 +105,7 @@ class TestUserRepositoryUniqueConstraint:
     """Sanity check that the real DB constraint is present and fires -- isolates the
     schema half of the fix from the service-level recovery logic tested below."""
 
-    def test_create_raises_integrity_error_on_duplicate_email(
-        self, test_engine, ensure_email_unique_constraint
-    ):
+    def test_create_raises_integrity_error_on_duplicate_email(self, test_engine):
         email = _unique_email("constraint-sanity")
         session_a = SessionLocal()
         session_b = SessionLocal()
@@ -207,9 +138,7 @@ class TestGetOrCreateUserConcurrentRace:
     out of the call instead of being caught and recovered from.
     """
 
-    def test_concurrent_calls_converge_to_single_user_row(
-        self, test_engine, ensure_email_unique_constraint
-    ):
+    def test_concurrent_calls_converge_to_single_user_row(self, test_engine):
         email = _unique_email("concurrent")
         session_a = SessionLocal()
         session_b = SessionLocal()

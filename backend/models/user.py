@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -13,6 +13,11 @@ class PlatformRole(str, enum.Enum):
 
 class User(Base):
     __tablename__ = 'User'
+    # Named to match the constraint added by alembic/versions/useremail001_dedupe_users_add_unique_email.py
+    # -- keeps ORM metadata and the real migration-managed schema in agreement (autogenerate-safe).
+    __table_args__ = (
+        UniqueConstraint('email', name='uq_user_email'),
+    )
     user_id = Column(Integer, primary_key=True)
     email = Column(String(255))
     name = Column(String(255))
