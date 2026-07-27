@@ -120,6 +120,7 @@ export interface Agent {
   tool_ids?: number[];
   mcp_config_ids?: number[];
   skill_ids?: number[];
+  exposed_chat_filters?: string[];
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
