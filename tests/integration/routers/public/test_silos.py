@@ -428,6 +428,30 @@ class TestDocOperations:
         )
         assert resp.status_code == 400
 
+    @patch("routers.public.v1.silos.SiloService.count_docs_with_filter")
+    def test_count_by_metadata(
+        self, mock_count, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_count.return_value = 7
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/count-by-metadata"),
+            json={"filter_metadata": {"resource_id": {"$eq": "123"}}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 7
+
+    def test_count_by_metadata_empty_filter_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/count-by-metadata"),
+            json={"filter_metadata": {}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
     @patch("routers.public.v1.silos.SiloService.index_multiple_content")
     @patch("routers.public.v1.silos.SiloService.extract_documents_from_file")
     def test_index_file(

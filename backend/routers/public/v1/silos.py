@@ -14,6 +14,7 @@ from .schemas import (
     MultipleDocumentIndexSchema,
     DeleteDocsRequestSchema,
     DeleteByMetadataRequestSchema,
+    CountByMetadataRequestSchema,
     DocsResponseSchema,
     FileIndexResponseSchema,
     PublicSiloSchema,
@@ -464,6 +465,46 @@ async def delete_docs_by_metadata(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to delete documents",
+        )
+
+
+@silos_router.post(
+    "/{silo_id}/docs/count-by-metadata",
+    summary="Count docs by metadata filter",
+    tags=["Silos"],
+    response_model=CountResponseSchema,
+)
+async def count_docs_by_metadata(
+    app_id: int,
+    silo_id: int,
+    request: CountByMetadataRequestSchema,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Count documents matching a metadata filter (MongoDB-style operators)."""
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_silo_ownership(db, silo_id, app_id)
+
+    try:
+        if not request.filter_metadata:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="filter_metadata cannot be empty",
+            )
+
+        count = SiloService.count_docs_with_filter(
+            silo_id=silo_id,
+            filter_metadata=request.filter_metadata,
+            db=db,
+        )
+        return CountResponseSchema(count=count)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error counting documents by metadata in silo {silo_id} for app {app_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to count documents",
         )
 
 
