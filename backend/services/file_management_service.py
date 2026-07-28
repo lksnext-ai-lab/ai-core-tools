@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi import UploadFile, HTTPException
 
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
+from tools.DocumentTools import extract_text_from_document
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -92,24 +93,29 @@ class FileReference:
         # No text extraction needed for images
         if self.file_type == "image":
             return "ready"
-        # Documents (.doc, .docx) don't have text extraction implemented yet
-        if "not implemented" in self.content.lower():
+        # Formats with no extractor (legacy .doc, spreadsheets, slides) carry a notice
+        # instead of text. Keyed off the placeholder check rather than one specific
+        # phrase, so a reworded notice cannot make an unread file look ready.
+        if not self._has_extractable_content():
             return "uploaded"  # File uploaded but not fully processed
         return "ready"
     
+    # Every notice this service puts in ``content`` in place of real text starts
+    # with one of these. Matched as a prefix, not a substring: extracted document
+    # text can legitimately contain "File:" anywhere in the body, and a substring
+    # match would report a successfully-read attachment as unread.
+    PLACEHOLDER_PREFIXES = (
+        "Error processing",
+        "Image file:",
+        "Document file:",
+        "File:",
+    )
+
     def _has_extractable_content(self) -> bool:
         """Check if meaningful content was extracted"""
         if not self.content:
             return False
-        # Check for placeholder messages
-        placeholder_indicators = [
-            "not implemented",
-            "Error processing",
-            "Image file:",
-            "Document file:",
-            "File:"
-        ]
-        return not any(indicator in self.content for indicator in placeholder_indicators)
+        return not self.content.startswith(self.PLACEHOLDER_PREFIXES)
     
     def _get_content_preview(self, max_length: int = 200) -> Optional[str]:
         """Get preview of extracted content"""
@@ -315,10 +321,15 @@ class FileManagementService:
             if file_type == "pdf":
                 # Use existing PDF tools
                 return extract_text_from_pdf(file_path)
-            elif file_type in ["txt", "md", "json"]:
-                # Read text files directly
+            elif file_type == "text":
+                # Read text files directly. _get_file_type_from_path returns the
+                # category ("text"), not the extension, so matching on extensions
+                # here never fired and .txt/.md/.json/.csv fell through to the
+                # generic placeholder below.
                 with open(file_path, 'r', encoding='utf-8') as f:
                     return f.read()
+            elif file_type == "document":
+                return extract_text_from_document(file_path, os.path.basename(file_path))
             else:
                 # For other file types, return basic info
                 return f"File: {os.path.basename(file_path)} (type: {file_type})"
@@ -558,8 +569,7 @@ class FileManagementService:
                     return content, temp_path, file_size
                 
                 elif file_type == "document":
-                    # For documents, return basic info (in production, use document processing)
-                    content = f"Document file: {file.filename} (Document processing not implemented)"
+                    content = extract_text_from_document(temp_path, file.filename)
                     return content, temp_path, file_size
                 
                 else:
