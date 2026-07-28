@@ -15,6 +15,8 @@ from .schemas import (
     DeleteDocsRequestSchema,
     DeleteByMetadataRequestSchema,
     CountByMetadataRequestSchema,
+    UpdateMetadataRequestSchema,
+    UpdatedCountResponseSchema,
     DocsResponseSchema,
     FileIndexResponseSchema,
     PublicSiloSchema,
@@ -505,6 +507,58 @@ async def count_docs_by_metadata(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to count documents",
+        )
+
+
+@silos_router.post(
+    "/{silo_id}/docs/update-metadata",
+    summary="Update docs metadata by metadata filter",
+    tags=["Silos"],
+    response_model=UpdatedCountResponseSchema,
+)
+async def update_docs_metadata(
+    app_id: int,
+    silo_id: int,
+    request: UpdateMetadataRequestSchema,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update the metadata of the documents matching a filter, in place.
+
+    Re-labels existing chunks without re-embedding them: vectors and content are
+    untouched. By default the updates are merged over the current metadata, so
+    the call is idempotent; `replace: true` overwrites it wholesale.
+    """
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_silo_ownership(db, silo_id, app_id)
+
+    try:
+        if not request.filter_metadata:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="filter_metadata cannot be empty",
+            )
+        if not request.metadata_updates:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="metadata_updates cannot be empty",
+            )
+
+        updated = SiloService.update_docs_metadata(
+            silo_id=silo_id,
+            filter_metadata=request.filter_metadata,
+            metadata_updates=request.metadata_updates,
+            replace=request.replace,
+            db=db,
+        )
+        return UpdatedCountResponseSchema(updated=updated)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating documents metadata in silo {silo_id} for app {app_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to update documents metadata",
         )
 
 

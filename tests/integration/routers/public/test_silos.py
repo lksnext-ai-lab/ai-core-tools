@@ -452,6 +452,47 @@ class TestDocOperations:
         )
         assert resp.status_code == 400
 
+    @patch("routers.public.v1.silos.SiloService.update_docs_metadata")
+    def test_update_metadata(
+        self, mock_update, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_update.return_value = 12
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/update-metadata"),
+            json={
+                "filter_metadata": {"categoria": {"$eq": "LS5000"}},
+                "metadata_updates": {"categoria": "Serie LS5000"},
+            },
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 12
+        # Merge by default: a caller re-labelling one key must not wipe the rest.
+        assert mock_update.call_args.kwargs["replace"] is False
+
+    def test_update_metadata_empty_filter_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        # An empty filter would match the whole collection — the one mistake that
+        # turns a rename into a silo-wide overwrite.
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/update-metadata"),
+            json={"filter_metadata": {}, "metadata_updates": {"categoria": "X"}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
+    def test_update_metadata_empty_updates_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/update-metadata"),
+            json={"filter_metadata": {"categoria": {"$eq": "LS5000"}}, "metadata_updates": {}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
     @patch("routers.public.v1.silos.SiloService.index_multiple_content")
     @patch("routers.public.v1.silos.SiloService.extract_documents_from_file")
     def test_index_file(

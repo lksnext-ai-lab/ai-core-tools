@@ -1359,6 +1359,69 @@ class SiloService:
         return doc_count
 
     @staticmethod
+    def update_docs_metadata(
+        silo_id: int,
+        filter_metadata: Dict[str, Any],
+        metadata_updates: Dict[str, Any],
+        db: Session,
+        replace: bool = False,
+    ) -> int:
+        """
+        Update the metadata of the documents matching a filter, in place.
+
+        Re-labelling documents without re-embedding them: the vectors and the
+        content are untouched, only ``cmetadata`` changes. Callers use it when a
+        label they indexed under is renamed upstream and the existing chunks must
+        follow, instead of paying a full re-index.
+
+        Args:
+            silo_id: ID of the silo
+            filter_metadata: Metadata filter dict (MongoDB-style, e.g., {"field": {"$eq": "value"}})
+            metadata_updates: Keys to write on the matched documents
+            db: Database session
+            replace: If True the metadata is replaced wholesale; by default the
+                updates are merged over the existing keys (idempotent)
+
+        Returns:
+            Number of documents updated
+        """
+        logger.info(
+            f"Updating metadata in silo {silo_id} with filter: {filter_metadata} "
+            f"(replace={replace})"
+        )
+
+        if not SiloService.check_silo_collection_exists(silo_id, db):
+            logger.warning(f"Collection for silo {silo_id} does not exist")
+            return 0
+
+        silo = SiloRepository.get_by_id(silo_id, db)
+        if not silo:
+            logger.error(f"Silo {silo_id} not found")
+            return 0
+
+        collection_name = COLLECTION_PREFIX + str(silo_id)
+        updated = _get_vector_store(silo).update_documents_metadata(
+            collection_name,
+            filter_metadata=filter_metadata,
+            metadata_updates=metadata_updates,
+            replace=replace,
+        )
+        logger.info(f"Successfully updated {updated} document(s) in silo {silo_id}")
+
+        # The metadata values feeding the UI filters are cached per silo; a
+        # rename changes them, so a stale cache would keep offering the old
+        # value in the dropdowns.
+        try:
+            from services.metadata_values_cache_service import MetadataValuesCacheService
+            MetadataValuesCacheService.invalidate(silo_id)
+        except Exception as _cache_exc:
+            logger.warning(
+                "metadata_values_cache: invalidation failed after update_docs_metadata for silo=%d: %s",
+                silo_id, _cache_exc,
+            )
+        return updated
+
+    @staticmethod
     def find_docs_in_collection(
         silo_id: int,
         query: str,
