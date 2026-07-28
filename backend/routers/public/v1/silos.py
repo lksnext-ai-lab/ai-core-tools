@@ -5,7 +5,7 @@ import json
 import tempfile
 import os
 
-from services.silo_service import SiloService
+from services.silo_service import DEFAULT_METADATA_VALUES_LIMIT, SiloService
 
 from .schemas import (
     MessageResponseSchema,
@@ -17,6 +17,8 @@ from .schemas import (
     CountByMetadataRequestSchema,
     UpdateMetadataRequestSchema,
     UpdatedCountResponseSchema,
+    MetadataValuesRequestSchema,
+    MetadataValuesResponseSchema,
     DocsResponseSchema,
     FileIndexResponseSchema,
     PublicSiloSchema,
@@ -507,6 +509,59 @@ async def count_docs_by_metadata(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to count documents",
+        )
+
+
+@silos_router.post(
+    "/{silo_id}/docs/metadata-values",
+    summary="List the distinct values of a metadata field",
+    tags=["Silos"],
+    response_model=MetadataValuesResponseSchema,
+)
+async def list_metadata_values(
+    app_id: int,
+    silo_id: int,
+    request: MetadataValuesRequestSchema,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List the distinct values a metadata field takes in a silo.
+
+    Enumeration, not search: it is resolved with a SELECT DISTINCT over the
+    collection, so there is no embedding call and no similarity ranking. Use it
+    to find out what a silo already holds for a target — `docs/find` is a
+    top-k semantic search and its result cap makes it unfit for that.
+    """
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_silo_ownership(db, silo_id, app_id)
+
+    try:
+        if not request.field or not request.field.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="field cannot be empty",
+            )
+
+        values = SiloService.get_metadata_field_values(
+            silo_id=silo_id,
+            field=request.field.strip(),
+            prefix=request.prefix,
+            limit=request.limit or DEFAULT_METADATA_VALUES_LIMIT,
+            db=db,
+            filter_metadata=request.filter_metadata,
+        )
+        return MetadataValuesResponseSchema(values=values)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        # Only ever raised for an invalid field name, which quotes the caller's
+        # own input — safe to surface.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error listing metadata values in silo {silo_id} for app {app_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to list metadata values",
         )
 
 

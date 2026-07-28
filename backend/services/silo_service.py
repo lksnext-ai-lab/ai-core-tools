@@ -31,6 +31,12 @@ COLLECTION_PREFIX = 'silo_'
 DEFAULT_SEARCH_LIMIT = 100
 MAX_SEARCH_LIMIT = 200
 
+# Distinct metadata values are read straight from SQL — no embedding call and no
+# similarity ranking — so this is an enumeration and can afford a much higher cap
+# than a search. Callers use it to list what a silo holds for one target.
+DEFAULT_METADATA_VALUES_LIMIT = 1000
+MAX_METADATA_VALUES_LIMIT = 5000
+
 # Per-chunk marker stamping each indexing run; lets reindex delete only stale chunks.
 INDEX_BATCH_FIELD = 'index_batch'
 
@@ -1827,18 +1833,20 @@ class SiloService:
         prefix: Optional[str] = None,
         limit: int = 100,
         db: Session = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """
         Return distinct values for a metadata field in the silo's vector collection.
-        Sorted alphabetically, filtered by optional case-insensitive prefix.
-        limit is clamped to 1–500.
+        Sorted alphabetically, filtered by optional case-insensitive prefix and by
+        an optional PGVector-style metadata filter.
+        limit is clamped to 1–MAX_METADATA_VALUES_LIMIT.
         Raises ValueError for invalid field names, NotFoundError for missing silo.
         """
         import re
         if not field or not re.match(r'^[\w.\-]+$', field):
             raise ValueError(f"Invalid metadata field name: '{field}'")
 
-        limit = min(max(1, limit), 500)
+        limit = min(max(1, limit), MAX_METADATA_VALUES_LIMIT)
 
         silo = SiloRepository.get_by_id(silo_id, db)
         if not silo:
@@ -1847,4 +1855,5 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         return _get_vector_store(silo).get_distinct_metadata_values(
             collection_name, field, prefix=prefix, limit=limit,
+            filter_metadata=filter_metadata,
         )

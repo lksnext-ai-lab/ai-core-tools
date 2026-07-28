@@ -190,6 +190,17 @@ class UpdatedCountResponseSchema(BaseModel):
     """Number of documents whose metadata was updated"""
     updated: int
 
+class MetadataValuesRequestSchema(BaseModel):
+    """Schema for listing the distinct values of a metadata field"""
+    field: str
+    filter_metadata: Optional[Dict[str, Any]] = None
+    prefix: Optional[str] = None
+    limit: Optional[int] = None
+
+class MetadataValuesResponseSchema(BaseModel):
+    """Distinct values of a metadata field"""
+    values: List[str]
+
 class DocumentSchema(BaseModel):
     """Document schema"""
     page_content: str
