@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square } from 'lucide-react';
+import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
 import StreamingMessage from '../components/playground/StreamingMessage';
+import AudioMessage from '../components/playground/AudioMessage';
 import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
 import type { PanelFile } from '../components/playground/AttachedFilesPanel';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -14,9 +15,13 @@ import { errorMessage } from '../constants/messages';
 
 interface ChatMessage {
   readonly id: string;
-  readonly type: 'user' | 'agent' | 'error';
+  readonly type: 'user' | 'agent' | 'agent-audio' | 'error';
   readonly content: string;
   readonly timestamp: Date;
+  readonly audioUrl?: string;
+  readonly audioFileId?: string;
+  readonly autoPlay?: boolean;
+  readonly transcript?: string;
 }
 
 interface RawAttachedFile {
@@ -60,6 +65,17 @@ export default function MarketplaceChatPage() {
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
+  // Audio response
+  type ResponseMode = 'text' | 'audio';
+  const [responseMode, setResponseMode] = useState<ResponseMode>('text');
+  const [audioLanguage, setAudioLanguage] = useState<'en' | 'es' | 'eu' | 'ca' | 'gl' | 'fr'>('en');
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioUrlsRef = useRef<string[]>([]);
+
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +95,8 @@ export default function MarketplaceChatPage() {
       apiService.chatMarketplaceStream(numericId, message, {
         files: opts.files,
         fileReferences: persistentFiles.length > 0 ? persistentFiles.map((f) => f.file_id) : undefined,
+        responseMode: opts.responseMode,
+        audioLanguage: opts.audioLanguage,
         onEvent: opts.onEvent,
         signal: opts.signal,
       }),
@@ -198,13 +216,44 @@ export default function MarketplaceChatPage() {
 
 
         if (data.messages && data.messages.length > 0) {
-          const loaded: ChatMessage[] = data.messages.map(
-            (msg: { role: string; content: string }, idx: number) => ({
-              id: `history-${idx}`,
-              type: msg.role === 'user' ? 'user' : 'agent',
-              content: msg.content,
-              timestamp: new Date(),
-            }),
+          const loaded: ChatMessage[] = await Promise.all(
+            data.messages.map(
+              async (msg: { role: string; content: string; message_type?: string; transcript?: string; audio_file_id?: string }, idx: number) => {
+                // Handle audio messages
+                if (msg.message_type === 'audio' && msg.audio_file_id) {
+                  try {
+                    const audioUrl = await apiService.getMarketplaceFileDownloadUrl(numericId, msg.audio_file_id);
+                    audioUrlsRef.current.push(audioUrl);
+                    return {
+                      id: `history-${idx}`,
+                      type: 'agent-audio' as const,
+                      content: '',
+                      transcript: msg.transcript || '',
+                      audioFileId: msg.audio_file_id,
+                      audioUrl,
+                      autoPlay: false,
+                      timestamp: new Date(),
+                    };
+                  } catch (err) {
+                    console.error('Failed to load audio URL for message:', err);
+                    // Fallback to text if audio URL can't be resolved
+                    return {
+                      id: `history-${idx}`,
+                      type: 'agent' as const,
+                      content: msg.transcript || msg.content || '',
+                      timestamp: new Date(),
+                    };
+                  }
+                }
+                // Handle text messages
+                return {
+                  id: `history-${idx}`,
+                  type: msg.role === 'user' ? ('user' as const) : ('agent' as const),
+                  content: msg.content || '',
+                  timestamp: new Date(),
+                };
+              }
+            )
           );
           setMessages(loaded);
         }
@@ -239,6 +288,13 @@ export default function MarketplaceChatPage() {
     };
   }, [numericId]);
 
+  // Cleanup audio URLs on unmount
+  useEffect(() => {
+    return () => {
+      audioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
   const refreshFileList = useCallback(async () => {
     try {
       const response = await apiService.listMarketplaceFiles(numericId);
@@ -257,87 +313,135 @@ export default function MarketplaceChatPage() {
     }
   }, []);
 
+  // Helper function to send a message with the given content
+  const performSendMessage = useCallback(
+    async (messageContent: string) => {
+      if (!messageContent && persistentFiles.length === 0) return;
+      if (isStreaming) return;
+      if (isQuotaExceeded) return;
+
+      const userMsg: ChatMessage = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: messageContent || `[${persistentFiles.length} file(s) attached]`,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMsg]);
+      setInputMessage('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      resetScrollLock();
+      setTimeout(() => scrollToBottom('instant'), 50);
+
+      try {
+        setHoldStreamingContent(true);
+        const result = await sendMessage(messageContent, {
+          conversationId: numericId,
+          responseMode,
+          audioLanguage,
+        });
+
+        const rawResponse = result.response || '';
+        const responseContent: string =
+          typeof rawResponse === 'object'
+            ? JSON.stringify(rawResponse, null, 2)
+            : rawResponse;
+
+        const agentMsgId = (Date.now() + 1).toString();
+        lastStreamedMsgIdRef.current = agentMsgId;
+
+        // Check if response is audio
+        if (result.messageType === 'audio' && result.audioFileId) {
+          try {
+            const audioUrl = await apiService.getMarketplaceFileDownloadUrl(numericId, result.audioFileId);
+            audioUrlsRef.current.push(audioUrl);
+
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: agentMsgId,
+                type: 'agent-audio',
+                content: '',
+                transcript: responseContent,
+                audioFileId: result.audioFileId,
+                audioUrl,
+                autoPlay: true,
+                timestamp: new Date(),
+              },
+            ]);
+          } catch (audioError) {
+            console.error('Error resolving audio file URL:', audioError);
+            // Fallback to text message if audio file can't be resolved
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: agentMsgId,
+                type: 'agent',
+                content: responseContent || 'Audio response generated but could not be retrieved.',
+                timestamp: new Date(),
+              },
+            ]);
+            toast.error('Audio response generated but could not be retrieved. Showing transcript instead.');
+          }
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: agentMsgId,
+              type: 'agent',
+              content: responseContent,
+              timestamp: new Date(),
+            },
+          ]);
+        }
+
+        setHoldStreamingContent(false);
+
+        void refreshFileList();
+        void fetchQuotaInfo();
+      } catch (err) {
+        setHoldStreamingContent(false);
+        const isQuotaError =
+          err instanceof Error &&
+          (err.message.toLowerCase().includes('quota') ||
+            err.message.toLowerCase().includes('429') ||
+            err.message.toLowerCase().includes('limit'));
+        const content = isQuotaError
+          ? 'Marketplace call quota exceeded. Your quota resets at the start of next month.'
+          : errorMessage(err, 'Failed to send message. Please try again.');
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            type: 'error',
+            content,
+            timestamp: new Date(),
+          },
+        ]);
+        void fetchQuotaInfo();
+      }
+    },
+    [
+      persistentFiles.length,
+      isStreaming,
+      isQuotaExceeded,
+      sendMessage,
+      numericId,
+      resetScrollLock,
+      scrollToBottom,
+      refreshFileList,
+      fetchQuotaInfo,
+      responseMode,
+      audioLanguage,
+    ],
+  );
+
   const handleSendMessage = useCallback(async () => {
     const trimmed = inputMessage.trim();
-    if (!trimmed && persistentFiles.length === 0) return;
-    if (isStreaming) return;
-    if (isQuotaExceeded) return;
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: trimmed || `[${persistentFiles.length} file(s) attached]`,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputMessage('');
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
-    resetScrollLock();
-    setTimeout(() => scrollToBottom('instant'), 50);
-
-    try {
-      setHoldStreamingContent(true);
-      const result = await sendMessage(trimmed, {
-        conversationId: numericId,
-      });
-
-      const rawResponse = result.response || '';
-      const responseContent: string =
-        typeof rawResponse === 'object'
-          ? JSON.stringify(rawResponse, null, 2)
-          : rawResponse;
-
-      const agentMsgId = (Date.now() + 1).toString();
-      lastStreamedMsgIdRef.current = agentMsgId;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: agentMsgId,
-          type: 'agent',
-          content: responseContent,
-          timestamp: new Date(),
-        },
-      ]);
-      setHoldStreamingContent(false);
-
-      void refreshFileList();
-      void fetchQuotaInfo();
-    } catch (err) {
-      setHoldStreamingContent(false);
-      const isQuotaError =
-        err instanceof Error &&
-        (err.message.toLowerCase().includes('quota') ||
-          err.message.toLowerCase().includes('429') ||
-          err.message.toLowerCase().includes('limit'));
-      const content = isQuotaError
-        ? 'Marketplace call quota exceeded. Your quota resets at the start of next month.'
-        : errorMessage(err, 'Failed to send message. Please try again.');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          type: 'error',
-          content,
-          timestamp: new Date(),
-        },
-      ]);
-      void fetchQuotaInfo();
-    }
-  }, [
-    inputMessage,
-    persistentFiles.length,
-    isStreaming,
-    isQuotaExceeded,
-    sendMessage,
-    numericId,
-    resetScrollLock,
-    scrollToBottom,
-    refreshFileList,
-    fetchQuotaInfo,
-  ]);
+    performSendMessage(trimmed);
+  }, [inputMessage, performSendMessage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -349,6 +453,77 @@ export default function MarketplaceChatPage() {
     [handleSendMessage],
   );
 
+  const handleStartRecording = async () => {
+    try {
+      const audioTracks = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(audioTracks);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioFile = new File(
+          [audioBlob],
+          `recording-${Date.now()}.webm`,
+          {
+            type: 'audio/webm',
+          }
+        );
+
+        const language = audioLanguage;
+
+        try {
+          const response = await apiService.uploadRecordedAudioMarketplace(
+            numericId,
+            audioFile,
+            language
+          );
+          const transcript = response.transcript;
+
+          if (!transcript) {
+            alert('No transcript available for the recording.');
+            return;
+          }
+
+          // Automatically send the transcribed message
+          performSendMessage(transcript);
+        } catch (error) {
+          console.error('Error uploading recorded audio:', error);
+          toast.error('Failed to process audio. Please try again.');
+        }
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error('Microphone access required to record audio.');
+    }
+  };
+
+  const handleStopRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+
+    recorder.stop();
+    recorder.stream.getTracks().forEach((track) => track.stop());
+    setIsRecording(false);
+  };
+
+  // Cleanup audio URLs on unmount
+  useEffect(() => {
+    return () => {
+      audioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      audioUrlsRef.current = [];
+    };
+  }, []);
+
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files ? Array.from(e.target.files) : [];
@@ -357,9 +532,11 @@ export default function MarketplaceChatPage() {
 
       setIsLoadingFiles(true);
       const failed: string[] = [];
+      
       for (const file of files) {
         try {
-          await apiService.uploadMarketplaceFile(numericId, file);
+          // Upload file - backend handles audio transcription if it's an audio file
+          await apiService.uploadMarketplaceFile(numericId, file, audioLanguage);
         } catch (err) {
           failed.push(file.name);
           console.error(`Error uploading file ${file.name}:`, err);
@@ -372,7 +549,7 @@ export default function MarketplaceChatPage() {
         toast.error(`Failed to upload: ${failed.join(', ')}`);
       }
     },
-    [numericId, refreshFileList],
+    [numericId, refreshFileList, audioLanguage],
   );
 
   const resolveFileUrl = useCallback(
@@ -593,6 +770,40 @@ export default function MarketplaceChatPage() {
               );
             }
 
+            if (message.type === 'agent-audio') {
+              const wasStreamed = message.id === lastStreamedMsgIdRef.current;
+              return (
+                <div
+                  key={message.id}
+                  className={`flex justify-start ${
+                    wasStreamed ? '' : 'animate-slide-in-left'
+                  }`}
+                >
+                  <div className="max-w-[90%] lg:max-w-[80%]">
+                    <div className="pg-bubble-agent">
+                      <AudioMessage
+                        audioUrl={message.audioUrl!}
+                        transcript={message.transcript}
+                        autoPlay={message.autoPlay}
+                        onPlay={() => setIsAudioPlaying(true)}
+                        onPause={() => setIsAudioPlaying(false)}
+                        onEnded={() => setIsAudioPlaying(false)}
+                      />
+                    </div>
+
+                    <div className="mt-1">
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {message.timestamp.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
             const wasStreamed = message.id === lastStreamedMsgIdRef.current;
             return (
               <div
@@ -616,9 +827,18 @@ export default function MarketplaceChatPage() {
             );
           })}
 
-          {showStreaming && (
+          {showStreaming && responseMode === 'text' && (
             <StreamingMessage
               content={streamingContent}
+              isStreaming={isStreaming}
+              activeTools={activeTools}
+              thinkingMessage={thinkingMessage}
+            />
+          )}
+
+          {showStreaming && responseMode === 'audio' && (
+            <StreamingMessage
+              content={''}
               isStreaming={isStreaming}
               activeTools={activeTools}
               thinkingMessage={thinkingMessage}
@@ -670,6 +890,39 @@ export default function MarketplaceChatPage() {
             </div>
           )}
 
+          {/* Response Mode & Language Controls */}
+          <div className="mb-2 flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setResponseMode('text')}
+              className={`px-2 py-1 rounded-md text-xs font-medium ${responseMode === 'text' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+            >
+              Text
+            </button>
+            <button
+              type="button"
+              onClick={() => setResponseMode('audio')}
+              className={`px-2 py-1 rounded-md text-xs font-medium ${responseMode === 'audio' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+            >
+              Audio
+            </button>
+
+            <select
+              value={audioLanguage}
+              onChange={(e) => setAudioLanguage(e.target.value as 'en' | 'es' | 'eu' | 'ca' | 'gl' | 'fr')}
+              className="text-xs rounded-md px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+            >
+              <option value="en">EN</option>
+              <option value="es">ES</option>
+              <option value="ca">CA</option>
+              <option value="gl">GL</option>
+              <option value="eu">EU</option>
+              <option value="fr">FR</option>
+            </select>
+
+            {isAudioPlaying && <span className="text-xs text-gray-500">Playing...</span>}
+          </div>
+
            <div className="pg-glass rounded-2xl px-4 py-3 flex items-end gap-3 shadow-sm border border-white/20 dark:border-gray-700/30">
              <input
                ref={fileInputRef}
@@ -678,6 +931,7 @@ export default function MarketplaceChatPage() {
                onChange={handleFileSelect}
                className="hidden"
                id="marketplace-file-upload"
+               accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx,.wav,.mp3,.ogg,.flac,.aac,.m4a,.webm"
              />
              <button
                type="button"
@@ -723,7 +977,26 @@ export default function MarketplaceChatPage() {
                >
                  <Square className="w-4 h-4" />
                </button>
-             ) : (
+             ) : isRecording ? (
+               <button
+                 type="button"
+                 onClick={handleStopRecording}
+                 className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
+                            hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
+                            active:scale-95 shrink-0"
+                 aria-label="Stop recording"
+                 title="Stop recording"
+               >
+                 <svg
+                   className="w-4 h-4"
+                   fill="currentColor"
+                   viewBox="0 0 24 24"
+                   aria-hidden="true"
+                 >
+                   <rect x="6" y="6" width="12" height="12" rx="2" />
+                 </svg>
+               </button>
+             ) : inputMessage.trim().length > 0 ? (
                <button
                  type="button"
                  onClick={handleSendMessage}
@@ -742,11 +1015,33 @@ export default function MarketplaceChatPage() {
                      strokeLinecap="round"
                      strokeLinejoin="round"
                      strokeWidth={2}
-                     d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                   />
-                 </svg>
-               </button>
-             )}
+                       d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                     />
+                   </svg>
+                 </button>
+               ) : (
+                 <button
+                   type="button"
+                   onClick={handleStartRecording}
+                   className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-900/30
+                             text-indigo-600 dark:text-indigo-400
+                             hover:bg-indigo-200 dark:hover:bg-indigo-900/50
+                             transition-all duration-150 active:scale-95 shrink-0"
+                   aria-label="Record audio"
+                   title="Record audio"
+                 >
+                   <svg
+                     className="w-4 h-4"
+                     fill="none"
+                     stroke="currentColor"
+                     viewBox="0 0 24 24"
+                     aria-hidden="true"
+                   >
+                     <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z" />
+                     <path d="M17 11a1 1 0 10-2 0 3 3 0 01-6 0 1 1 0 10-2 0 5 5 0 004 4.9V19H9a1 1 0 100 2h6a1 1 0 100-2h-2v-3.1A5 5 0 0017 11z" />
+                   </svg>
+                 </button>
+               )}
            </div>
 
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">

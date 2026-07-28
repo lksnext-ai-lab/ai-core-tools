@@ -2288,6 +2288,8 @@ class ApiService {
     options: {
       files?: File[];
       fileReferences?: string[];
+      responseMode?: string;
+      audioLanguage?: string;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     },
@@ -2300,6 +2302,12 @@ class ApiService {
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));
+    }
+    if (options.responseMode) {
+      formData.append('response_mode', options.responseMode);
+    }
+    if (options.audioLanguage) {
+      formData.append('audio_language', options.audioLanguage);
     }
 
     const url = `${this.baseURL}/internal/marketplace/conversations/${conversationId}/chat/stream`;
@@ -2340,9 +2348,14 @@ class ApiService {
     }
   }
 
-  async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
+  async uploadMarketplaceFile(conversationId: number, file: File, language?: string): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
+    
+    if (language) {
+      formData.append('language', language);
+    }
+    
     return this.request(
       `/internal/marketplace/conversations/${conversationId}/upload-file`,
       { method: 'POST', body: formData },
@@ -2366,6 +2379,24 @@ class ApiService {
       { method: 'GET' },
     );
     return response.download_url;
+  }
+
+  async uploadRecordedAudioMarketplace(
+    conversationId: number,
+    file: File,
+    language: string = 'en'
+  ) {
+    const formData = new FormData();
+    formData.append('audio_file', file);
+    formData.append('language', language);
+
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/transcribe-audio`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
   }
 
   async getMarketplaceQuotaUsage(): Promise<MarketplaceQuotaUsage> {
