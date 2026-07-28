@@ -8,6 +8,8 @@ Only vector DB / service operations are mocked — auth, routing, Pydantic, and 
 import pytest
 from unittest.mock import patch, MagicMock
 
+from services.silo_service import DEFAULT_METADATA_VALUES_LIMIT
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -424,6 +426,129 @@ class TestDocOperations:
             "DELETE",
             silos_url(fake_app.app_id, fake_silo.silo_id, "docs/delete-by-metadata"),
             json={"filter_metadata": {}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
+    @patch("routers.public.v1.silos.SiloService.count_docs_with_filter")
+    def test_count_by_metadata(
+        self, mock_count, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_count.return_value = 7
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/count-by-metadata"),
+            json={"filter_metadata": {"resource_id": {"$eq": "123"}}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 7
+
+    def test_count_by_metadata_empty_filter_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/count-by-metadata"),
+            json={"filter_metadata": {}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
+    @patch("routers.public.v1.silos.SiloService.update_docs_metadata")
+    def test_update_metadata(
+        self, mock_update, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_update.return_value = 12
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/update-metadata"),
+            json={
+                "filter_metadata": {"categoria": {"$eq": "LS5000"}},
+                "metadata_updates": {"categoria": "Serie LS5000"},
+            },
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 12
+        # Merge by default: a caller re-labelling one key must not wipe the rest.
+        assert mock_update.call_args.kwargs["replace"] is False
+
+    def test_update_metadata_empty_filter_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        # An empty filter would match the whole collection — the one mistake that
+        # turns a rename into a silo-wide overwrite.
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/update-metadata"),
+            json={"filter_metadata": {}, "metadata_updates": {"categoria": "X"}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
+    def test_update_metadata_empty_updates_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/update-metadata"),
+            json={"filter_metadata": {"categoria": {"$eq": "LS5000"}}, "metadata_updates": {}},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
+    @patch("routers.public.v1.silos.SiloService.get_metadata_field_values")
+    def test_metadata_values(
+        self, mock_values, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_values.return_value = ["https://wiki/A", "https://wiki/B"]
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={
+                "field": "source_url",
+                "filter_metadata": {"categoria": {"$eq": "LS5000"}},
+            },
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["values"] == ["https://wiki/A", "https://wiki/B"]
+        # The filter must reach the service: without it the caller would get the
+        # whole silo's values instead of its own target's.
+        assert mock_values.call_args.kwargs["filter_metadata"] == {
+            "categoria": {"$eq": "LS5000"}
+        }
+
+    @patch("routers.public.v1.silos.SiloService.get_metadata_field_values")
+    def test_metadata_values_defaults_the_limit(
+        self, mock_values, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_values.return_value = []
+
+        client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={"field": "ticket_id"},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert mock_values.call_args.kwargs["limit"] == DEFAULT_METADATA_VALUES_LIMIT
+
+    def test_metadata_values_empty_field_returns_400(
+        self, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={"field": "   "},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+
+    @patch("routers.public.v1.silos.SiloService.get_metadata_field_values")
+    def test_metadata_values_invalid_field_name_returns_400(
+        self, mock_values, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_values.side_effect = ValueError("Invalid metadata field name: 'a b'")
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={"field": "a b"},
             headers=api_headers(fake_api_key.key),
         )
         assert resp.status_code == 400

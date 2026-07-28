@@ -217,3 +217,63 @@ class TestPGVectorStoreStrForJsonb:
         PGVectorStore._operator_condition(0, "active", "$in", [True, False], params)
         assert params["in0_0"] == "true"
         assert params["in0_1"] == "false"
+
+
+class TestPGVectorStoreDistinctMetadataValues:
+    """PGVectorStore.get_distinct_metadata_values with a metadata filter.
+
+    This is the enumeration path that replaced a top-k similarity search for
+    "what does this target already hold?". Two things have to hold: the filter
+    reaches the SQL, and the embedding table keeps the alias `_build_filter_sql`
+    emits (`e`) — a mismatch there produces a SQL error at runtime only.
+    """
+
+    def _make_store(self):
+        from tools.vector_stores.pgvector_store import PGVectorStore
+
+        store = PGVectorStore.__new__(PGVectorStore)
+        store.db = MagicMock()
+        store.async_engine = None
+
+        # Reads use engine.connect(), not engine.begin().
+        self.mock_conn = MagicMock()
+        self.mock_conn.execute.return_value = [("https://wiki/A",), ("https://wiki/B",)]
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value.__enter__.return_value = self.mock_conn
+        mock_engine.connect.return_value.__exit__.return_value = False
+        store.engine = mock_engine
+        return store
+
+    def test_filter_reaches_the_sql_with_the_expected_alias(self):
+        store = self._make_store()
+
+        values = store.get_distinct_metadata_values(
+            "silo_3",
+            "source_url",
+            limit=1000,
+            filter_metadata={"categoria": {"$eq": "LS5000"}},
+        )
+
+        assert values == ["https://wiki/A", "https://wiki/B"]
+        sql_arg, params = self.mock_conn.execute.call_args.args
+        sql = str(sql_arg)
+        assert "SELECT DISTINCT e.cmetadata->>:field" in sql
+        assert "FROM langchain_pg_embedding e" in sql
+        # _build_filter_sql always prefixes with `e.`; the join alias must match.
+        assert "e.cmetadata ->> :k0 = :v0" in sql
+        assert params["k0"] == "categoria"
+        assert params["v0"] == "LS5000"
+
+    def test_without_a_filter_the_where_stays_unchanged(self):
+        store = self._make_store()
+
+        store.get_distinct_metadata_values("silo_3", "source_url", limit=100)
+
+        sql = str(self.mock_conn.execute.call_args.args[0])
+        assert "cmetadata ->> :k0" not in sql
+
+    def test_failure_returns_empty_instead_of_raising(self):
+        store = self._make_store()
+        self.mock_conn.execute.side_effect = RuntimeError("boom")
+
+        assert store.get_distinct_metadata_values("silo_3", "source_url") == []

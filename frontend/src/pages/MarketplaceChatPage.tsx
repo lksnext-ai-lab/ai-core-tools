@@ -7,6 +7,8 @@ import MessageContent from '../components/playground/MessageContent';
 import StreamingMessage from '../components/playground/StreamingMessage';
 import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
 import type { PanelFile } from '../components/playground/AttachedFilesPanel';
+import OrchestratorFilterDropdowns from '../components/playground/OrchestratorFilterDropdowns';
+import type { ChatFilterField } from '../components/playground/OrchestratorFilterDropdowns';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
@@ -59,6 +61,8 @@ export default function MarketplaceChatPage() {
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [chatFilters, setChatFilters] = useState<ChatFilterField[]>([]);
+  const [exposedFilterValues, setExposedFilterValues] = useState<Record<string, string>>({});
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -79,6 +83,7 @@ export default function MarketplaceChatPage() {
       apiService.chatMarketplaceStream(numericId, message, {
         files: opts.files,
         fileReferences: persistentFiles.length > 0 ? persistentFiles.map((f) => f.file_id) : undefined,
+        searchParams: opts.searchParams,
         onEvent: opts.onEvent,
         signal: opts.signal,
       }),
@@ -239,6 +244,27 @@ export default function MarketplaceChatPage() {
     };
   }, [numericId]);
 
+  // Orchestrator-level exposed chat filters — resolved via the conversation's
+  // agent, aggregated across its own silo + all its subagents' silos.
+  useEffect(() => {
+    if (!numericId || Number.isNaN(numericId)) return;
+    let isMounted = true;
+    setExposedFilterValues({});
+    const loadChatFilters = async () => {
+      try {
+        const response = await apiService.getMarketplaceChatFilters(numericId);
+        if (isMounted) setChatFilters(response.filters || []);
+      } catch (err) {
+        console.error('Error loading chat filters:', err);
+        if (isMounted) setChatFilters([]);
+      }
+    };
+    loadChatFilters();
+    return () => {
+      isMounted = false;
+    };
+  }, [numericId]);
+
   const refreshFileList = useCallback(async () => {
     try {
       const response = await apiService.listMarketplaceFiles(numericId);
@@ -280,8 +306,10 @@ export default function MarketplaceChatPage() {
 
     try {
       setHoldStreamingContent(true);
+      const hasExposedFilters = Object.keys(exposedFilterValues).length > 0;
       const result = await sendMessage(trimmed, {
         conversationId: numericId,
+        searchParams: hasExposedFilters ? { filter: exposedFilterValues } : undefined,
       });
 
       const rawResponse = result.response || '';
@@ -337,6 +365,7 @@ export default function MarketplaceChatPage() {
     scrollToBottom,
     refreshFileList,
     fetchQuotaInfo,
+    exposedFilterValues,
   ]);
 
   const handleKeyDown = useCallback(
@@ -667,6 +696,17 @@ export default function MarketplaceChatPage() {
                 ({quotaInfo.call_count}/{quotaInfo.quota}).
                 Your quota resets at the start of next month (UTC).
               </span>
+            </div>
+          )}
+
+          {chatFilters.length > 0 && (
+            <div className="mb-3">
+              <OrchestratorFilterDropdowns
+                filters={chatFilters}
+                selected={exposedFilterValues}
+                onChange={setExposedFilterValues}
+                disabled={isStreaming || isQuotaExceeded}
+              />
             </div>
           )}
 

@@ -7,7 +7,7 @@ from utils.security import generate_signature
 
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import AsyncGenerator, List, Optional, Dict, Annotated
+from typing import Any, AsyncGenerator, List, Optional, Dict, Annotated
 
 from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
@@ -518,6 +518,24 @@ def _parse_file_references_json(file_references: Optional[str]) -> Optional[list
         return None
 
 
+def _parse_optional_json(value: Optional[str], param_name: str) -> Any:
+    """Parse a JSON-encoded optional string, logging a warning on decode failure.
+
+    Mirrors the identically-named helper in ``routers/internal/agents.py`` so the
+    Playground and Marketplace chat endpoints handle the ``search_params`` form
+    field the same way. Kept file-local since the helper in ``agents.py`` is
+    file-private too and duplicating small parsing helpers is the established
+    pattern in this router (see ``_parse_file_references_json`` above).
+    """
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid {param_name} JSON, ignoring")
+        return None
+
+
 def _extract_jwt_token(request: Request) -> Optional[str]:
     """Extract JWT token from Authorization header."""
     auth_header = request.headers.get("Authorization", "")
@@ -598,6 +616,29 @@ def _prepare_marketplace_chat(
     return conversation, agent
 
 
+@marketplace_router.get(
+    "/conversations/{conversation_id}/chat-filters",
+    summary="Get chat-time dropdown filter values for a marketplace conversation's agent",
+)
+async def get_marketplace_chat_filter_values(
+    conversation_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+):
+    """Get distinct values for the agent's exposed chat-time dropdown filters.
+
+    Reuses ``_prepare_marketplace_chat`` for the established
+    ownership/visibility/quota validation on this router, even though this is
+    a pure read — it's a one-shot call on chat page load, not per-message, so
+    the quota check it performs is a negligible cost.
+    """
+    user_id = int(current_user.identity.id)
+    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+
+    filters = AgentService().get_chat_filter_values(db, agent)
+    return {"filters": filters}
+
+
 @marketplace_router.post(
     "/conversations/{conversation_id}/chat",
     summary="Chat in marketplace conversation",
@@ -611,6 +652,7 @@ async def marketplace_chat(
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
+    search_params: Annotated[Optional[str], Form()] = None,
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
@@ -620,6 +662,7 @@ async def marketplace_chat(
     all_file_references: list = []
     try:
         parsed_refs = _parse_file_references_json(file_references)
+        parsed_search_params = _parse_optional_json(search_params, "search_params")
         jwt_token = _extract_jwt_token(request)
 
         user_context = {
@@ -644,7 +687,7 @@ async def marketplace_chat(
             agent_id=agent.agent_id,
             message=message,
             file_references=all_file_references,
-            search_params=None,
+            search_params=parsed_search_params,
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
@@ -683,6 +726,7 @@ async def marketplace_chat_stream(
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
+    search_params: Annotated[Optional[str], Form()] = None,
 ):
     """Stream a marketplace chat turn as Server-Sent Events.
 
@@ -694,6 +738,7 @@ async def marketplace_chat_stream(
 
     try:
         parsed_refs = _parse_file_references_json(file_references)
+        parsed_search_params = _parse_optional_json(search_params, "search_params")
         jwt_token = _extract_jwt_token(request)
 
         user_context = {
@@ -719,7 +764,7 @@ async def marketplace_chat_stream(
             agent_id=agent.agent_id,
             message=message,
             file_references=all_file_references,
-            search_params=None,
+            search_params=parsed_search_params,
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,

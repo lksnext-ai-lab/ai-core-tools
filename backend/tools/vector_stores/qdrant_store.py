@@ -557,15 +557,18 @@ class QdrantStore(VectorStoreInterface):
         field: str,
         prefix: Optional[str] = None,
         limit: int = 100,
+        filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         seen: set = set()
         offset = None
         batch_size = 200
+        scroll_filter = self._build_qdrant_filter(filter_metadata) if filter_metadata else None
 
         try:
             while len(seen) < limit:
                 results, next_offset = self.client.scroll(
                     collection_name=collection_name,
+                    scroll_filter=scroll_filter,
                     limit=batch_size,
                     offset=offset,
                     with_payload=True,

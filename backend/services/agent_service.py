@@ -1,10 +1,11 @@
-from typing import Union, List, Dict, Any, Optional
+from typing import Union, List, Dict, Any, Optional, Set
 from sqlalchemy.orm import Session
 from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
+from services.metadata_values_cache_service import MetadataValuesCacheService
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -143,6 +144,7 @@ class AgentService:
             rag_score_threshold=getattr(agent, 'rag_score_threshold', None) if isinstance(getattr(agent, 'rag_score_threshold', None), (float, int, type(None))) else None,
             rag_max_retrieval_calls=getattr(agent, 'rag_max_retrieval_calls', None) if isinstance(getattr(agent, 'rag_max_retrieval_calls', None), (int, type(None))) else None,
             rag_fixed_filters=getattr(agent, 'rag_fixed_filters', None) if isinstance(getattr(agent, 'rag_fixed_filters', None), (list, type(None))) else None,
+            exposed_chat_filters=getattr(agent, 'exposed_chat_filters', None) or [],
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int):
@@ -190,7 +192,221 @@ class AgentService:
     def get_agent(self, db: Session, agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
         """Get agent by ID and type"""
         return AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type)
-    
+
+    def get_available_chat_filter_fields(
+        self, db: Session, tool_ids: List[int], own_silo_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get the union of metadata filter fields available for chat-time exposure.
+
+        Aggregates ``{name, type, description}`` entries from the metadata
+        definitions of the given candidate subagent silos plus the orchestrator's
+        own silo (if any). Accepts raw candidate ``tool_ids``/``own_silo_id``
+        (not persisted ``AgentTool`` associations) so it works mid-edit, before
+        the agent (or its subagent associations) has actually been saved.
+
+        On a name collision across silos the first-seen ``type`` wins. Never
+        raises: a broken or missing metadata_definition for one silo simply
+        contributes nothing to the union.
+
+        Args:
+            db: Database session.
+            tool_ids: Candidate subagent agent_ids (may include non-tool agents;
+                any without a silo are skipped).
+            own_silo_id: The orchestrator's own silo_id, if any.
+
+        Returns:
+            List of ``{"name": str, "type": str, "description": Optional[str]}``
+            dicts, sorted by name.
+        """
+        silo_ids: set = set()
+        if own_silo_id:
+            silo_ids.add(own_silo_id)
+
+        if tool_ids:
+            rows = db.query(Agent.agent_id, Agent.silo_id).filter(Agent.agent_id.in_(tool_ids)).all()
+            for _, silo_id in rows:
+                if silo_id:
+                    silo_ids.add(silo_id)
+
+        fields_by_name: Dict[str, Dict[str, Any]] = {}
+        for silo_id in silo_ids:
+            try:
+                silo_info = AgentRepository.get_silo_with_metadata_definition(db, silo_id)
+                metadata_def = silo_info.get('metadata_definition') if silo_info else None
+                fields = (metadata_def or {}).get('fields') or []
+                for field in fields:
+                    if not isinstance(field, dict) or not field.get('name'):
+                        continue
+                    name = field['name']
+                    if name not in fields_by_name:
+                        fields_by_name[name] = {
+                            'name': name,
+                            'type': field.get('type', 'str'),
+                            'description': field.get('description'),
+                        }
+            except Exception as exc:
+                logger.warning(f"Failed to load metadata definition for silo {silo_id}: {exc}")
+                continue
+
+        return sorted(fields_by_name.values(), key=lambda f: f['name'])
+
+    def _get_silo_ids_by_metadata_field(self, db: Session, silo_ids: Set[int]) -> Dict[str, Set[int]]:
+        """Map each declared metadata field name to the silo_ids that declare it.
+
+        Reuses the same ``AgentRepository.get_silo_with_metadata_definition``
+        lookup as :meth:`get_available_chat_filter_fields`, but keeps the
+        silo-to-field association instead of collapsing it to a name union,
+        since callers need to know which silo(s) to query for a given field's
+        distinct values.
+
+        Never raises: a broken or missing metadata_definition for one silo
+        simply contributes nothing.
+
+        Args:
+            db: Database session.
+            silo_ids: Candidate silo_ids to inspect.
+
+        Returns:
+            Dict mapping field name to the set of silo_ids declaring it.
+        """
+        field_to_silos: Dict[str, Set[int]] = {}
+        for silo_id in silo_ids:
+            try:
+                silo_info = AgentRepository.get_silo_with_metadata_definition(db, silo_id)
+                metadata_def = silo_info.get('metadata_definition') if silo_info else None
+                fields = (metadata_def or {}).get('fields') or []
+                for field in fields:
+                    if not isinstance(field, dict) or not field.get('name'):
+                        continue
+                    field_to_silos.setdefault(field['name'], set()).add(silo_id)
+            except Exception as exc:
+                logger.warning(f"Failed to load metadata definition for silo {silo_id}: {exc}")
+                continue
+        return field_to_silos
+
+    def _collect_candidate_silo_ids(self, agent: Agent) -> Set[int]:
+        """Own silo_id + each direct subagent's silo_id.
+
+        Shared by :meth:`get_chat_filter_values` and
+        :meth:`get_chat_filter_field_values` so the traversal logic lives once.
+        """
+        silo_ids: Set[int] = set()
+        own_silo_id = getattr(agent, 'silo_id', None)
+        if own_silo_id:
+            silo_ids.add(own_silo_id)
+
+        for assoc in getattr(agent, 'tool_associations', None) or []:
+            tool = getattr(assoc, 'tool', None)
+            tool_silo_id = getattr(tool, 'silo_id', None) if tool else None
+            if tool_silo_id:
+                silo_ids.add(tool_silo_id)
+
+        return silo_ids
+
+    def _fetch_distinct_values(self, db: Session, silo_ids: Set[int], field_name: str) -> Set[str]:
+        """Union distinct values for *field_name* across *silo_ids*.
+
+        Never raises: a failure fetching values for one silo is logged and
+        skipped, never blowing up the aggregation for the others.
+        """
+        values: Set[str] = set()
+        for silo_id in silo_ids:
+            try:
+                values.update(MetadataValuesCacheService.get_distinct_values(silo_id, field_name, db))
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to fetch distinct values for silo {silo_id}, field {field_name!r}: {exc}"
+                )
+                continue
+        return values
+
+    def get_chat_filter_values(self, db: Session, agent: Agent) -> List[Dict[str, Any]]:
+        """Get the distinct values for each orchestrator-exposed chat filter field.
+
+        For every field name in ``agent.exposed_chat_filters``, finds every silo
+        (the agent's own silo, plus each direct subagent's silo) whose
+        ``metadata_definition`` declares that field, then unions the DISTINCT
+        values for that field across those silos via
+        :meth:`MetadataValuesCacheService.get_distinct_values` (TTL-cached, so
+        N-subagent fan-out on every chat page load doesn't hit the vector store
+        repeatedly).
+
+        Never raises: a failure fetching values for one silo/field is logged
+        and skipped, never blowing up the aggregation for other fields/silos.
+        A field is omitted entirely when no silo declares it or the union of
+        values is empty.
+
+        Args:
+            db: Database session.
+            agent: The orchestrator agent (its ``exposed_chat_filters``,
+                ``silo_id`` and ``tool_associations`` are read directly).
+
+        Returns:
+            List of ``{"field_name": str, "values": List[str]}`` dicts, sorted
+            by field_name, with each field's values sorted too.
+        """
+        exposed_fields = getattr(agent, 'exposed_chat_filters', None) or []
+        if not exposed_fields:
+            return []
+
+        silo_ids = self._collect_candidate_silo_ids(agent)
+        if not silo_ids:
+            return []
+
+        field_to_silos = self._get_silo_ids_by_metadata_field(db, silo_ids)
+
+        results: List[Dict[str, Any]] = []
+        for field_name in exposed_fields:
+            candidate_silo_ids = field_to_silos.get(field_name)
+            if not candidate_silo_ids:
+                continue
+
+            values = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
+            if not values:
+                continue
+
+            results.append({"field_name": field_name, "values": sorted(values)})
+
+        return sorted(results, key=lambda r: r['field_name'])
+
+    def get_chat_filter_field_values(
+        self, db: Session, agent: Agent, field_name: str
+    ) -> Optional[List[str]]:
+        """Distinct values for ONE orchestrator-exposed chat filter field.
+
+        Returns ``None`` if *field_name* is not in ``agent.exposed_chat_filters``
+        — this is the security boundary: callers may only query fields the
+        designer explicitly exposed, never arbitrary internal metadata field
+        names (the public router maps ``None`` to a 404).
+
+        Returns ``[]`` (not ``None``) if the field is exposed but no silo
+        currently declares it / has values — that's a valid, non-error state.
+
+        Args:
+            db: Database session.
+            agent: The orchestrator agent.
+            field_name: The single filter field to look up.
+
+        Returns:
+            Sorted list of distinct values, ``[]`` if none, or ``None`` if
+            *field_name* isn't one of this agent's exposed filters.
+        """
+        exposed_fields = getattr(agent, 'exposed_chat_filters', None) or []
+        if field_name not in exposed_fields:
+            return None
+
+        silo_ids = self._collect_candidate_silo_ids(agent)
+        if not silo_ids:
+            return []
+
+        field_to_silos = self._get_silo_ids_by_metadata_field(db, silo_ids)
+        candidate_silo_ids = field_to_silos.get(field_name)
+        if not candidate_silo_ids:
+            return []
+
+        values = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
+        return sorted(values)
+
     def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str, user_id: int = None) -> int:
         """Create or update agent"""
         agent_id = agent_data.get('agent_id')
@@ -240,6 +456,24 @@ class AgentService:
                 raise ValueError(
                     f"rag_fixed_filters references unknown metadata fields: {unknown}. "
                     f"Allowed fields: {sorted(declared_fields)}"
+                )
+
+        # Validate exposed_chat_filters against the union of metadata fields available
+        # from the agent's own silo + its candidate subagents' silos. Uses the raw
+        # incoming tool_ids/silo_id (not persisted associations) so it works mid-edit,
+        # before update_agent_tools() reconciles the actual M:N rows (it runs after
+        # this method returns).
+        raw_exposed_filters = agent_data.get('exposed_chat_filters')
+        if raw_exposed_filters:
+            candidate_tool_ids = agent_data.get('tool_ids') or []
+            candidate_silo_id = agent_data.get('silo_id') or getattr(agent, 'silo_id', None)
+            available = self.get_available_chat_filter_fields(db, candidate_tool_ids, candidate_silo_id)
+            available_names = {f['name'] for f in available}
+            unknown_chat_filters = [name for name in raw_exposed_filters if name not in available_names]
+            if unknown_chat_filters:
+                raise ValueError(
+                    f"exposed_chat_filters references unknown metadata fields: {unknown_chat_filters}. "
+                    f"Available fields: {sorted(available_names)}"
                 )
 
         update_method = self._update_normal_agent
@@ -340,6 +574,11 @@ class AgentService:
             agent.rag_score_threshold = data['rag_score_threshold']
         if 'rag_fixed_filters' in data:
             agent.rag_fixed_filters = data['rag_fixed_filters']
+
+        # exposed_chat_filters (orchestrator-level chat dropdown whitelist): the
+        # column is NOT NULL, so always coerce to a list, clearing via explicit [].
+        if 'exposed_chat_filters' in data:
+            agent.exposed_chat_filters = data.get('exposed_chat_filters') or []
 
     def update_agent_tools(self, db: Session, agent_id: int, tool_ids: list, form_data: dict = None):
         """Update agent tools associations"""
