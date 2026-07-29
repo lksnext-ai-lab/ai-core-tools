@@ -8,6 +8,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import UploadFile, HTTPException
 
+from .audio_transcription_service import AudioTranscriptionService
+
+from tools.audioTools import extract_text_from_audio
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
 
@@ -36,6 +39,7 @@ class FileReference:
         "text": "text/plain",
         "image": "image/jpeg",  # Default, will be overridden based on extension
         "document": "application/msword",
+        "audio_response": "audio/wav",
         "unknown": "application/octet-stream"
     }
     
@@ -161,6 +165,10 @@ class FileManagementService:
         # Structure: {session_key: {file_id: FileReference}}
         self._files: Dict[str, Dict[str, FileReference]] = {}
         
+        # Separate storage for audio responses (not shown in attached files)
+        # Structure: {session_key: {file_id: FileReference}}
+        self._audio_responses: Dict[str, Dict[str, FileReference]] = {}
+        
         # Get TMP_BASE_FOLDER from config
         from utils.config import get_app_config
         app_config = get_app_config()
@@ -184,6 +192,7 @@ class FileManagementService:
         agent_id: int,
         user_context: Dict = None,
         conversation_id: Optional[int] = None,
+        language: Optional[str] = None,
         has_memory: bool = False,
     ) -> FileReference:
         """
@@ -208,6 +217,7 @@ class FileManagementService:
             agent_id: ID of the agent.
             user_context: User context (api_key, user_id, etc.).
             conversation_id: Optional conversation ID to organize files.
+            language: Optional language of the audio file (e.g. "en" for English). Only needed for audio files to assist with transcription.
             has_memory: Whether the target agent persists conversation state.
                 Callers MUST pass this so the storage strategy is correct;
                 defaulting to ``False`` keeps backward compatibility with
@@ -229,7 +239,7 @@ class FileManagementService:
             file_type = self._get_file_type(file.filename)
 
             # Process file based on type (also returns file size)
-            content, temp_path, file_size = await self._process_file_content(file, file_type)
+            content, temp_path, file_size = await self._process_file_content(file, file_type, language)
 
             storage_strategy = self._resolve_storage_strategy(has_memory, conversation_id)
 
@@ -518,6 +528,10 @@ class FileManagementService:
         elif ext in ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']:
             return "document"
         
+        # Audio files
+        elif ext in ['.wav', '.mp3', '.ogg', '.flac', '.aac', '.m4a', '.webm']:
+            return "audio"
+        
         else:
             return "unknown"
     
@@ -525,13 +539,14 @@ class FileManagementService:
         """Get file type from file path"""
         return self._get_file_type(os.path.basename(file_path))
     
-    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str, int]:
+    async def _process_file_content(self, file: UploadFile, file_type: str, language: Optional[str] = None) -> tuple[str, str, int]:
         """
         Process file content based on file type
         
         Args:
             file: Uploaded file
             file_type: Type of file
+            language: Optional language of the audio file (e.g. "en" for English). Only needed for audio files to assist with transcription.
             
         Returns:
             Tuple of (processed_content, temp_file_path, file_size_bytes)
@@ -560,6 +575,13 @@ class FileManagementService:
                 elif file_type == "document":
                     # For documents, return basic info (in production, use document processing)
                     content = f"Document file: {file.filename} (Document processing not implemented)"
+                    return content, temp_path, file_size
+                
+                elif file_type == "audio":
+                    # Use existing audio tools for wav files
+                    if not temp_path.lower().endswith(".wav"):
+                        temp_path = AudioTranscriptionService.convert_to_wav(temp_path)
+                    content = extract_text_from_audio(temp_path, language)
                     return content, temp_path, file_size
                 
                 else:
@@ -807,106 +829,148 @@ class FileManagementService:
         layout is shared).
         """
         try:
-            session_path = None
-            loaded_strategy = STORAGE_STRATEGY_PERSISTENT
+            # Initialize session if not exists
+            if session_key not in self._files:
+                self._files[session_key] = {}
+
+            # Load from BOTH persistent and ephemeral directories
+            # (do not break on first match; files may be in either or both)
             for base_dir, strategy in (
                 (self._persistent_dir, STORAGE_STRATEGY_PERSISTENT),
                 (self._ephemeral_dir, STORAGE_STRATEGY_EPHEMERAL),
             ):
                 if not os.path.exists(base_dir):
                     continue
-                candidate = os.path.join(base_dir, session_key)
-                if os.path.exists(candidate) and os.path.isdir(candidate):
-                    session_path = candidate
-                    loaded_strategy = strategy
-                    # Prefer persistent if it exists; ephemeral is only checked
-                    # when persistent does not have the session.
-                    break
-            if session_path is None:
-                return
+                session_path = os.path.join(base_dir, session_key)
+                if not os.path.exists(session_path) or not os.path.isdir(session_path):
+                    continue
 
-            # Initialize session if not exists
-            if session_key not in self._files:
-                self._files[session_key] = {}
+                # Load files for this session from this directory
+                for filename in os.listdir(session_path):
+                    if filename.endswith('.json'):
+                        file_id = filename[:-5]  # Remove .json extension
+                        metadata_file = os.path.join(session_path, filename)
+                        content_file = os.path.join(session_path, f"{file_id}.content")
 
-            # Load files for this session
-            for filename in os.listdir(session_path):
-                if filename.endswith('.json'):
-                    file_id = filename[:-5]  # Remove .json extension
-                    metadata_file = os.path.join(session_path, filename)
-                    content_file = os.path.join(session_path, f"{file_id}.content")
+                        if os.path.exists(content_file):
+                            try:
+                                with open(metadata_file, 'r') as f:
+                                    metadata = json.load(f)
 
-                    if os.path.exists(content_file):
+                                with open(content_file, 'r', encoding='utf-8') as f:
+                                    content = f.read()
+
+                                # Recreate FileReference with visual feedback data
+                                file_ref = FileReference(
+                                    file_id=metadata['file_id'],
+                                    filename=metadata['filename'],
+                                    file_type=metadata['file_type'],
+                                    content=content,
+                                    file_path=metadata.get('file_path'),
+                                    file_size_bytes=metadata.get('file_size_bytes'),
+                                    conversation_id=metadata.get('conversation_id')
+                                )
+                                # Re-stamp the lifecycle markers that the original
+                                # upload set on the in-memory ref. Without these
+                                # cleanup_ephemeral_refs cannot tell ephemeral
+                                # refs apart from persistent ones when the chat
+                                # happens in a later request than the upload.
+                                file_ref.storage_strategy = strategy
+                                file_ref._session_key = session_key
+                                
+                                # If file_path is missing, try to regenerate it
+                                if not file_ref.file_path:
+                                    # Search: session dir (UUID-named legacy files) and
+                                    # conversation dir (original-named files)
+                                    conv_id = metadata.get('conversation_id')
+                                    search_dirs = [session_path]
+                                    if conv_id:
+                                        search_dirs.append(os.path.join(
+                                            self._tmp_base_folder, "conversations", str(conv_id)
+                                        ))
+                                    found = False
+                                    for search_dir in search_dirs:
+                                        if not os.path.isdir(search_dir):
+                                            continue
+                                        for fname in os.listdir(search_dir):
+                                            # Legacy: UUID prefix match; new: original filename match
+                                            is_match = (
+                                                fname.startswith(file_id)
+                                                or fname == metadata.get('filename')
+                                            )
+                                            if is_match and not fname.endswith(('.json', '.content')):
+                                                candidate = os.path.join(search_dir, fname)
+                                                if os.path.exists(candidate):
+                                                    relative_path = os.path.relpath(candidate, self._tmp_base_folder)
+                                                    file_ref.file_path = relative_path
+                                                    metadata['file_path'] = relative_path
+                                                    with open(metadata_file, 'w') as f:
+                                                        json.dump(metadata, f, indent=2)
+                                                    logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
+                                                    found = True
+                                                    break
+                                        if found:
+                                            break
+                                
+                                self._files[session_key][file_id] = file_ref
+                                logger.info(f"Loaded file {file_id} from {strategy} for session {session_key}")
+                                logger.info(f"Loaded file_path: {file_ref.file_path}")
+                                
+                            except Exception as e:
+                                logger.error(f"Error loading file {file_id}: {str(e)}")
+            
+            # Also load audio responses from audio_responses subdirectory
+            # Keep them separate so they don't appear in attached files list
+            for base_dir, strategy in (
+                (self._persistent_dir, STORAGE_STRATEGY_PERSISTENT),
+                (self._ephemeral_dir, STORAGE_STRATEGY_EPHEMERAL),
+            ):
+                if not os.path.exists(base_dir):
+                    continue
+                audio_responses_path = os.path.join(base_dir, session_key, "audio_responses")
+                if not os.path.exists(audio_responses_path) or not os.path.isdir(audio_responses_path):
+                    continue
+
+                # Initialize audio responses for this session if needed
+                if session_key not in self._audio_responses:
+                    self._audio_responses[session_key] = {}
+
+                # Load audio response metadata files
+                for filename in os.listdir(audio_responses_path):
+                    if filename.endswith('.json'):
+                        file_id = filename[:-5]  # Remove .json extension
+                        metadata_file = os.path.join(audio_responses_path, filename)
+                        
                         try:
                             with open(metadata_file, 'r') as f:
                                 metadata = json.load(f)
-
-                            with open(content_file, 'r', encoding='utf-8') as f:
-                                content = f.read()
-
-                            # Recreate FileReference with visual feedback data
+                            
+                            # Create FileReference from audio response metadata
                             file_ref = FileReference(
                                 file_id=metadata['file_id'],
                                 filename=metadata['filename'],
-                                file_type=metadata['file_type'],
-                                content=content,
+                                file_type=metadata.get('file_type', 'audio_response'),
+                                content=metadata.get('content', 'Generated audio response'),
                                 file_path=metadata.get('file_path'),
                                 file_size_bytes=metadata.get('file_size_bytes'),
                                 conversation_id=metadata.get('conversation_id')
                             )
-                            # Re-stamp the lifecycle markers that the original
-                            # upload set on the in-memory ref. Without these
-                            # cleanup_ephemeral_refs cannot tell ephemeral
-                            # refs apart from persistent ones when the chat
-                            # happens in a later request than the upload.
-                            file_ref.storage_strategy = loaded_strategy
+                            file_ref.storage_strategy = strategy
                             file_ref._session_key = session_key
+                            file_ref.processing_status = metadata.get('processing_status', 'ready')
                             
-                            # If file_path is missing, try to regenerate it
-                            if not file_ref.file_path:
-                                # Search: session dir (UUID-named legacy files) and
-                                # conversation dir (original-named files)
-                                conv_id = metadata.get('conversation_id')
-                                search_dirs = [session_path]
-                                if conv_id:
-                                    search_dirs.append(os.path.join(
-                                        self._tmp_base_folder, "conversations", str(conv_id)
-                                    ))
-                                found = False
-                                for search_dir in search_dirs:
-                                    if not os.path.isdir(search_dir):
-                                        continue
-                                    for fname in os.listdir(search_dir):
-                                        # Legacy: UUID prefix match; new: original filename match
-                                        is_match = (
-                                            fname.startswith(file_id)
-                                            or fname == metadata.get('filename')
-                                        )
-                                        if is_match and not fname.endswith(('.json', '.content')):
-                                            candidate = os.path.join(search_dir, fname)
-                                            if os.path.exists(candidate):
-                                                relative_path = os.path.relpath(candidate, self._tmp_base_folder)
-                                                file_ref.file_path = relative_path
-                                                metadata['file_path'] = relative_path
-                                                with open(metadata_file, 'w') as f:
-                                                    json.dump(metadata, f, indent=2)
-                                                logger.info(f"Regenerated file_path for {file_id}: {relative_path}")
-                                                found = True
-                                                break
-                                    if found:
-                                        break
-                            
-                            self._files[session_key][file_id] = file_ref
-                            logger.info(f"Loaded persistent file {file_id} for session {session_key}")
-                            logger.info(f"Loaded file_path: {file_ref.file_path}")
+                            # Store in audio_responses, NOT in attached files
+                            self._audio_responses[session_key][file_id] = file_ref
+                            logger.info(f"Loaded audio response {file_id} from {strategy} for session {session_key}")
+                            logger.info(f"Audio response file_path: {file_ref.file_path}")
                             
                         except Exception as e:
-                            logger.error(f"Error loading file {file_id}: {str(e)}")
-                            
-            logger.info(f"Loaded {len(self._files.get(session_key, {}))} persistent files for session {session_key}")
+                            logger.error(f"Error loading audio response {file_id}: {str(e)}")
+            
+            logger.info(f"Loaded {len(self._files.get(session_key, {}))} total files for session {session_key}")
             
         except Exception as e:
-            logger.error(f"Error loading persistent files for session {session_key}: {str(e)}")
+            logger.error(f"Error loading files for session {session_key}: {str(e)}")
 
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
@@ -1039,6 +1103,7 @@ class FileManagementService:
         agent_id: int,
         user_context: Dict,
         conversation_id: Optional[int],
+        language: Optional[str] = None,
         has_memory: bool = False,
     ) -> List["FileReference"]:
         """Upload new files and merge with the existing attached files for a chat turn.
@@ -1082,6 +1147,7 @@ class FileManagementService:
                             agent_id=agent_id,
                             user_context=user_context,
                             conversation_id=conversation_id,
+                            language=language,
                             has_memory=has_memory,
                         )
                         all_refs.append(file_ref)
@@ -1163,4 +1229,129 @@ class FileManagementService:
             
         except Exception as e:
             logger.error(f"Error getting file stats: {str(e)}")
-            return {} 
+            return {}
+    
+    async def register_audio_response(
+        self,
+        file_path: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ) -> Optional[FileReference]:
+
+        try:
+            if not os.path.exists(file_path):
+                logger.warning(
+                    f"register_audio_response: file not found at {file_path}"
+                )
+                return None
+
+            filename = os.path.basename(file_path)
+            file_id = str(uuid.uuid4())
+            file_size = os.path.getsize(file_path)
+
+            relative_path = os.path.relpath(
+                file_path,
+                self._tmp_base_folder
+            ).replace(os.sep, "/")
+
+            file_ref = FileReference(
+                file_id=file_id,
+                filename=filename,
+                file_type="audio_response",
+                content="Generated audio response",
+                file_path=relative_path,
+                file_size_bytes=file_size,
+                conversation_id=str(conversation_id)
+                if conversation_id
+                else None,
+            )
+
+            file_ref.processing_status = "ready"
+
+            #
+            # IMPORTANTE:
+            # NO añadir a self._files
+            #
+            # NO aparecerá en AttachedFilesPanel
+            #
+
+            session_key = self._get_session_key(
+                agent_id,
+                user_context,
+                str(conversation_id)
+                if conversation_id
+                else None,
+            )
+
+            session_dir = os.path.join(
+                self._persistent_dir,
+                session_key,
+                "audio_responses",
+            )
+
+            os.makedirs(session_dir, exist_ok=True)
+
+            metadata_file = os.path.join(
+                session_dir,
+                f"{file_id}.json",
+            )
+
+            with open(metadata_file, "w") as f:
+                json.dump(file_ref.to_dict(), f, indent=2)
+
+            logger.info(
+                "Registered audio response %s (id=%s)",
+                filename,
+                file_id,
+            )
+
+            return file_ref
+
+        except Exception as e:
+            logger.error(
+                f"Error registering audio response: {e}",
+                exc_info=True,
+            )
+            return None
+    
+    async def get_audio_response(
+        self,
+        file_id: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ):
+        try:
+
+            session_key = self._get_session_key(
+                agent_id,
+                user_context,
+                str(conversation_id)
+                if conversation_id
+                else None,
+            )
+
+            audio_dir = os.path.join(
+                self._persistent_dir,
+                session_key,
+                "audio_responses",
+            )
+
+            metadata_file = os.path.join(
+                audio_dir,
+                f"{file_id}.json",
+            )
+
+            if not os.path.exists(metadata_file):
+                return None
+
+            with open(metadata_file) as f:
+                return json.load(f)
+
+        except Exception as e:
+            logger.error(
+                f"Error getting audio response: {e}",
+                exc_info=True,
+            )
+            return None

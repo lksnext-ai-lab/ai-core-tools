@@ -1778,6 +1778,8 @@ class ApiService {
       files?: File[];
       searchParams?: unknown;
       conversationId?: number | null;
+      responseMode?: string;
+      audioLanguage?: string;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     }
@@ -1793,6 +1795,13 @@ class ApiService {
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));
+    }
+
+    if (options.responseMode) {
+      formData.append('response_mode', options.responseMode);
+    }
+    if (options.audioLanguage) {
+      formData.append('audio_language', options.audioLanguage);
     }
 
     const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;
@@ -1835,7 +1844,8 @@ class ApiService {
     }
   }
 
-  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null): Promise<{ file_id: string }> {
+  // ==================== FILE MANAGEMENT API ====================
+  async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null, language?: string): Promise<{ file_id: string }> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -1843,11 +1853,69 @@ class ApiService {
       formData.append('conversation_id', conversationId.toString());
     }
 
+    if (language) {
+      formData.append('language', language);
+    }
+
     return this.request(`/internal/apps/${appId}/agents/${agentId}/upload-file`, {
       method: 'POST',
       body: formData,
     });
   }
+
+  async uploadRecordedAudio(
+    appId: number,
+    agentId: number,
+    file: File,
+    conversationId?: number | null,
+    language: string = 'en'
+  ) {
+    const formData = new FormData();
+
+    formData.append('audio_file', file);
+
+    if (conversationId) {
+      formData.append('conversation_id', conversationId.toString());
+    }
+
+    formData.append('language', language);
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/transcribe-audio`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  // Esto no se esta usando
+  async synthesizeAudio(
+    appId: number,
+    agentId: number,
+    text: string,
+    language: string = 'en',
+  ): Promise<Blob> {
+    const formData = new FormData();
+    formData.append('text', text);
+    formData.append('language', language);
+
+    const headers: Record<string, string> = {};
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`/internal/apps/${appId}/agents/${agentId}/synthesize-audio`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+  //
 
   async listAttachedFiles(appId: number, agentId: number, conversationId?: number | null): Promise<{ files: AttachedFile[] }> {
     const url = conversationId
@@ -2220,6 +2288,8 @@ class ApiService {
     options: {
       files?: File[];
       fileReferences?: string[];
+      responseMode?: string;
+      audioLanguage?: string;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     },
@@ -2232,6 +2302,12 @@ class ApiService {
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));
+    }
+    if (options.responseMode) {
+      formData.append('response_mode', options.responseMode);
+    }
+    if (options.audioLanguage) {
+      formData.append('audio_language', options.audioLanguage);
     }
 
     const url = `${this.baseURL}/internal/marketplace/conversations/${conversationId}/chat/stream`;
@@ -2272,9 +2348,14 @@ class ApiService {
     }
   }
 
-  async uploadMarketplaceFile(conversationId: number, file: File): Promise<any> {
+  async uploadMarketplaceFile(conversationId: number, file: File, language?: string): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
+    
+    if (language) {
+      formData.append('language', language);
+    }
+    
     return this.request(
       `/internal/marketplace/conversations/${conversationId}/upload-file`,
       { method: 'POST', body: formData },
@@ -2298,6 +2379,24 @@ class ApiService {
       { method: 'GET' },
     );
     return response.download_url;
+  }
+
+  async uploadRecordedAudioMarketplace(
+    conversationId: number,
+    file: File,
+    language: string = 'en'
+  ) {
+    const formData = new FormData();
+    formData.append('audio_file', file);
+    formData.append('language', language);
+
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/transcribe-audio`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
   }
 
   async getMarketplaceQuotaUsage(): Promise<MarketplaceQuotaUsage> {

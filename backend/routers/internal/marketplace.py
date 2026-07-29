@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import tempfile
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from utils.security import generate_signature
@@ -20,6 +21,7 @@ from services.user_service import UserService
 from services.file_management_service import FileManagementService, FileReference
 from services.marketplace_quota_service import MarketplaceQuotaService
 from services.system_settings_service import SystemSettingsService
+from services.audio_transcription_service import AudioTranscriptionService
 from utils.config import is_omniadmin
 from models.conversation import Conversation, ConversationSource
 from models.agent import Agent, MarketplaceVisibility
@@ -346,10 +348,15 @@ def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
 async def upload_marketplace_file(
     conversation_id: int,
     file: Annotated[UploadFile, File(...)],
-    db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    language: Annotated[Optional[str], Form()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
 ):
-    """Upload and persist a file for a marketplace conversation."""
+    """Upload and persist a file for a marketplace conversation.
+    
+    Args:
+        language: Optional language of the audio file for transcription (ISO 639-1 format, e.g. "en").
+    """
     user_id = int(current_user.identity.id)
     conversation = _get_marketplace_conversation(conversation_id, user_id, db)
     agent = _get_agent_or_404(db, conversation.agent_id)
@@ -362,6 +369,7 @@ async def upload_marketplace_file(
             agent_id=agent.agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            language=language,
         )
         return {
             "success": True,
@@ -467,6 +475,8 @@ async def download_marketplace_file(
     file_service = FileManagementService()
     try:
         file_data = None
+        
+        # Try to find in attached files first
         for try_conv_id in [str(conversation_id), None]:
             files = await file_service.list_attached_files(
                 agent_id=agent.agent_id,
@@ -476,6 +486,18 @@ async def download_marketplace_file(
             file_data = next((f for f in files if f.get("file_id") == file_id), None)
             if file_data:
                 break
+        
+        # If not found in attached files, try audio responses
+        if not file_data:
+            audio_response_data = await file_service.get_audio_response(
+                file_id=file_id,
+                agent_id=agent.agent_id,
+                user_context=user_context,
+                conversation_id=str(conversation_id),
+            )
+            if audio_response_data:
+                file_data = audio_response_data
+        
         if not file_data or not file_data.get("file_path"):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
@@ -501,6 +523,44 @@ async def download_marketplace_file(
     except Exception as e:
         logger.error(f"Error downloading marketplace file: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="File download failed")
+
+
+@marketplace_router.post(
+    "/conversations/{conversation_id}/transcribe-audio",
+    summary="Transcribe audio for marketplace conversation",
+)
+async def transcribe_marketplace_audio(
+    conversation_id: int,
+    audio_file: Annotated[UploadFile, File()],
+    language: Annotated[Optional[str], Form()] = 'en',
+    db: Annotated[Session, Depends(get_db)] = None,
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)] = None,
+):
+    """Transcribe recorded audio for a marketplace conversation."""
+    user_id = int(current_user.identity.id)
+    conversation = _get_marketplace_conversation(conversation_id, user_id, db)
+    
+    try:
+        # Save uploaded audio temporarily
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".webm")
+        try:
+            content = await audio_file.read()
+            temp_file.write(content)
+            temp_file.flush()
+            temp_file.close()
+            
+            # Transcribe the audio
+            transcript = await AudioTranscriptionService.transcribe_audio(temp_file.name, language or 'en')
+            
+            return {"transcript": transcript}
+        finally:
+            try:
+                os.remove(temp_file.name)
+            except OSError:
+                pass
+    except Exception as e:
+        logger.error(f"Marketplace audio transcription error: {e}")
+        raise HTTPException(status_code=500, detail="Audio transcription failed")
 
 
 # ==================== CHAT ====================
@@ -683,6 +743,8 @@ async def marketplace_chat_stream(
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
+    response_mode: Annotated[Optional[str], Form()] = "text",
+    audio_language: Annotated[Optional[str], Form()] = "en",
 ):
     """Stream a marketplace chat turn as Server-Sent Events.
 
@@ -702,6 +764,8 @@ async def marketplace_chat_stream(
             "oauth": True,
             "app_id": agent.app_id,
             "token": jwt_token,
+            "response_mode": response_mode,
+            "audio_language": audio_language,
         }
 
         fms = FileManagementService()

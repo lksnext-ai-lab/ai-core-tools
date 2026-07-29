@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from datetime import datetime
 
+from services.conversation_message_service import ConversationMessageService
+from services.file_management_service import FileManagementService
 from models.conversation import Conversation
 from repositories.conversation_repository import ConversationRepository
 from models.agent import Agent
@@ -317,97 +319,41 @@ class ConversationService:
         conversation_id: int,
         user_context: Dict
     ) -> Optional[List[Dict]]:
-        """
-        Get the message history for a conversation
-        
-        Args:
-            db: Database session
-            conversation_id: ID of the conversation
-            user_context: User context for validation
-            
-        Returns:
-            List of messages or None if not found/unauthorized
-        """
-        conversation = ConversationService.get_conversation(db, conversation_id, user_context)
-        
+
+        conversation = ConversationService.get_conversation(
+            db,
+            conversation_id,
+            user_context
+        )
+
         if not conversation:
             return None
-        
-        # Use the full session_id as-is (don't remove the conv_ prefix)
-        # The thread_id format is: thread_{agent_id}_{full_session_id}
-        
-        # Get history from PostgreSQL checkpointer
-        history = await CheckpointerCacheService.get_conversation_history_async(
-            agent_id=conversation.agent_id,
-            session_id=conversation.session_id
+
+        messages = ConversationMessageService.get_conversation_messages(
+            db,
+            conversation_id
         )
-        
-        if not history:
-            return []
-        
-        cleaned_history: List[Dict] = []
-        for msg in history:
-            if not isinstance(msg, dict):
-                continue
-            content = msg.get("content")
-            parsed_content = content
-            
-            if isinstance(content, str):
-                stripped_content = content.strip()
-                if stripped_content.startswith("[") and "type" in stripped_content:
-                    try:
-                        parsed_content = json.loads(stripped_content)
-                    except json.JSONDecodeError:
-                        try:
-                            parsed_content = ast.literal_eval(stripped_content)
-                        except (ValueError, SyntaxError):
-                            parsed_content = content
-            
-            if isinstance(parsed_content, list):
-                text_parts = []
-                has_image = False
-                for item in parsed_content:
-                    if isinstance(item, dict):
-                        if item.get("type") == "text":
-                            text_parts.append(item.get("text", ""))
-                        elif item.get("type") == "image_url":
-                            has_image = True
-                display_text = " ".join(text_parts).strip()
-                # Clean attached file content from multimodal text
-                display_text = ConversationService._clean_attached_files_content(display_text)
-                if not display_text and has_image:
-                    display_text = "[Imagen adjunta]"
-                clean_msg = msg.copy()
-                clean_msg["content"] = display_text or msg.get("content", "")
-                cleaned_history.append(clean_msg)
+
+        history = []
+
+        for msg in messages:
+
+            if msg.message_type == "audio":
+                history.append({
+                    "role": msg.role,
+                    "message_type": "audio",
+                    "transcript": msg.content,
+                    "audio_file_id": msg.audio_file_id,
+                    "content": ""
+                })
             else:
-                # Clean attached file content from simple text messages
-                clean_msg = msg.copy()
-                if isinstance(parsed_content, str):
-                    clean_msg["content"] = ConversationService._clean_attached_files_content(parsed_content)
-                cleaned_history.append(clean_msg)
+                history.append({
+                    "role": msg.role,
+                    "message_type": "text",
+                    "content": msg.content or ""
+                })
 
-        # Resolve [IMAGE:{block_id}] placeholders to inline file:// markers.
-        # The conversations endpoint user_context lacks app_id; enrich it from the agent.
-        resolve_user_ctx = user_context
-        if 'app_id' not in resolve_user_ctx and conversation.agent and conversation.agent.app_id:
-            resolve_user_ctx = {**resolve_user_ctx, 'app_id': conversation.agent.app_id}
-
-        resolved_history = []
-        for msg in cleaned_history:
-            if msg.get("role") == "agent" and isinstance(msg.get("content"), str) and "[IMAGE:" in msg["content"]:
-                resolved_msg = msg.copy()
-                resolved_msg["content"] = await _resolve_image_placeholders(
-                    msg["content"],
-                    agent_id=conversation.agent_id,
-                    user_context=resolve_user_ctx,
-                    conversation_id=str(conversation_id),
-                )
-                resolved_history.append(resolved_msg)
-            else:
-                resolved_history.append(msg)
-
-        return resolved_history
+        return history
     
     @staticmethod
     def _clean_attached_files_content(text: str) -> str:

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from typing import AsyncGenerator, List, Optional, Annotated
+from typing import AsyncGenerator, List, Optional, Annotated, Literal
 
 from schemas.agent_schemas import RuntimeSearchParamsSchema
 
@@ -94,9 +94,11 @@ async def call_agent(
     db: Annotated[Session, Depends(get_db)],
     files: Annotated[List[UploadFile], File(description="Optional files to attach (images, PDFs, text files)")] = None,
     file_references: Annotated[Optional[str], Form(description="JSON array of existing file_ids to include. If not provided, all files are included.")] = None,
+    language: Annotated[Optional[str], Form(description="Optional language code for the transcription of an audio file, e.g. 'en'")] = None,
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters for silo-based agents")] = None,
     conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue existing conversation")] = None,    
     user_token: Annotated[Optional[str], Form(description="End-user Bearer token to forward to MCP servers. When provided, every MCP tool call in this execution will include Authorization: Bearer <token>.")] = None,
+    response_mode: Annotated[Literal["text", "audio"], Form(description="Optional response mode: 'text' or 'audio'. If 'audio', the agent's response will be synthesized to audio.")] = "text",
 ):
     """
     Call an agent for chat completion.
@@ -124,6 +126,7 @@ async def call_agent(
     - Text files (.txt, .md, .json, .csv): Content is read directly
     - Images (.jpg, .jpeg, .png, .gif, .bmp): Sent to vision models
     - Documents (.doc, .docx): Basic support
+    - Audio files (.mp3, .wav, .ogg, .flac, .aac): Transcribed to text (language can be specified)
     """
     validate_api_key_for_app(app_id, api_key, db)
     agent = validate_agent_ownership(db, agent_id, app_id)
@@ -136,12 +139,17 @@ async def call_agent(
 
         user_context = create_api_key_user_context(app_id, api_key, user_token=user_token)
 
+        user_context["response_mode"] = response_mode
+
+        user_context["audio_language"] = language
+
         all_file_references = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,
             agent_id=agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            language=language,
             has_memory=bool(agent.has_memory),
         )
 
@@ -160,6 +168,7 @@ async def call_agent(
             response=result["response"],
             conversation_id=result.get("conversation_id"),
             usage=result["metadata"],
+            audio_file_id=result.get("audio_file_id"),
         )
 
         logger.info(f"Public API chat request processed for agent {agent_id}, conversation: {result.get('conversation_id')}")
@@ -203,7 +212,8 @@ async def call_agent_stream(
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters")] = None,
     conversation_id: Annotated[Optional[int], Form(description="Optional conversation ID to continue")] = None,
     user_token: Annotated[Optional[str], Form(description="End-user Bearer token to forward to MCP servers.")] = None,
-
+    language: Annotated[Optional[str], Form(description="Optional language code for the transcription of an audio file, e.g. 'en'")] = None,
+    response_mode: Annotated[Literal["text", "audio"], Form(description="Optional response mode: 'text' or 'audio'. If 'audio', the agent's response will be synthesized to audio.")] = "text",
 ):
     """
     Call an agent with Server-Sent Events streaming response.
@@ -230,6 +240,10 @@ async def call_agent_stream(
 
         user_context = create_api_key_user_context(app_id, api_key, user_token=user_token)
 
+        user_context["response_mode"] = response_mode
+
+        user_context["audio_language"] = language
+
         fms = FileManagementService()
         all_file_references = await fms.resolve_chat_files(
             files=files,
@@ -237,6 +251,7 @@ async def call_agent_stream(
             agent_id=agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            language=language,
             has_memory=bool(agent.has_memory),
         )
 

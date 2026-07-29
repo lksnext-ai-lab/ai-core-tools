@@ -299,6 +299,17 @@ async def download_file(
             file_data = next((f for f in files if f.get("file_id") == file_id), None)
             if file_data:
                 break
+        
+        if not file_data:
+            for try_conv_id in conv_ids_to_try:
+                file_data = await file_service.get_audio_response(
+                    file_id=file_id,
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=try_conv_id,
+                )
+                if file_data:
+                    break
 
         if not file_data or not file_data.get("file_path"):
             raise HTTPException(status_code=404, detail="File not found")

@@ -6,12 +6,18 @@ interface StreamResult {
   response: string | Record<string, unknown>;
   conversationId: number | null;
   files: Array<{ file_id: string; filename: string; file_type: string }>;
+  messageType?: 'text' | 'audio';
+  audioFileId?: string;
 }
 
 export interface StreamFnOptions {
   readonly files?: File[];
   readonly searchParams?: any;
   readonly conversationId?: number | null;
+  
+  responseMode?: 'text' | 'audio';
+  audioLanguage?: 'en' | 'es' | 'eu' | 'ca' | 'gl' | 'fr';
+
   readonly onEvent: (event: StreamEvent) => void;
   readonly signal?: AbortSignal;
 }
@@ -22,6 +28,9 @@ interface SendOptions {
   readonly files?: File[];
   readonly conversationId?: number | null;
   readonly searchParams?: any;
+
+  responseMode?: 'text' | 'audio';
+  audioLanguage?: 'en' | 'es' | 'eu' | 'ca' | 'gl' | 'fr';
 }
 
 interface UseStreamingChatReturn {
@@ -109,12 +118,16 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       let conversationId: number | null = options?.conversationId ?? null;
       let finalResponse: string | Record<string, unknown> = '';
       let finalFiles: Array<{ file_id: string; filename: string; file_type: string }> = [];
+      let messageType: 'text' | 'audio' | undefined;
+      let audioFileId: string | undefined;
 
       try {
         await streamFnRef.current(message, {
           files: options?.files,
           searchParams: options?.searchParams,
           conversationId: options?.conversationId,
+          responseMode: options?.responseMode,
+          audioLanguage: options?.audioLanguage,
           signal: abortController.signal,
           onEvent: (event: StreamEvent) => {
             switch (event.type) {
@@ -122,7 +135,13 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 const content = (event.data as { content?: string }).content || '';
                 contentRef.current += content;
                 scheduleFlush();
-                setThinkingMessage(null);
+
+                const isTextResponse = options?.responseMode !== 'audio';
+
+                if (isTextResponse) {
+                  setThinkingMessage(null);
+                }
+
                 break;
               }
 
@@ -161,9 +180,13 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   response?: string | Record<string, unknown>;
                   files?: Array<{ file_id: string; filename: string; file_type: string }>;
                   conversation_id?: number;
+                  message_type?: 'text' | 'audio';
+                  audio_file_id?: string;
                 };
                 finalResponse = doneData.response ?? contentRef.current;
                 finalFiles = doneData.files ?? [];
+                messageType = doneData.message_type ?? 'text';
+                audioFileId = doneData.audio_file_id;
                 if (doneData.conversation_id) {
                   conversationId = doneData.conversation_id;
                 }
@@ -202,6 +225,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
         response: finalResponse || contentRef.current,
         conversationId,
         files: finalFiles,
+        messageType,
+        audioFileId,
       };
     },
     [],

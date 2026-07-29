@@ -15,6 +15,7 @@ from .agent_marketplace_rating import AgentMarketplaceRating
 from .skill import Skill
 from .ocr_agent import OCRAgent
 from .conversation import Conversation
+from .conversation_message import ConversationMessage
 from .repository import Repository
 from .resource import Resource
 from .folder import Folder
@@ -40,6 +41,7 @@ __all__ = [
     'Agent', 'AgentMarketplaceProfile', 'ConversationStarter', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
     'Repository', 'Resource', 'Folder', 'Domain',
     'DomainUrl', 'CrawlPolicy', 'CrawlJob', 'SharePointSource', 'SharePointFile',
+    'ConversationMessage',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',
     'Agent', 'Skill', 'OCRAgent', 'Conversation', 'Repository', 'Resource', 'Folder', 'Domain',
     'Media',

@@ -228,6 +228,8 @@ class AgentStreamingService:
                     "response": result["parsed_response"],
                     "conversation_id": result["effective_conv_id"],
                     "files": result["files_data"],
+                    "message_type": result["message_type"],
+                    "audio_file_id": result["audio_file_id"],
                 },
             )
 
