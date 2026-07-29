@@ -82,6 +82,8 @@ function ChatInterface({
   const lastScrollTopRef = useRef(0);
   const filterPanelId = `metadata-filters-${agentId}`;
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const playgroundStream = useCallback(
     (message: string, opts: Parameters<typeof apiService.chatWithAgentStream>[3]) =>
       apiService.chatWithAgentStream(appId, agentId, message, opts),
@@ -291,6 +293,8 @@ function ChatInterface({
 
       await refreshFileList(result.conversationId || currentConversationId);
       onMessageSent?.();
+
+      textareaRef.current?.focus();
     } catch (error) {
       setHoldStreamingContent(false);
       const errorMsg: Message = {
@@ -302,6 +306,16 @@ function ChatInterface({
       setMessages((prev) => [...prev, errorMsg]);
     }
   };
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.min(
+      textareaRef.current.scrollHeight,
+      160
+    )}px`;
+  }, [inputMessage]);
 
   // ─── Reset ───────────────────────────────────────────────────────────────────
 
@@ -514,9 +528,9 @@ function ChatInterface({
       )}
 
       {/* Chat Interface + File Panel */}
-      <div className="flex gap-4 items-start">
+      <div className="flex gap-4 items-start h-full">
         {/* Chat card */}
-        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
+        <div className="flex-1 pg-glass rounded-l-none rounded-r-xl border-l-0 flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
           {/* Reset button — subtle, top-right corner */}
           <div className="flex justify-end px-4 pt-3 pb-1">
             <button
@@ -603,7 +617,7 @@ function ChatInterface({
                         key={message.id}
                         className="flex justify-end animate-slide-in-right"
                       >
-                        <div className="max-w-[85%] lg:max-w-[75%]">
+                        <div className="max-w-[85%] lg:max-w-[75%] min-w-0">
                           <div className="pg-bubble-user">
                             <MessageContent
                               content={message.content}
@@ -655,7 +669,7 @@ function ChatInterface({
                         key={message.id}
                         className="flex justify-start animate-slide-in-left"
                       >
-                        <div className="max-w-[85%] lg:max-w-[75%]">
+                        <div className="max-w-[85%] lg:max-w-[75%] min-w-0">
                           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 text-red-700 dark:text-red-300 rounded-2xl rounded-bl-sm px-4 py-3">
                             <div className="flex items-center gap-2 mb-1">
                               <svg
@@ -698,7 +712,7 @@ function ChatInterface({
                       key={message.id}
                       className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
-                      <div className="max-w-[90%] lg:max-w-[80%]">
+                      <div className="max-w-[90%] lg:max-w-[80%] min-w-0">
                         <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
                           <MessageContent
                             content={message.content}
@@ -766,7 +780,7 @@ function ChatInterface({
 
           {/* Input area */}
           <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
-            <div className="pg-glass rounded-xl px-3 py-2.5 flex items-end gap-2">
+            <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
               {/* File attach button */}
               <div>
                 <input
@@ -782,7 +796,7 @@ function ChatInterface({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
-                  className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
+                  className="p-2 rounded-xl text-gray-400 dark:text-gray-500
                              hover:text-indigo-600 dark:hover:text-indigo-400
                              hover:bg-indigo-50 dark:hover:bg-indigo-900/20
                              disabled:opacity-40 disabled:cursor-not-allowed
@@ -809,25 +823,21 @@ function ChatInterface({
 
               {/* Textarea */}
               <textarea
+                ref={textareaRef}
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={`Message ${agentName}...`}
+                placeholder={`Message ${agentName}…`}
                 disabled={isStreaming}
-                className="flex-1 bg-transparent border-none outline-none resize-none
+                className="flex-1 py-2 bg-transparent border-none outline-none resize-none
                            text-sm text-gray-800 dark:text-gray-100
                            placeholder:text-gray-400 dark:placeholder:text-gray-500
                            disabled:opacity-50
+                           focus:outline-none focus:ring-0
                            max-h-40 input-login"
                 rows={1}
                 style={{ minHeight: '1.5rem' }}
-                onInput={(e) => {
-                  // Auto-resize textarea
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = 'auto';
-                  target.style.height = `${Math.min(target.scrollHeight, 160)}px`;
-                }}
               />
 
               {/* Send / Abort button */}
@@ -855,7 +865,7 @@ function ChatInterface({
                   type="button"
                   onClick={handleSendMessage}
                   disabled={!canSend}
-                  className="pg-btn-send shrink-0 !p-2"
+                  className="pg-btn-send shrink-0 !p-2 rounded-xl"
                   aria-label="Send message"
                 >
                   <svg

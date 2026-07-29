@@ -257,7 +257,7 @@ export default function ConversationSidebar({
 
   if (isCollapsed) {
     return (
-      <div className="w-12 pg-glass border-r border-white/10 flex flex-col items-center py-4">
+      <div className="w-14 h-full pg-glass border-r border-white/10 flex flex-col items-center py-4">
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 hover:bg-white/30 dark:hover:bg-gray-700/40 rounded-lg transition-colors"
@@ -268,7 +268,7 @@ export default function ConversationSidebar({
           </svg>
         </button>
         
-        <div className="mt-4 text-xs text-gray-500 transform -rotate-90 whitespace-nowrap">
+        <div className="mt-4 text-xs text-gray-500 whitespace-nowrap" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center'}}>
           {conversations.length} conversaciones
         </div>
       </div>
@@ -276,7 +276,7 @@ export default function ConversationSidebar({
   }
 
   return (
-    <div className="w-80 pg-glass border-r border-white/10 flex flex-col animate-fade-in">
+    <div className="w-80 h-full pg-glass rounded-1-xl rounded-r-none border-r border-white/10 flex flex-col animate-fade-in">
       {/* Header */}
       <div className="p-4 border-b border-white/10 dark:border-gray-700/30">
         <div className="flex items-center justify-between mb-3">
