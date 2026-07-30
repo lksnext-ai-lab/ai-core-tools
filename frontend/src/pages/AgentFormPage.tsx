@@ -93,6 +93,14 @@ interface AgentFormData {
   rag_fixed_filters: RagFixedFilter[];
 }
 
+interface AgentFormDraft {
+  formData: AgentFormData;
+  activeTab: string;
+  showOutputParser: boolean;
+}
+
+const AGENT_FORM_DRAFT_STORAGE_PREFIX = 'agent-form-draft';
+
 // Output Parser Field Component
 const OutputParserField = ({
   showOutputParser,
@@ -228,6 +236,7 @@ function AgentFormPage() {
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
   const [loadingSiloMetadata, setLoadingSiloMetadata] = useState(false);
+  const draftHydratedRef = useRef(false);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -242,6 +251,27 @@ function AgentFormPage() {
     cover_image_url: null,
     conversation_starters: [],
   });
+
+  const isNewAgent = Number.parseInt(agentId || '0') === 0;
+  const draftStorageKey = appId
+    ? `${AGENT_FORM_DRAFT_STORAGE_PREFIX}:${appId}`
+    : null;
+
+    const normalizeDraftFilters = useCallback((filters: RagFixedFilter[] = []) => {
+      return filters.map((filter) => ({
+        ...filter,
+        _key: filter._key ?? Math.random().toString(36).slice(2),
+      }));
+    }, []);
+
+    const clearDraft = useCallback(() => {
+      if (!draftStorageKey) return;
+      try {
+        sessionStorage.removeItem(draftStorageKey);
+      } catch (err) {
+        console.warn('Failed to clear agent form draft from session storage:', err);
+      }
+    }, [draftStorageKey]);
 
   // Load agent data when component mounts
   useEffect(() => {
@@ -287,7 +317,7 @@ function AgentFormPage() {
       setAgent(response);
 
       // Initialize form data
-      setFormData({
+      const initialFormData: AgentFormData = {
         name: response.name || '',
         description: response.description || '',
         system_prompt: response.system_prompt || '',
@@ -317,14 +347,43 @@ function AgentFormPage() {
         rag_search_type: response.rag_search_type ?? 'similarity',
         rag_score_threshold: response.rag_score_threshold ?? null,
         rag_max_retrieval_calls: response.rag_max_retrieval_calls ?? 4,
-        rag_fixed_filters: (response.rag_fixed_filters ?? []).map((f) => ({
-          ...f,
-          _key: Math.random().toString(36).slice(2),
-        }))
-      });
+        rag_fixed_filters: normalizeDraftFilters(response.rag_fixed_filters ?? [])
+      };
+
+      let nextFormData = initialFormData;
+      let nextShowOutputParser = !!response.output_parser_id;
+      let nextActiveTab = 'basic';
+
+      if (Number.parseInt(agentId) === 0 && draftStorageKey) {
+        try {
+          const rawDraft = sessionStorage.getItem(draftStorageKey);
+          if (rawDraft) {
+            const parsedDraft = JSON.parse(rawDraft) as Partial<AgentFormDraft>;
+            if (parsedDraft.formData) {
+              nextFormData = {
+                ...initialFormData,
+                ...parsedDraft.formData,
+                rag_fixed_filters: normalizeDraftFilters(parsedDraft.formData.rag_fixed_filters ?? []),
+              };
+            }
+            if (typeof parsedDraft.showOutputParser === 'boolean') {
+              nextShowOutputParser = parsedDraft.showOutputParser;
+            }
+            if (typeof parsedDraft.activeTab === 'string') {
+              nextActiveTab = parsedDraft.activeTab;
+            }
+          }
+        } catch (draftErr) {
+          console.warn('Failed to restore agent form draft from session storage:', draftErr);
+        }
+      }
+
+      setFormData(nextFormData);
 
       // Set output parser toggle based on whether agent has an output parser
-      setShowOutputParser(!!response.output_parser_id);
+      setShowOutputParser(nextShowOutputParser);
+      setActiveTab(nextActiveTab);
+      draftHydratedRef.current = true;
 
       // Load MCP usage and marketplace profile for existing agents
       if (Number.parseInt(agentId) !== 0) {
@@ -362,9 +421,26 @@ function AgentFormPage() {
       setError(err instanceof Error ? err.message : 'Failed to load agent data');
       console.error('Error loading agent data:', err);
     } finally {
+      if (Number.parseInt(agentId) !== 0) {
+        draftHydratedRef.current = true;
+      }
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!isNewAgent || !draftStorageKey || !draftHydratedRef.current) return;
+    const draft: AgentFormDraft = {
+      formData,
+      activeTab,
+      showOutputParser,
+    };
+    try {
+      sessionStorage.setItem(draftStorageKey, JSON.stringify(draft));
+    } catch (err) {
+      console.warn('Failed to persist agent form draft to session storage:', err);
+    }
+  }, [isNewAgent, draftStorageKey, formData, activeTab, showOutputParser]);
 
   const handleInputChange = (field: keyof AgentFormData, value: any) => {
     setFormData(prev => ({
@@ -549,11 +625,12 @@ function AgentFormPage() {
     setSaving(false);
 
     if (result !== undefined) {
+      if (isNew) {
+        clearDraft();
+      }
       navigate(`/apps/${appId}/agents`);
     }
   };
-
-  const isNewAgent = Number.parseInt(agentId || '0') === 0;
 
   if (loading) {
     return (
@@ -591,7 +668,12 @@ function AgentFormPage() {
             </p>
           </div>
           <button
-            onClick={() => navigate(`/apps/${appId}/agents`)}
+            onClick={() => {
+              if (isNewAgent) {
+                clearDraft();
+              }
+              navigate(`/apps/${appId}/agents`);
+            }}
             className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-gray-700 shadow-sm border border-gray-200 transition-all duration-200"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1667,7 +1749,12 @@ function AgentFormPage() {
           <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
             <button
               type="button"
-              onClick={() => navigate(`/apps/${appId}/agents`)}
+              onClick={() => {
+                if (isNewAgent) {
+                  clearDraft();
+                }
+                navigate(`/apps/${appId}/agents`);
+              }}
               className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-medium transition-all duration-200"
               disabled={saving}
             >
