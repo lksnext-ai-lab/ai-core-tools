@@ -22,6 +22,7 @@ interface AIService {
   model_name: string;
   created_at: string;
   needs_api_key?: boolean;
+  is_system?: boolean;
 }
 
 function AIServicesPage() {
@@ -208,13 +209,22 @@ function AIServicesPage() {
           {
             header: 'Name',
             render: (service: AIService) => (
-              canEdit ? (
-                <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
-                  {service.name}
-                </button>
-              ) : (
-                <span className="text-sm font-medium text-gray-900">{service.name}</span>
-              )
+              <span className="flex items-center gap-1.5">
+                {canEdit && !service.is_system ? (
+                  <button 
+                    type="button"
+                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                    onClick={() => handleEdit(service.service_id)}
+                  >
+                    {service.name}
+                  </button>
+                ) : (
+                  <span className="text-sm font-medium text-gray-900">{service.name}</span>
+                )}
+                {service.is_system && (
+                  <span className="ml-1 text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">System</span>
+                )}
+              </span>
             )
           },
           { header: 'Model', accessor: 'model_name' },
@@ -236,7 +246,9 @@ function AIServicesPage() {
           )},
           { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: AIService) => (
-            canEdit ? (
+            service.is_system ? (
+              <span className="text-gray-400 text-sm">System</span>
+            ) : canEdit ? (
               <ActionDropdown actions={[
                 {
                   label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
