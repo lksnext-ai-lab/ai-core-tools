@@ -1,5 +1,5 @@
 import React from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams, Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
@@ -9,6 +9,7 @@ interface PageTitleProps {
 
 interface TitlePart {
   label: string;
+  path?: string;
 }
 
 const TOP_LEVEL_PATHS = new Set(['/home', '/marketplace', '/apps', '/about', '/profile']);
@@ -77,22 +78,33 @@ export const PageTitle: React.FC<PageTitleProps> = ({ navigationConfig }) => {
 
   // Settings sub-routes
   if (pathname !== settingsBase && pathname.startsWith(settingsBase + '/')) {
-    parts.push({ label: 'App Settings' });
+    parts.push({ 
+      label: 'App Settings',
+      path: settingsBase,
+    });
     const label = pathLookup.get(pathname);
-    parts.push({ label: label || 'Edit' });
+    parts.push({
+      label: label || 'Edit',
+    });
     return renderTitle(parts);
   }
 
   // Settings page itself
   if (pathname === settingsBase) {
-    parts.push({ label: 'App Settings' });
+    parts.push({
+      label: 'App Settings',
+      path: settingsBase,
+    });
     return renderTitle(parts);
   }
 
   // Direct match (e.g. /apps/:appId/agents)
   const directLabel = pathLookup.get(pathname);
   if (directLabel) {
-    parts.push({ label: directLabel });
+    parts.push({
+      label: directLabel,
+      path: pathname,
+    });
     return renderTitle(parts);
   }
 
@@ -102,7 +114,10 @@ export const PageTitle: React.FC<PageTitleProps> = ({ navigationConfig }) => {
     const candidatePath = '/' + segments.slice(0, i).join('/');
     const candidateLabel = pathLookup.get(candidatePath);
     if (candidateLabel) {
-      parts.push({ label: candidateLabel });
+      parts.push({
+        label: candidateLabel,
+        path: candidatePath,
+      });
       const lastSegment = segments[segments.length - 1];
       parts.push({ label: SUFFIX_LABELS[lastSegment] || 'Edit' });
       break;
@@ -123,15 +138,24 @@ function renderTitle(parts: TitlePart[]): React.ReactElement | null {
           {index > 0 && (
             <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
           )}
-          <span
-            className={
-              index === parts.length - 1 && parts.length > 1
-                ? 'text-sm text-gray-500'
-                : 'text-sm font-medium text-gray-700'
-            }
-          >
-            {part.label}
-          </span>
+          {part.path ? (
+            <Link
+              to={part.path}
+              className="text-sm font-medium text-gray-700 hover:text-blue-600 hover:underline"
+            >
+              {part.label}
+            </Link>
+          ) : (
+            <span
+              className={
+                index === parts.length - 1 && parts.length > 1
+                  ? 'text-sm text-gray-500'
+                  : 'text-sm font-medium text-gray-700'
+              }
+            >
+              {part.label}
+            </span>
+          )}
         </React.Fragment>
       ))}
     </div>
