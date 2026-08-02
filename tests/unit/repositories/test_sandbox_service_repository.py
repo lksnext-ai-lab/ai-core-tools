@@ -1,16 +1,52 @@
 """
-Integration-style unit tests for SandboxServiceRepository.
+Unit tests for SandboxServiceRepository.
 
-Uses the shared `db`/`fake_app` fixtures (real test-DB connection, rolled
-back after each test) rather than a real Alembic migration — the
-SandboxService table is created via Base.metadata.create_all() in the
-session-scoped test_engine fixture (see tests/conftest.py).
+Uses an in-memory SQLite database (same pattern as test_credential_service.py
+and test_refresh_service.py) so no real PostgreSQL connection is required.
+This overrides conftest.py's `db` fixture for this module only; `fake_app`/
+`fake_user` (defined in conftest.py against the `db` fixture) transparently
+pick up this SQLite-backed session instead.
 """
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("SECRET_KEY", "test-secret-key-32chars-minimum-ok")
+os.environ.setdefault("SQLALCHEMY_DATABASE_URI", "sqlite:///:memory:")
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from db.database import Base
 from models.sandbox_service import SandboxService
 from repositories.sandbox_service_repository import SandboxServiceRepository
+
+_SQLITE_URL = "sqlite:///:memory:"
+
+
+@pytest.fixture(scope="function")
+def engine():
+    eng = create_engine(_SQLITE_URL, connect_args={"check_same_thread": False})
+    import models  # noqa: F401 — registers all ORM models with Base.metadata
+
+    Base.metadata.create_all(bind=eng)
+    yield eng
+    Base.metadata.drop_all(bind=eng)
+    eng.dispose()
+
+
+@pytest.fixture()
+def db(engine):
+    """Per-test session with rollback isolation (no FOR UPDATE needed on SQLite)."""
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection, join_transaction_mode="create_savepoint", autoflush=True)
+    yield session
+    session.close()
+    transaction.rollback()
+    connection.close()
 
 
 def _make_service(app_id, name="Test Sandbox Service", provider="opensandbox", api_key="secret-key"):
